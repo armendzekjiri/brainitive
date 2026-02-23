@@ -46,8 +46,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // Bookmarks (workspace level)
         Route::get('bookmarks', [BookmarkController::class, 'index'])->name('bookmarks.index');
         Route::post('bookmarks', [BookmarkController::class, 'store'])->name('bookmarks.store');
+        Route::post('bookmarks/upload-icon-temp', [BookmarkController::class, 'uploadIconTemp'])->name('bookmarks.icon.upload-temp');
         Route::get('bookmarks/{bookmark}', [BookmarkController::class, 'show'])->name('bookmarks.show');
         Route::put('bookmarks/{bookmark}', [BookmarkController::class, 'update'])->name('bookmarks.update');
+        Route::post('bookmarks/{bookmark}/icon', [BookmarkController::class, 'uploadIcon'])->name('bookmarks.icon.upload');
         Route::delete('bookmarks/{bookmark}', [BookmarkController::class, 'destroy'])->name('bookmarks.destroy');
         Route::post('bookmarks/{bookmark}/items', [BookmarkController::class, 'storeItem'])->name('bookmarks.items.store');
         Route::put('bookmarks/{bookmark}/items/{item}', [BookmarkController::class, 'updateItem'])->name('bookmarks.items.update');
