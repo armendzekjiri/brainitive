@@ -1,0 +1,98 @@
+<?php
+
+use App\Http\Controllers\BoardController;
+use App\Http\Controllers\PageController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\WorkspaceController;
+use Illuminate\Foundation\Application;
+use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
+
+Route::get('/', function () {
+    return Inertia::render('Welcome', [
+        'canLogin' => Route::has('login'),
+        'canRegister' => Route::has('register'),
+        'laravelVersion' => Application::VERSION,
+        'phpVersion' => PHP_VERSION,
+    ]);
+});
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    // Dashboard redirects to workspaces
+    Route::get('/dashboard', function () {
+        return redirect()->route('workspaces.index');
+    })->name('dashboard');
+
+    // Workspaces
+    Route::resource('workspaces', WorkspaceController::class);
+
+    // Workspace member management
+    Route::post('workspaces/{workspace}/members', [WorkspaceController::class, 'inviteMember'])->name('workspaces.members.invite');
+    Route::patch('workspaces/{workspace}/members/{user}', [WorkspaceController::class, 'updateMemberRole'])->name('workspaces.members.update');
+    Route::delete('workspaces/{workspace}/members/{user}', [WorkspaceController::class, 'removeMember'])->name('workspaces.members.remove');
+
+    // Projects (nested under workspaces) - scoped to workspace
+    Route::prefix('workspaces/{workspace}')->group(function () {
+        Route::resource('projects', ProjectController::class)->scoped([
+            'project' => 'slug',
+        ]);
+
+        // Labels (nested under projects)
+        Route::prefix('projects/{project:slug}')->group(function () {
+            Route::post('labels', [ProjectController::class, 'storeLabel'])->name('projects.labels.store');
+            Route::put('labels/{label}', [ProjectController::class, 'updateLabel'])->name('projects.labels.update');
+            Route::delete('labels/{label}', [ProjectController::class, 'destroyLabel'])->name('projects.labels.destroy');
+        });
+
+        // Boards (nested under projects) - scoped to project
+        Route::prefix('projects/{project}')->scopeBindings()->group(function () {
+            Route::post('boards', [BoardController::class, 'store'])->name('boards.store');
+            Route::get('boards/{board:slug}', [BoardController::class, 'show'])->name('boards.show');
+            Route::get('boards/{board:slug}/edit', [BoardController::class, 'edit'])->name('boards.edit');
+            Route::put('boards/{board:slug}', [BoardController::class, 'update'])->name('boards.update');
+            Route::delete('boards/{board:slug}', [BoardController::class, 'destroy'])->name('boards.destroy');
+            Route::post('boards/{board:slug}/columns', [BoardController::class, 'storeColumn'])->name('boards.columns.store');
+            Route::post('boards/{board:slug}/columns/reorder', [BoardController::class, 'reorderColumns'])->name('boards.columns.reorder');
+            Route::put('boards/{board:slug}/columns/{column}', [BoardController::class, 'updateColumn'])->name('boards.columns.update');
+            Route::delete('boards/{board:slug}/columns/{column}', [BoardController::class, 'destroyColumn'])->name('boards.columns.destroy');
+            Route::post('boards/{board:slug}/items', [BoardController::class, 'storeItem'])->name('boards.items.store');
+            Route::get('boards/{board:slug}/items/{item}', [BoardController::class, 'showItem'])->name('boards.items.show');
+            Route::patch('boards/{board:slug}/items/{item}/move', [BoardController::class, 'moveItem'])->name('boards.items.move');
+            Route::patch('boards/{board:slug}/items/{item}', [BoardController::class, 'updateItem'])->name('boards.items.update');
+            Route::patch('boards/{board:slug}/items/{item}/labels', [BoardController::class, 'updateItemLabels'])->name('boards.items.labels');
+            Route::post('boards/{board:slug}/items/{item}/links', [BoardController::class, 'storeItemLink'])->name('boards.items.links.store');
+            Route::delete('boards/{board:slug}/items/{item}/links/{link}', [BoardController::class, 'destroyItemLink'])->name('boards.items.links.destroy');
+            Route::patch('boards/{board:slug}/items/{item}/move-to-board', [BoardController::class, 'moveItemToBoard'])->name('boards.items.move-to-board');
+            Route::delete('boards/{board:slug}/items/{item}', [BoardController::class, 'destroyItem'])->name('boards.items.destroy');
+            Route::post('boards/{board:slug}/items/{item}/comments', [BoardController::class, 'storeComment'])->name('boards.items.comments.store');
+            Route::post('boards/{board:slug}/items/{item}/attachments', [BoardController::class, 'storeAttachment'])->name('boards.items.attachments.store');
+            Route::delete('boards/{board:slug}/items/{item}/attachments/{attachment}', [BoardController::class, 'destroyAttachment'])->name('boards.items.attachments.destroy');
+
+            // Pages (nested under projects)
+            Route::post('pages', [PageController::class, 'store'])->name('pages.store');
+            Route::get('pages/tree', [PageController::class, 'tree'])->name('pages.tree');
+            Route::post('pages/reorder', [PageController::class, 'reorder'])->name('pages.reorder');
+            Route::get('pages/{page}', [PageController::class, 'show'])->name('pages.show');
+            Route::get('pages/{page}/excalidraw', [PageController::class, 'excalidrawEditor'])->name('pages.excalidraw');
+            Route::post('pages/{page}/excalidraw/save', [PageController::class, 'saveExcalidraw'])->name('pages.excalidraw.save');
+            Route::put('pages/{page}', [PageController::class, 'update'])->name('pages.update');
+            Route::post('pages/{page}/publish', [PageController::class, 'publish'])->name('pages.publish');
+            Route::post('pages/{page}/unpublish', [PageController::class, 'unpublish'])->name('pages.unpublish');
+            Route::post('pages/{page}/archive', [PageController::class, 'archive'])->name('pages.archive');
+            Route::delete('pages/{page}', [PageController::class, 'destroy'])->name('pages.destroy');
+        });
+    });
+});
+
+Route::middleware('auth')->group(function () {
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // File uploads
+    Route::post('/upload/image', [App\Http\Controllers\FileController::class, 'uploadImage'])->name('upload.image');
+    Route::post('/upload/document', [App\Http\Controllers\FileController::class, 'uploadDocument'])->name('upload.document');
+});
+
+require __DIR__.'/auth.php';

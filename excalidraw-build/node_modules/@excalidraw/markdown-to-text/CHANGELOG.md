@@ -1,0 +1,36 @@
+# Changelog
+
+## key
+
+Changelog entries are classified using the following labels _(from [keep-a-changelog][]_):
+
+- `added`: for new features
+- `changed`: for changes in existing functionality
+- `deprecated`: for once-stable features removed in upcoming releases
+- `removed`: for deprecated features removed in this release
+- `fixed`: for any bug fixes
+
+## [0.1.2] - 2023-08-22
+
+### Changed
+
+- Make `removeMarkdown` a named export instead of default so its compatible with Vite
+
+## [0.1.1] - 2020-12-13
+
+### Added
+
+- Circle CI to tests
+
+### Changed
+
+- TypeScript version to latest
+
+## [0.1.0] - 2020-12-13
+
+### Added
+
+- `removeMarkdown` to parse the markdown and covert it to string
+- Integrate TS for the project
+
+[keep-a-changelog]: https://github.com/olivierlacan/keep-a-changelog

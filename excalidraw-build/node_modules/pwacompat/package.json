@@ -1,0 +1,36 @@
+{
+  "name": "pwacompat",
+  "version": "2.0.17",
+  "description": "library to bring Web App Manifest contents to non-compliant browsers",
+  "main": "pwacompat.min.js",
+  "module": "src/pwacompat.js",
+  "jsnext:main": "src/pwacompat.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GoogleChrome/pwacompat.git"
+  },
+  "keywords": [
+    "pwa",
+    "compatibility",
+    "ios",
+    "homescreen",
+    "manifest"
+  ],
+  "author": "The Chromium Authors",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/GoogleChrome/pwacompat/issues"
+  },
+  "homepage": "https://github.com/GoogleChrome/pwacompat",
+  "scripts": {
+    "test": "headless-test src/test.js"
+  },
+  "devDependencies": {
+    "chai": "^4.1.2",
+    "headless-test": "^1.0.2",
+    "mocha": "^5.2.0"
+  },
+  "resolutions": {
+    "**/minimist": "^1.2.5"
+  }
+}

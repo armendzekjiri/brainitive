@@ -1,0 +1,19 @@
+{
+  "name": "canvas-roundrect-polyfill",
+  "version": "0.0.1",
+  "description": "CanvasRenderingContext2D.roundRect() and Path2D.roundRect() polyfill",
+  "main": "roundRect.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kaiido/roundRect.git"
+  },
+  "keywords": [
+    "canvas",
+    "polyfill",
+    "roundRect"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}
