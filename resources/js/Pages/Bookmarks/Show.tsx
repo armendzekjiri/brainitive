@@ -484,7 +484,13 @@ export default function BookmarksShow({ workspace, bookmark, workspaceMembers, c
                                 <ChevronLeft className="size-4 shrink-0" />
                                 <span className="hidden sm:inline">Back</span>
                             </Link>
-                            <span className="text-2xl sm:text-3xl shrink-0" aria-hidden>{bookmark.icon || '📑'}</span>
+                            <span className="text-2xl sm:text-3xl shrink-0 flex items-center justify-center size-9 overflow-hidden rounded" aria-hidden>
+                                {bookmark.icon_display && (bookmark.icon_display.startsWith('http') || bookmark.icon_display.startsWith('/')) ? (
+                                    <img src={bookmark.icon_display} alt="" className="size-9 object-contain" />
+                                ) : (
+                                    bookmark.icon_display || bookmark.icon || '📑'
+                                )}
+                            </span>
                             <div className="min-w-0 flex-1">
                                 {canEdit && editingTitle ? (
                                     <div className="flex items-center gap-2 flex-wrap">

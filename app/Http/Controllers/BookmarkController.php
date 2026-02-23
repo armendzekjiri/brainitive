@@ -70,7 +70,9 @@ class BookmarkController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:2000',
-            'icon' => 'nullable|string|max:10',
+            'icon' => 'nullable|string|max:500',
+            'icon_image' => 'nullable|image|mimes:png,jpeg,jpg|max:2048',
+            'visibility' => 'nullable|in:private,public',
         ]);
 
         $slug = Str::slug($validated['name']);
@@ -80,15 +82,40 @@ class BookmarkController extends Controller
             $slug = $originalSlug . '-' . $counter++;
         }
 
+        $iconValue = $validated['icon'] ?? null;
+        $isTempIcon = $iconValue && str_contains($iconValue, 'bookmark-icons/temp/');
+        if (isset($validated['icon']) && (str_contains($validated['icon'], 'storage/') || str_starts_with($validated['icon'], 'http'))) {
+            $iconValue = Str::after($validated['icon'], 'storage/');
+            if (str_starts_with($iconValue, 'http')) {
+                $iconValue = $validated['icon'];
+            }
+        }
+        if ($isTempIcon) {
+            $iconValue = null; // set after we move the temp file
+        }
+
         $bookmark = $workspace->bookmarks()->create([
             'name' => $validated['name'],
             'slug' => $slug,
             'description' => $validated['description'] ?? null,
-            'icon' => $validated['icon'] ?? null,
-            'visibility' => 'private',
+            'icon' => $iconValue,
+            'visibility' => $validated['visibility'] ?? 'private',
             'position' => $workspace->bookmarks()->max('position') + 1,
             'created_by' => $request->user()->id,
         ]);
+
+        if ($request->hasFile('icon_image')) {
+            $path = $request->file('icon_image')->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.$request->file('icon_image')->getClientOriginalExtension(), 'public');
+            $bookmark->update(['icon' => $path]);
+        } elseif ($isTempIcon && isset($validated['icon'])) {
+            $tempPath = str_contains($validated['icon'], 'storage/') ? Str::after($validated['icon'], 'storage/') : $validated['icon'];
+            if (str_starts_with($tempPath, 'bookmark-icons/temp/') && Storage::disk('public')->exists($tempPath)) {
+                $ext = pathinfo($tempPath, PATHINFO_EXTENSION);
+                $newPath = 'bookmark-icons/'.$bookmark->id.'/icon.'.$ext;
+                Storage::disk('public')->move($tempPath, $newPath);
+                $bookmark->update(['icon' => $newPath]);
+            }
+        }
 
         return redirect()->route('bookmarks.show', [$workspace->slug, $bookmark->slug])
             ->with('success', 'Bookmark created.');
@@ -101,12 +128,22 @@ class BookmarkController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
             'description' => 'nullable|string|max:2000',
-            'icon' => 'nullable|string|max:10',
+            'icon' => 'nullable|string|max:500',
+            'icon_image' => 'nullable|image|mimes:png,jpeg,jpg|max:2048',
             'visibility' => 'sometimes|in:private,public',
         ]);
 
         if (isset($validated['name'])) {
             $validated['slug'] = Str::slug($validated['name']);
+        }
+
+        if (array_key_exists('icon', $validated) && $validated['icon'] && str_contains($validated['icon'], 'storage/')) {
+            $validated['icon'] = Str::after($validated['icon'], 'storage/');
+        }
+
+        if ($request->hasFile('icon_image')) {
+            $path = $request->file('icon_image')->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.$request->file('icon_image')->getClientOriginalExtension(), 'public');
+            $validated['icon'] = $path;
         }
 
         $bookmark->update($validated);
@@ -115,6 +152,45 @@ class BookmarkController extends Controller
             return response()->json(['bookmark' => $bookmark->fresh()]);
         }
         return back()->with('success', 'Bookmark updated.');
+    }
+
+    public function uploadIcon(Request $request, Workspace $workspace, Bookmark $bookmark)
+    {
+        $this->authorize('update', $bookmark);
+
+        if ($bookmark->workspace_id !== $workspace->id) {
+            abort(404);
+        }
+
+        $request->validate([
+            'icon' => 'required|file|image|mimes:png,jpeg,jpg|max:2048',
+        ]);
+
+        $file = $request->file('icon');
+        $ext = $file->getClientOriginalExtension() === 'jpeg' ? 'jpg' : $file->getClientOriginalExtension();
+        $path = $file->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.$ext, 'public');
+        $bookmark->update(['icon' => $path]);
+
+        return response()->json(['icon_display' => $bookmark->fresh()->icon_display]);
+    }
+
+    /**
+     * Upload icon for a bookmark that doesn't exist yet (create flow).
+     * File is stored in bookmark-icons/temp/ and moved to bookmark-icons/{id}/ on store.
+     */
+    public function uploadIconTemp(Request $request, Workspace $workspace)
+    {
+        $this->authorize('create', [Bookmark::class, $workspace]);
+
+        $request->validate([
+            'icon' => 'required|file|image|mimes:png,jpeg,jpg|max:2048',
+        ]);
+
+        $file = $request->file('icon');
+        $ext = $file->getClientOriginalExtension() === 'jpeg' ? 'jpg' : $file->getClientOriginalExtension();
+        $path = $file->storeAs('bookmark-icons/temp', Str::uuid().'.'.$ext, 'public');
+
+        return response()->json(['icon_display' => asset('storage/'.$path), 'icon_path' => $path]);
     }
 
     public function destroy(Request $request, Workspace $workspace, Bookmark $bookmark)

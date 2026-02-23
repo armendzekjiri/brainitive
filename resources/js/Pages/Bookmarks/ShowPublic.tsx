@@ -91,14 +91,20 @@ export default function BookmarksShowPublic({ bookmark }: Props) {
             <Head title={bookmark.name} />
 
             <div className="min-h-screen bg-gradient-to-b from-muted/30 to-background">
-                <div className="max-w-4xl mx-auto p-6 md:p-8 lg:p-10 space-y-8">
+                <div className="w-full max-w-6xl mx-auto px-4 py-6 sm:px-6 md:px-8 lg:px-10 lg:py-10 space-y-6 md:space-y-8">
                     <p className="text-center text-sm text-muted-foreground">Public bookmark (view only)</p>
 
                     {/* Header card */}
                     <Card className="overflow-hidden">
                         <CardContent className="p-6 md:p-8">
                             <div className="flex items-start gap-4">
-                                <span className="text-4xl md:text-5xl shrink-0">{bookmark.icon || '📑'}</span>
+                                <span className="text-4xl md:text-5xl shrink-0 flex items-center justify-center size-14 md:size-16 overflow-hidden rounded">
+                                    {bookmark.icon_display && (bookmark.icon_display.startsWith('http') || bookmark.icon_display.startsWith('/')) ? (
+                                        <img src={bookmark.icon_display} alt="" className="size-14 md:size-16 object-contain" />
+                                    ) : (
+                                        bookmark.icon_display || bookmark.icon || '📑'
+                                    )}
+                                </span>
                                 <div className="min-w-0 flex-1">
                                     <h1 className="text-2xl md:text-3xl font-bold tracking-tight">{bookmark.name}</h1>
                                     {bookmark.description && (
@@ -112,8 +118,8 @@ export default function BookmarksShowPublic({ bookmark }: Props) {
                         </CardContent>
                     </Card>
 
-                    {/* 2x2 grid: Links, Files, To-dos, Notes */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                    {/* Links, Files, To-dos, Notes — stacked on mobile, 2-col grid from md */}
+                    <div className="flex flex-col gap-4 md:grid md:grid-cols-2 md:gap-6">
                         {/* Links */}
                         <Card className="flex flex-col overflow-hidden">
                             <CardHeader className="pb-2">

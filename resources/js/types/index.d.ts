@@ -86,6 +86,7 @@ export interface Bookmark {
     slug: string;
     description?: string;
     icon?: string;
+    icon_display?: string; // emoji or full URL for stored image
     visibility: 'private' | 'public';
     collaborators?: Array<{ id: number; name: string; email?: string; pivot?: { role: 'viewer' | 'editor' } }>;
     creator?: User;

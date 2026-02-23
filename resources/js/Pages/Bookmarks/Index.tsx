@@ -4,6 +4,7 @@ import { PageProps, Workspace, Bookmark } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { IconPicker } from '@/components/IconPicker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -67,11 +68,14 @@ export default function BookmarksIndex({ workspace, bookmarks }: Props) {
         name: '',
         description: '',
         icon: '',
+        visibility: 'private' as 'private' | 'public',
     });
 
     const editForm = useForm({
         name: '',
         description: '',
+        icon: '',
+        visibility: 'private' as 'private' | 'public',
     });
 
     const createBookmark = (e: React.FormEvent) => {
@@ -86,7 +90,48 @@ export default function BookmarksIndex({ workspace, bookmarks }: Props) {
 
     const openEdit = (b: Bookmark) => {
         setEditBookmark(b);
-        editForm.setData({ name: b.name, description: b.description ?? '' });
+        editForm.setData({
+            name: b.name,
+            description: b.description ?? '',
+            icon: b.icon_display ?? b.icon ?? '',
+            visibility: b.visibility ?? 'private',
+        });
+    };
+
+    const handleBookmarkIconUpload = async (file: File, bookmarkSlug: string): Promise<string> => {
+        const formData = new FormData();
+        const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
+        if (token) formData.append('_token', token);
+        formData.append('icon', file);
+        const res = await fetch(route('bookmarks.icon.upload', [workspace.slug, bookmarkSlug]), {
+            method: 'POST',
+            body: formData,
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            toast.error(data.message ?? 'Icon upload failed');
+            throw new Error(data.message ?? 'Upload failed');
+        }
+        return data.icon_display;
+    };
+
+    const handleCreateBookmarkIconUpload = async (file: File): Promise<string> => {
+        const formData = new FormData();
+        const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
+        if (token) formData.append('_token', token);
+        formData.append('icon', file);
+        const res = await fetch(route('bookmarks.icon.upload-temp', [workspace.slug]), {
+            method: 'POST',
+            body: formData,
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            toast.error(data.message ?? 'Icon upload failed');
+            throw new Error(data.message ?? 'Upload failed');
+        }
+        return data.icon_display;
     };
 
     const saveEdit = (e: React.FormEvent) => {
@@ -95,6 +140,14 @@ export default function BookmarksIndex({ workspace, bookmarks }: Props) {
         editForm.put(route('bookmarks.update', [workspace.slug, editBookmark.slug]), {
             onSuccess: () => setEditBookmark(null),
         });
+    };
+
+    const copySharedLinkFromEdit = (e: React.MouseEvent) => {
+        e.preventDefault();
+        if (!editBookmark?.uuid) return;
+        const path = route('bookmarks.public.show', [editBookmark.uuid]);
+        const url = path.startsWith('http') ? path : `${window.location.origin}${path.startsWith('/') ? '' : '/'}${path}`;
+        navigator.clipboard.writeText(url).then(() => toast.success('Link copied')).catch(() => toast.error('Could not copy'));
     };
 
     const postFile = (
@@ -272,26 +325,37 @@ export default function BookmarksIndex({ workspace, bookmarks }: Props) {
                                         Add Bookmark
                                     </Button>
                                 </DialogTrigger>
-                                <DialogContent className="sm:max-w-md">
+                                <DialogContent className="sm:max-w-lg">
                                     <DialogHeader>
-                                        <DialogTitle>New bookmark collection</DialogTitle>
+                                        <DialogTitle className="text-xl">New bookmark collection</DialogTitle>
                                         <DialogDescription>
                                             Create a card to collect links, files, and to-dos. You can share it publicly (view only) or invite workspace members to view or edit.
                                         </DialogDescription>
                                     </DialogHeader>
-                                    <form onSubmit={createBookmark} className="space-y-4 mt-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="name">Name</Label>
-                                            <Input
-                                                id="name"
-                                                value={data.name}
-                                                onChange={(e) => setData('name', e.target.value)}
-                                                placeholder="e.g. Research, Reading list"
-                                                required
+                                    <form onSubmit={createBookmark} className="space-y-5 mt-4">
+                                        <div className="flex gap-3 items-end">
+                                            <IconPicker
+                                                label="Icon"
+                                                value={data.icon}
+                                                onChange={(v) => setData('icon', v)}
+                                                placeholderEmoji="📑"
+                                                onImageUpload={handleCreateBookmarkIconUpload}
+                                                className="shrink-0"
                                             />
-                                            {errors.name && (
-                                                <p className="text-sm text-destructive">{errors.name}</p>
-                                            )}
+                                            <div className="flex-1 min-w-0 space-y-2">
+                                                <Label htmlFor="name">Name</Label>
+                                                <Input
+                                                    id="name"
+                                                    value={data.name}
+                                                    onChange={(e) => setData('name', e.target.value)}
+                                                    placeholder="e.g. Research, Reading list"
+                                                    className="h-10"
+                                                    required
+                                                />
+                                                {errors.name && (
+                                                    <p className="text-sm text-destructive">{errors.name}</p>
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="space-y-2">
                                             <Label htmlFor="description">Description (optional)</Label>
@@ -300,15 +364,43 @@ export default function BookmarksIndex({ workspace, bookmarks }: Props) {
                                                 value={data.description}
                                                 onChange={(e) => setData('description', e.target.value)}
                                                 placeholder="What is this collection for?"
-                                                className="min-h-[80px]"
+                                                className="min-h-[80px] resize-none"
                                             />
                                         </div>
-                                        <div className="flex justify-end gap-2 pt-2">
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                onClick={() => setCreateOpen(false)}
-                                            >
+                                        <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                                            <Label>Visibility</Label>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setData('visibility', 'private')}
+                                                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg border-2 py-2.5 text-sm font-medium transition-colors ${
+                                                        data.visibility === 'private'
+                                                            ? 'border-primary bg-primary/10 text-primary'
+                                                            : 'border-transparent bg-background hover:bg-muted'
+                                                    }`}
+                                                >
+                                                    <Lock className="size-4" />
+                                                    Private
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setData('visibility', 'public')}
+                                                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg border-2 py-2.5 text-sm font-medium transition-colors ${
+                                                        data.visibility === 'public'
+                                                            ? 'border-primary bg-primary/10 text-primary'
+                                                            : 'border-transparent bg-background hover:bg-muted'
+                                                    }`}
+                                                >
+                                                    <Globe className="size-4" />
+                                                    Shared
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                                {data.visibility === 'public' ? 'Anyone with the link can view (read-only).' : 'Only you and invited collaborators can see this.'}
+                                            </p>
+                                        </div>
+                                        <div className="flex justify-end gap-2 pt-2 border-t">
+                                            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
                                                 Cancel
                                             </Button>
                                             <Button type="submit" disabled={processing}>
@@ -392,8 +484,12 @@ export default function BookmarksIndex({ workspace, bookmarks }: Props) {
                                                     href={route('bookmarks.show', [workspace.slug, bookmark.slug])}
                                                     className="flex-1 min-w-0 flex items-start gap-3"
                                                 >
-                                                    <span className="text-2xl shrink-0">
-                                                        {bookmark.icon || '📑'}
+                                                    <span className="text-2xl shrink-0 flex items-center justify-center size-8 overflow-hidden rounded">
+                                                        {bookmark.icon_display && (bookmark.icon_display.startsWith('http') || bookmark.icon_display.startsWith('/')) ? (
+                                                            <img src={bookmark.icon_display} alt="" className="size-8 object-contain" />
+                                                        ) : (
+                                                            bookmark.icon_display || bookmark.icon || '📑'
+                                                        )}
                                                     </span>
                                                     <div className="min-w-0 flex-1">
                                                         <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
@@ -486,28 +582,41 @@ export default function BookmarksIndex({ workspace, bookmarks }: Props) {
                 </div>
             </div>
 
-            {/* Edit bookmark dialog */}
+            {/* Edit bookmark dialog – settings */}
             <Dialog open={!!editBookmark} onOpenChange={(open) => !open && setEditBookmark(null)}>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>Edit bookmark</DialogTitle>
+                        <DialogTitle className="text-xl">Bookmark settings</DialogTitle>
                         <DialogDescription>
-                            Change the name and description of this bookmark card.
+                            Edit name, description, icon, and sharing for this bookmark.
                         </DialogDescription>
                     </DialogHeader>
-                    <form onSubmit={saveEdit} className="space-y-4 mt-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="edit-name">Name</Label>
-                            <Input
-                                id="edit-name"
-                                value={editForm.data.name}
-                                onChange={(e) => editForm.setData('name', e.target.value)}
-                                placeholder="Bookmark name"
-                                required
-                            />
-                            {editForm.errors.name && (
-                                <p className="text-sm text-destructive">{editForm.errors.name}</p>
+                    <form onSubmit={saveEdit} className="space-y-5 mt-4">
+                        <div className="flex gap-3 items-end">
+                            {editBookmark && (
+                                <IconPicker
+                                    label="Icon"
+                                    value={editForm.data.icon}
+                                    onChange={(v) => editForm.setData('icon', v)}
+                                    placeholderEmoji="📑"
+                                    onImageUpload={async (file) => handleBookmarkIconUpload(file, editBookmark.slug)}
+                                    className="shrink-0"
+                                />
                             )}
+                            <div className="flex-1 min-w-0 space-y-2">
+                                <Label htmlFor="edit-name">Name</Label>
+                                <Input
+                                    id="edit-name"
+                                    value={editForm.data.name}
+                                    onChange={(e) => editForm.setData('name', e.target.value)}
+                                    placeholder="Bookmark name"
+                                    className="h-10"
+                                    required
+                                />
+                                {editForm.errors.name && (
+                                    <p className="text-sm text-destructive">{editForm.errors.name}</p>
+                                )}
+                            </div>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="edit-description">Description</Label>
@@ -516,15 +625,57 @@ export default function BookmarksIndex({ workspace, bookmarks }: Props) {
                                 value={editForm.data.description}
                                 onChange={(e) => editForm.setData('description', e.target.value)}
                                 placeholder="What is this collection for?"
-                                className="min-h-[80px]"
+                                className="min-h-[80px] resize-none"
                             />
                         </div>
-                        <div className="flex justify-end gap-2 pt-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => setEditBookmark(null)}
-                            >
+                        <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                            <Label>Visibility</Label>
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => editForm.setData('visibility', 'private')}
+                                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg border-2 py-2.5 text-sm font-medium transition-colors ${
+                                        editForm.data.visibility === 'private'
+                                            ? 'border-primary bg-primary/10 text-primary'
+                                            : 'border-transparent bg-background hover:bg-muted'
+                                    }`}
+                                >
+                                    <Lock className="size-4" />
+                                    Private
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => editForm.setData('visibility', 'public')}
+                                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg border-2 py-2.5 text-sm font-medium transition-colors ${
+                                        editForm.data.visibility === 'public'
+                                            ? 'border-primary bg-primary/10 text-primary'
+                                            : 'border-transparent bg-background hover:bg-muted'
+                                    }`}
+                                >
+                                    <Globe className="size-4" />
+                                    Shared
+                                </button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                {editForm.data.visibility === 'public'
+                                    ? 'Anyone with the link can view (read-only).'
+                                    : 'Only you and invited collaborators can see this.'}
+                            </p>
+                            {editForm.data.visibility === 'public' && editBookmark?.uuid && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="mt-2 gap-2"
+                                    onClick={copySharedLinkFromEdit}
+                                >
+                                    <Copy className="size-4" />
+                                    Copy shared link
+                                </Button>
+                            )}
+                        </div>
+                        <div className="flex justify-end gap-2 pt-2 border-t">
+                            <Button type="button" variant="outline" onClick={() => setEditBookmark(null)}>
                                 Cancel
                             </Button>
                             <Button type="submit" disabled={editForm.processing}>
