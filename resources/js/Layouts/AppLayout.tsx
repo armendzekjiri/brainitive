@@ -404,21 +404,21 @@ function PageTreeItem({
     if (page.type === 'folder') {
         return (
             <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="flex items-center group">
+                <div className="flex min-w-0 items-center group">
                     <CollapsibleTrigger asChild>
                         <button
-                            className="flex items-center gap-2 flex-1 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-left text-sm"
+                            className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-left text-sm"
                             style={{ paddingLeft: `${level * 12 + 8}px` }}
                         >
-                            <ChevronRight className={`size-3.5 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-                            <span className="text-base">{page.icon || '📁'}</span>
-                            <span className="truncate text-muted-foreground group-hover:text-foreground">{page.name}</span>
+                            <ChevronRight className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                            <span className="shrink-0 text-base">{page.icon || '📁'}</span>
+                            <span className="min-w-0 truncate text-muted-foreground group-hover:text-foreground">{page.name}</span>
                         </button>
                     </CollapsibleTrigger>
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="size-6 opacity-0 group-hover:opacity-100 mr-1"
+                        className="size-6 shrink-0 opacity-0 group-hover:opacity-100 mr-1"
                         onClick={(e) => {
                             e.stopPropagation();
                             onAddItem(page.id);
@@ -448,11 +448,11 @@ function PageTreeItem({
     return (
         <Link
             href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
-            className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+            className="flex min-w-0 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
             style={{ paddingLeft: `${level * 12 + 24}px` }}
         >
-            <span className="text-base">{page.icon || '📄'}</span>
-            <span className="truncate">{page.name}</span>
+            <span className="shrink-0 text-base">{page.icon || '📄'}</span>
+            <span className="min-w-0 truncate">{page.name}</span>
         </Link>
     );
 }
@@ -474,26 +474,26 @@ function ProjectItem({
 
     return (
         <Collapsible open={isOpen} onOpenChange={setIsOpen} className="group/collapsible">
-            <SidebarMenuItem>
-                <div className="flex items-center group">
+            <SidebarMenuItem className="min-w-0">
+                <div className="flex min-w-0 items-center group">
                     <CollapsibleTrigger asChild>
-                        <button className="flex items-center gap-3 flex-1 px-2 py-2 hover:bg-accent rounded-lg transition-colors text-left">
+                        <button className="flex min-w-0 flex-1 items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors text-left">
                             <div
                                 className="size-6 rounded flex items-center justify-center text-[11px] font-bold text-white shrink-0"
                                 style={{ backgroundColor: project.color || '#0052CC' }}
                             >
                                 {project.key?.substring(0, 2) || 'PR'}
                             </div>
-                            <span className="flex-1 text-sm font-medium truncate">{project.name}</span>
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium">{project.name}</span>
                             {hasContent && (
-                                <ChevronRight className="size-4 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" />
+                                <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" />
                             )}
                         </button>
                     </CollapsibleTrigger>
                     <Button
                         variant="ghost"
                         size="icon"
-                        className="size-7 opacity-0 group-hover:opacity-100 mr-1"
+                        className="size-7 shrink-0 opacity-0 group-hover:opacity-100 mr-1"
                         onClick={(e) => {
                             e.stopPropagation();
                             onAddItem(project.id);
@@ -510,10 +510,10 @@ function ProjectItem({
                                 <Link
                                     key={board.id}
                                     href={route('boards.show', [workspace.slug, project.slug, board.slug])}
-                                    className="flex items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                                    className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
                                 >
-                                    <LayoutGrid className="size-4" />
-                                    <span className="truncate">{board.name}</span>
+                                    <LayoutGrid className="size-4 shrink-0" />
+                                    <span className="min-w-0 truncate">{board.name}</span>
                                 </Link>
                             ))}
 
@@ -625,12 +625,12 @@ function AppSidebar({ workspaces, currentWorkspace }: { workspaces: Workspace[];
                 {/* Projects Section - Scrollable */}
                 <SidebarContent className="px-3">
                     <SidebarGroup className="py-4">
-                        <div className="flex items-center justify-between px-2 mb-2">
-                            <SidebarGroupLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider p-0 m-0">
+                        <div className="flex min-w-0 items-center justify-between gap-2 px-2 mb-2">
+                            <SidebarGroupLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider p-0 m-0 truncate">
                                 Projects
                             </SidebarGroupLabel>
                             {currentWorkspace && (
-                                <Link href={route('projects.create', currentWorkspace.slug)}>
+                                <Link href={route('projects.create', currentWorkspace.slug)} className="shrink-0">
                                     <Button variant="ghost" size="icon" className="size-6 hover:bg-accent">
                                         <Plus className="size-4" />
                                     </Button>

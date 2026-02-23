@@ -412,6 +412,8 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
     const [isSaving, setIsSaving] = useState(false);
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
     const [headings, setHeadings] = useState<HeadingItem[]>([]);
+    const [contentWithEmbedImage, setContentWithEmbedImage] = useState<Record<string, unknown> | null>(null);
+    const appliedEmbedReturnRef = useRef(false);
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Edit mode state - published pages start in view mode
@@ -423,6 +425,40 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
         icon: page.icon || '📄',
         content: page.content || { type: 'doc', content: [] },
     });
+
+    // When returning from Excalidraw embed editor: merge image_url into block and save
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const from = params.get('from');
+        const blockId = params.get('block_id');
+        const imageUrl = params.get('image_url');
+        if (from !== 'excalidraw_embed' || !blockId || !imageUrl || appliedEmbedReturnRef.current) return;
+        const raw = page.content as { blocks?: Array<{ id?: string; type?: string; data?: Record<string, unknown> }> } | null;
+        const blocks = raw?.blocks ?? [];
+        const idx = blocks.findIndex((b) => b.id === blockId && b.type === 'excalidrawEmbed');
+        if (idx < 0) return;
+        appliedEmbedReturnRef.current = true;
+        const decodedUrl = decodeURIComponent(imageUrl);
+        const newBlocks = blocks.map((b, i) =>
+            i === idx && b.data ? { ...b, data: { ...b.data, imageUrl: decodedUrl } } : b
+        );
+        const merged = { ...raw, blocks: newBlocks };
+        setContentWithEmbedImage(merged);
+        router.put(route('pages.update', [workspace.slug, project.slug, page.uuid]), {
+            content: JSON.stringify(merged),
+        }, {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('from');
+                url.searchParams.delete('block_id');
+                url.searchParams.delete('diagram_id');
+                url.searchParams.delete('image_url');
+                window.history.replaceState({}, '', url.pathname + url.search);
+            },
+        });
+    }, [page.uuid, page.content, workspace.slug, project.slug]);
 
     // Update formData and editing state when page prop changes
     useEffect(() => {
@@ -490,6 +526,25 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
             }
         };
     }, []);
+
+    const handleExcalidrawEmbedInsert = useCallback(
+        async (content: Record<string, unknown>, diagramId: string, blockId: string) => {
+            await new Promise<void>((resolve, reject) => {
+                router.put(route('pages.update', [workspace.slug, project.slug, page.uuid]), {
+                    content: JSON.stringify(content),
+                }, {
+                    preserveScroll: true,
+                    preserveState: true,
+                    onSuccess: () => resolve(),
+                    onError: () => reject(new Error('Failed to save')),
+                });
+            });
+            const url = route('pages.excalidraw', [workspace.slug, project.slug, page.uuid])
+                + '?embed=1&diagram_id=' + encodeURIComponent(diagramId) + '&block_id=' + encodeURIComponent(blockId);
+            window.location.href = url;
+        },
+        [workspace.slug, project.slug, page.uuid]
+    );
 
     const handlePublish = () => {
         router.post(route('pages.publish', [workspace.slug, project.slug, page.uuid]), {}, {
@@ -670,12 +725,12 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                 <div className="max-w-6xl mx-auto px-6 py-8">
                     {/* Icon and Title */}
                     <div className="mb-8">
-                        {isEditing ? (
-                            <EmojiPicker value={formData.icon} onChange={handleUpdateIcon} />
-                        ) : (
-                            <span className="text-4xl">{formData.icon}</span>
-                        )}
-                        <div className="mt-2">
+                        <div className="flex items-center gap-3">
+                            {isEditing ? (
+                                <EmojiPicker value={formData.icon} onChange={handleUpdateIcon} />
+                            ) : (
+                                <span className="text-4xl">{formData.icon}</span>
+                            )}
                             {isEditing ? (
                                 <PageTitleEditor title={formData.name} onSave={handleUpdateName} />
                             ) : (
@@ -710,15 +765,48 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
 
                     <Separator className="mb-8" />
 
-                    {/* Page Content - Editor.js (Excalidraw pages redirect to full-page editor) */}
-                    {page.type === 'page' && (
+                    {/* Standalone Excalidraw page: show preview image/card, click to open editor */}
+                    {page.type === 'page' && isExcalidrawPage(page.content) && (
+                        <div className="mb-8">
+                            <a
+                                href={route('pages.excalidraw', [workspace.slug, project.slug, page.uuid])}
+                                className="block rounded-lg border border-border bg-muted/30 overflow-hidden transition-colors hover:bg-muted/50 hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                            >
+                                {(page.content as { previewImageUrl?: string })?.previewImageUrl ? (
+                                    <img
+                                        src={(page.content as { previewImageUrl: string }).previewImageUrl}
+                                        alt={`Whiteboard: ${formData.name || 'Untitled'}`}
+                                        className="w-full max-h-[480px] object-contain bg-white"
+                                    />
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
+                                        <span className="text-5xl mb-4">✏️</span>
+                                        <p className="text-lg font-medium text-foreground">Whiteboard</p>
+                                        <p className="text-sm text-muted-foreground mt-1">Click to open and edit</p>
+                                    </div>
+                                )}
+                                <div className="px-4 py-3 border-t border-border bg-muted/20 text-sm text-muted-foreground text-center">
+                                    Click to open in editor
+                                </div>
+                            </a>
+                        </div>
+                    )}
+
+                    {/* Page Content - Editor.js (documents only; Excalidraw pages use preview above) */}
+                    {page.type === 'page' && !isExcalidrawPage(page.content) && (
                         <EditorJSComponent
                             key={`${page.uuid}-${isEditing}`}
-                            content={page.content as any || { blocks: [] }}
+                            content={(contentWithEmbedImage ?? page.content) as any || { blocks: [] }}
                             onChange={handleUpdateContent}
                             onHeadingsChange={setHeadings}
                             editable={isEditing}
-                            placeholder="Click here and start writing..."
+                            placeholder="Click here and start writing, or type / for commands..."
+                            excalidrawEmbedConfig={{
+                                getEmbedEditorUrl: ({ diagramId, blockId }) =>
+                                    route('pages.excalidraw', [workspace.slug, project.slug, page.uuid]) +
+                                    '?embed=1&diagram_id=' + encodeURIComponent(diagramId) + '&block_id=' + encodeURIComponent(blockId),
+                            }}
+                            onExcalidrawEmbedInsert={handleExcalidrawEmbedInsert}
                         />
                     )}
 
@@ -766,20 +854,6 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                     </Button>
                                 </div>
                             )}
-                        </div>
-                    )}
-
-                    {/* Add Subpage for regular pages */}
-                    {page.type === 'page' && (!page.children || page.children.length === 0) && (
-                        <div className="mt-12 pt-8 border-t">
-                            <Button
-                                variant="ghost"
-                                onClick={() => setAddSubpageOpen(true)}
-                                className="gap-2 text-muted-foreground hover:text-foreground"
-                            >
-                                <Plus className="size-4" />
-                                Add subpage
-                            </Button>
                         </div>
                     )}
                 </div>

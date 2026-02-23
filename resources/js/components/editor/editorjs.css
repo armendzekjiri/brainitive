@@ -280,6 +280,46 @@
     padding: 0.5rem;
 }
 
+/* Excalidraw embed block */
+.editorjs-container .excalidraw-embed-block {
+    margin: 1rem 0;
+}
+.editorjs-container .excalidraw-embed-block__image-wrap {
+    border-radius: 0.5rem;
+    overflow: hidden;
+    border: 1px solid hsl(var(--border));
+}
+.editorjs-container .excalidraw-embed-block__image {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+.editorjs-container .excalidraw-embed-block__placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 2rem;
+    border: 2px dashed hsl(var(--border));
+    border-radius: 0.5rem;
+    background: hsl(var(--muted) / 0.3);
+    color: hsl(var(--muted-foreground));
+    font-size: 0.875rem;
+}
+.editorjs-container .excalidraw-embed-block__placeholder-icon {
+    font-size: 2rem;
+}
+.editorjs-container .excalidraw-embed-block__placeholder-hint {
+    font-size: 0.75rem;
+    opacity: 0.8;
+}
+.editorjs-container .excalidraw-embed-block__caption {
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+    margin-top: 0.5rem;
+}
+
 /* Embed */
 .editorjs-container .embed-tool {
     margin: 1rem 0;
@@ -377,6 +417,21 @@
 .editorjs-container .ce-toolbar__settings-btn:hover {
     background: hsl(var(--accent));
     color: hsl(var(--accent-foreground));
+}
+
+/* Hide the plus button's "/" shortcut hint (optional) */
+.editorjs-container .ce-toolbar__plus-shortcut {
+    display: none !important;
+}
+
+/* Hide the empty box: third element in toolbar (after + and six-dots) */
+.editorjs-container .ce-toolbar__actions > *:nth-child(3) {
+    width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    overflow: visible !important;
 }
 
 /* Inline Toolbar */

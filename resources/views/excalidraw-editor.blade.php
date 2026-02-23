@@ -63,6 +63,9 @@
             var returnUrl = config.returnUrl || '';
             var initialData = config.initialData || { elements: [], appState: {}, files: {}, libraryItems: [] };
             var theme = config.theme || 'light';
+            var isEmbed = config.isEmbed || false;
+            var diagramId = config.diagramId || '';
+            var blockId = config.blockId || '';
 
             var excalidrawAPI = null;
             var initialElements = null;
@@ -96,6 +99,65 @@
 
                 var btn = thenRedirect ? document.getElementById('saveAndExitBtn') : document.getElementById('saveBtn');
                 if (btn) btn.textContent = 'Saving…';
+
+                if (isEmbed && thenRedirect) {
+                    return window.BrainitiveExcalidraw.exportToCanvas({
+                        elements: elements,
+                        appState: appState,
+                        files: files,
+                        exportPadding: 10,
+                        exportBackground: true
+                    }).then(function(canvas) {
+                        return new Promise(function(resolve) { canvas.toBlob(resolve, 'image/png'); });
+                    }).then(function(blob) {
+                        var formData = new FormData();
+                        formData.append('diagram_data', JSON.stringify(data));
+                        formData.append('diagram_id', diagramId);
+                        formData.append('block_id', blockId);
+                        formData.append('image', blob, 'diagram.png');
+                        formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
+                        return fetch(saveUrl, {
+                            method: 'POST',
+                            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                            body: formData
+                        });
+                    }).then(function(r) { return r.json(); }).then(function(result) {
+                        if (!result.success) throw new Error(result.message || 'Save failed');
+                        var url = returnUrl + '&image_url=' + encodeURIComponent(result.imageUrl || '');
+                        window.location.href = url;
+                    }).catch(function(e) {
+                        alert('Error: ' + (e.message || 'Save failed'));
+                        if (btn) btn.textContent = 'Save & exit';
+                    });
+                }
+
+                if (!isEmbed && thenRedirect) {
+                    return window.BrainitiveExcalidraw.exportToCanvas({
+                        elements: elements,
+                        appState: appState,
+                        files: files,
+                        exportPadding: 10,
+                        exportBackground: true
+                    }).then(function(canvas) {
+                        return new Promise(function(resolve) { canvas.toBlob(resolve, 'image/png'); });
+                    }).then(function(blob) {
+                        var formData = new FormData();
+                        formData.append('diagram_data', JSON.stringify(data));
+                        formData.append('image', blob, 'preview.png');
+                        formData.append('_token', document.querySelector('meta[name="csrf-token"]').content);
+                        return fetch(saveUrl, {
+                            method: 'POST',
+                            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                            body: formData
+                        });
+                    }).then(function(r) { return r.json(); }).then(function(result) {
+                        if (!result.success) throw new Error(result.message || 'Save failed');
+                        window.location.href = returnUrl;
+                    }).catch(function(e) {
+                        alert('Error: ' + (e.message || 'Save failed'));
+                        if (btn) btn.textContent = 'Save & exit';
+                    });
+                }
 
                 return fetch(saveUrl, {
                     method: 'POST',
