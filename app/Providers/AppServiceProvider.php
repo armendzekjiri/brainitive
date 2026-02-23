@@ -1,0 +1,47 @@
+<?php
+
+namespace App\Providers;
+
+use App\Models\Board;
+use App\Models\Item;
+use App\Models\Project;
+use App\Models\Workspace;
+use App\Policies\BoardPolicy;
+use App\Policies\ItemPolicy;
+use App\Policies\ProjectPolicy;
+use App\Policies\WorkspacePolicy;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Vite;
+use Illuminate\Support\ServiceProvider;
+
+class AppServiceProvider extends ServiceProvider
+{
+    /**
+     * Register any application services.
+     */
+    public function register(): void
+    {
+        //
+    }
+
+    /**
+     * Bootstrap any application services.
+     */
+    public function boot(): void
+    {
+        Vite::prefetch(concurrency: 3);
+
+        // Register policies
+        Gate::policy(Workspace::class, WorkspacePolicy::class);
+        Gate::policy(Project::class, ProjectPolicy::class);
+        Gate::policy(Board::class, BoardPolicy::class);
+        Gate::policy(Item::class, ItemPolicy::class);
+
+        // Instance admins bypass all permission checks
+        Gate::before(function ($user, $ability) {
+            if ($user->isInstanceAdmin()) {
+                return true;
+            }
+        });
+    }
+}

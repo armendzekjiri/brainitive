@@ -1,0 +1,661 @@
+/* Editor.js Custom Styles */
+
+/* Editor Container */
+.editorjs-container {
+    min-height: 400px;
+}
+
+.editorjs-container .codex-editor {
+    padding: 0;
+}
+
+.editorjs-container .codex-editor__redactor {
+    padding-bottom: 200px !important;
+}
+
+.editorjs-container .ce-block__content {
+    max-width: 100%;
+    margin: 0;
+}
+
+.editorjs-container .ce-toolbar__content {
+    max-width: 100%;
+    margin: 0;
+}
+
+/* Paragraphs */
+.editorjs-container .ce-paragraph {
+    font-size: 1rem;
+    line-height: 1.75;
+    padding: 0.5rem 0;
+}
+
+/* Headings */
+.editorjs-container .ce-header {
+    padding: 0.75rem 0;
+    margin: 0;
+    scroll-margin-top: 100px;
+}
+
+.editorjs-container h1.ce-header {
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.editorjs-container h2.ce-header {
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.editorjs-container h3.ce-header {
+    font-size: 1.375rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.editorjs-container h4.ce-header {
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+/* Lists */
+.editorjs-container .cdx-nested-list {
+    padding-left: 1.5rem;
+}
+
+.editorjs-container .cdx-nested-list__item {
+    padding: 0.25rem 0;
+    line-height: 1.5;
+}
+
+.editorjs-container .cdx-nested-list__item-content {
+    flex-grow: 1;
+}
+
+/* Checklist */
+.editorjs-container .cdx-checklist {
+    padding-left: 0;
+}
+
+.editorjs-container .cdx-checklist__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.375rem 0;
+}
+
+.editorjs-container .cdx-checklist__item-checkbox {
+    width: 1.125rem;
+    height: 1.125rem;
+    border-radius: 0.25rem;
+    border: 2px solid hsl(var(--border));
+    flex-shrink: 0;
+    margin-top: 0.125rem;
+}
+
+.editorjs-container .cdx-checklist__item--checked .cdx-checklist__item-checkbox {
+    background-color: hsl(var(--primary));
+    border-color: hsl(var(--primary));
+}
+
+.editorjs-container .cdx-checklist__item--checked .cdx-checklist__item-text {
+    text-decoration: line-through;
+    opacity: 0.6;
+}
+
+/* Quote */
+.editorjs-container .cdx-quote {
+    border-left: 4px solid hsl(var(--primary));
+    padding-left: 1rem;
+    margin: 1rem 0;
+}
+
+.editorjs-container .cdx-quote__text {
+    font-size: 1.125rem;
+    font-style: italic;
+    color: hsl(var(--muted-foreground));
+    min-height: auto;
+}
+
+.editorjs-container .cdx-quote__caption {
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+    margin-top: 0.5rem;
+}
+
+/* Warning/Info Panel */
+.editorjs-container .cdx-warning {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    background-color: hsl(var(--warning) / 0.1);
+    border: 1px solid hsl(var(--warning) / 0.3);
+    margin: 1rem 0;
+}
+
+.editorjs-container .cdx-warning__icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.editorjs-container .cdx-warning__title {
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+}
+
+.editorjs-container .cdx-warning__message {
+    font-size: 0.9375rem;
+    line-height: 1.5;
+}
+
+/* Code Block */
+.editorjs-container .ce-code {
+    background: hsl(var(--muted));
+    border-radius: 0.5rem;
+    padding: 1rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    overflow-x: auto;
+}
+
+.editorjs-container .ce-code__textarea {
+    background: transparent;
+    border: none;
+    width: 100%;
+    min-height: 100px;
+    resize: vertical;
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+}
+
+/* Delimiter */
+.editorjs-container .ce-delimiter {
+    line-height: 1.6em;
+    width: 100%;
+    text-align: center;
+    margin: 2rem 0;
+}
+
+.editorjs-container .ce-delimiter::before {
+    display: inline-block;
+    content: "***";
+    font-size: 1.5rem;
+    color: hsl(var(--muted-foreground));
+    letter-spacing: 0.5em;
+}
+
+/* Table */
+.editorjs-container .tc-wrap {
+    --color-border: hsl(var(--border));
+    margin: 1rem 0;
+    overflow-x: auto;
+    max-width: 100%;
+}
+
+.editorjs-container .tc-table {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: collapse;
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.editorjs-container .tc-row {
+    display: flex;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.editorjs-container .tc-row:last-child {
+    border-bottom: none;
+}
+
+.editorjs-container .tc-row--heading {
+    background: hsl(var(--muted));
+    font-weight: 600;
+}
+
+.editorjs-container .tc-cell {
+    padding: 0.75rem 1rem;
+    border-right: 1px solid var(--color-border);
+    min-width: 120px;
+    flex: 1;
+}
+
+.editorjs-container .tc-cell:last-child {
+    border-right: none;
+}
+
+.editorjs-container .tc-cell[contenteditable="true"] {
+    outline: none;
+}
+
+.editorjs-container .tc-cell--selected {
+    background: hsl(var(--primary) / 0.1);
+}
+
+/* Add Row/Column buttons */
+.editorjs-container .tc-add-column,
+.editorjs-container .tc-add-row {
+    background: hsl(var(--muted));
+    color: hsl(var(--muted-foreground));
+    border: 1px dashed hsl(var(--border));
+    transition: all 0.2s;
+}
+
+.editorjs-container .tc-add-column:hover,
+.editorjs-container .tc-add-row:hover {
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+    border-color: hsl(var(--primary));
+}
+
+/* Image */
+.editorjs-container .image-tool {
+    margin: 1rem 0;
+}
+
+.editorjs-container .image-tool__image {
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.editorjs-container .image-tool__image-picture {
+    max-width: 100%;
+    height: auto;
+}
+
+.editorjs-container .image-tool__caption {
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+    text-align: center;
+    padding: 0.5rem;
+}
+
+/* Embed */
+.editorjs-container .embed-tool {
+    margin: 1rem 0;
+}
+
+.editorjs-container .embed-tool__content {
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+/* Link Tool */
+.editorjs-container .link-tool {
+    margin: 1rem 0;
+}
+
+.editorjs-container .link-tool__content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    text-decoration: none;
+    color: inherit;
+    transition: background-color 0.2s;
+}
+
+.editorjs-container .link-tool__content:hover {
+    background: hsl(var(--accent));
+}
+
+.editorjs-container .link-tool__title {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.editorjs-container .link-tool__description {
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+    margin-top: 0.25rem;
+}
+
+/* Inline tools */
+.editorjs-container .cdx-marker {
+    background: rgba(245, 235, 111, 0.5);
+    padding: 0.125rem 0;
+}
+
+.editorjs-container .inline-code {
+    background: hsl(var(--muted));
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.875em;
+}
+
+/* Attachments */
+.editorjs-container .cdx-attaches {
+    margin: 1rem 0;
+}
+
+.editorjs-container .cdx-attaches__file-icon {
+    width: 40px;
+    height: 40px;
+    background: hsl(var(--primary));
+    border-radius: 0.5rem;
+}
+
+.editorjs-container .cdx-attaches__file-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.editorjs-container .cdx-attaches__title {
+    font-weight: 500;
+}
+
+.editorjs-container .cdx-attaches__size {
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+}
+
+/* Toolbar */
+.editorjs-container .ce-toolbar__plus,
+.editorjs-container .ce-toolbar__settings-btn {
+    color: hsl(var(--muted-foreground));
+    background: transparent;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.375rem;
+    transition: all 0.2s;
+}
+
+.editorjs-container .ce-toolbar__plus:hover,
+.editorjs-container .ce-toolbar__settings-btn:hover {
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+}
+
+/* Inline Toolbar */
+.editorjs-container .ce-inline-toolbar {
+    background: hsl(var(--popover));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.editorjs-container .ce-inline-tool {
+    color: hsl(var(--popover-foreground));
+}
+
+.editorjs-container .ce-inline-tool:hover {
+    background: hsl(var(--accent));
+}
+
+.editorjs-container .ce-inline-tool--active {
+    color: hsl(var(--primary));
+}
+
+/* Conversion Toolbar */
+.editorjs-container .ce-conversion-toolbar {
+    background: hsl(var(--popover));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.editorjs-container .ce-conversion-tool {
+    color: hsl(var(--popover-foreground));
+}
+
+.editorjs-container .ce-conversion-tool:hover {
+    background: hsl(var(--accent));
+}
+
+/* Settings */
+.editorjs-container .ce-settings {
+    background: hsl(var(--popover));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.editorjs-container .ce-settings__button {
+    color: hsl(var(--popover-foreground));
+}
+
+.editorjs-container .ce-settings__button:hover {
+    background: hsl(var(--accent));
+}
+
+/* Block selection */
+.editorjs-container .ce-block--selected .ce-block__content {
+    background: hsl(var(--primary) / 0.05);
+    border-radius: 0.375rem;
+}
+
+/* Placeholder */
+.editorjs-container .ce-paragraph[data-placeholder]:empty::before {
+    color: hsl(var(--muted-foreground));
+}
+
+/* Dark mode adjustments */
+.dark .editorjs-container .cdx-marker {
+    background: rgba(245, 235, 111, 0.3);
+}
+
+.dark .editorjs-container .cdx-warning {
+    background-color: hsl(45 100% 50% / 0.1);
+    border-color: hsl(45 100% 50% / 0.3);
+}
+
+/* Additional Heading Levels */
+.editorjs-container h5.ce-header {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.editorjs-container h6.ce-header {
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.4;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: hsl(var(--muted-foreground));
+}
+
+/* Alert Blocks - editorjs-alert */
+.editorjs-container .cdx-alert {
+    padding: 1rem 1.25rem;
+    border-radius: 0.5rem;
+    margin: 1rem 0;
+    border-left: 4px solid;
+}
+
+.editorjs-container .cdx-alert__message {
+    font-size: 0.9375rem;
+    line-height: 1.6;
+}
+
+/* Alert types */
+.editorjs-container .cdx-alert-primary {
+    background-color: hsl(var(--primary) / 0.1);
+    border-left-color: hsl(var(--primary));
+}
+
+.editorjs-container .cdx-alert-secondary {
+    background-color: hsl(var(--secondary) / 0.5);
+    border-left-color: hsl(var(--secondary-foreground) / 0.5);
+}
+
+.editorjs-container .cdx-alert-info {
+    background-color: hsl(210 100% 50% / 0.1);
+    border-left-color: hsl(210 100% 50%);
+}
+
+.editorjs-container .cdx-alert-success {
+    background-color: hsl(142 76% 36% / 0.1);
+    border-left-color: hsl(142 76% 36%);
+}
+
+.editorjs-container .cdx-alert-warning {
+    background-color: hsl(45 100% 50% / 0.1);
+    border-left-color: hsl(45 100% 50%);
+}
+
+.editorjs-container .cdx-alert-danger {
+    background-color: hsl(0 84% 60% / 0.1);
+    border-left-color: hsl(0 84% 60%);
+}
+
+.editorjs-container .cdx-alert-light {
+    background-color: hsl(0 0% 96%);
+    border-left-color: hsl(0 0% 70%);
+}
+
+.editorjs-container .cdx-alert-dark {
+    background-color: hsl(0 0% 20% / 0.1);
+    border-left-color: hsl(0 0% 20%);
+}
+
+/* Alert select dropdown */
+.editorjs-container .cdx-alert-select {
+    margin-bottom: 0.5rem;
+}
+
+/* Raw HTML Block */
+.editorjs-container .ce-rawtool {
+    margin: 1rem 0;
+}
+
+.editorjs-container .ce-rawtool__textarea {
+    background: hsl(var(--muted));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    padding: 1rem;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    width: 100%;
+    min-height: 100px;
+    resize: vertical;
+    color: hsl(var(--foreground));
+}
+
+/* Text Variant Tunes */
+.editorjs-container .cdx-text-variant--call-out {
+    background: hsl(var(--muted));
+    padding: 1rem 1.25rem;
+    border-radius: 0.5rem;
+    border-left: 4px solid hsl(var(--primary));
+}
+
+.editorjs-container .cdx-text-variant--citation {
+    font-style: italic;
+    color: hsl(var(--muted-foreground));
+    border-left: 3px solid hsl(var(--border));
+    padding-left: 1rem;
+}
+
+.editorjs-container .cdx-text-variant--details {
+    font-size: 0.875rem;
+    color: hsl(var(--muted-foreground));
+}
+
+/* Underline inline tool */
+.editorjs-container u {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+/* Drag and Drop styles */
+.editorjs-container .ce-block--drop-target::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -2px;
+    height: 4px;
+    background: hsl(var(--primary));
+    border-radius: 2px;
+}
+
+/* Block dragging cursor */
+.editorjs-container .ce-block--dragging {
+    opacity: 0.5;
+}
+
+/* Improved focus styles */
+.editorjs-container .ce-block--focused {
+    background: transparent;
+}
+
+.editorjs-container [contenteditable]:focus {
+    outline: none;
+}
+
+/* Toolbox improvements */
+.editorjs-container .ce-toolbox {
+    background: hsl(var(--popover));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    padding: 0.5rem;
+}
+
+.editorjs-container .ce-toolbox__button {
+    color: hsl(var(--popover-foreground));
+    border-radius: 0.375rem;
+    padding: 0.5rem;
+    margin: 0.125rem;
+}
+
+.editorjs-container .ce-toolbox__button:hover {
+    background: hsl(var(--accent));
+}
+
+.editorjs-container .ce-toolbox__button--active {
+    background: hsl(var(--primary) / 0.1);
+    color: hsl(var(--primary));
+}
+
+/* Block tunes panel */
+.editorjs-container .ce-popover {
+    background: hsl(var(--popover));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.editorjs-container .ce-popover__item {
+    color: hsl(var(--popover-foreground));
+    border-radius: 0.375rem;
+}
+
+.editorjs-container .ce-popover__item:hover {
+    background: hsl(var(--accent));
+}
+
+.editorjs-container .ce-popover__item--active {
+    background: hsl(var(--primary) / 0.1);
+}
+
+.editorjs-container .ce-popover__item-icon {
+    background: hsl(var(--muted));
+    border-radius: 0.25rem;
+}
+
+/* Dark mode alert adjustments */
+.dark .editorjs-container .cdx-alert-light {
+    background-color: hsl(0 0% 30% / 0.3);
+    border-left-color: hsl(0 0% 50%);
+}
+
+.dark .editorjs-container .cdx-alert-dark {
+    background-color: hsl(0 0% 10% / 0.3);
+    border-left-color: hsl(0 0% 40%);
+}

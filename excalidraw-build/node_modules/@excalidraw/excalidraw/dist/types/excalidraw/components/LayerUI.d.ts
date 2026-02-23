@@ -1,0 +1,31 @@
+import React from "react";
+import type { ActionManager } from "../actions/manager";
+import type { NonDeletedExcalidrawElement } from "../element/types";
+import type { Language } from "../i18n";
+import type { AppProps, AppState, ExcalidrawProps, BinaryFiles, UIAppState, AppClassProperties } from "../types";
+import "./LayerUI.scss";
+import "./Toolbar.scss";
+interface LayerUIProps {
+    actionManager: ActionManager;
+    appState: UIAppState;
+    files: BinaryFiles;
+    canvas: HTMLCanvasElement;
+    setAppState: React.Component<any, AppState>["setState"];
+    elements: readonly NonDeletedExcalidrawElement[];
+    onLockToggle: () => void;
+    onHandToolToggle: () => void;
+    onPenModeToggle: AppClassProperties["togglePenMode"];
+    showExitZenModeBtn: boolean;
+    langCode: Language["code"];
+    renderTopRightUI?: ExcalidrawProps["renderTopRightUI"];
+    renderCustomStats?: ExcalidrawProps["renderCustomStats"];
+    UIOptions: AppProps["UIOptions"];
+    onExportImage: AppClassProperties["onExportImage"];
+    renderWelcomeScreen: boolean;
+    children?: React.ReactNode;
+    app: AppClassProperties;
+    isCollaborating: boolean;
+    generateLinkForSelection?: AppProps["generateLinkForSelection"];
+}
+declare const _default: React.MemoExoticComponent<({ actionManager, appState, files, setAppState, elements, canvas, onLockToggle, onHandToolToggle, onPenModeToggle, showExitZenModeBtn, renderTopRightUI, renderCustomStats, UIOptions, onExportImage, renderWelcomeScreen, children, app, isCollaborating, generateLinkForSelection, }: LayerUIProps) => import("react/jsx-runtime").JSX.Element>;
+export default _default;

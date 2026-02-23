@@ -1,0 +1,241 @@
+export interface User {
+    id: number;
+    name: string;
+    email: string;
+    email_verified_at?: string;
+    is_instance_admin?: boolean;
+    pivot?: {
+        role?: 'admin' | 'editor' | 'viewer' | 'member';
+        invited_at?: string;
+        accepted_at?: string;
+    };
+}
+
+export interface Workspace {
+    id: number;
+    uuid: string;
+    name: string;
+    slug: string;
+    description?: string;
+    logo?: string;
+    header_image?: string;
+    website?: string;
+    industry?: string;
+    company_size?: string;
+    timezone?: string;
+    language?: string;
+    currency?: string;
+    is_public?: boolean;
+    social_links?: {
+        twitter?: string;
+        linkedin?: string;
+        github?: string;
+    };
+    branding?: {
+        primary_color?: string;
+        secondary_color?: string;
+    };
+    settings?: Record<string, unknown>;
+    owner_id: number;
+    owner?: User;
+    pivot?: {
+        role: 'admin' | 'editor' | 'viewer' | 'member';
+    };
+    projects_count?: number;
+    users_count?: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface Project {
+    id: number;
+    uuid: string;
+    workspace_id: number;
+    name: string;
+    slug: string;
+    key: string;
+    description?: string;
+    icon?: string;
+    color?: string;
+    workspace?: Workspace;
+    boards_count?: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface Board {
+    id: number;
+    uuid: string;
+    project_id: number;
+    name: string;
+    slug: string;
+    description?: string;
+    type: 'kanban' | 'scrum' | 'list';
+    position: number;
+    project?: Project;
+    columns?: BoardColumn[];
+    created_at: string;
+    updated_at: string;
+}
+
+export interface BoardColumn {
+    id: number;
+    board_id: number;
+    name: string;
+    slug: string;
+    color?: string;
+    position: number;
+    wip_limit?: number;
+    is_done_column: boolean;
+    items?: Item[];
+    items_count?: number;
+}
+
+export interface Item {
+    id: number;
+    uuid: string;
+    board_id: number;
+    column_id: number;
+    parent_id?: number;
+    item_type_id?: number;
+    priority_id?: number;
+    key: string;
+    title: string;
+    description?: string;
+    created_by: number;
+    assigned_to?: number;
+    reporter_id?: number;
+    position: number;
+    story_points?: number;
+    start_date?: string;
+    due_date?: string;
+    completed_at?: string;
+    creator?: User;
+    assignee?: User;
+    reporter?: User;
+    column?: BoardColumn;
+    item_type?: ItemType;
+    priority?: ItemPriority;
+    labels?: Label[];
+    outgoing_links?: ItemLink[];
+    incoming_links?: ItemLink[];
+    comments?: Comment[];
+    comments_count?: number;
+    attachments?: Attachment[];
+    attachments_count?: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ItemType {
+    id: number;
+    name: string;
+    slug: string;
+    icon?: string;
+    color?: string;
+}
+
+export interface ItemPriority {
+    id: number;
+    name: string;
+    slug: string;
+    icon?: string;
+    color?: string;
+    order: number;
+}
+
+export interface Label {
+    id: number;
+    project_id: number;
+    name: string;
+    slug: string;
+    color?: string;
+}
+
+export interface ItemLink {
+    id: number;
+    source_item_id: number;
+    target_item_id: number;
+    link_type: 'blocks' | 'is_blocked_by' | 'duplicates' | 'is_duplicated_by' | 'relates_to' | 'clones' | 'is_cloned_by';
+    source_item?: {
+        id: number;
+        key: string;
+        title: string;
+        board?: { id: number; name: string; slug: string };
+    };
+    target_item?: {
+        id: number;
+        key: string;
+        title: string;
+        board?: { id: number; name: string; slug: string };
+    };
+    created_at: string;
+}
+
+export interface Comment {
+    id: number;
+    item_id: number;
+    user_id: number;
+    parent_id?: number;
+    body: string;
+    user?: User;
+    replies?: Comment[];
+    created_at: string;
+    updated_at: string;
+}
+
+export interface Attachment {
+    id: number;
+    item_id: number;
+    user_id: number;
+    filename: string;
+    original_filename: string;
+    path: string;
+    mime_type: string;
+    size: number;
+    formatted_size?: string;
+    url?: string;
+    user?: User;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface Page {
+    id: number;
+    uuid: string;
+    project_id: number;
+    parent_id?: number;
+    created_by?: number;
+    last_edited_by?: number;
+    name: string;
+    slug: string;
+    icon?: string;
+    type: 'page' | 'folder';
+    status: 'draft' | 'published' | 'archived';
+    content?: Record<string, unknown>;
+    position: number;
+    published_at?: string;
+    parent?: Page;
+    children?: Page[];
+    creator?: User;
+    lastEditor?: User;
+    created_at: string;
+    updated_at: string;
+}
+
+export type PageProps<
+    T extends Record<string, unknown> = Record<string, unknown>,
+> = T & {
+    auth: {
+        user: User;
+    };
+    flash?: {
+        success?: string;
+        error?: string;
+    };
+    // Shared layout data
+    workspaces?: Workspace[];
+    currentWorkspace?: Workspace & {
+        projects: (Project & { boards: Board[]; pages: Page[] })[];
+    };
+};
