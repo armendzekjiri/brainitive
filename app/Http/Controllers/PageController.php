@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 class PageController extends Controller
@@ -77,22 +78,56 @@ class PageController extends Controller
 
     /**
      * Full-page Excalidraw editor (Poznote-style: local IIFE bundle, opens in same tab).
+     * Supports embed mode: ?embed=1&diagram_id=xxx&block_id=yyy for embedding in a document.
      */
-    public function excalidrawEditor(Workspace $workspace, Project $project, Page $page)
+    public function excalidrawEditor(Request $request, Workspace $workspace, Project $project, Page $page)
     {
+        $isEmbed = $request->boolean('embed');
+        $diagramId = $request->query('diagram_id', '');
+        $blockId = $request->query('block_id', '');
+
         $content = $page->content ?? [];
-        $initialData = [
-            'elements' => $content['elements'] ?? [],
-            'appState' => $content['appState'] ?? [],
-            'files' => $content['files'] ?? [],
-            'libraryItems' => $content['libraryItems'] ?? [],
-        ];
+        if ($isEmbed && $diagramId && isset($content['excalidrawEmbeds'][$diagramId])) {
+            $embedData = $content['excalidrawEmbeds'][$diagramId];
+            $initialData = [
+                'elements' => $embedData['elements'] ?? [],
+                'appState' => $embedData['appState'] ?? [],
+                'files' => $embedData['files'] ?? [],
+                'libraryItems' => $embedData['libraryItems'] ?? [],
+            ];
+        } elseif (! $isEmbed && isset($content['type']) && $content['type'] === 'excalidraw') {
+            $initialData = [
+                'elements' => $content['elements'] ?? [],
+                'appState' => $content['appState'] ?? [],
+                'files' => $content['files'] ?? [],
+                'libraryItems' => $content['libraryItems'] ?? [],
+            ];
+        } else {
+            $initialData = [
+                'elements' => [],
+                'appState' => [],
+                'files' => [],
+                'libraryItems' => [],
+            ];
+        }
+
+        if ($isEmbed) {
+            $saveUrl = route('pages.excalidraw.embed.save', [$workspace->slug, $project->slug, $page->uuid]);
+            $returnUrl = route('pages.show', [$workspace->slug, $project->slug, $page->uuid])
+                . '?from=excalidraw_embed&block_id=' . urlencode($blockId) . '&diagram_id=' . urlencode($diagramId);
+        } else {
+            $saveUrl = route('pages.excalidraw.save', [$workspace->slug, $project->slug, $page->uuid]);
+            $returnUrl = route('pages.show', [$workspace->slug, $project->slug, $page->uuid]) . '?from=excalidraw';
+        }
 
         $excalidrawConfig = [
             'initialData' => $initialData,
-            'saveUrl' => route('pages.excalidraw.save', [$workspace->slug, $project->slug, $page->uuid]),
-            'returnUrl' => route('pages.show', [$workspace->slug, $project->slug, $page->uuid]) . '?from=excalidraw',
+            'saveUrl' => $saveUrl,
+            'returnUrl' => $returnUrl,
             'theme' => 'light',
+            'isEmbed' => $isEmbed,
+            'diagramId' => $diagramId,
+            'blockId' => $blockId,
         ];
 
         return view('excalidraw-editor', [
@@ -100,17 +135,19 @@ class PageController extends Controller
             'workspace' => $workspace,
             'project' => $project,
             'excalidrawConfig' => $excalidrawConfig,
-            'returnUrl' => $excalidrawConfig['returnUrl'],
+            'returnUrl' => $returnUrl,
         ]);
     }
 
     /**
-     * Save Excalidraw diagram data for a page.
+     * Save Excalidraw diagram data for a page (standalone whiteboard).
+     * Optional: image (PNG) for preview thumbnail when saving via "Save & exit".
      */
     public function saveExcalidraw(Request $request, Workspace $workspace, Project $project, Page $page)
     {
         $validated = $request->validate([
             'diagram_data' => 'required',
+            'image' => 'nullable|image|mimes:png|max:10240',
         ]);
 
         $diagramData = is_string($validated['diagram_data'])
@@ -129,12 +166,74 @@ class PageController extends Controller
             'libraryItems' => $data['libraryItems'] ?? [],
         ];
 
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store(
+                'excalidraw-previews',
+                'public'
+            );
+            $content['previewImageUrl'] = asset('storage/' . $path);
+        } elseif (is_array($page->content ?? null) && ! empty(($page->content ?? [])['previewImageUrl'])) {
+            $content['previewImageUrl'] = $page->content['previewImageUrl'];
+        }
+
         $page->update([
             'content' => $content,
             'last_edited_by' => Auth::id(),
         ]);
 
-        return response()->json(['success' => true]);
+        return response()->json(['success' => true, 'previewImageUrl' => $content['previewImageUrl'] ?? null]);
+    }
+
+    /**
+     * Save an embedded Excalidraw diagram (image + scene data) into a document page.
+     */
+    public function saveExcalidrawEmbed(Request $request, Workspace $workspace, Project $project, Page $page)
+    {
+        $validated = $request->validate([
+            'diagram_data' => 'required',
+            'diagram_id' => 'required|string|max:255',
+            'block_id' => 'required|string|max:255',
+            'image' => 'required|image|mimes:png|max:10240',
+        ]);
+
+        $diagramData = is_string($validated['diagram_data'])
+            ? $validated['diagram_data']
+            : json_encode($validated['diagram_data']);
+        $data = json_decode($diagramData, true);
+        if (json_last_error() !== JSON_ERROR_NONE || ! is_array($data)) {
+            return response()->json(['success' => false, 'message' => 'Invalid diagram data'], 400);
+        }
+
+        $content = $page->content ?? [];
+        if (! is_array($content)) {
+            $content = [];
+        }
+        if (! isset($content['excalidrawEmbeds']) || ! is_array($content['excalidrawEmbeds'])) {
+            $content['excalidrawEmbeds'] = [];
+        }
+        $content['excalidrawEmbeds'][$validated['diagram_id']] = [
+            'elements' => $data['elements'] ?? [],
+            'appState' => $data['appState'] ?? [],
+            'files' => $data['files'] ?? [],
+            'libraryItems' => $data['libraryItems'] ?? [],
+        ];
+
+        $path = $request->file('image')->store(
+            'excalidraw-embeds/' . $page->id,
+            'public'
+        );
+        $imageUrl = asset('storage/' . $path);
+
+        $page->update([
+            'content' => $content,
+            'last_edited_by' => Auth::id(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'imageUrl' => $imageUrl,
+            'diagramId' => $validated['diagram_id'],
+        ]);
     }
 
     /**
@@ -151,8 +250,15 @@ class PageController extends Controller
         ]);
 
         // Handle content - it can be a string (JSON) or an array
-        if (isset($validated['content']) && is_string($validated['content'])) {
-            $validated['content'] = json_decode($validated['content'], true);
+        if (isset($validated['content'])) {
+            $newContent = is_string($validated['content']) ? json_decode($validated['content'], true) : $validated['content'];
+            if (is_array($newContent)) {
+                $current = $page->content ?? [];
+                if (is_array($current) && ! empty($current['excalidrawEmbeds'])) {
+                    $newContent['excalidrawEmbeds'] = $current['excalidrawEmbeds'];
+                }
+                $validated['content'] = $newContent;
+            }
         }
 
         // Prevent moving a folder into its own descendant

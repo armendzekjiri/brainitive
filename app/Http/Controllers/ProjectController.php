@@ -89,7 +89,14 @@ class ProjectController extends Controller
                 $query->orderBy('position');
             },
             'creator:id,name',
+            'pages' => function ($query) {
+                $query->orderByRaw("CASE type WHEN 'folder' THEN 0 ELSE 1 END")->orderBy('position');
+            },
         ]);
+
+        $project->pages->load(['children' => function ($query) {
+            $query->orderByRaw("CASE type WHEN 'folder' THEN 0 ELSE 1 END")->orderBy('position');
+        }]);
 
         return Inertia::render('Projects/Show', [
             'workspace' => $workspace,

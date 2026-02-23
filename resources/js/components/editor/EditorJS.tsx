@@ -21,6 +21,7 @@ import Underline from '@editorjs/underline';
 import TextVariantTune from '@editorjs/text-variant-tune';
 import Undo from 'editorjs-undo';
 import DragDrop from 'editorjs-drag-drop';
+import { ExcalidrawEmbedTool } from './ExcalidrawEmbedTool';
 import { cn } from '@/lib/utils';
 
 // Get CSRF token from meta tag
@@ -29,12 +30,20 @@ const getCsrfToken = (): string => {
     return meta ? meta.getAttribute('content') || '' : '';
 };
 
+export interface ExcalidrawEmbedConfig {
+    getEmbedEditorUrl: (params: { diagramId: string; blockId: string }) => string;
+}
+
 interface EditorJSComponentProps {
     content: OutputData | null;
     onChange: (content: OutputData) => void;
     onHeadingsChange?: (headings: HeadingItem[]) => void;
     editable?: boolean;
     placeholder?: string;
+    /** Config for Excalidraw embed block (embed diagram in document, open editor on click). */
+    excalidrawEmbedConfig?: ExcalidrawEmbedConfig;
+    /** When user inserts Excalidraw from slash: save content then navigate to embed editor. */
+    onExcalidrawEmbedInsert?: (content: OutputData, diagramId: string, blockId: string) => Promise<void>;
 }
 
 export interface HeadingItem {
@@ -49,10 +58,15 @@ export function EditorJSComponent({
     onHeadingsChange,
     editable = true,
     placeholder = 'Click here and start typing, or press / for commands...',
+    excalidrawEmbedConfig,
+    onExcalidrawEmbedInsert,
 }: EditorJSComponentProps) {
     const editorRef = useRef<EditorJS | null>(null);
     const holderRef = useRef<HTMLDivElement>(null);
+    const apiRef = useRef<API | null>(null);
     const [isReady, setIsReady] = useState(false);
+    const [slashOpen, setSlashOpen] = useState(false);
+    const slashBlockIndexRef = useRef<number>(0);
     const isInternalChange = useRef(false);
     const initialContentRef = useRef<OutputData | null>(null);
 
@@ -130,6 +144,8 @@ export function EditorJSComponent({
                     return block.data && typeof block.data.html === 'string';
                 case 'attaches':
                     return block.data && block.data.file;
+                case 'excalidrawEmbed':
+                    return block.data && typeof block.data.diagramId === 'string';
                 default:
                     // Allow unknown block types with data
                     return block.data !== undefined;
@@ -312,6 +328,12 @@ export function EditorJSComponent({
                         endpoint: '/api/link-preview',
                     },
                 },
+                excalidrawEmbed: {
+                    class: ExcalidrawEmbedTool,
+                    config: {
+                        getEmbedEditorUrl: excalidrawEmbedConfig?.getEmbedEditorUrl ?? (() => '#'),
+                    },
+                },
 
                 // Inline tools
                 marker: {
@@ -351,6 +373,7 @@ export function EditorJSComponent({
             },
 
             onReady: () => {
+                apiRef.current = editorRef.current as unknown as API;
                 setIsReady(true);
 
                 // Initialize Undo plugin
@@ -403,14 +426,77 @@ export function EditorJSComponent({
         isInternalChange.current = false;
     }, [content?.time]); // Only update when content.time changes
 
+    // Slash menu: open on "/" when editable and excalidraw embed is supported
+    useEffect(() => {
+        if (!editable || !excalidrawEmbedConfig?.getEmbedEditorUrl || !onExcalidrawEmbedInsert) return;
+        const holder = holderRef.current;
+        if (!holder) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== '/' || !holder.contains(document.activeElement)) return;
+            if (apiRef.current) {
+                slashBlockIndexRef.current = apiRef.current.blocks.getCurrentBlockIndex();
+                e.preventDefault();
+                setSlashOpen(true);
+            }
+        };
+        holder.addEventListener('keydown', onKeyDown, true);
+        return () => holder.removeEventListener('keydown', onKeyDown, true);
+    }, [editable, excalidrawEmbedConfig, onExcalidrawEmbedInsert]);
+
+    // Close slash menu on Escape or click outside
+    useEffect(() => {
+        if (!slashOpen) return;
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSlashOpen(false); };
+        const onClick = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (holderRef.current?.contains(target)) return;
+            setSlashOpen(false);
+        };
+        document.addEventListener('keydown', onKey);
+        document.addEventListener('mousedown', onClick);
+        return () => {
+            document.removeEventListener('keydown', onKey);
+            document.removeEventListener('mousedown', onClick);
+        };
+    }, [slashOpen]);
+
+    const handleInsertExcalidraw = useCallback(async () => {
+        setSlashOpen(false);
+        const api = apiRef.current;
+        if (!api || !onExcalidrawEmbedInsert) return;
+        const diagramId = 'embed-' + Date.now();
+        const idx = slashBlockIndexRef.current + 1;
+        const block = api.blocks.insert('excalidrawEmbed', { diagramId, imageUrl: '', caption: '' }, undefined, idx);
+        const blockId = block?.id ?? '';
+        const output = await api.saver.save();
+        await onExcalidrawEmbedInsert(output, diagramId, blockId);
+    }, [onExcalidrawEmbedInsert]);
+
     return (
-        <div
-            ref={holderRef}
-            className={cn(
-                'editorjs-container prose prose-slate dark:prose-invert max-w-none min-h-[200px]',
-                !editable && 'pointer-events-none opacity-90'
+        <div className="relative">
+            <div
+                ref={holderRef}
+                className={cn(
+                    'editorjs-container prose prose-slate dark:prose-invert max-w-none min-h-[200px]',
+                    !editable && 'pointer-events-none opacity-90'
+                )}
+            />
+            {slashOpen && editable && excalidrawEmbedConfig && onExcalidrawEmbedInsert && (
+                <div
+                    className="absolute z-50 min-w-[200px] rounded-lg border border-border bg-popover py-1 shadow-md"
+                    style={{ top: 8, left: 0 }}
+                >
+                    <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                        onClick={handleInsertExcalidraw}
+                    >
+                        <span className="text-lg">✏️</span>
+                        Excalidraw
+                    </button>
+                </div>
             )}
-        />
+        </div>
     );
 }
 

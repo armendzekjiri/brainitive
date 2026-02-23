@@ -4,8 +4,10 @@ namespace App\Providers;
 
 use App\Models\Board;
 use App\Models\Item;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\Workspace;
+use Illuminate\Support\Facades\Route;
 use App\Policies\BoardPolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\ProjectPolicy;
@@ -42,6 +44,15 @@ class AppServiceProvider extends ServiceProvider
             if ($user->isInstanceAdmin()) {
                 return true;
             }
+        });
+
+        // Resolve page from project's allPages() so child pages (e.g. documents inside folders) are found
+        Route::bind('page', function (string $value, $route) {
+            $project = $route->parameter('project');
+            if ($project instanceof Project) {
+                return $project->allPages()->where('uuid', $value)->firstOrFail();
+            }
+            return Page::where('uuid', $value)->firstOrFail();
         });
     }
 }
