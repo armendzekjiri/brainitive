@@ -8,6 +8,7 @@ use App\Models\Project;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -129,12 +130,68 @@ class ProjectController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000',
+            'key' => [
+                'nullable',
+                'string',
+                'max:10',
+                'regex:/^[A-Z0-9]*$/',
+                Rule::unique('projects', 'key')->where('workspace_id', $workspace->id)->ignore($project->id),
+            ],
+            'icon' => 'nullable|string|max:500',
+            'icon_image' => 'nullable|image|mimes:png,jpeg,jpg|max:2048',
+            'color' => 'nullable|string|max:20',
         ]);
 
+        if (array_key_exists('key', $validated)) {
+            if (($validated['key'] ?? '') === '') {
+                unset($validated['key']);
+            } else {
+                $validated['key'] = strtoupper($validated['key']);
+            }
+        }
+
+        if (array_key_exists('icon', $validated) && $validated['icon'] && str_contains($validated['icon'], 'storage/')) {
+            $validated['icon'] = Str::after($validated['icon'], 'storage/');
+        }
+
+        if ($request->hasFile('icon_image')) {
+            if ($project->icon && \Illuminate\Support\Facades\Storage::disk('public')->exists($project->icon)) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($project->icon);
+            }
+            $file = $request->file('icon_image');
+            $ext = strtolower($file->getClientOriginalExtension()) === 'jpeg' ? 'jpg' : $file->getClientOriginalExtension();
+            $path = $file->storeAs('project-icons/'.$project->id, 'icon.'.$ext, 'public');
+            $validated['icon'] = $path;
+        }
+
+        unset($validated['icon_image']);
         $project->update($validated);
 
         return redirect()->route('projects.show', [$workspace, $project])
             ->with('success', 'Project updated successfully.');
+    }
+
+    /**
+     * Upload project icon (for use in settings form).
+     */
+    public function uploadIcon(Request $request, Workspace $workspace, Project $project)
+    {
+        $this->authorize('update', $project);
+
+        if ($project->workspace_id !== $workspace->id) {
+            abort(404);
+        }
+
+        $request->validate([
+            'icon' => 'required|file|image|mimes:png,jpeg,jpg|max:2048',
+        ]);
+
+        $file = $request->file('icon');
+        $ext = strtolower($file->getClientOriginalExtension()) === 'jpeg' ? 'jpg' : $file->getClientOriginalExtension();
+        $path = $file->storeAs('project-icons/'.$project->id, 'icon.'.$ext, 'public');
+        $project->update(['icon' => $path]);
+
+        return response()->json(['icon_display' => $project->fresh()->icon_display]);
     }
 
     /**

@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { LayoutGrid, Plus, Settings, ArrowRight, Kanban, FileText, Folder, ChevronRight } from 'lucide-react';
+import { LayoutGrid, Plus, Settings, ArrowRight, Kanban, FileText, Folder, ChevronRight, PencilRuler } from 'lucide-react';
+import { ProjectIcon } from '@/components/ProjectIcon';
 import { useState } from 'react';
 
 type PageWithChildren = PageType & { children?: PageWithChildren[] };
@@ -39,7 +40,21 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
     const pages = project.pages ?? [];
     const hasPages = pages.length > 0;
 
+    // Split: documents (folders + non-whiteboard pages) and whiteboards (flat list)
+    const documentPages = pages.filter((p) => p.type === 'folder' || !(p.type === 'page' && p.is_whiteboard));
+    const whiteboardPages = (function collectWhiteboards(nodes: PageWithChildren[]): PageWithChildren[] {
+        const out: PageWithChildren[] = [];
+        for (const p of nodes) {
+            if (p.type === 'page' && p.is_whiteboard) out.push(p);
+            if (p.children?.length) out.push(...collectWhiteboards(p.children));
+        }
+        return out;
+    })(pages);
+    const hasDocuments = documentPages.length > 0;
+    const hasWhiteboards = whiteboardPages.length > 0;
+
     function renderPageItem(page: PageWithChildren, depth = 0) {
+        if (page.type === 'page' && page.is_whiteboard) return null; // Whiteboards listed in their own section
         const href = route('pages.show', [workspace.slug, project.slug, page.uuid]);
         const isFolder = page.type === 'folder';
         const children = page.children ?? [];
@@ -80,12 +95,7 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                         <CardContent className="pt-6 pb-6">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
                                 <div className="flex items-start gap-5 min-w-0">
-                                    <div
-                                        className="size-16 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-lg shrink-0"
-                                        style={{ backgroundColor: project.color || '#6366f1' }}
-                                    >
-                                        {project.key}
-                                    </div>
+                                    <ProjectIcon project={project} size="xl" className="shadow-lg" />
                                     <div className="min-w-0">
                                         <h1 className="text-2xl md:text-3xl font-bold tracking-tight truncate">
                                             {project.name}
@@ -154,7 +164,7 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                         </CardContent>
                     </Card>
 
-                    {/* Boards + Documents */}
+                    {/* Boards + Documents + Whiteboards */}
                     <div className="grid gap-8 lg:grid-cols-2">
                         {/* Boards Section */}
                         <Card>
@@ -219,7 +229,7 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                             </CardContent>
                         </Card>
 
-                        {/* Documents & folders Section */}
+                        {/* Documents & folders Section (excludes whiteboards) */}
                         <Card>
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-2">
@@ -235,14 +245,14 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                {!hasPages ? (
+                                {!hasDocuments ? (
                                     <div className="flex flex-col items-center justify-center py-12 rounded-xl border-2 border-dashed border-muted-foreground/25">
                                         <div className="size-14 rounded-full bg-primary/10 flex items-center justify-center mb-4">
                                             <FileText className="size-7 text-primary" />
                                         </div>
                                         <p className="text-sm font-medium text-foreground mb-1">No documents yet</p>
                                         <p className="text-xs text-muted-foreground text-center max-w-[240px]">
-                                            Documents and folders are managed from the sidebar. Open a page to add content.
+                                            Documents and folders are managed from the sidebar. Create a page or folder.
                                         </p>
                                         <Link href={route('workspaces.show', [workspace.slug])} className="mt-5">
                                             <Button variant="outline" size="sm">
@@ -252,12 +262,63 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                                     </div>
                                 ) : (
                                     <div className="space-y-0.5">
-                                        {pages.map((page) => renderPageItem(page))}
+                                        {documentPages.map((page) => renderPageItem(page))}
                                     </div>
                                 )}
                             </CardContent>
                         </Card>
                     </div>
+
+                    {/* Whiteboards - full width section */}
+                    <Card className="mt-8">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="size-9 rounded-lg bg-violet-500/10 flex items-center justify-center">
+                                        <PencilRuler className="size-5 text-violet-600" />
+                                    </div>
+                                    <div>
+                                        <CardTitle className="text-lg">Whiteboards</CardTitle>
+                                        <CardDescription>
+                                            Draw and sketch with whiteboard pages
+                                        </CardDescription>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {!hasWhiteboards ? (
+                                    <div className="flex flex-col items-center justify-center py-10 rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                        <PencilRuler className="size-10 text-violet-500/50 mb-3" />
+                                        <p className="text-sm text-muted-foreground text-center max-w-[280px]">
+                                            Create a whiteboard from the sidebar (Pages → Whiteboard) to draw diagrams and sketches.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid gap-3 sm:grid-cols-2">
+                                        {whiteboardPages.map((page) => (
+                                            <Link
+                                                key={page.id}
+                                                href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
+                                            >
+                                                <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-muted/80 transition-colors group">
+                                                    <div className="size-11 rounded-xl bg-violet-500/10 flex items-center justify-center shrink-0">
+                                                        <PencilRuler className="size-5 text-violet-600" />
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="font-semibold text-foreground group-hover:text-violet-600 transition-colors truncate">
+                                                            {page.name}
+                                                        </p>
+                                                        <Badge variant="secondary" className="text-xs mt-1">
+                                                            Whiteboard
+                                                        </Badge>
+                                                    </div>
+                                                    <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                </div>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
                 </div>
             </div>
         </AppLayout>

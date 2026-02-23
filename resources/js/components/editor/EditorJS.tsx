@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import EditorJS, { OutputData, API } from '@editorjs/editorjs';
+import type { BlockAPI } from '@editorjs/editorjs';
 import Header from '@editorjs/header';
 import NestedList from '@editorjs/nested-list';
 import Checklist from '@editorjs/checklist';
@@ -466,8 +467,9 @@ export function EditorJSComponent({
         if (!api || !onExcalidrawEmbedInsert) return;
         const diagramId = 'embed-' + Date.now();
         const idx = slashBlockIndexRef.current + 1;
-        const block = api.blocks.insert('excalidrawEmbed', { diagramId, imageUrl: '', caption: '' }, undefined, idx);
-        const blockId = block?.id ?? '';
+        // insert() returns the new block at runtime; use type assertion for TS where some defs say void
+        const inserted = api.blocks.insert('excalidrawEmbed', { diagramId, imageUrl: '', caption: '' }, undefined, idx) as unknown as BlockAPI;
+        const blockId = inserted?.id ?? '';
         const output = await api.saver.save();
         await onExcalidrawEmbedInsert(output, diagramId, blockId);
     }, [onExcalidrawEmbedInsert]);

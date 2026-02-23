@@ -6,7 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     {{-- Allow unload events (Excalidraw uses beforeunload); avoids "Permissions policy violation: unload is not allowed" --}}
     <meta http-equiv="Permissions-Policy" content="unload=(self)">
-    <title>Excalidraw – {{ $page->name }}</title>
+    <title>Whiteboard – {{ $page->name }}</title>
     <link rel="stylesheet" href="{{ asset('js/excalidraw-dist/excalidraw-bundle.css') }}">
     <style>
         * { box-sizing: border-box; }

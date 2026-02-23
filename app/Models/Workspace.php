@@ -44,6 +44,22 @@ class Workspace extends Model
         ];
     }
 
+    protected $appends = ['logo_display', 'header_image_display'];
+
+    /** Full URL for workspace logo (for frontend). */
+    public function getLogoDisplayAttribute(): ?string
+    {
+        $path = $this->attributes['logo'] ?? null;
+        return $path ? asset('storage/'.$path) : null;
+    }
+
+    /** Full URL for workspace header/cover image (for frontend). */
+    public function getHeaderImageDisplayAttribute(): ?string
+    {
+        $path = $this->attributes['header_image'] ?? null;
+        return $path ? asset('storage/'.$path) : null;
+    }
+
     /**
      * Boot the model.
      */

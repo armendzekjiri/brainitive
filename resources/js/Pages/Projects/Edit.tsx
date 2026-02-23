@@ -1,5 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, useForm, router } from '@inertiajs/react';
+import { ProjectIcon } from '@/components/ProjectIcon';
 import { PageProps, Workspace, Project, Label as LabelType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { IconPicker } from '@/components/IconPicker';
 import {
     Dialog,
     DialogContent,
@@ -29,27 +31,22 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag } from 'lucide-react';
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 interface Props extends PageProps {
     workspace: Workspace;
     project: Project & { labels?: LabelType[] };
 }
 
-// Predefined colors for labels
+// Predefined colors for labels and project
 const LABEL_COLORS = [
-    '#ef4444', // red
-    '#f97316', // orange
-    '#f59e0b', // amber
-    '#84cc16', // lime
-    '#22c55e', // green
-    '#14b8a6', // teal
-    '#06b6d4', // cyan
-    '#3b82f6', // blue
-    '#6366f1', // indigo
-    '#8b5cf6', // violet
-    '#a855f7', // purple
-    '#ec4899', // pink
-    '#64748b', // slate
+    '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', '#14b8a6',
+    '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ec4899', '#64748b',
+];
+
+const PROJECT_COLORS = [
+    '#6366f1', '#3b82f6', '#06b6d4', '#14b8a6', '#22c55e', '#84cc16',
+    '#f59e0b', '#f97316', '#ef4444', '#ec4899', '#a855f7', '#64748b',
 ];
 
 function LabelForm({
@@ -145,11 +142,32 @@ export default function ProjectsEdit({ auth, workspace, project }: Props) {
     const { data, setData, put, processing, errors, isDirty } = useForm({
         name: project.name || '',
         description: project.description || '',
+        key: project.key || '',
+        icon: project.icon_display ?? project.icon ?? '',
+        color: project.color ?? '',
     });
 
     const handleSaveProject = (e: React.FormEvent) => {
         e.preventDefault();
         put(route('projects.update', [workspace.slug, project.slug]));
+    };
+
+    const handleProjectIconUpload = async (file: File): Promise<string> => {
+        const formData = new FormData();
+        const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
+        if (token) formData.append('_token', token);
+        formData.append('icon', file);
+        const res = await fetch(route('projects.icon.upload', [workspace.slug, project.slug]), {
+            method: 'POST',
+            body: formData,
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            toast.error(data.message ?? 'Icon upload failed');
+            throw new Error(data.message ?? 'Upload failed');
+        }
+        return data.icon_display;
     };
 
     const handleDeleteLabel = (labelId: number) => {
@@ -173,7 +191,10 @@ export default function ProjectsEdit({ auth, workspace, project }: Props) {
                                 </Link>
                                 <div>
                                     <h1 className="text-xl font-semibold">Project Settings</h1>
-                                    <p className="text-sm text-muted-foreground">{project.name}</p>
+                                    <p className="text-sm text-muted-foreground flex items-center gap-2">
+                                        <ProjectIcon project={project} size="xs" />
+                                        {project.name}
+                                    </p>
                                 </div>
                             </div>
                             {isDirty && (
@@ -192,20 +213,63 @@ export default function ProjectsEdit({ auth, workspace, project }: Props) {
                     <Card>
                         <CardHeader>
                             <CardTitle>General</CardTitle>
-                            <CardDescription>Basic project information</CardDescription>
+                            <CardDescription>Basic project information, icon, and color</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <form onSubmit={handleSaveProject} className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="name">Project Name</Label>
-                                    <Input
-                                        id="name"
-                                        value={data.name}
-                                        onChange={(e) => setData('name', e.target.value)}
-                                        placeholder="Project name"
-                                        required
+                            <form onSubmit={handleSaveProject} className="space-y-5">
+                                <div className="flex gap-4 items-end flex-wrap">
+                                    <IconPicker
+                                        label="Icon"
+                                        value={data.icon}
+                                        onChange={(v) => setData('icon', v)}
+                                        placeholderEmoji="📁"
+                                        onImageUpload={handleProjectIconUpload}
+                                        className="shrink-0"
                                     />
-                                    {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+                                    <div className="flex-1 min-w-[200px] space-y-2">
+                                        <Label htmlFor="name">Project Name</Label>
+                                        <Input
+                                            id="name"
+                                            value={data.name}
+                                            onChange={(e) => setData('name', e.target.value)}
+                                            placeholder="Project name"
+                                            required
+                                        />
+                                        {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+                                    </div>
+                                </div>
+                                <div className="space-y-2 max-w-xs">
+                                    <Label htmlFor="key">Project key</Label>
+                                    <Input
+                                        id="key"
+                                        value={data.key}
+                                        onChange={(e) => setData('key', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                                        placeholder="e.g. PROJ"
+                                        maxLength={10}
+                                        className="font-mono"
+                                    />
+                                    <p className="text-xs text-muted-foreground">Short code for the project (e.g. PROJ, DEV). Unique per workspace.</p>
+                                    {errors.key && <p className="text-sm text-destructive">{errors.key}</p>}
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Color</Label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {PROJECT_COLORS.map((color) => (
+                                            <button
+                                                key={color}
+                                                type="button"
+                                                className={`w-8 h-8 rounded-full transition-all ${
+                                                    (data.color || '#6366f1') === color
+                                                        ? 'ring-2 ring-offset-2 ring-primary scale-110'
+                                                        : 'hover:scale-105'
+                                                }`}
+                                                style={{ backgroundColor: color }}
+                                                onClick={() => setData('color', color)}
+                                                title={color}
+                                            />
+                                        ))}
+                                    </div>
+                                    {errors.color && <p className="text-sm text-destructive">{errors.color}</p>}
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="description">Description</Label>

@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { ProjectIcon } from '@/components/ProjectIcon';
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -259,7 +260,8 @@ export default function ItemShow({
                                     <BreadcrumbList>
                                         <BreadcrumbItem>
                                             <BreadcrumbLink asChild>
-                                                <Link href={route('projects.show', [workspace.slug, project.slug])}>
+                                                <Link href={route('projects.show', [workspace.slug, project.slug])} className="flex items-center gap-2">
+                                                    <ProjectIcon project={project} size="xs" />
                                                     {project.name}
                                                 </Link>
                                             </BreadcrumbLink>

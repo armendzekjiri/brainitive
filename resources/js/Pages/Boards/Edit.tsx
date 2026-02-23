@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { ProjectIcon } from '@/components/ProjectIcon';
 import {
     Dialog,
     DialogContent,
@@ -456,12 +457,7 @@ export default function BoardsEdit({ workspace, project, board }: Props) {
                                 </Button>
                             </Link>
                             <div className="flex items-center gap-3">
-                                <div
-                                    className="size-10 rounded-lg flex items-center justify-center text-white font-bold text-sm"
-                                    style={{ backgroundColor: project.color || '#6366f1' }}
-                                >
-                                    {project.key}
-                                </div>
+                                <ProjectIcon project={project} size="md" />
                                 <div>
                                     <h1 className="text-xl font-semibold">Board Settings</h1>
                                     <p className="text-sm text-muted-foreground">{board.name}</p>

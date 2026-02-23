@@ -1,5 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, useForm, router, Link } from '@inertiajs/react';
+import type { OutputData } from '@editorjs/editorjs';
 import { PageProps, Workspace, Project, Page as PageType, User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,6 +39,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { ProjectIcon } from '@/components/ProjectIcon';
 import {
     MoreHorizontal,
     FileText,
@@ -318,7 +320,7 @@ function AddSubpageDialog({
                 <DialogHeader>
                     <DialogTitle>Add Subpage</DialogTitle>
                     <DialogDescription>
-                        Create a new page, Excalidraw whiteboard, or folder inside this {itemType === 'folder' ? 'folder' : 'page'}.
+                        Create a new page, Whiteboard, or folder inside this {itemType === 'folder' ? 'folder' : 'page'}.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -355,7 +357,7 @@ function AddSubpageDialog({
                                 <path d="M2 2l7.586 7.586" />
                                 <circle cx="11" cy="11" r="2" />
                             </svg>
-                            <span>Excalidraw</span>
+                            <span>Whiteboard</span>
                         </button>
                         <button
                             type="button"
@@ -373,12 +375,12 @@ function AddSubpageDialog({
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="name">{itemType === 'folder' ? 'Folder' : itemType === 'excalidraw' ? 'Excalidraw' : 'Page'} Name</Label>
+                        <Label htmlFor="name">{itemType === 'folder' ? 'Folder' : itemType === 'excalidraw' ? 'Whiteboard' : 'Page'} Name</Label>
                         <Input
                             id="name"
                             value={data.name}
                             onChange={(e) => setData('name', e.target.value)}
-                            placeholder={itemType === 'folder' ? 'e.g., Documentation' : itemType === 'excalidraw' ? 'e.g., Diagram' : 'e.g., Getting Started'}
+                            placeholder={itemType === 'folder' ? 'e.g., Documentation' : itemType === 'excalidraw' ? 'e.g., Diagram, Sketch' : 'e.g., Getting Started'}
                             autoFocus
                             required
                         />
@@ -389,7 +391,7 @@ function AddSubpageDialog({
                             Cancel
                         </Button>
                         <Button type="submit" disabled={processing}>
-                            {processing ? 'Creating...' : `Create ${itemType === 'folder' ? 'Folder' : itemType === 'excalidraw' ? 'Excalidraw' : 'Page'}`}
+                            {processing ? 'Creating...' : `Create ${itemType === 'folder' ? 'Folder' : itemType === 'excalidraw' ? 'Whiteboard' : 'Page'}`}
                         </Button>
                     </div>
                 </form>
@@ -528,7 +530,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
     }, []);
 
     const handleExcalidrawEmbedInsert = useCallback(
-        async (content: Record<string, unknown>, diagramId: string, blockId: string) => {
+        async (content: OutputData, diagramId: string, blockId: string) => {
             await new Promise<void>((resolve, reject) => {
                 router.put(route('pages.update', [workspace.slug, project.slug, page.uuid]), {
                     content: JSON.stringify(content),
@@ -606,7 +608,8 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                 <BreadcrumbList>
                                     <BreadcrumbItem>
                                         <BreadcrumbLink asChild>
-                                            <Link href={route('projects.show', [workspace.slug, project.slug])}>
+                                            <Link href={route('projects.show', [workspace.slug, project.slug])} className="flex items-center gap-2">
+                                                <ProjectIcon project={project} size="xs" />
                                                 {project.name}
                                             </Link>
                                         </BreadcrumbLink>
@@ -765,7 +768,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
 
                     <Separator className="mb-8" />
 
-                    {/* Standalone Excalidraw page: show preview image/card, click to open editor */}
+                    {/* Whiteboard page: show preview image/card, click to open editor */}
                     {page.type === 'page' && isExcalidrawPage(page.content) && (
                         <div className="mb-8">
                             <a
@@ -786,7 +789,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                     </div>
                                 )}
                                 <div className="px-4 py-3 border-t border-border bg-muted/20 text-sm text-muted-foreground text-center">
-                                    Click to open in editor
+                                    Open whiteboard
                                 </div>
                             </a>
                         </div>
