@@ -5,6 +5,7 @@ use App\Http\Controllers\BookmarkController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\SearchController;
 use App\Http\Controllers\WorkspaceController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -32,6 +33,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', function () {
         return redirect()->route('workspaces.index');
     })->name('dashboard');
+
+    // Global search (bookmarks, board items, documents)
+    Route::get('/search', SearchController::class)->name('search');
 
     // Workspaces
     Route::resource('workspaces', WorkspaceController::class);
@@ -63,6 +67,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::resource('projects', ProjectController::class)->scoped([
             'project' => 'slug',
         ]);
+        Route::post('projects/{project:slug}/icon', [ProjectController::class, 'uploadIcon'])->name('projects.icon.upload')->scopeBindings();
 
         // Labels (nested under projects)
         Route::prefix('projects/{project:slug}')->group(function () {

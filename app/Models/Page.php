@@ -33,6 +33,21 @@ class Page extends Model
         'published_at' => 'datetime',
     ];
 
+    protected $appends = ['is_whiteboard'];
+
+    /**
+     * Whether this page is a whiteboard (Excalidraw) page.
+     */
+    public function getIsWhiteboardAttribute(): bool
+    {
+        $content = $this->content;
+        if (! is_array($content)) {
+            return false;
+        }
+        return ($content['type'] ?? '') === 'excalidraw'
+            || (array_key_exists('elements', $content) && array_key_exists('appState', $content));
+    }
+
     /**
      * Get the route key for the model.
      */

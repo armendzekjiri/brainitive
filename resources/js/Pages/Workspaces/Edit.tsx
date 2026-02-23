@@ -91,10 +91,10 @@ export default function WorkspacesEdit({
     companySizes,
 }: Props) {
     const [logoPreview, setLogoPreview] = useState<string | null>(
-        workspace.logo ? `/storage/${workspace.logo}` : null
+        workspace.logo_display ?? (workspace.logo ? `/storage/${workspace.logo}` : null)
     );
     const [headerPreview, setHeaderPreview] = useState<string | null>(
-        workspace.header_image ? `/storage/${workspace.header_image}` : null
+        workspace.header_image_display ?? (workspace.header_image ? `/storage/${workspace.header_image}` : null)
     );
     const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 

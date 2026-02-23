@@ -3,6 +3,10 @@ export interface User {
     name: string;
     email: string;
     email_verified_at?: string;
+    avatar?: string | null;
+    avatar_display?: string | null;
+    bio?: string | null;
+    phone?: string | null;
     is_instance_admin?: boolean;
     pivot?: {
         role?: 'admin' | 'editor' | 'viewer' | 'member';
@@ -19,6 +23,8 @@ export interface Workspace {
     description?: string;
     logo?: string;
     header_image?: string;
+    logo_display?: string | null;
+    header_image_display?: string | null;
     website?: string;
     industry?: string;
     company_size?: string;
@@ -56,9 +62,11 @@ export interface Project {
     key: string;
     description?: string;
     icon?: string;
+    icon_display?: string | null;
     color?: string;
     workspace?: Workspace;
     boards_count?: number;
+    pages_count?: number;
     created_at: string;
     updated_at: string;
 }
@@ -257,6 +265,7 @@ export interface Page {
     content?: Record<string, unknown>;
     position: number;
     published_at?: string;
+    is_whiteboard?: boolean;
     parent?: Page;
     children?: Page[];
     creator?: User;

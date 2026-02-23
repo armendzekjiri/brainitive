@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { ProjectIcon } from '@/components/ProjectIcon';
 import {
     Dialog,
     DialogContent,
@@ -1741,12 +1742,7 @@ export default function BoardsShow({
                 <div className="flex items-center justify-between px-6 py-3 border-b bg-background/95 backdrop-blur">
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-3">
-                            <div
-                                className="size-9 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-sm"
-                                style={{ backgroundColor: project.color || '#6366f1' }}
-                            >
-                                {project.key}
-                            </div>
+                            <ProjectIcon project={project} size="md" className="shadow-sm" />
                             <div>
                                 <h1 className="text-lg font-semibold tracking-tight">{board.name}</h1>
                                 <p className="text-xs text-muted-foreground">{project.name}</p>

@@ -1,10 +1,13 @@
 import InputError from '@/Components/InputError';
-import InputLabel from '@/Components/InputLabel';
-import PrimaryButton from '@/Components/PrimaryButton';
-import TextInput from '@/Components/TextInput';
-import { Transition } from '@headlessui/react';
-import { Link, useForm, usePage } from '@inertiajs/react';
-import { FormEventHandler } from 'react';
+import { User } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Link, useForm, usePage, router } from '@inertiajs/react';
+import { FormEventHandler, useRef } from 'react';
+import { Camera } from 'lucide-react';
 
 export default function UpdateProfileInformation({
     mustVerifyEmail,
@@ -15,102 +18,171 @@ export default function UpdateProfileInformation({
     status?: string;
     className?: string;
 }) {
-    const user = usePage().props.auth.user;
+    const user = usePage().props.auth.user as User;
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const { data, setData, patch, errors, processing, recentlySuccessful } =
         useForm({
             name: user.name,
             email: user.email,
+            bio: user.bio ?? '',
+            phone: user.phone ?? '',
+            avatar: null as File | null,
         });
+
+    const avatarPreview = data.avatar
+        ? URL.createObjectURL(data.avatar)
+        : user.avatar_display ?? null;
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-
-        patch(route('profile.update'));
+        if (data.avatar) {
+            const formData = new FormData();
+            const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
+            if (token) formData.append('_token', token);
+            formData.append('_method', 'PATCH');
+            formData.append('name', data.name);
+            formData.append('email', data.email);
+            formData.append('bio', data.bio);
+            formData.append('phone', data.phone);
+            formData.append('avatar', data.avatar);
+            router.post(route('profile.update'), formData, {
+                forceFormData: true,
+                preserveScroll: true,
+                onFinish: () => {},
+            });
+            return;
+        }
+        patch(route('profile.update'), {
+            preserveScroll: true,
+        });
     };
 
     return (
         <section className={className}>
-            <header>
-                <h2 className="text-lg font-medium text-gray-900">
-                    Profile Information
-                </h2>
+            <form onSubmit={submit} className="space-y-6">
+                {/* Profile picture */}
+                <div className="flex items-center gap-6">
+                    <div className="relative">
+                        <Avatar className="h-24 w-24">
+                            {avatarPreview ? (
+                                <AvatarImage src={avatarPreview} alt="" />
+                            ) : null}
+                            <AvatarFallback className="text-2xl bg-primary/10 text-primary">
+                                {(user.name || 'U').charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                        </Avatar>
+                        <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground shadow hover:bg-primary/90"
+                        >
+                            <Camera className="size-4" />
+                        </button>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/jpeg,image/png,image/jpg"
+                            className="hidden"
+                            onChange={(e) => setData('avatar', e.target.files?.[0] ?? null)}
+                        />
+                    </div>
+                    <div>
+                        <Label className="text-base font-medium">Profile picture</Label>
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                            JPG or PNG. Max 2MB.
+                        </p>
+                        {data.avatar && (
+                            <p className="text-sm text-primary mt-1">
+                                New photo selected
+                            </p>
+                        )}
+                        <InputError className="mt-1" message={errors.avatar} />
+                    </div>
+                </div>
 
-                <p className="mt-1 text-sm text-gray-600">
-                    Update your account's profile information and email address.
-                </p>
-            </header>
-
-            <form onSubmit={submit} className="mt-6 space-y-6">
-                <div>
-                    <InputLabel htmlFor="name" value="Name" />
-
-                    <TextInput
+                <div className="space-y-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input
                         id="name"
-                        className="mt-1 block w-full"
                         value={data.name}
                         onChange={(e) => setData('name', e.target.value)}
                         required
-                        isFocused
                         autoComplete="name"
                     />
-
-                    <InputError className="mt-2" message={errors.name} />
+                    <InputError message={errors.name} />
                 </div>
 
-                <div>
-                    <InputLabel htmlFor="email" value="Email" />
-
-                    <TextInput
+                <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
                         id="email"
                         type="email"
-                        className="mt-1 block w-full"
                         value={data.email}
                         onChange={(e) => setData('email', e.target.value)}
                         required
                         autoComplete="username"
                     />
+                    <InputError message={errors.email} />
+                </div>
 
-                    <InputError className="mt-2" message={errors.email} />
+                <div className="space-y-2">
+                    <Label htmlFor="phone">Phone (optional)</Label>
+                    <Input
+                        id="phone"
+                        type="tel"
+                        value={data.phone}
+                        onChange={(e) => setData('phone', e.target.value)}
+                        autoComplete="tel"
+                        placeholder="+1 234 567 8900"
+                    />
+                    <InputError message={errors.phone} />
+                </div>
+
+                <div className="space-y-2">
+                    <Label htmlFor="bio">Bio (optional)</Label>
+                    <Textarea
+                        id="bio"
+                        value={data.bio}
+                        onChange={(e) => setData('bio', e.target.value)}
+                        placeholder="A short bio about you"
+                        className="min-h-[100px] resize-none"
+                        maxLength={1000}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        {data.bio.length}/1000
+                    </p>
+                    <InputError message={errors.bio} />
                 </div>
 
                 {mustVerifyEmail && user.email_verified_at === null && (
-                    <div>
-                        <p className="mt-2 text-sm text-gray-800">
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 p-4">
+                        <p className="text-sm text-amber-800 dark:text-amber-200">
                             Your email address is unverified.
                             <Link
                                 href={route('verification.send')}
                                 method="post"
                                 as="button"
-                                className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                                className="ml-1 underline hover:no-underline"
                             >
                                 Click here to re-send the verification email.
                             </Link>
                         </p>
-
                         {status === 'verification-link-sent' && (
-                            <div className="mt-2 text-sm font-medium text-green-600">
-                                A new verification link has been sent to your
-                                email address.
-                            </div>
+                            <p className="mt-2 text-sm font-medium text-green-600 dark:text-green-400">
+                                A new verification link has been sent to your email address.
+                            </p>
                         )}
                     </div>
                 )}
 
                 <div className="flex items-center gap-4">
-                    <PrimaryButton disabled={processing}>Save</PrimaryButton>
-
-                    <Transition
-                        show={recentlySuccessful}
-                        enter="transition ease-in-out"
-                        enterFrom="opacity-0"
-                        leave="transition ease-in-out"
-                        leaveTo="opacity-0"
-                    >
-                        <p className="text-sm text-gray-600">
-                            Saved.
-                        </p>
-                    </Transition>
+                    <Button type="submit" disabled={processing}>
+                        {processing ? 'Saving…' : 'Save'}
+                    </Button>
+                    {recentlySuccessful && (
+                        <p className="text-sm text-muted-foreground">Saved.</p>
+                    )}
                 </div>
             </form>
         </section>

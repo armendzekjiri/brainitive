@@ -27,11 +27,26 @@ class Project extends Model
         'settings',
     ];
 
+    protected $appends = ['icon_display'];
+
     protected function casts(): array
     {
         return [
             'settings' => 'array',
         ];
+    }
+
+    /** For frontend: emoji or full URL when icon is a stored image path. */
+    public function getIconDisplayAttribute(): ?string
+    {
+        $icon = $this->attributes['icon'] ?? null;
+        if (! $icon) {
+            return null;
+        }
+        if (str_contains($icon, '/') || strlen($icon) > 30) {
+            return asset('storage/'.$icon);
+        }
+        return $icon;
     }
 
     /**

@@ -79,7 +79,10 @@ class WorkspaceController extends Controller
 
         $workspace->load([
             'projects' => function ($query) {
-                $query->withCount('boards')->latest();
+                $query->withCount(['boards', 'pages'])->latest();
+            },
+            'bookmarks' => function ($query) {
+                $query->limit(6)->orderBy('position');
             },
             'users:id,name,email',
             'owner:id,name,email',
@@ -156,8 +159,8 @@ class WorkspaceController extends Controller
             'language' => 'nullable|string|max:10',
             'currency' => 'nullable|string|max:10',
             'is_public' => 'nullable|boolean',
-            'logo' => 'nullable|image|max:2048',
-            'header_image' => 'nullable|image|max:4096',
+            'logo' => 'nullable|file|image|max:2048',
+            'header_image' => 'nullable|file|image|max:4096',
             'social_links' => 'nullable|array',
             'social_links.twitter' => 'nullable|url|max:255',
             'social_links.linkedin' => 'nullable|url|max:255',
@@ -167,16 +170,17 @@ class WorkspaceController extends Controller
             'branding.secondary_color' => 'nullable|string|max:20',
         ]);
 
-        // Handle logo upload
-        if ($request->hasFile('logo')) {
-            $logoPath = $request->file('logo')->store('workspaces/logos', 'public');
-            $validated['logo'] = $logoPath;
+        // Only update logo/header when a new file was uploaded; never overwrite with null
+        if (! $request->hasFile('logo')) {
+            unset($validated['logo']);
+        } else {
+            $validated['logo'] = $request->file('logo')->store('workspaces/logos', 'public');
         }
 
-        // Handle header image upload
-        if ($request->hasFile('header_image')) {
-            $headerPath = $request->file('header_image')->store('workspaces/headers', 'public');
-            $validated['header_image'] = $headerPath;
+        if (! $request->hasFile('header_image')) {
+            unset($validated['header_image']);
+        } else {
+            $validated['header_image'] = $request->file('header_image')->store('workspaces/headers', 'public');
         }
 
         $workspace->update($validated);

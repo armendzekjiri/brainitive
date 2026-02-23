@@ -25,7 +25,12 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'avatar',
+        'bio',
+        'phone',
     ];
+
+    protected $appends = ['avatar_display'];
 
     /**
      * The attributes that should be hidden for serialization.
@@ -48,6 +53,16 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /** Full URL for profile picture (avatar). */
+    public function getAvatarDisplayAttribute(): ?string
+    {
+        $avatar = $this->attributes['avatar'] ?? null;
+        if (! $avatar) {
+            return null;
+        }
+        return asset('storage/'.$avatar);
     }
 
     /**

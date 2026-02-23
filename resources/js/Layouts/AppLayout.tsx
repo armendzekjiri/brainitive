@@ -2,6 +2,8 @@ import { Link, router, usePage, useForm } from '@inertiajs/react';
 import { Toaster } from 'sonner';
 import { PropsWithChildren, useState, FormEvent, useEffect, useCallback, createContext, useContext } from 'react';
 import { PageProps, Workspace, Project, Board, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn } from '@/types';
+import { SearchModal } from '@/components/SearchModal';
+import { ProjectIcon } from '@/components/ProjectIcon';
 import {
     Sidebar,
     SidebarContent,
@@ -36,7 +38,7 @@ import {
     CollapsibleContent,
     CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -60,6 +62,7 @@ import {
     Kanban,
     ListTodo,
     Bookmark as BookmarkIcon,
+    PencilRuler,
 } from 'lucide-react';
 import {
     Select,
@@ -262,13 +265,13 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>
-                        {itemType === null ? 'Create New' : itemType === 'board' ? 'Create Board' : itemType === 'folder' ? 'Create Folder' : itemType === 'excalidraw' ? 'Create Excalidraw' : 'Create Page'}
+                        {itemType === null ? 'Create New' : itemType === 'board' ? 'Create Board' : itemType === 'folder' ? 'Create Folder' : itemType === 'excalidraw' ? 'Create Whiteboard' : 'Create Page'}
                     </DialogTitle>
                     <DialogDescription>
                         {itemType === null
                             ? `Add a new item to ${parentType === 'folder' ? 'this folder' : project.name}`
                             : itemType === 'excalidraw'
-                                ? 'Create a whiteboard page. Opens Excalidraw to draw and save on this page.'
+                                ? 'Create a whiteboard to draw and save diagrams.'
                                 : `Enter a name for your new ${itemType}`}
                     </DialogDescription>
                 </DialogHeader>
@@ -306,7 +309,7 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                                     <circle cx="11" cy="11" r="2" />
                                 </svg>
                             </div>
-                            <span className="text-sm font-medium">Excalidraw</span>
+                            <span className="text-sm font-medium">Whiteboard</span>
                         </button>
                         {parentType === 'project' && (
                             <button
@@ -357,7 +360,7 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                     <form onSubmit={handleCreatePage} className="space-y-4 py-2">
                         <div className="space-y-2">
                             <Label htmlFor="page-name">
-                                {itemType === 'folder' ? 'Folder Name' : itemType === 'excalidraw' ? 'Excalidraw Name' : 'Page Name'}
+                                {itemType === 'folder' ? 'Folder Name' : itemType === 'excalidraw' ? 'Whiteboard Name' : 'Page Name'}
                             </Label>
                             <Input
                                 id="page-name"
@@ -366,7 +369,7 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                                     pageForm.setData('name', e.target.value);
                                     pageForm.setData('type', itemType === 'folder' ? 'folder' : 'page');
                                 }}
-                                placeholder={itemType === 'folder' ? 'e.g., Documentation, Updates' : itemType === 'excalidraw' ? 'e.g., Diagram, Whiteboard' : 'e.g., Getting Started, API Reference'}
+                                placeholder={itemType === 'folder' ? 'e.g., Documentation, Updates' : itemType === 'excalidraw' ? 'e.g., Diagram, Sketch' : 'e.g., Getting Started, API Reference'}
                                 autoFocus
                                 required
                             />
@@ -376,7 +379,7 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                                 Back
                             </Button>
                             <Button type="submit" disabled={pageForm.processing}>
-                                {pageForm.processing ? 'Creating...' : `Create ${itemType === 'folder' ? 'Folder' : itemType === 'excalidraw' ? 'Excalidraw' : 'Page'}`}
+                                {pageForm.processing ? 'Creating...' : `Create ${itemType === 'folder' ? 'Folder' : itemType === 'excalidraw' ? 'Whiteboard' : 'Page'}`}
                             </Button>
                         </div>
                     </form>
@@ -453,8 +456,15 @@ function PageTreeItem({
             className="flex min-w-0 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
             style={{ paddingLeft: `${level * 12 + 24}px` }}
         >
-            <span className="shrink-0 text-base">{page.icon || '📄'}</span>
+            {page.is_whiteboard ? (
+                <PencilRuler className="size-4 shrink-0 text-violet-500" />
+            ) : (
+                <span className="shrink-0 text-base">{page.icon || '📄'}</span>
+            )}
             <span className="min-w-0 truncate">{page.name}</span>
+            {page.is_whiteboard && (
+                <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/80">Whiteboard</span>
+            )}
         </Link>
     );
 }
@@ -480,12 +490,7 @@ function ProjectItem({
                 <div className="flex min-w-0 items-center group">
                     <CollapsibleTrigger asChild>
                         <button className="flex min-w-0 flex-1 items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors text-left">
-                            <div
-                                className="size-6 rounded flex items-center justify-center text-[11px] font-bold text-white shrink-0"
-                                style={{ backgroundColor: project.color || '#0052CC' }}
-                            >
-                                {project.key?.substring(0, 2) || 'PR'}
-                            </div>
+                            <ProjectIcon project={project} size="sm" />
                             <span className="min-w-0 flex-1 truncate text-sm font-medium">{project.name}</span>
                             {hasContent && (
                                 <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" />
@@ -519,26 +524,78 @@ function ProjectItem({
                                 </Link>
                             ))}
 
-                            {/* Pages Section */}
-                            {project.pages && project.pages.length > 0 && (
-                                <>
-                                    {(project.boards?.length ?? 0) > 0 && (
-                                        <div className="border-t border-border/50 my-1.5" />
-                                    )}
-                                    <div className="flex items-center justify-between px-2 py-1">
-                                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Pages</span>
-                                    </div>
-                                    {project.pages.map((page) => (
-                                        <PageTreeItem
-                                            key={page.id}
-                                            page={page}
-                                            workspace={workspace}
-                                            project={project}
-                                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
-                                        />
-                                    ))}
-                                </>
-                            )}
+                            {/* Pages, Whiteboards, Folders - separated sections */}
+                            {project.pages && project.pages.length > 0 && (() => {
+                                const rootDocs = project.pages.filter((p) => p.type === 'page' && !p.is_whiteboard);
+                                const rootWhiteboards = project.pages.filter((p) => p.type === 'page' && p.is_whiteboard);
+                                const rootFolders = project.pages.filter((p) => p.type === 'folder');
+                                const hasAny = rootDocs.length > 0 || rootWhiteboards.length > 0 || rootFolders.length > 0;
+                                if (!hasAny) return null;
+                                return (
+                                    <>
+                                        {(project.boards?.length ?? 0) > 0 && (
+                                            <div className="border-t border-border/50 my-1.5" />
+                                        )}
+                                        {/* Pages */}
+                                        {rootDocs.length > 0 && (
+                                            <>
+                                                <div className="px-2 py-1">
+                                                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Pages</span>
+                                                </div>
+                                                {rootDocs.map((page) => (
+                                                    <Link
+                                                        key={page.id}
+                                                        href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
+                                                        className="flex min-w-0 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                                                    >
+                                                        <span className="shrink-0 text-base">{page.icon || '📄'}</span>
+                                                        <span className="min-w-0 truncate">{page.name}</span>
+                                                    </Link>
+                                                ))}
+                                            </>
+                                        )}
+                                        {/* Whiteboards */}
+                                        {rootWhiteboards.length > 0 && (
+                                            <>
+                                                {rootDocs.length > 0 && <div className="border-t border-border/50 my-1.5" />}
+                                                <div className="px-2 py-1">
+                                                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Whiteboards</span>
+                                                </div>
+                                                {rootWhiteboards.map((page) => (
+                                                    <Link
+                                                        key={page.id}
+                                                        href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
+                                                        className="flex min-w-0 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                                                    >
+                                                        <PencilRuler className="size-4 shrink-0 text-violet-500" />
+                                                        <span className="min-w-0 truncate">{page.name}</span>
+                                                    </Link>
+                                                ))}
+                                            </>
+                                        )}
+                                        {/* Folders */}
+                                        {rootFolders.length > 0 && (
+                                            <>
+                                                {(rootDocs.length > 0 || rootWhiteboards.length > 0) && (
+                                                    <div className="border-t border-border/50 my-1.5" />
+                                                )}
+                                                <div className="px-2 py-1">
+                                                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Folders</span>
+                                                </div>
+                                                {rootFolders.map((page) => (
+                                                    <PageTreeItem
+                                                        key={page.id}
+                                                        page={page}
+                                                        workspace={workspace}
+                                                        project={project}
+                                                        onAddItem={(parentId) => onAddItem(project.id, parentId)}
+                                                    />
+                                                ))}
+                                            </>
+                                        )}
+                                    </>
+                                );
+                            })()}
                         </div>
                     </CollapsibleContent>
                 )}
@@ -547,7 +604,15 @@ function ProjectItem({
     );
 }
 
-function AppSidebar({ workspaces, currentWorkspace }: { workspaces: Workspace[]; currentWorkspace?: Workspace & { projects: (Project & { boards: Board[]; pages?: PageType[] })[] } }) {
+function AppSidebar({
+    workspaces,
+    currentWorkspace,
+    onOpenSearch,
+}: {
+    workspaces: Workspace[];
+    currentWorkspace?: Workspace & { projects: (Project & { boards: Board[]; pages?: PageType[] })[] };
+    onOpenSearch?: () => void;
+}) {
     const { auth } = usePage<PageProps>().props;
     const user = auth.user;
 
@@ -608,7 +673,11 @@ function AppSidebar({ workspaces, currentWorkspace }: { workspaces: Workspace[];
                             </SidebarMenuItem>
                         )}
                         <SidebarMenuItem>
-                            <button className="flex items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors w-full text-left">
+                            <button
+                                type="button"
+                                onClick={() => onOpenSearch?.()}
+                                className="flex items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors w-full text-left"
+                            >
                                 <Search className="size-5 text-muted-foreground" />
                                 <span className="text-sm font-medium">Search</span>
                             </button>
@@ -633,7 +702,7 @@ function AppSidebar({ workspaces, currentWorkspace }: { workspaces: Workspace[];
                     </SidebarMenu>
                 </div>
 
-                <Separator className="mx-3" />
+                <Separator className="mx-3 my-4" />
 
                 {/* Projects Section - Scrollable */}
                 <SidebarContent className="px-3">
@@ -690,6 +759,7 @@ function AppSidebar({ workspaces, currentWorkspace }: { workspaces: Workspace[];
                         <DropdownMenuTrigger asChild>
                             <button className="flex items-center gap-3 w-full px-2 py-2 hover:bg-accent rounded-lg transition-colors text-left">
                                 <Avatar className="size-8">
+                                    {user.avatar_display && <AvatarImage src={user.avatar_display} alt="" />}
                                     <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm font-semibold">
                                         {user.name.charAt(0).toUpperCase()}
                                     </AvatarFallback>
@@ -709,6 +779,7 @@ function AppSidebar({ workspaces, currentWorkspace }: { workspaces: Workspace[];
                         >
                             <div className="flex items-center gap-3 p-2 mb-2">
                                 <Avatar className="size-10">
+                                    {user.avatar_display && <AvatarImage src={user.avatar_display} alt="" />}
                                     <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
                                         {user.name.charAt(0).toUpperCase()}
                                     </AvatarFallback>
@@ -760,8 +831,7 @@ function AppSidebar({ workspaces, currentWorkspace }: { workspaces: Workspace[];
     );
 }
 
-function TopBar({ onCreateClick }: { onCreateClick?: () => void }) {
-    const [searchQuery, setSearchQuery] = useState('');
+function TopBar({ onCreateClick, onSearchClick }: { onCreateClick?: () => void; onSearchClick?: () => void }) {
     const { currentWorkspace } = usePage<PageProps>().props;
 
     return (
@@ -785,16 +855,23 @@ function TopBar({ onCreateClick }: { onCreateClick?: () => void }) {
             {/* Spacer */}
             <div className="flex-1" />
 
-            {/* Search */}
+            {/* Search trigger - opens search modal */}
             <div className="w-full max-w-sm">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                     <Input
                         type="search"
                         placeholder="Search..."
-                        className="pl-9 h-9 bg-muted/50 border-0 focus-visible:ring-1 focus-visible:ring-primary/50 text-sm"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9 h-9 bg-muted/50 border-0 focus-visible:ring-1 focus-visible:ring-primary/50 text-sm cursor-pointer"
+                        readOnly
+                        onFocus={() => onSearchClick?.()}
+                        onClick={() => onSearchClick?.()}
+                        onKeyDown={(e) => {
+                            if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+                                e.preventDefault();
+                                onSearchClick?.();
+                            }
+                        }}
                     />
                     <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium sm:flex">
                         ⌘K
@@ -940,7 +1017,8 @@ function GlobalCreateTaskModal({
                             </SelectTrigger>
                             <SelectContent>
                                 {currentWorkspace.projects?.map((project) => (
-                                    <SelectItem key={project.id} value={project.id.toString()}>
+                                    <SelectItem key={project.id} value={project.id.toString()} className="flex items-center gap-2">
+                                        <ProjectIcon project={project} size="xs" />
                                         {project.name}
                                     </SelectItem>
                                 ))}
@@ -1038,9 +1116,23 @@ function GlobalCreateTaskModal({
 export default function AppLayout({ children, title }: Props) {
     const { workspaces = [], currentWorkspace } = usePage<PageProps>().props;
     const [createTaskModalOpen, setCreateTaskModalOpen] = useState(false);
+    const [searchModalOpen, setSearchModalOpen] = useState(false);
     const [preSelectedProjectId, setPreSelectedProjectId] = useState<number | undefined>();
     const [preSelectedBoardId, setPreSelectedBoardId] = useState<number | undefined>();
     const [preSelectedColumnId, setPreSelectedColumnId] = useState<number | undefined>();
+
+    const onOpenSearch = useCallback(() => setSearchModalOpen(true), []);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                setSearchModalOpen((open) => !open);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, []);
 
     const openCreateTaskModal = useCallback((projectId?: number, boardId?: number, columnId?: number) => {
         setPreSelectedProjectId(projectId);
@@ -1064,9 +1156,13 @@ export default function AppLayout({ children, title }: Props) {
     return (
         <GlobalCreateModalContext.Provider value={globalCreateModalValue}>
             <SidebarProvider>
-                <AppSidebar workspaces={workspaces} currentWorkspace={currentWorkspace} />
+                <AppSidebar
+                workspaces={workspaces}
+                currentWorkspace={currentWorkspace}
+                onOpenSearch={onOpenSearch}
+            />
                 <SidebarInset className="flex flex-col h-screen overflow-hidden">
-                    <TopBar onCreateClick={() => openCreateTaskModal()} />
+                    <TopBar onCreateClick={() => openCreateTaskModal()} onSearchClick={onOpenSearch} />
                     <main className="flex-1 overflow-auto bg-muted/30">
                         {children}
                     </main>
@@ -1080,6 +1176,10 @@ export default function AppLayout({ children, title }: Props) {
                 preSelectedProjectId={preSelectedProjectId}
                 preSelectedBoardId={preSelectedBoardId}
                 preSelectedColumnId={preSelectedColumnId}
+            />
+            <SearchModal
+                open={searchModalOpen}
+                onOpenChange={setSearchModalOpen}
             />
             <Toaster richColors position="bottom-right" closeButton />
         </GlobalCreateModalContext.Provider>
