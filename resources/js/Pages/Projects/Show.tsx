@@ -154,7 +154,7 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                         </CardContent>
                     </Card>
 
-                    {/* Two-column layout: Boards + Documents */}
+                    {/* Boards + Documents */}
                     <div className="grid gap-8 lg:grid-cols-2">
                         {/* Boards Section */}
                         <Card>

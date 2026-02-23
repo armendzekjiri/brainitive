@@ -1,4 +1,5 @@
 import { Link, router, usePage, useForm } from '@inertiajs/react';
+import { Toaster } from 'sonner';
 import { PropsWithChildren, useState, FormEvent, useEffect, useCallback, createContext, useContext } from 'react';
 import { PageProps, Workspace, Project, Board, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn } from '@/types';
 import {
@@ -58,6 +59,7 @@ import {
     Folder,
     Kanban,
     ListTodo,
+    Bookmark as BookmarkIcon,
 } from 'lucide-react';
 import {
     Select,
@@ -520,7 +522,7 @@ function ProjectItem({
                             {/* Pages Section */}
                             {project.pages && project.pages.length > 0 && (
                                 <>
-                                    {project.boards && project.boards.length > 0 && (
+                                    {(project.boards?.length ?? 0) > 0 && (
                                         <div className="border-t border-border/50 my-1.5" />
                                     )}
                                     <div className="flex items-center justify-between px-2 py-1">
@@ -594,6 +596,17 @@ function AppSidebar({ workspaces, currentWorkspace }: { workspaces: Workspace[];
                                 </Link>
                             )}
                         </SidebarMenuItem>
+                        {currentWorkspace && (
+                            <SidebarMenuItem>
+                                <Link
+                                    href={route('bookmarks.index', currentWorkspace.slug)}
+                                    className="flex items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors"
+                                >
+                                    <BookmarkIcon className="size-5 text-muted-foreground" />
+                                    <span className="text-sm font-medium">Bookmarks</span>
+                                </Link>
+                            </SidebarMenuItem>
+                        )}
                         <SidebarMenuItem>
                             <button className="flex items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors w-full text-left">
                                 <Search className="size-5 text-muted-foreground" />
@@ -1068,6 +1081,7 @@ export default function AppLayout({ children, title }: Props) {
                 preSelectedBoardId={preSelectedBoardId}
                 preSelectedColumnId={preSelectedColumnId}
             />
+            <Toaster richColors position="bottom-right" closeButton />
         </GlobalCreateModalContext.Provider>
     );
 }
