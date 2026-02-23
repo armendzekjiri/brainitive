@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BoardController;
+use App\Http\Controllers\BookmarkController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
@@ -23,6 +24,9 @@ Route::get('/terms', function () {
     return Inertia::render('Terms');
 })->name('terms');
 
+// Public bookmark view (view only, no auth)
+Route::get('/share/bookmarks/{uuid}', [BookmarkController::class, 'showPublic'])->name('bookmarks.public.show');
+
 Route::middleware(['auth', 'verified'])->group(function () {
     // Dashboard redirects to workspaces
     Route::get('/dashboard', function () {
@@ -37,8 +41,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('workspaces/{workspace}/members/{user}', [WorkspaceController::class, 'updateMemberRole'])->name('workspaces.members.update');
     Route::delete('workspaces/{workspace}/members/{user}', [WorkspaceController::class, 'removeMember'])->name('workspaces.members.remove');
 
-    // Projects (nested under workspaces) - scoped to workspace
+    // Workspace-scoped routes
     Route::prefix('workspaces/{workspace}')->group(function () {
+        // Bookmarks (workspace level)
+        Route::get('bookmarks', [BookmarkController::class, 'index'])->name('bookmarks.index');
+        Route::post('bookmarks', [BookmarkController::class, 'store'])->name('bookmarks.store');
+        Route::get('bookmarks/{bookmark}', [BookmarkController::class, 'show'])->name('bookmarks.show');
+        Route::put('bookmarks/{bookmark}', [BookmarkController::class, 'update'])->name('bookmarks.update');
+        Route::delete('bookmarks/{bookmark}', [BookmarkController::class, 'destroy'])->name('bookmarks.destroy');
+        Route::post('bookmarks/{bookmark}/items', [BookmarkController::class, 'storeItem'])->name('bookmarks.items.store');
+        Route::put('bookmarks/{bookmark}/items/{item}', [BookmarkController::class, 'updateItem'])->name('bookmarks.items.update');
+        Route::patch('bookmarks/{bookmark}/items/{item}/toggle', [BookmarkController::class, 'toggleItem'])->name('bookmarks.items.toggle');
+        Route::delete('bookmarks/{bookmark}/items/{item}', [BookmarkController::class, 'destroyItem'])->name('bookmarks.items.destroy');
+        Route::post('bookmarks/{bookmark}/collaborators', [BookmarkController::class, 'inviteCollaborator'])->name('bookmarks.collaborators.invite');
+        Route::put('bookmarks/{bookmark}/collaborators/{user}', [BookmarkController::class, 'updateCollaborator'])->name('bookmarks.collaborators.update');
+        Route::delete('bookmarks/{bookmark}/collaborators/{user}', [BookmarkController::class, 'removeCollaborator'])->name('bookmarks.collaborators.remove');
+
+        // Projects (nested under workspaces) - scoped to workspace
         Route::resource('projects', ProjectController::class)->scoped([
             'project' => 'slug',
         ]);
@@ -50,7 +69,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('labels/{label}', [ProjectController::class, 'destroyLabel'])->name('projects.labels.destroy');
         });
 
-        // Boards (nested under projects) - scoped to project
+        // Boards & Pages (nested under projects) - scoped to project
         Route::prefix('projects/{project}')->scopeBindings()->group(function () {
             Route::post('boards', [BoardController::class, 'store'])->name('boards.store');
             Route::get('boards/{board:slug}', [BoardController::class, 'show'])->name('boards.show');

@@ -120,6 +120,14 @@ class Workspace extends Model
     }
 
     /**
+     * Get all bookmarks in this workspace.
+     */
+    public function bookmarks(): HasMany
+    {
+        return $this->hasMany(Bookmark::class)->orderBy('position');
+    }
+
+    /**
      * Get pending invitations for this workspace.
      */
     public function invitations(): HasMany

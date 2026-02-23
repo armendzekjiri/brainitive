@@ -78,6 +78,47 @@ export interface Board {
     updated_at: string;
 }
 
+export interface Bookmark {
+    id: number;
+    uuid: string;
+    workspace_id?: number;
+    name: string;
+    slug: string;
+    description?: string;
+    icon?: string;
+    visibility: 'private' | 'public';
+    collaborators?: Array<{ id: number; name: string; email?: string; pivot?: { role: 'viewer' | 'editor' } }>;
+    creator?: User;
+    position: number;
+    created_by?: number;
+    settings?: Record<string, unknown>;
+    links_count?: number;
+    files_count?: number;
+    todos_count?: number;
+    notes_count?: number;
+    todos_completed_count?: number;
+    items?: BookmarkItem[];
+    created_at: string;
+    updated_at: string;
+}
+
+export interface BookmarkItem {
+    id: number;
+    bookmark_id: number;
+    type: 'link' | 'file' | 'todo' | 'note';
+    title?: string;
+    url?: string;
+    file_path?: string;
+    file_url?: string;
+    content?: string;
+    metadata?: Record<string, unknown> & { favicon_url?: string; description?: string };
+    position: number;
+    is_completed: boolean;
+    created_by?: number;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface BoardColumn {
     id: number;
     board_id: number;
