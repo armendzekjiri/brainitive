@@ -39,7 +39,7 @@ export function ProjectIcon({ project, size = 'sm', className = '' }: ProjectIco
             className={`flex items-center justify-center shrink-0 overflow-hidden ${boxClass} ${className}`}
             style={
                 !display
-                    ? { backgroundColor: project.color || '#6366f1' }
+                    ? { backgroundColor: project.color || '#2563eb' }
                     : undefined
             }
         >
