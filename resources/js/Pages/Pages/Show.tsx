@@ -309,11 +309,16 @@ function AddSubpageDialog({
     const projectPages = (props.currentWorkspace?.projects?.find((p) => p.id === project.id) as (Project & { pages?: PageType[] }) | undefined)?.pages ?? [];
 
     const [itemType, setItemType] = useState<'page' | 'folder' | 'excalidraw'>('page');
-    const { data, setData, post, processing, reset } = useForm({
+    const { data, setData, post, processing, reset } = useForm<{
+        name: string;
+        type: 'page' | 'folder';
+        parent_id: number | null;
+        content_type: 'doc' | 'excalidraw';
+    }>({
         name: '',
-        type: 'page' as 'page' | 'folder',
+        type: 'page',
         parent_id: parentId,
-        content_type: 'doc' as 'doc' | 'excalidraw',
+        content_type: 'doc',
     });
 
     // Sync parent when dialog opens or parentId changes (e.g. opened from a page's "Add")
