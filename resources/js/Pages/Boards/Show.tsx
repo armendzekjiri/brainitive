@@ -104,9 +104,9 @@ function PriorityIcon({ slug, className }: { slug?: string; className?: string }
         case 'medium':
             return <Equal className={`${baseClass} text-yellow-500`} />;
         case 'low':
-            return <ChevronDown className={`${baseClass} text-blue-500`} />;
+            return <ChevronDown className={`${baseClass} text-brand-blue`} />;
         case 'lowest':
-            return <ChevronDown className={`${baseClass} text-slate-400`} />;
+            return <ChevronDown className={`${baseClass} text-brand-gray`} />;
         default:
             return <Equal className={`${baseClass} text-muted-foreground`} />;
     }
@@ -119,14 +119,14 @@ function ItemTypeIcon({ slug, className }: { slug?: string; className?: string }
         case 'bug':
             return <Bug className={`${baseClass} text-red-500`} />;
         case 'story':
-            return <Bookmark className={`${baseClass} text-green-500`} />;
+            return <Bookmark className={`${baseClass} text-brand-green`} />;
         case 'epic':
-            return <Layers className={`${baseClass} text-purple-500`} />;
+            return <Layers className={`${baseClass} text-brand-slate`} />;
         case 'subtask':
-            return <Square className={`${baseClass} text-blue-400`} />;
+            return <Square className={`${baseClass} text-primary/60`} />;
         case 'task':
         default:
-            return <CheckSquare className={`${baseClass} text-blue-500`} />;
+            return <CheckSquare className={`${baseClass} text-primary`} />;
     }
 }
 
@@ -366,7 +366,7 @@ function ItemCard({
                     </div>
                     {item.assignee ? (
                         <Avatar className="size-6 ring-2 ring-background">
-                            <AvatarFallback className="text-[10px] bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
+                            <AvatarFallback className="text-[10px] bg-gradient-to-br from-brand-blue to-brand-slate text-white font-semibold">
                                 {item.assignee.name.charAt(0).toUpperCase()}
                             </AvatarFallback>
                         </Avatar>
@@ -505,12 +505,12 @@ function BoardColumnComponent({
         <div
             className={`flex-shrink-0 w-[280px] flex flex-col max-h-full rounded-xl transition-colors ${
                 isDragOver ? 'ring-2 ring-primary/40' : ''
-            } bg-slate-200/80 dark:bg-slate-800/60`}
+            } bg-muted dark:bg-muted/60`}
             onDragOver={(e) => onDragOver(e, column)}
             onDrop={(e) => onDrop(e, column)}
         >
             {/* Column Header */}
-            <div className="px-3 py-3 flex items-center justify-between bg-slate-300/60 dark:bg-slate-700/50 rounded-t-xl border-b border-slate-300 dark:border-slate-700">
+            <div className="px-3 py-3 flex items-center justify-between bg-secondary dark:bg-secondary/50 rounded-t-xl border-b border-border">
                 <div className="flex items-center gap-2">
                     <div
                         className="w-1 h-4 rounded-full"
@@ -1828,7 +1828,7 @@ export default function BoardsShow({
 
                 {/* View Content */}
                 {currentView === 'kanban' && (
-                    <div className="flex-1 overflow-x-auto overflow-y-hidden bg-slate-100 dark:bg-slate-900/50">
+                    <div className="flex-1 overflow-x-auto overflow-y-hidden bg-muted/50 dark:bg-muted/30">
                         <div className="flex gap-4 p-6 h-full">
                             {filteredColumns.map((column) => (
                                 <BoardColumnComponent

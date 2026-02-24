@@ -37,11 +37,11 @@ const MIN_QUERY_LENGTH = 2;
 function ResultIcon({ type }: { type: SearchResult['type'] }) {
     const styles = {
         bookmark:
-            'bg-gradient-to-br from-amber-400/20 to-orange-500/20 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/20',
+            'bg-gradient-to-br from-brand-green/20 to-brand-green/10 text-brand-green ring-1 ring-brand-green/20',
         item:
-            'bg-gradient-to-br from-violet-400/20 to-purple-500/20 text-violet-600 dark:text-violet-400 ring-1 ring-violet-500/20',
+            'bg-gradient-to-br from-brand-slate/20 to-brand-slate/10 text-brand-slate ring-1 ring-brand-slate/20',
         page:
-            'bg-gradient-to-br from-sky-400/20 to-blue-500/20 text-sky-600 dark:text-sky-400 ring-1 ring-sky-500/20',
+            'bg-gradient-to-br from-primary/20 to-primary/10 text-primary ring-1 ring-primary/20',
     };
     const Icon = type === 'bookmark' ? BookmarkIcon : type === 'item' ? LayoutGrid : FileText;
     return (

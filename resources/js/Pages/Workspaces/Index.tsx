@@ -14,17 +14,17 @@ interface Props extends PageProps {
 // Gradient for cover when no header image; fallback color for logo circle
 function getWorkspaceGradient(name: string): string {
     const gradients = [
-        'from-violet-600 to-purple-800',
-        'from-teal-600 to-cyan-800',
-        'from-orange-500 to-amber-700',
-        'from-pink-500 to-rose-700',
-        'from-indigo-600 to-blue-800',
-        'from-emerald-600 to-green-800',
+        'from-brand-blue to-brand-slate',
+        'from-brand-slate to-brand-blue',
+        'from-brand-green to-brand-slate',
+        'from-brand-blue to-brand-green',
+        'from-brand-slate to-brand-green',
+        'from-brand-green to-brand-blue',
     ];
     return gradients[name.charCodeAt(0) % gradients.length];
 }
 function getWorkspaceBg(name: string): string {
-    const colors = ['bg-violet-600', 'bg-teal-600', 'bg-orange-500', 'bg-pink-500', 'bg-indigo-600', 'bg-emerald-600'];
+    const colors = ['bg-brand-blue', 'bg-brand-slate', 'bg-brand-green', 'bg-brand-blue', 'bg-brand-slate', 'bg-brand-green'];
     return colors[name.charCodeAt(0) % colors.length];
 }
 

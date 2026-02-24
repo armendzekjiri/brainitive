@@ -81,9 +81,9 @@ function PriorityIcon({ slug, className }: { slug?: string; className?: string }
         case 'medium':
             return <Equal className={`${baseClass} text-yellow-500`} />;
         case 'low':
-            return <ChevronDown className={`${baseClass} text-blue-500`} />;
+            return <ChevronDown className={`${baseClass} text-brand-blue`} />;
         case 'lowest':
-            return <ChevronDown className={`${baseClass} text-slate-400`} />;
+            return <ChevronDown className={`${baseClass} text-brand-gray`} />;
         default:
             return <Equal className={`${baseClass} text-muted-foreground`} />;
     }
@@ -96,14 +96,14 @@ function ItemTypeIcon({ slug, className }: { slug?: string; className?: string }
         case 'bug':
             return <Bug className={`${baseClass} text-red-500`} />;
         case 'story':
-            return <Bookmark className={`${baseClass} text-green-500`} />;
+            return <Bookmark className={`${baseClass} text-brand-green`} />;
         case 'epic':
-            return <Layers className={`${baseClass} text-purple-500`} />;
+            return <Layers className={`${baseClass} text-brand-slate`} />;
         case 'subtask':
-            return <Square className={`${baseClass} text-blue-400`} />;
+            return <Square className={`${baseClass} text-primary/60`} />;
         case 'task':
         default:
-            return <CheckSquare className={`${baseClass} text-blue-500`} />;
+            return <CheckSquare className={`${baseClass} text-primary`} />;
     }
 }
 

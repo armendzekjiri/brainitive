@@ -375,7 +375,7 @@ function AddSubpageDialog({
                                 itemType === 'excalidraw' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/50'
                             }`}
                         >
-                            <svg className="size-5 text-violet-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <svg className="size-5 text-brand-slate" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M12 19l7-7 3 3-7 7-3-3z" />
                                 <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
                                 <path d="M2 2l7.586 7.586" />
@@ -415,11 +415,11 @@ function AddSubpageDialog({
                                     <SelectItem key={p.id} value={String(p.id)}>
                                         <span className="flex items-center gap-2" style={{ paddingLeft: `${p.depth * 14}px` }}>
                                             {p.type === 'folder' ? (
-                                                <Folder className="size-3.5 shrink-0 text-amber-600" />
+                                                <Folder className="size-3.5 shrink-0 text-brand-slate" />
                                             ) : p.is_whiteboard ? (
-                                                <PencilRuler className="size-3.5 shrink-0 text-violet-500" />
+                                                <PencilRuler className="size-3.5 shrink-0 text-brand-slate" />
                                             ) : (
-                                                <FileText className="size-3.5 shrink-0 text-blue-600" />
+                                                <FileText className="size-3.5 shrink-0 text-primary" />
                                             )}
                                             {p.name}
                                         </span>
@@ -634,7 +634,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
     const getStatusBadge = () => {
         switch (page.status) {
             case 'published':
-                return <Badge variant="default" className="bg-green-600 hover:bg-green-700"><Globe className="size-3 mr-1" /> Published</Badge>;
+                return <Badge variant="default" className="bg-brand-green hover:bg-brand-green/90"><Globe className="size-3 mr-1" /> Published</Badge>;
             case 'archived':
                 return <Badge variant="secondary"><Archive className="size-3 mr-1" /> Archived</Badge>;
             default:
@@ -699,7 +699,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                 )}
                                 {isEditing && !isSaving && lastSaved && (
                                     <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                        <Check className="size-3 text-green-500" />
+                                        <Check className="size-3 text-brand-green" />
                                         Saved
                                     </span>
                                 )}

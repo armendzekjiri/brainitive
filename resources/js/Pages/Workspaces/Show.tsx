@@ -133,7 +133,7 @@ export default function WorkspacesShow({ auth, workspace, userRole }: Props) {
                     <section className="mb-12">
                         <div className="mb-4 flex items-center justify-between">
                             <h2 className="flex items-center gap-2 text-lg font-semibold">
-                                <BookmarkIcon className="size-5 text-amber-500" />
+                                <BookmarkIcon className="size-5 text-primary" />
                                 Bookmarks
                             </h2>
                             <Link
@@ -146,8 +146,8 @@ export default function WorkspacesShow({ auth, workspace, userRole }: Props) {
                         {bookmarks.length === 0 ? (
                             <Card className="border-dashed bg-card/50">
                                 <CardContent className="flex flex-col items-center justify-center py-10">
-                                    <div className="size-14 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mb-4">
-                                        <BookmarkIcon className="size-7 text-amber-600 dark:text-amber-400" />
+                                    <div className="size-14 rounded-2xl bg-primary/10 dark:bg-primary/20 flex items-center justify-center mb-4">
+                                        <BookmarkIcon className="size-7 text-primary" />
                                     </div>
                                     <p className="text-sm text-muted-foreground text-center mb-4">
                                         No bookmarks yet. Save links and notes for this workspace.
@@ -167,10 +167,10 @@ export default function WorkspacesShow({ auth, workspace, userRole }: Props) {
                                         key={bookmark.id}
                                         href={route('bookmarks.show', [workspace.slug, bookmark.slug])}
                                     >
-                                        <Card className="h-full transition-all hover:shadow-md hover:border-amber-500/30 group">
+                                        <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 group">
                                             <CardContent className="p-4">
                                                 <div className="flex items-start gap-3">
-                                                    <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/30 overflow-hidden">
+                                                    <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 dark:bg-primary/20 overflow-hidden">
                                                         {bookmark.icon_display && (bookmark.icon_display.startsWith('http') || bookmark.icon_display.startsWith('/')) ? (
                                                             <img src={bookmark.icon_display} alt="" className="size-full object-cover" />
                                                         ) : (
@@ -178,7 +178,7 @@ export default function WorkspacesShow({ auth, workspace, userRole }: Props) {
                                                         )}
                                                     </div>
                                                     <div className="min-w-0 flex-1">
-                                                        <h3 className="font-semibold truncate group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                                                        <h3 className="font-semibold truncate group-hover:text-primary transition-colors">
                                                             {bookmark.name}
                                                         </h3>
                                                         {bookmark.description && (

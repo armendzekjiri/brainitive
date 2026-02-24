@@ -71,14 +71,14 @@ interface Props extends PageProps {
 // Generate consistent colors for workspace icons
 function getWorkspaceColor(name: string): string {
     const colors = [
-        'bg-blue-600',
-        'bg-purple-600',
-        'bg-teal-600',
-        'bg-orange-500',
-        'bg-pink-600',
-        'bg-indigo-600',
-        'bg-green-600',
-        'bg-red-500',
+        'bg-brand-blue',
+        'bg-brand-slate',
+        'bg-brand-green',
+        'bg-brand-blue',
+        'bg-brand-slate',
+        'bg-brand-green',
+        'bg-brand-blue',
+        'bg-brand-slate',
     ];
     return colors[name.charCodeAt(0) % colors.length];
 }
@@ -184,7 +184,7 @@ export default function WorkspacesEdit({
 
             <div className="min-h-full">
                 {/* Header with cover image */}
-                <div className="relative h-48 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-500">
+                <div className="relative h-48 bg-gradient-to-r from-brand-blue via-brand-slate to-brand-green">
                     {headerPreview && (
                         <img
                             src={headerPreview}
@@ -805,7 +805,7 @@ export default function WorkspacesEdit({
                                         <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
                                             <div className="flex items-center gap-4">
                                                 <Avatar className="size-12">
-                                                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold text-lg">
+                                                    <AvatarFallback className="bg-gradient-to-br from-brand-blue to-brand-slate text-white font-semibold text-lg">
                                                         {workspace.owner.name.charAt(0).toUpperCase()}
                                                     </AvatarFallback>
                                                 </Avatar>

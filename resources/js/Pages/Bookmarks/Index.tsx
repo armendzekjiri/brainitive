@@ -296,7 +296,7 @@ export default function BookmarksIndex({ workspace, bookmarks }: Props) {
         private: { label: 'Private', variant: 'secondary' },
         public: { label: 'Shared', variant: 'default' },
     };
-    const sharedBadgeClass = 'border-transparent bg-green-600 text-white hover:bg-green-600';
+    const sharedBadgeClass = 'border-transparent bg-brand-green text-white hover:bg-brand-green';
 
     return (
         <AppLayout>
