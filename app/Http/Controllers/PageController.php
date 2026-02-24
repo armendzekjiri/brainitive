@@ -8,6 +8,7 @@ use App\Models\Workspace;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class PageController extends Controller
@@ -20,7 +21,10 @@ class PageController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'type' => 'required|in:page,folder',
-            'parent_id' => 'nullable|exists:pages,id',
+            'parent_id' => [
+                'nullable',
+                Rule::exists('pages', 'id')->where('project_id', $project->id),
+            ],
             'icon' => 'nullable|string|max:50',
             'content_type' => 'nullable|string|in:doc,excalidraw',
         ]);

@@ -1,6 +1,7 @@
 import { PageProps } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { useState, useEffect } from 'react';
+import ApplicationLogo from '@/Components/ApplicationLogo';
 import {
     LayoutDashboard,
     FolderKanban,
@@ -223,14 +224,12 @@ export default function Welcome({
                 <nav className="relative z-10 flex items-center justify-between px-6 py-5 max-w-6xl mx-auto">
                     <Link
                         href="/"
-                        className={`flex items-center gap-2 font-semibold text-xl tracking-tight ${
-                            isDark ? 'text-white' : 'text-zinc-900'
-                        }`}
+                        className="flex items-center gap-2 font-semibold text-xl tracking-tight"
                     >
-                        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-emerald-600 text-white">
-                            B
-                        </span>
-                        Brainitive
+                        <ApplicationLogo
+                            className="h-9 w-auto object-contain"
+                            alt="Brainitive"
+                        />
                     </Link>
                     <div className="flex items-center gap-4">
                         <button

@@ -289,4 +289,5 @@ export type PageProps<
     currentWorkspace?: Workspace & {
         projects: (Project & { boards: Board[]; pages: Page[] })[];
     };
+    currentPageUuid?: string | null;
 };
