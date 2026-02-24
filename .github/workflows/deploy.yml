@@ -1,0 +1,39 @@
+# Automatic deployment on push to main
+# Deploys Laravel app to your server via SSH
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # allow manual run from Actions tab
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+            echo ">>> Pulling latest code..."
+            git pull origin main
+            echo ">>> Installing PHP dependencies..."
+            composer install --no-dev --optimize-autoloader --no-interaction
+            echo ">>> Installing Node dependencies and building assets..."
+            npm ci
+            npm run build
+            echo ">>> Running migrations..."
+            php artisan migrate --force
+            echo ">>> Caching config, routes, views..."
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            echo ">>> Restarting queue workers (if running)..."
+            (php artisan queue:restart 2>/dev/null || true)
+            echo ">>> Deployment finished."
