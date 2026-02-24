@@ -109,7 +109,7 @@ In GitHub: open your repo → **Settings** → **Secrets and variables** → **A
 | `DEPLOY_USER`   | SSH user: **`ubuntu`** (the user that owns `/var/www/brainitive`) | Yes |
 | `DEPLOY_KEY`    | Full contents of the **private** SSH key used to log in as `ubuntu` (paste the whole key including `-----BEGIN ... KEY-----` and `-----END ... KEY-----`) | Yes |
 | `DEPLOY_PATH`   | **`/var/www/brainitive`** (where the app lives on the server) | Yes |
-| `DEPLOY_PORT`   | SSH port if not 22 (e.g. `2222`); omit if you use port 22 | No |
+| `DEPLOY_PORT`   | SSH port: **`5067`** (use this for your VPS; omit only if you use default port 22) | Yes (for your server) |
 
 To get the private key for `DEPLOY_KEY`:
 
