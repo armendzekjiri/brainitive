@@ -258,6 +258,7 @@ export default function Welcome({
                             <ApplicationLogo
                                 className="h-9 w-auto object-contain transition-transform group-hover:scale-105"
                                 alt="Brainitive"
+                                priority
                             />
                         </Link>
 
@@ -395,6 +396,8 @@ export default function Welcome({
                             <ApplicationLogo
                                 className="h-20 sm:h-24 w-auto object-contain drop-shadow-lg"
                                 alt="Brainitive"
+                                width={200}
+                                height={48}
                             />
                         </div>
 
@@ -710,6 +713,8 @@ export default function Welcome({
                                 <ApplicationLogo
                                     className="h-8 w-auto object-contain"
                                     alt="Brainitive"
+                                    width={124}
+                                    height={32}
                                 />
                             </div>
                             <div className="flex flex-wrap items-center justify-center gap-6 text-sm">

@@ -21,9 +21,8 @@
         <link rel="apple-touch-icon" sizes="180x180" href="{{ file_exists(public_path('apple-touch-icon.png')) ? asset('apple-touch-icon.png') : asset('images/logo.png') }}">
         <link rel="manifest" href="{{ route('manifest') }}">
 
-        <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.bunny.net">
-        <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
+        <!-- Preload LCP image (logo) so it is discoverable immediately -->
+        <link rel="preload" href="{{ asset('images/logo.png') }}" as="image">
 
         <!-- Scripts -->
         @routes

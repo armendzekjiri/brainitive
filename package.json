@@ -48,6 +48,8 @@
         "@editorjs/underline": "^1.2.1",
         "@editorjs/warning": "^1.4.1",
         "@excalidraw/excalidraw": "^0.18.0",
+        "@fontsource/hanken-grotesk": "^5.2.8",
+        "@fontsource/inter": "^5.2.8",
         "@hookform/resolvers": "^5.2.2",
         "@lexical/clipboard": "^0.40.0",
         "@lexical/code": "^0.40.0",
