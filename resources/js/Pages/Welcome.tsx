@@ -278,14 +278,14 @@ export default function Welcome({
                                 Pricing
                             </a>
                             <Link
-                                href={route('privacy')}
+                                href="/privacy"
                                 className="inline-flex items-center gap-1.5 text-sm font-medium text-[#485E72]/70 hover:text-[#0E83DC] transition-colors"
                             >
                                 <ShieldCheck className="h-3.5 w-3.5" />
                                 Privacy
                             </Link>
                             <Link
-                                href={route('terms')}
+                                href="/terms"
                                 className="inline-flex items-center gap-1.5 text-sm font-medium text-[#485E72]/70 hover:text-[#0E83DC] transition-colors"
                             >
                                 <Scale className="h-3.5 w-3.5" />
@@ -356,14 +356,14 @@ export default function Welcome({
                                 Pricing
                             </a>
                             <Link
-                                href={route('privacy')}
+                                href="/privacy"
                                 className="flex items-center gap-2 text-sm font-medium text-[#485E72]/70 hover:text-[#0E83DC]"
                             >
                                 <ShieldCheck className="h-3.5 w-3.5" />
                                 Privacy
                             </Link>
                             <Link
-                                href={route('terms')}
+                                href="/terms"
                                 className="flex items-center gap-2 text-sm font-medium text-[#485E72]/70 hover:text-[#0E83DC]"
                             >
                                 <Scale className="h-3.5 w-3.5" />
@@ -726,19 +726,19 @@ export default function Welcome({
                                     Pricing
                                 </a>
                                 <Link
-                                    href={route('privacy')}
+                                    href="/privacy"
                                     className="text-[#485E72]/60 hover:text-[#0E83DC] transition-colors font-medium"
                                 >
                                     Privacy Policy
                                 </Link>
                                 <Link
-                                    href={route('terms')}
+                                    href="/terms"
                                     className="text-[#485E72]/60 hover:text-[#0E83DC] transition-colors font-medium"
                                 >
                                     Terms of Service
                                 </Link>
                                 <Link
-                                    href={route('cookies')}
+                                    href="/cookies"
                                     className="text-[#485E72]/60 hover:text-[#0E83DC] transition-colors font-medium"
                                 >
                                     Cookie Policy

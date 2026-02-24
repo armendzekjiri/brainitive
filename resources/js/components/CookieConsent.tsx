@@ -122,15 +122,15 @@ export function CookieConsent() {
                             </button>
                         </div>
                         <p className="mt-4 text-xs text-[#485E72]/40">
-                            <Link href={route('privacy')} className="hover:text-[#0E83DC] underline transition-colors">
+                            <Link href="/privacy" className="hover:text-[#0E83DC] underline transition-colors">
                                 Privacy Policy
                             </Link>
                             {' · '}
-                            <Link href={route('terms')} className="hover:text-[#0E83DC] underline transition-colors">
+                            <Link href="/terms" className="hover:text-[#0E83DC] underline transition-colors">
                                 Terms of Service
                             </Link>
                             {' · '}
-                            <Link href={route('cookies')} className="hover:text-[#0E83DC] underline transition-colors">
+                            <Link href="/cookies" className="hover:text-[#0E83DC] underline transition-colors">
                                 Cookie Policy
                             </Link>
                         </p>

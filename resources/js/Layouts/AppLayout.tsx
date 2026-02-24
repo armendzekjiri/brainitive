@@ -967,7 +967,7 @@ function AppSidebar({
                                 </Avatar>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium truncate">{user.name}</p>
-                                    <p className="text-xs text-sidebar-foreground/60 truncate">{user.email}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                                 </div>
                                 <ChevronsUpDown className="size-4 text-muted-foreground shrink-0" />
                             </button>
