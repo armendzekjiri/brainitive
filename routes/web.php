@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BookmarkController;
+use App\Http\Controllers\MyWorkController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
@@ -58,6 +59,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Global search (bookmarks, board items, documents)
     Route::get('/search', SearchController::class)->name('search');
+
+    // My Work — assigned items across all workspaces
+    Route::get('/my-work', [MyWorkController::class, 'index'])->name('my-work.index');
 
     // Workspaces
     Route::resource('workspaces', WorkspaceController::class);

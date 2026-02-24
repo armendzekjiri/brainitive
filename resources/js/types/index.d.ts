@@ -291,3 +291,33 @@ export type PageProps<
     };
     currentPageUuid?: string | null;
 };
+
+/** My Work page: assigned item summary */
+export interface MyWorkItem {
+    id: number;
+    uuid: string;
+    key: string;
+    title: string;
+    description?: string;
+    due_date?: string;
+    completed_at?: string;
+    position: number;
+    board: { id: number; name: string; slug: string };
+    column?: { id: number; name: string; is_done_column: boolean };
+    item_type?: ItemType;
+    priority?: ItemPriority;
+    assignee?: User;
+}
+
+/** My Work page: project with assigned items */
+export interface MyWorkProject {
+    id: number;
+    name: string;
+    slug: string;
+    key: string;
+    icon?: string;
+    icon_display?: string | null;
+    color?: string;
+    workspace?: { id: number; name: string; slug: string };
+    items: MyWorkItem[];
+}

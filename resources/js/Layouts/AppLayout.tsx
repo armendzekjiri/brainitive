@@ -2,6 +2,7 @@ import { Link, router, usePage, useForm } from '@inertiajs/react';
 import { Toaster } from 'sonner';
 import React, { PropsWithChildren, useState, FormEvent, useEffect, useCallback, createContext, useContext } from 'react';
 import { PageProps, Workspace, Project, Board, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn } from '@/types';
+import { cn } from '@/lib/utils';
 import { SearchModal } from '@/components/SearchModal';
 import { SidebarResizer, getInitialSidebarWidth } from '@/components/SidebarResizer';
 import { ProjectIcon } from '@/components/ProjectIcon';
@@ -860,6 +861,20 @@ function AppSidebar({
                                     <span className="text-sm font-medium">Home</span>
                                 </Link>
                             )}
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                            <Link
+                                href={route('my-work.index')}
+                                className={cn(
+                                    'flex items-center gap-3 px-2 py-2 rounded-lg transition-colors',
+                                    route().current() === 'my-work.index'
+                                        ? 'bg-accent text-accent-foreground'
+                                        : 'hover:bg-accent'
+                                )}
+                            >
+                                <ListTodo className="size-5 text-muted-foreground" />
+                                <span className="text-sm font-medium">My Work</span>
+                            </Link>
                         </SidebarMenuItem>
                         {currentWorkspace && (
                             <SidebarMenuItem>
