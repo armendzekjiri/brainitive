@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, useForm, router, Link } from '@inertiajs/react';
+import { Head, useForm, router, Link, usePage } from '@inertiajs/react';
 import type { OutputData } from '@editorjs/editorjs';
 import { PageProps, Workspace, Project, Page as PageType, User } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -56,12 +56,21 @@ import {
     Save,
     Pencil,
     Eye,
+    PencilRuler,
 } from 'lucide-react';
 import { useState, useEffect, useRef, FormEvent, Fragment, useCallback } from 'react';
 import EditorJSComponent, { HeadingItem } from '@/components/editor/EditorJS';
 import '@/components/editor/editorjs.css';
 import { cn } from '@/lib/utils';
 import { List as ListIcon } from 'lucide-react';
+import { flattenPagesForParentSelect } from '@/lib/pageTree';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -296,6 +305,9 @@ function AddSubpageDialog({
     project: Project;
     parentId: number;
 }) {
+    const { props } = usePage<PageProps>();
+    const projectPages = (props.currentWorkspace?.projects?.find((p) => p.id === project.id) as (Project & { pages?: PageType[] }) | undefined)?.pages ?? [];
+
     const [itemType, setItemType] = useState<'page' | 'folder' | 'excalidraw'>('page');
     const { data, setData, post, processing, reset } = useForm({
         name: '',
@@ -303,6 +315,13 @@ function AddSubpageDialog({
         parent_id: parentId,
         content_type: 'doc' as 'doc' | 'excalidraw',
     });
+
+    // Sync parent when dialog opens or parentId changes (e.g. opened from a page's "Add")
+    useEffect(() => {
+        if (open) {
+            setData('parent_id', parentId);
+        }
+    }, [open, parentId]);
 
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
@@ -320,7 +339,7 @@ function AddSubpageDialog({
                 <DialogHeader>
                     <DialogTitle>Add Subpage</DialogTitle>
                     <DialogDescription>
-                        Create a new page, Whiteboard, or folder inside this {itemType === 'folder' ? 'folder' : 'page'}.
+                        Create a new page, Whiteboard, or folder. Choose a parent to nest under Root or any folder/page.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -372,6 +391,37 @@ function AddSubpageDialog({
                             <Folder className="size-5" />
                             <span>Folder</span>
                         </button>
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label htmlFor="parent-select">Parent</Label>
+                        <Select
+                            value={data.parent_id === null || data.parent_id === undefined ? 'root' : String(data.parent_id)}
+                            onValueChange={(v) => setData('parent_id', v === 'root' ? null : Number(v))}
+                        >
+                            <SelectTrigger id="parent-select">
+                                <SelectValue placeholder="Select parent" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="root">Root</SelectItem>
+                                {flattenPagesForParentSelect(projectPages, {
+                                    foldersOnly: itemType === 'folder',
+                                }).map((p) => (
+                                    <SelectItem key={p.id} value={String(p.id)}>
+                                        <span className="flex items-center gap-2" style={{ paddingLeft: `${p.depth * 14}px` }}>
+                                            {p.type === 'folder' ? (
+                                                <Folder className="size-3.5 shrink-0 text-amber-600" />
+                                            ) : p.is_whiteboard ? (
+                                                <PencilRuler className="size-3.5 shrink-0 text-violet-500" />
+                                            ) : (
+                                                <FileText className="size-3.5 shrink-0 text-blue-600" />
+                                            )}
+                                            {p.name}
+                                        </span>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     <div className="space-y-2">

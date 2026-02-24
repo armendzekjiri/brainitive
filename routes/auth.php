@@ -35,13 +35,15 @@ Route::middleware('guest')->group(function () {
         ->name('password.store');
 });
 
+// Email verification: allow guests; no signed URL so the link works regardless of APP_URL/host/port (e.g. localhost vs 127.0.0.1).
+// Security: id + hash (sha1 of email) + optional expiry are validated in the controller.
+Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
+    ->middleware(['throttle:6,1'])
+    ->name('verification.verify');
+
 Route::middleware('auth')->group(function () {
     Route::get('verify-email', EmailVerificationPromptController::class)
         ->name('verification.notice');
-
-    Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
-        ->middleware(['signed', 'throttle:6,1'])
-        ->name('verification.verify');
 
     Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])
         ->middleware('throttle:6,1')

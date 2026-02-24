@@ -24,6 +24,22 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
+     * Recursively load page children for sidebar tree (avoids N+1, supports Folder -> folder -> document etc.).
+     *
+     * @param  int  $depth  Remaining nesting levels (e.g. 7 allows 8 levels: root + 7 nested).
+     * @return \Closure
+     */
+    private static function pageTreeRecursive(int $depth = 7): \Closure
+    {
+        return function ($query) use ($depth) {
+            $query->orderBy('type', 'desc')->orderBy('position');
+            if ($depth > 0) {
+                $query->with(['children' => self::pageTreeRecursive($depth - 1)]);
+            }
+        };
+    }
+
+    /**
      * Define the props that are shared by default.
      *
      * @return array<string, mixed>
@@ -55,10 +71,10 @@ class HandleInertiaRequests extends Middleware
                         $query->with([
                             'boards:id,project_id,name,slug,type',
                             'pages' => function ($q) {
-                                $q->with(['children' => function ($c) {
-                                    $c->orderBy('type', 'desc')->orderBy('position');
-                                }])->orderBy('type', 'desc')->orderBy('position');
-                            }
+                                $q->with(['children' => self::pageTreeRecursive(7)])
+                                    ->orderBy('type', 'desc')
+                                    ->orderBy('position');
+                            },
                         ]);
                     }])
                     ->first();
@@ -72,6 +88,9 @@ class HandleInertiaRequests extends Middleware
             ],
             'workspaces' => $workspaces,
             'currentWorkspace' => $currentWorkspace,
+            'currentPageUuid' => $request->routeIs('pages.show') && $request->route('page')
+                ? (is_object($request->route('page')) ? $request->route('page')->uuid : $request->route('page'))
+                : null,
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),

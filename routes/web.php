@@ -25,6 +25,24 @@ Route::get('/terms', function () {
     return Inertia::render('Terms');
 })->name('terms');
 
+// PWA / Web app manifest (uses app name and full icon URLs)
+Route::get('/site.webmanifest', function () {
+    return response()->json([
+        'name' => config('app.name'),
+        'short_name' => config('app.name'),
+        'icons' => [
+            ['src' => asset('android-chrome-192x192.png'), 'sizes' => '192x192', 'type' => 'image/png'],
+            ['src' => asset('android-chrome-512x512.png'), 'sizes' => '512x512', 'type' => 'image/png'],
+        ],
+        'theme_color' => '#ffffff',
+        'background_color' => '#ffffff',
+        'display' => 'standalone',
+    ], 200, [
+        'Content-Type' => 'application/manifest+json',
+        'Cache-Control' => 'public, max-age=3600',
+    ]);
+})->name('manifest');
+
 // Public bookmark view (view only, no auth)
 Route::get('/share/bookmarks/{uuid}', [BookmarkController::class, 'showPublic'])->name('bookmarks.public.show');
 

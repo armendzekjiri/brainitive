@@ -1,9 +1,11 @@
 import { Link, router, usePage, useForm } from '@inertiajs/react';
 import { Toaster } from 'sonner';
-import { PropsWithChildren, useState, FormEvent, useEffect, useCallback, createContext, useContext } from 'react';
+import React, { PropsWithChildren, useState, FormEvent, useEffect, useCallback, createContext, useContext } from 'react';
 import { PageProps, Workspace, Project, Board, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn } from '@/types';
 import { SearchModal } from '@/components/SearchModal';
+import { SidebarResizer, getInitialSidebarWidth } from '@/components/SidebarResizer';
 import { ProjectIcon } from '@/components/ProjectIcon';
+import ApplicationLogo from '@/Components/ApplicationLogo';
 import {
     Sidebar,
     SidebarContent,
@@ -72,6 +74,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { flattenPagesForParentSelect } from '@/lib/pageTree';
 
 interface Props extends PropsWithChildren {
     title?: string;
@@ -110,8 +113,23 @@ function useExpandedState(key: string, defaultValue: boolean = false): [boolean,
     return [isOpen, setIsOpenPersisted];
 }
 
-// Jira-like workspace icon with first letter
-function WorkspaceIcon({ name, size = 'md' }: { name: string; size?: 'sm' | 'md' | 'lg' }) {
+// Check if a page (or any descendant) has the given uuid
+function pageContainsUuid(page: PageType, uuid: string): boolean {
+    if (page.uuid === uuid) return true;
+    if (page.children && page.children.length > 0) {
+        return page.children.some((c) => pageContainsUuid(c, uuid));
+    }
+    return false;
+}
+
+// Check if project's page tree contains the given page uuid
+function projectContainsPageUuid(project: Project & { pages?: PageType[] }, uuid: string): boolean {
+    if (!project.pages || project.pages.length === 0) return false;
+    return project.pages.some((p) => pageContainsUuid(p, uuid));
+}
+
+// Workspace icon: logo image when available, otherwise first letter
+function WorkspaceIcon({ name, logoUrl, size = 'md' }: { name: string; logoUrl?: string | null; size?: 'sm' | 'md' | 'lg' }) {
     const sizeClasses = {
         sm: 'size-6 text-xs',
         md: 'size-8 text-sm',
@@ -130,8 +148,18 @@ function WorkspaceIcon({ name, size = 'md' }: { name: string; size?: 'sm' | 'md'
     ];
     const colorIndex = name.charCodeAt(0) % colors.length;
 
+    if (logoUrl) {
+        return (
+            <img
+                src={logoUrl}
+                alt=""
+                className={`${sizeClasses[size]} rounded-md object-cover shrink-0`}
+            />
+        );
+    }
+
     return (
-        <div className={`${sizeClasses[size]} ${colors[colorIndex]} rounded-md flex items-center justify-center text-white font-semibold`}>
+        <div className={`${sizeClasses[size]} ${colors[colorIndex]} rounded-md flex items-center justify-center text-white font-semibold shrink-0`}>
             {name.charAt(0).toUpperCase()}
         </div>
     );
@@ -143,7 +171,7 @@ function WorkspaceSwitcher({ workspaces, currentWorkspace }: { workspaces: Works
             <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 w-full px-3 py-2.5 hover:bg-accent rounded-lg transition-colors text-left">
                     {currentWorkspace ? (
-                        <WorkspaceIcon name={currentWorkspace.name} size="md" />
+                        <WorkspaceIcon name={currentWorkspace.name} logoUrl={currentWorkspace.logo_display} size="md" />
                     ) : (
                         <div className="size-8 rounded-md bg-muted flex items-center justify-center">
                             <FolderKanban className="size-4 text-muted-foreground" />
@@ -175,7 +203,7 @@ function WorkspaceSwitcher({ workspaces, currentWorkspace }: { workspaces: Works
                         onClick={() => router.visit(route('workspaces.show', workspace.slug))}
                         className="flex items-center gap-3 p-2 cursor-pointer rounded-md"
                     >
-                        <WorkspaceIcon name={workspace.name} size="sm" />
+                        <WorkspaceIcon name={workspace.name} logoUrl={workspace.logo_display} size="sm" />
                         <span className="flex-1 text-sm font-medium truncate">{workspace.name}</span>
                         {currentWorkspace?.id === workspace.id && (
                             <Check className="size-4 text-primary" />
@@ -222,9 +250,16 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
     const pageForm = useForm({
         name: '',
         type: 'page' as 'page' | 'folder',
-        parent_id: parentId || null,
+        parent_id: parentId ?? null,
         content_type: 'doc' as 'doc' | 'excalidraw',
     });
+
+    // Sync parent when modal opens or parentId changes (e.g. "Add" on a folder)
+    useEffect(() => {
+        if (open) {
+            pageForm.setData('parent_id', parentId ?? null);
+        }
+    }, [open, parentId]);
 
     const boardForm = useForm({
         name: '',
@@ -359,6 +394,36 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                 ) : (itemType === 'page' || itemType === 'excalidraw' || itemType === 'folder') ? (
                     <form onSubmit={handleCreatePage} className="space-y-4 py-2">
                         <div className="space-y-2">
+                            <Label htmlFor="parent-select">Parent</Label>
+                            <Select
+                                value={pageForm.data.parent_id === null || pageForm.data.parent_id === undefined ? 'root' : String(pageForm.data.parent_id)}
+                                onValueChange={(v) => pageForm.setData('parent_id', v === 'root' ? null : Number(v))}
+                            >
+                                <SelectTrigger id="parent-select">
+                                    <SelectValue placeholder="Select parent" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="root">Root</SelectItem>
+                                    {flattenPagesForParentSelect((project as Project & { pages?: PageType[] }).pages ?? [], {
+                                        foldersOnly: itemType === 'folder',
+                                    }).map((p) => (
+                                        <SelectItem key={p.id} value={String(p.id)}>
+                                            <span className="flex items-center gap-2" style={{ paddingLeft: `${p.depth * 14}px` }}>
+                                                {p.type === 'folder' ? (
+                                                    <Folder className="size-3.5 shrink-0 text-amber-600" />
+                                                ) : p.is_whiteboard ? (
+                                                    <PencilRuler className="size-3.5 shrink-0 text-violet-500" />
+                                                ) : (
+                                                    <FileText className="size-3.5 shrink-0 text-blue-600" />
+                                                )}
+                                                {p.name}
+                                            </span>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
                             <Label htmlFor="page-name">
                                 {itemType === 'folder' ? 'Folder Name' : itemType === 'excalidraw' ? 'Whiteboard Name' : 'Page Name'}
                             </Label>
@@ -395,16 +460,24 @@ function PageTreeItem({
     workspace,
     project,
     level = 0,
-    onAddItem
+    onAddItem,
+    currentPageUuid,
 }: {
     page: PageType;
     workspace: Workspace;
     project: Project;
     level?: number;
     onAddItem: (parentId: number) => void;
+    currentPageUuid?: string | null;
 }) {
-    const [isOpen, setIsOpen] = useExpandedState(`page-${page.id}`, false);
     const hasChildren = page.children && page.children.length > 0;
+    const defaultOpen = !!currentPageUuid && hasChildren && (page.uuid === currentPageUuid || pageContainsUuid(page, currentPageUuid));
+    const [isOpen, setIsOpen] = useExpandedState(`page-${page.id}`, defaultOpen);
+
+    // Auto-expand when we navigate to this page or a descendant (e.g. open sidebar to current location)
+    useEffect(() => {
+        if (defaultOpen) setIsOpen(true);
+    }, [defaultOpen]);
 
     if (page.type === 'folder') {
         return (
@@ -434,7 +507,99 @@ function PageTreeItem({
                 </div>
                 {hasChildren && (
                     <CollapsibleContent>
-                        {page.children!.map((child) => (
+                        {(() => {
+                            const children = page.children!;
+                            const childDocs = children.filter((p) => p.type === 'page' && !p.is_whiteboard);
+                            const childWhiteboards = children.filter((p) => p.type === 'page' && p.is_whiteboard);
+                            const childFolders = children.filter((p) => p.type === 'folder');
+                            return (
+                                <>
+                                    {childDocs.map((child) => (
+                                        <PageTreeItem
+                                            key={child.id}
+                                            page={child}
+                                            workspace={workspace}
+                                            project={project}
+                                            level={level + 1}
+                                            onAddItem={onAddItem}
+                                            currentPageUuid={currentPageUuid}
+                                        />
+                                    ))}
+                                    {childWhiteboards.map((child) => (
+                                        <PageTreeItem
+                                            key={child.id}
+                                            page={child}
+                                            workspace={workspace}
+                                            project={project}
+                                            level={level + 1}
+                                            onAddItem={onAddItem}
+                                            currentPageUuid={currentPageUuid}
+                                        />
+                                    ))}
+                                    {childFolders.map((child) => (
+                                        <PageTreeItem
+                                            key={child.id}
+                                            page={child}
+                                            workspace={workspace}
+                                            project={project}
+                                            level={level + 1}
+                                            onAddItem={onAddItem}
+                                            currentPageUuid={currentPageUuid}
+                                        />
+                                    ))}
+                                </>
+                            );
+                        })()}
+                    </CollapsibleContent>
+                )}
+            </Collapsible>
+        );
+    }
+
+    // Page with children: collapsible with link to page
+    if (page.type === 'page' && hasChildren) {
+        const children = page.children!;
+        const childDocs = children.filter((p) => p.type === 'page' && !p.is_whiteboard);
+        const childWhiteboards = children.filter((p) => p.type === 'page' && p.is_whiteboard);
+        const childFolders = children.filter((p) => p.type === 'folder');
+        const baseIndent = (level + 1) * 12 + 8;
+        return (
+            <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+                <div className="flex min-w-0 items-center group">
+                    <CollapsibleTrigger asChild>
+                        <button
+                            className="shrink-0 p-1 hover:bg-accent rounded transition-colors text-muted-foreground"
+                            style={{ marginLeft: `${level * 12 + 4}px` }}
+                        >
+                            <ChevronRight className={`size-3.5 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                        </button>
+                    </CollapsibleTrigger>
+                    <Link
+                        href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
+                        className="flex min-w-0 flex-1 items-center gap-2 px-1 py-1.5 hover:bg-accent rounded-md transition-colors text-left text-sm text-muted-foreground hover:text-foreground"
+                    >
+                        {page.is_whiteboard ? (
+                            <PencilRuler className="size-4 shrink-0 text-violet-500" />
+                        ) : (
+                            <span className="shrink-0 text-base">{page.icon || '📄'}</span>
+                        )}
+                        <span className="min-w-0 truncate">{page.name}</span>
+                    </Link>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-6 shrink-0 opacity-0 group-hover:opacity-100 mr-1"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onAddItem(page.id);
+                        }}
+                    >
+                        <Plus className="size-3.5" />
+                    </Button>
+                </div>
+                <CollapsibleContent>
+                    <>
+                        {childDocs.map((child) => (
                             <PageTreeItem
                                 key={child.id}
                                 page={child}
@@ -442,10 +607,33 @@ function PageTreeItem({
                                 project={project}
                                 level={level + 1}
                                 onAddItem={onAddItem}
+                                currentPageUuid={currentPageUuid}
                             />
                         ))}
-                    </CollapsibleContent>
-                )}
+                        {childWhiteboards.map((child) => (
+                            <PageTreeItem
+                                key={child.id}
+                                page={child}
+                                workspace={workspace}
+                                project={project}
+                                level={level + 1}
+                                onAddItem={onAddItem}
+                                currentPageUuid={currentPageUuid}
+                            />
+                        ))}
+                        {childFolders.map((child) => (
+                            <PageTreeItem
+                                key={child.id}
+                                page={child}
+                                workspace={workspace}
+                                project={project}
+                                level={level + 1}
+                                onAddItem={onAddItem}
+                                currentPageUuid={currentPageUuid}
+                            />
+                        ))}
+                    </>
+                </CollapsibleContent>
             </Collapsible>
         );
     }
@@ -474,14 +662,22 @@ function ProjectItem({
     project,
     workspace,
     isActive,
-    onAddItem
+    onAddItem,
+    currentPageUuid,
 }: {
     project: Project & { boards: Board[]; pages?: PageType[] };
     workspace: Workspace;
     isActive: boolean;
     onAddItem: (projectId: number, parentId?: number) => void;
+    currentPageUuid?: string | null;
 }) {
-    const [isOpen, setIsOpen] = useExpandedState(`project-${project.id}`, isActive);
+    const isProjectActive = !!currentPageUuid && projectContainsPageUuid(project, currentPageUuid);
+    const [isOpen, setIsOpen] = useExpandedState(`project-${project.id}`, isActive || isProjectActive);
+
+    useEffect(() => {
+        if (isProjectActive) setIsOpen(true);
+    }, [isProjectActive]);
+
     const hasContent = (project.boards && project.boards.length > 0) || (project.pages && project.pages.length > 0);
 
     return (
@@ -543,14 +739,14 @@ function ProjectItem({
                                                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Pages</span>
                                                 </div>
                                                 {rootDocs.map((page) => (
-                                                    <Link
+                                                    <PageTreeItem
                                                         key={page.id}
-                                                        href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
-                                                        className="flex min-w-0 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                                                    >
-                                                        <span className="shrink-0 text-base">{page.icon || '📄'}</span>
-                                                        <span className="min-w-0 truncate">{page.name}</span>
-                                                    </Link>
+                                                        page={page}
+                                                        workspace={workspace}
+                                                        project={project}
+                                                        onAddItem={(parentId) => onAddItem(project.id, parentId)}
+                                                        currentPageUuid={currentPageUuid}
+                                                    />
                                                 ))}
                                             </>
                                         )}
@@ -562,14 +758,14 @@ function ProjectItem({
                                                     <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Whiteboards</span>
                                                 </div>
                                                 {rootWhiteboards.map((page) => (
-                                                    <Link
+                                                    <PageTreeItem
                                                         key={page.id}
-                                                        href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
-                                                        className="flex min-w-0 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                                                    >
-                                                        <PencilRuler className="size-4 shrink-0 text-violet-500" />
-                                                        <span className="min-w-0 truncate">{page.name}</span>
-                                                    </Link>
+                                                        page={page}
+                                                        workspace={workspace}
+                                                        project={project}
+                                                        onAddItem={(parentId) => onAddItem(project.id, parentId)}
+                                                        currentPageUuid={currentPageUuid}
+                                                    />
                                                 ))}
                                             </>
                                         )}
@@ -589,6 +785,7 @@ function ProjectItem({
                                                         workspace={workspace}
                                                         project={project}
                                                         onAddItem={(parentId) => onAddItem(project.id, parentId)}
+                                                        currentPageUuid={currentPageUuid}
                                                     />
                                                 ))}
                                             </>
@@ -613,7 +810,7 @@ function AppSidebar({
     currentWorkspace?: Workspace & { projects: (Project & { boards: Board[]; pages?: PageType[] })[] };
     onOpenSearch?: () => void;
 }) {
-    const { auth } = usePage<PageProps>().props;
+    const { auth, currentPageUuid } = usePage<PageProps>().props;
     const user = auth.user;
 
     // Modal state
@@ -634,8 +831,11 @@ function AppSidebar({
 
     return (
         <>
-            <Sidebar className="border-r border-border/50">
+            <Sidebar className="border-r border-border/50 overflow-hidden min-w-0 flex flex-col">
                 <SidebarHeader className="p-3 pb-0">
+                    <Link href={route('workspaces.index')} className="flex items-center justify-center py-2 mb-2 rounded-lg hover:bg-accent/50 transition-colors">
+                        <ApplicationLogo className="h-8 w-auto object-contain" alt="Brainitive" />
+                    </Link>
                     <WorkspaceSwitcher workspaces={workspaces} currentWorkspace={currentWorkspace} />
                 </SidebarHeader>
 
@@ -729,6 +929,7 @@ function AppSidebar({
                                             workspace={currentWorkspace}
                                             isActive={false}
                                             onAddItem={handleAddItem}
+                                            currentPageUuid={currentPageUuid}
                                         />
                                     ))}
                                 </SidebarMenu>
@@ -1115,6 +1316,7 @@ function GlobalCreateTaskModal({
 
 export default function AppLayout({ children, title }: Props) {
     const { workspaces = [], currentWorkspace } = usePage<PageProps>().props;
+    const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
     const [createTaskModalOpen, setCreateTaskModalOpen] = useState(false);
     const [searchModalOpen, setSearchModalOpen] = useState(false);
     const [preSelectedProjectId, setPreSelectedProjectId] = useState<number | undefined>();
@@ -1155,12 +1357,19 @@ export default function AppLayout({ children, title }: Props) {
 
     return (
         <GlobalCreateModalContext.Provider value={globalCreateModalValue}>
-            <SidebarProvider>
+            <SidebarProvider
+                style={
+                    {
+                        '--sidebar-width': `${sidebarWidth}px`,
+                    } as React.CSSProperties
+                }
+            >
                 <AppSidebar
                 workspaces={workspaces}
                 currentWorkspace={currentWorkspace}
                 onOpenSearch={onOpenSearch}
             />
+                <SidebarResizer width={sidebarWidth} onWidthChange={setSidebarWidth} />
                 <SidebarInset className="flex flex-col h-screen overflow-hidden">
                     <TopBar onCreateClick={() => openCreateTaskModal()} onSearchClick={onOpenSearch} />
                     <main className="flex-1 overflow-auto bg-muted/30">
