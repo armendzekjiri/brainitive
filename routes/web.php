@@ -30,18 +30,30 @@ Route::get('/cookies', function () {
     return Inertia::render('Cookies');
 })->name('cookies');
 
-// PWA / Web app manifest (uses app name and full icon URLs)
+// PWA / Web app manifest — installable app icon on mobile and desktop
 Route::get('/site.webmanifest', function () {
+    $icon192 = file_exists(public_path('android-chrome-192x192.png'))
+        ? asset('android-chrome-192x192.png')
+        : asset('images/logo.png');
+    $icon512 = file_exists(public_path('android-chrome-512x512.png'))
+        ? asset('android-chrome-512x512.png')
+        : asset('images/logo.png');
+
     return response()->json([
         'name' => config('app.name'),
         'short_name' => config('app.name'),
-        'icons' => [
-            ['src' => asset('android-chrome-192x192.png'), 'sizes' => '192x192', 'type' => 'image/png'],
-            ['src' => asset('android-chrome-512x512.png'), 'sizes' => '512x512', 'type' => 'image/png'],
-        ],
-        'theme_color' => '#ffffff',
-        'background_color' => '#ffffff',
+        'description' => 'All-in-one workspace for teams: boards, wiki, docs, whiteboard, and bookmarks.',
+        'start_url' => '/',
+        'scope' => '/',
         'display' => 'standalone',
+        'orientation' => 'any',
+        'theme_color' => '#0E83DC',
+        'background_color' => '#F4F6F8',
+        'icons' => [
+            ['src' => $icon192, 'sizes' => '192x192', 'type' => 'image/png', 'purpose' => 'any'],
+            ['src' => $icon512, 'sizes' => '512x512', 'type' => 'image/png', 'purpose' => 'any'],
+        ],
+        'categories' => ['productivity', 'business'],
     ], 200, [
         'Content-Type' => 'application/manifest+json',
         'Cache-Control' => 'public, max-age=3600',
