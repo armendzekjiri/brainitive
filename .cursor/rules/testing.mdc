@@ -1,0 +1,49 @@
+---
+description: Testing patterns and conventions
+globs: tests/**
+alwaysApply: false
+---
+
+# Testing Rules
+
+## Framework
+
+- PHPUnit 11 for backend
+- `tests/TestCase.php` as base class (extends Laravel TestCase)
+- Feature tests in `tests/Feature/`, Unit tests in `tests/Unit/`
+- `phpunit.xml` config with SQLite in-memory for tests
+
+## Test Conventions
+
+- Test file names match pattern: `{Feature}Test.php`
+- Use `RefreshDatabase` trait in feature tests
+- Use model factories for test data
+- Test both authorized and unauthorized access flows
+- Test validation rules explicitly
+
+## Key Test Patterns
+
+```php
+// Feature test
+class BoardTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_user_can_create_board(): void
+    {
+        $user = User::factory()->create();
+        $workspace = Workspace::factory()->create();
+        // ... assert responses, redirects, DB state
+    }
+}
+```
+
+## What to Test
+
+- All policy methods (viewAny, view, create, update, delete)
+- Controller CRUD operations
+- Validation rules reject invalid data
+- Authorization denies unauthorized users
+- Soft deletes work correctly
+- Slug generation is unique
+- UUID generation on model creation

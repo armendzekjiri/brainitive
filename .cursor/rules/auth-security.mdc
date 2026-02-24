@@ -1,0 +1,94 @@
+---
+description: Rules for authentication, authorization, and security
+globs: app/Policies/**/*.php, app/Http/Middleware/**/*.php, routes/**/*.php
+alwaysApply: false
+---
+
+# Auth & Authorization Rules
+
+## Authentication
+
+- **Laravel Breeze** with Inertia/React stack
+- **Sanctum** for session-based auth
+- Email verification required (`MustVerifyEmail` on User model)
+- Auth controllers in `app/Http/Controllers/Auth/`
+- Auth routes in `routes/auth.php`
+
+## Authorization — Policies
+
+Policies are the primary auth mechanism. Located in `app/Policies/`.
+
+### Instance Admin Bypass
+```php
+// In AppServiceProvider boot()
+Gate::before(function ($user, $ability) {
+    if ($user->isInstanceAdmin()) return true;
+});
+```
+Instance admins bypass ALL policy checks.
+
+### Policy Registration
+Policies are auto-discovered by Laravel convention:
+- `WorkspacePolicy` → `Workspace` model
+- `ProjectPolicy` → `Project` model
+- etc.
+
+### Policy Check in Controllers
+```php
+$this->authorize('update', $workspace);
+$this->authorize('create', [Board::class, $project]);
+```
+
+### Role Hierarchy
+```
+Workspace: owner > admin > editor > viewer/member
+Project:   admin > editor > viewer
+Bookmark:  creator > editor > viewer
+```
+
+### Role Helpers on User Model
+```php
+$user->workspaceRole($workspace);  // returns role string
+$user->projectRole($project);
+$user->hasWorkspaceAccess($workspace);
+$user->hasProjectAccess($project);
+$user->isInstanceAdmin();
+```
+
+### Common Policy Pattern
+```php
+public function update(User $user, Workspace $workspace): bool
+{
+    $role = $user->workspaceRole($workspace);
+    return in_array($role, ['owner', 'admin']);
+}
+```
+
+## Middleware
+
+- `auth` — Laravel built-in session auth
+- `verified` — Email must be verified
+- `HandleInertiaRequests` — Shares global data to all pages:
+  - `auth.user` — Current user
+  - `flash` — Flash messages
+  - `workspaces` — User's workspace list
+  - `currentWorkspace` — Active workspace with full project/board/page tree
+  - `currentPageUuid` — Currently viewed page UUID
+
+## Route Protection
+```php
+// Public (no auth)
+Route::get('/', fn() => Inertia::render('Welcome'));
+
+// Auth + Verified
+Route::middleware(['auth', 'verified'])->group(function () {
+    // All app routes here
+});
+```
+
+## Spatie Permissions
+
+- Package: `spatie/laravel-permission` v6
+- `HasRoles` trait on User model
+- Permission tables created via Spatie migration
+- Used alongside custom role logic on workspace/project pivots

@@ -1,0 +1,64 @@
+---
+description: Rules for rich text editors (Editor.js, Tiptap, Lexical) and Excalidraw
+globs: resources/js/components/editor/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Rich Text Editors & Excalidraw
+
+## Three Editors
+
+Brainitive uses three different rich text editors for different contexts:
+
+### 1. Editor.js (`@editorjs/editorjs`)
+- Used for structured block-based content
+- Component: `resources/js/components/editor/EditorJS.tsx`
+- Plugins: header, list, nested-list, checklist, code, delimiter, embed, image, link, marker, inline-code, paragraph, quote, raw, table, text-variant-tune, underline, warning, attaches, alert, drag-drop, undo
+- File uploads via `FileController` to public disk
+
+### 2. Tiptap 3 (`@tiptap/react`)
+- Used for rich page editing with advanced features
+- Extensions: starter-kit, bubble-menu, floating-menu, code-block-lowlight, color, heading, highlight, horizontal-rule, image, link, mention, placeholder, table (with cells/header/row), task-item/list, text-align, text-style, typography, underline, suggestion
+- Custom extensions in `resources/js/components/editor/extensions/`
+
+### 3. Lexical (`@lexical/react`)
+- Used for advanced document editing
+- Components: `LexicalEditor.tsx`, `RichLexicalEditor.tsx`, `RichLexicalEditorFull.tsx`
+- Features: clipboard, code highlighting, hashtag, HTML import/export, link, list, markdown shortcuts, overflow, rich-text, selection, table
+- Custom nodes in `resources/js/components/editor/nodes/`
+- Custom plugins in `resources/js/components/editor/plugins/`
+
+### 4. Excalidraw (`@excalidraw/excalidraw`)
+- Whiteboard/diagramming tool embedded in pages
+- Pages can be of type "whiteboard" (detected via `is_whiteboard` appended attribute)
+- Excalidraw data stored as JSON in page `content` field
+- Standalone build in `excalidraw-build/` for a separate bundle
+- Blade template: `excalidraw-editor.blade.php`
+
+## Content Storage
+
+- Editor content is stored as JSON in the database (`content` column, cast as `array`)
+- File attachments uploaded to `public` disk with UUID filenames
+- Images uploaded via `FileController` (`/upload/image`, `/upload/file`)
+
+## Editor Component Patterns
+
+```tsx
+// Using a Tiptap editor
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+
+const editor = useEditor({
+    extensions: [StarterKit, /* other extensions */],
+    content: initialContent,
+    onUpdate: ({ editor }) => {
+        // Save content
+    },
+});
+```
+
+## Slash Commands
+
+- Available in Tiptap via `SlashCommands.tsx`
+- Triggered by typing `/` in the editor
+- Commands include: headings, lists, code blocks, images, embeds, Excalidraw

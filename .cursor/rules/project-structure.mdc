@@ -1,0 +1,90 @@
+---
+description: File structure reference and naming conventions
+globs:
+alwaysApply: false
+---
+
+# Project Structure & Conventions
+
+## Directory Structure
+
+```
+brainitive/
+├── app/
+│   ├── Console/Commands/          # Artisan commands
+│   ├── Http/
+│   │   ├── Controllers/           # Route controllers
+│   │   │   └── Auth/              # Breeze auth controllers
+│   │   ├── Middleware/             # HandleInertiaRequests, etc.
+│   │   └── Requests/              # Form requests (minimal use)
+│   ├── Jobs/                      # Queued jobs (FetchLinkMetadataJob)
+│   ├── Models/                    # Eloquent models (18 models)
+│   ├── Notifications/             # Email notifications
+│   ├── Policies/                  # Authorization policies (5)
+│   └── Providers/                 # Service providers
+├── config/                        # Laravel config files
+├── database/
+│   ├── factories/                 # Model factories
+│   ├── migrations/                # 35+ migrations
+│   └── seeders/                   # Database seeders
+├── resources/
+│   ├── css/app.css                # Tailwind + custom CSS + animations
+│   ├── js/
+│   │   ├── app.tsx                # Inertia entry point
+│   │   ├── bootstrap.ts           # Axios setup
+│   │   ├── Components/            # Legacy Breeze components (PascalCase)
+│   │   ├── components/            # Custom components (camelCase)
+│   │   │   ├── ui/                # shadcn/ui components (24)
+│   │   │   └── editor/            # Rich text editor components
+│   │   ├── hooks/                 # Custom React hooks
+│   │   ├── Layouts/               # Page layouts (AppLayout, GuestLayout)
+│   │   ├── lib/                   # Utilities (cn(), pageTree)
+│   │   ├── Pages/                 # Inertia page components
+│   │   │   ├── Auth/
+│   │   │   ├── Boards/
+│   │   │   ├── Bookmarks/
+│   │   │   ├── Items/
+│   │   │   ├── Pages/
+│   │   │   ├── Profile/
+│   │   │   ├── Projects/
+│   │   │   └── Workspaces/
+│   │   └── types/                 # TypeScript type definitions
+│   └── views/                     # Blade templates
+├── routes/
+│   ├── web.php                    # Main routes
+│   ├── auth.php                   # Auth routes (Breeze)
+│   └── console.php                # Console routes
+├── tests/
+│   ├── Feature/                   # Feature tests
+│   └── Unit/                      # Unit tests
+├── public/images/                 # Static images (logo.png, logo-dark.png)
+├── excalidraw-build/              # Excalidraw standalone build
+└── tools/                         # Build scripts
+```
+
+## Naming Conventions
+
+| What | Convention | Example |
+|---|---|---|
+| Models | PascalCase singular | `BoardColumn.php` |
+| Controllers | PascalCase + Controller | `BoardController.php` |
+| Policies | PascalCase + Policy | `BoardPolicy.php` |
+| Migrations | snake_case with timestamp | `create_boards_table.php` |
+| Page components | PascalCase | `Pages/Boards/Show.tsx` |
+| UI components | kebab-case (shadcn) | `components/ui/dropdown-menu.tsx` |
+| Custom components | PascalCase | `components/SearchModal.tsx` |
+| Hooks | camelCase with `use` prefix | `hooks/use-mobile.tsx` |
+| Routes | dot-notation | `workspaces.projects.boards.show` |
+| DB tables | snake_case plural | `board_columns`, `bookmark_items` |
+| DB pivots | alphabetical singular | `project_user`, `workspace_user` |
+
+## Creating New Features Checklist
+
+1. **Migration** — Create table with uuid, slug, timestamps, softDeletes
+2. **Model** — With fillable, casts, relationships, boot() for uuid/slug
+3. **Policy** — Role-based authorization
+4. **Controller** — CRUD with inline validation, Inertia responses
+5. **Routes** — Named, nested under appropriate middleware group
+6. **TypeScript type** — Add interface to `types/index.d.ts`
+7. **Page component** — In appropriate `Pages/` subdirectory
+8. **Update HandleInertiaRequests** — If data needs to be shared globally

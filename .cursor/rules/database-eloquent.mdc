@@ -1,0 +1,85 @@
+---
+description: Rules for database operations, migrations, and Eloquent queries
+globs: database/**/*.php, app/Models/**/*.php
+alwaysApply: false
+---
+
+# Database & Eloquent Rules
+
+## Database
+
+- Default: SQLite (configurable via `DB_CONNECTION` env)
+- Testing: SQLite in-memory (`:memory:`)
+- Production-ready for PostgreSQL or MySQL
+
+## Migrations
+
+### Naming Convention
+- `YYYY_MM_DD_HHMMSS_description.php` (Laravel default)
+- Use descriptive names: `create_items_table`, `add_story_points_to_items`, `create_bookmark_collaborators_table`
+
+### Required Fields for Main Entities
+```php
+$table->id();
+$table->uuid('uuid')->unique();
+$table->string('name');
+$table->string('slug')->unique();  // where applicable
+$table->timestamps();
+$table->softDeletes();             // on main entities
+```
+
+### Foreign Keys
+```php
+$table->foreignId('workspace_id')->constrained()->cascadeOnDelete();
+$table->foreignId('user_id')->constrained()->cascadeOnDelete();
+```
+
+### JSON Fields
+```php
+$table->json('settings')->nullable();
+$table->json('metadata')->nullable();
+```
+
+## Eloquent Patterns
+
+### Eager Loading — Always eager load to avoid N+1
+```php
+// Controller
+$board->load(['columns.items.labels', 'columns.items.assignee']);
+
+// Query
+Board::with(['columns' => function ($q) {
+    $q->orderBy('position');
+}])->findOrFail($id);
+```
+
+### Scoped Queries
+```php
+// Always scope to user's accessible workspaces
+$workspaces = $user->workspaces()->with('projects')->get();
+```
+
+### Mass Assignment
+- Always use `$fillable` — never `$guarded = []`
+- Use `create()` / `update()` with validated data
+
+### Relationships Reference
+
+| Parent | Child | Type |
+|---|---|---|
+| User | Workspaces | BelongsToMany (pivot: role) |
+| Workspace | Projects | HasMany |
+| Workspace | Bookmarks | HasMany |
+| Project | Boards | HasMany |
+| Project | Pages | HasMany |
+| Project | Labels | HasMany |
+| Board | Columns | HasMany |
+| Board | Items | HasMany |
+| BoardColumn | Items | HasMany |
+| Item | Comments | HasMany |
+| Item | Attachments | HasMany |
+| Item | Labels | BelongsToMany |
+| Item | Links | HasMany (outgoing/incoming) |
+| Page | Children | HasMany (self-referential tree) |
+| Bookmark | Items | HasMany |
+| Bookmark | Collaborators | BelongsToMany |

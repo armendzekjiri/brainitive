@@ -25,6 +25,10 @@ Route::get('/terms', function () {
     return Inertia::render('Terms');
 })->name('terms');
 
+Route::get('/cookies', function () {
+    return Inertia::render('Cookies');
+})->name('cookies');
+
 // PWA / Web app manifest (uses app name and full icon URLs)
 Route::get('/site.webmanifest', function () {
     return response()->json([
