@@ -4,25 +4,27 @@ import { PageProps, Workspace } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Users, FolderKanban, ArrowRight } from 'lucide-react';
+import { Plus, Users, FolderKanban, ArrowRight, User as UserIcon } from 'lucide-react';
 
 interface Props extends PageProps {
     workspaces: Workspace[];
     isInstanceAdmin: boolean;
 }
 
-// Generate consistent colors for workspace icons
-function getWorkspaceColor(name: string): string {
-    const colors = [
-        'bg-blue-600',
-        'bg-purple-600',
-        'bg-teal-600',
-        'bg-orange-500',
-        'bg-pink-600',
-        'bg-indigo-600',
-        'bg-green-600',
-        'bg-red-500',
+// Gradient for cover when no header image; fallback color for logo circle
+function getWorkspaceGradient(name: string): string {
+    const gradients = [
+        'from-violet-600 to-purple-800',
+        'from-teal-600 to-cyan-800',
+        'from-orange-500 to-amber-700',
+        'from-pink-500 to-rose-700',
+        'from-indigo-600 to-blue-800',
+        'from-emerald-600 to-green-800',
     ];
+    return gradients[name.charCodeAt(0) % gradients.length];
+}
+function getWorkspaceBg(name: string): string {
+    const colors = ['bg-violet-600', 'bg-teal-600', 'bg-orange-500', 'bg-pink-500', 'bg-indigo-600', 'bg-emerald-600'];
     return colors[name.charCodeAt(0) % colors.length];
 }
 
@@ -33,7 +35,7 @@ export default function WorkspacesIndex({ auth, workspaces, isInstanceAdmin }: P
 
             <div className="p-8 max-w-6xl mx-auto">
                 {/* Header */}
-                <div className="flex items-center justify-between mb-10">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 mb-10">
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight mb-1">Workspaces</h1>
                         <p className="text-base text-muted-foreground">
@@ -41,7 +43,7 @@ export default function WorkspacesIndex({ auth, workspaces, isInstanceAdmin }: P
                         </p>
                     </div>
                     <Link href={route('workspaces.create')}>
-                        <Button size="lg" className="gap-2">
+                        <Button size="lg" className="gap-2 shrink-0">
                             <Plus className="size-5" />
                             New Workspace
                         </Button>
@@ -63,7 +65,7 @@ export default function WorkspacesIndex({ auth, workspaces, isInstanceAdmin }: P
                                     : "You haven't been added to any workspaces yet. Contact an administrator to get access."}
                             </p>
                             <Link href={route('workspaces.create')}>
-                                <Button size="lg" className="gap-2">
+                                <Button size="lg" className="gap-2 shrink-0">
                                     <Plus className="size-5" />
                                     Create Workspace
                                 </Button>
@@ -71,45 +73,88 @@ export default function WorkspacesIndex({ auth, workspaces, isInstanceAdmin }: P
                         </CardContent>
                     </Card>
                 ) : (
-                    <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                         {workspaces.map((workspace) => (
                             <Link
                                 key={workspace.id}
                                 href={route('workspaces.show', workspace.slug)}
+                                className="block h-full group"
                             >
-                                <Card className="hover:shadow-lg hover:border-primary/50 transition-all cursor-pointer h-full group">
-                                    <CardContent className="p-6">
-                                        <div className="flex items-start gap-4 mb-4">
-                                            <div className={`size-12 rounded-xl ${getWorkspaceColor(workspace.name)} flex items-center justify-center text-white text-lg font-bold shadow-sm`}>
-                                                {workspace.name.charAt(0).toUpperCase()}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <h3 className="text-lg font-semibold truncate group-hover:text-primary transition-colors">
-                                                    {workspace.name}
-                                                </h3>
-                                                {workspace.pivot?.role && (
-                                                    <Badge variant="secondary" className="mt-1">
-                                                        {workspace.pivot.role}
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                            <ArrowRight className="size-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <Card className="h-full overflow-hidden hover:shadow-xl hover:shadow-primary/5 hover:border-primary/30 transition-all duration-200 border-2">
+                                    {/* Cover / header */}
+                                    <div
+                                        className={`relative h-28 sm:h-32 overflow-hidden ${
+                                            workspace.header_image_display
+                                                ? 'bg-muted'
+                                                : `bg-gradient-to-br ${getWorkspaceGradient(workspace.name)}`
+                                        }`}
+                                    >
+                                        {workspace.header_image_display ? (
+                                            <img
+                                                src={workspace.header_image_display}
+                                                alt=""
+                                                className="absolute inset-0 w-full h-full object-cover"
+                                            />
+                                        ) : null}
+                                        <div className="absolute inset-0 bg-black/10" aria-hidden />
+                                        {/* Logo or initial overlapping the cover */}
+                                        <div
+                                            className={`absolute left-4 -bottom-6 size-14 rounded-xl border-4 border-background shadow-lg flex items-center justify-center shrink-0 ${
+                                                workspace.logo_display ? 'bg-background' : getWorkspaceBg(workspace.name)
+                                            }`}
+                                        >
+                                            {workspace.logo_display ? (
+                                                <img
+                                                    src={workspace.logo_display}
+                                                    alt=""
+                                                    className="size-full rounded-lg object-cover"
+                                                />
+                                            ) : (
+                                                <span className="text-2xl font-bold text-white">
+                                                    {workspace.name.charAt(0).toUpperCase()}
+                                                </span>
+                                            )}
                                         </div>
-                                        <p className="text-sm text-muted-foreground line-clamp-2 mb-5 min-h-[2.5rem]">
-                                            {workspace.description || 'No description'}
+                                    </div>
+                                    <CardContent className="pt-8 pb-5 px-5">
+                                        <div className="flex items-start justify-between gap-2 mb-2">
+                                            <h3 className="text-lg font-semibold leading-tight truncate group-hover:text-primary transition-colors">
+                                                {workspace.name}
+                                            </h3>
+                                            <ArrowRight className="size-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5" />
+                                        </div>
+                                        {workspace.pivot?.role && (
+                                            <Badge variant="secondary" className="mb-3 text-xs">
+                                                {workspace.pivot.role}
+                                            </Badge>
+                                        )}
+                                        <p className="text-sm text-muted-foreground line-clamp-2 min-h-[2.5rem] mb-4">
+                                            {workspace.description || (
+                                                <span className="italic">No description</span>
+                                            )}
                                         </p>
-                                        <div className="flex items-center gap-5 text-sm text-muted-foreground">
-                                            <div className="flex items-center gap-2">
-                                                <FolderKanban className="size-4" />
-                                                <span className="font-medium">{workspace.projects_count || 0}</span>
-                                                <span>projects</span>
+                                        <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                                            <div className="flex items-center gap-1.5">
+                                                <FolderKanban className="size-4 text-muted-foreground/80" />
+                                                <span>
+                                                    <span className="font-medium text-foreground">{workspace.projects_count ?? 0}</span>
+                                                    {' '}projects
+                                                </span>
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <Users className="size-4" />
-                                                <span className="font-medium">{workspace.users_count || 0}</span>
-                                                <span>members</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <Users className="size-4 text-muted-foreground/80" />
+                                                <span>
+                                                    <span className="font-medium text-foreground">{workspace.users_count ?? 0}</span>
+                                                    {' '}members
+                                                </span>
                                             </div>
                                         </div>
+                                        {workspace.owner && (
+                                            <div className="mt-3 pt-3 border-t border-border/50 flex items-center gap-2 text-xs text-muted-foreground">
+                                                <UserIcon className="size-3.5 shrink-0" />
+                                                <span className="truncate">Owner: {workspace.owner.name}</span>
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
                             </Link>
