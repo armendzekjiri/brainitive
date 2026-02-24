@@ -55,6 +55,16 @@ export default {
     				DEFAULT: 'hsl(var(--destructive))',
     				foreground: 'hsl(var(--destructive-foreground))'
     			},
+    			success: {
+    				DEFAULT: 'hsl(var(--success))',
+    				foreground: 'hsl(var(--success-foreground))'
+    			},
+    			brand: {
+    				blue: '#0E83DC',
+    				slate: '#485E72',
+    				green: '#69A748',
+    				gray: '#C0C5C0',
+    			},
     			border: 'hsl(var(--border))',
     			input: 'hsl(var(--input))',
     			ring: 'hsl(var(--ring))',

@@ -66,7 +66,7 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                     className="flex items-center gap-3 py-2.5 px-3 -mx-3 rounded-lg hover:bg-muted/80 transition-colors group min-w-0"
                 >
                     {isFolder ? (
-                        <Folder className="size-5 shrink-0 text-amber-500/90" />
+                        <Folder className="size-5 shrink-0 text-brand-slate" />
                     ) : (
                         <span className="text-lg shrink-0 w-6 text-center">{page.icon || '📄'}</span>
                     )}
@@ -273,8 +273,8 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                     <Card className="mt-8">
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-2">
-                                    <div className="size-9 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                                        <PencilRuler className="size-5 text-violet-600" />
+                                    <div className="size-9 rounded-lg bg-brand-slate/10 flex items-center justify-center">
+                                        <PencilRuler className="size-5 text-brand-slate" />
                                     </div>
                                     <div>
                                         <CardTitle className="text-lg">Whiteboards</CardTitle>
@@ -287,7 +287,7 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                             <CardContent>
                                 {!hasWhiteboards ? (
                                     <div className="flex flex-col items-center justify-center py-10 rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                        <PencilRuler className="size-10 text-violet-500/50 mb-3" />
+                                        <PencilRuler className="size-10 text-brand-slate/50 mb-3" />
                                         <p className="text-sm text-muted-foreground text-center max-w-[280px]">
                                             Create a whiteboard from the sidebar (Pages → Whiteboard) to draw diagrams and sketches.
                                         </p>
@@ -300,11 +300,11 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                                                 href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
                                             >
                                                 <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-muted/80 transition-colors group">
-                                                    <div className="size-11 rounded-xl bg-violet-500/10 flex items-center justify-center shrink-0">
-                                                        <PencilRuler className="size-5 text-violet-600" />
+                                                    <div className="size-11 rounded-xl bg-brand-slate/10 flex items-center justify-center shrink-0">
+                                                        <PencilRuler className="size-5 text-brand-slate" />
                                                     </div>
                                                     <div className="min-w-0 flex-1">
-                                                        <p className="font-semibold text-foreground group-hover:text-violet-600 transition-colors truncate">
+                                                        <p className="font-semibold text-foreground group-hover:text-brand-slate transition-colors truncate">
                                                             {page.name}
                                                         </p>
                                                         <Badge variant="secondary" className="text-xs mt-1">

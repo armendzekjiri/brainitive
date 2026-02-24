@@ -156,8 +156,8 @@ export default function UpdateProfileInformation({
                 </div>
 
                 {mustVerifyEmail && user.email_verified_at === null && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 p-4">
-                        <p className="text-sm text-amber-800 dark:text-amber-200">
+                    <div className="rounded-lg border border-primary/30 bg-primary/5 dark:border-primary/20 dark:bg-primary/10 p-4">
+                        <p className="text-sm text-primary dark:text-primary">
                             Your email address is unverified.
                             <Link
                                 href={route('verification.send')}
@@ -169,7 +169,7 @@ export default function UpdateProfileInformation({
                             </Link>
                         </p>
                         {status === 'verification-link-sent' && (
-                            <p className="mt-2 text-sm font-medium text-green-600 dark:text-green-400">
+                            <p className="mt-2 text-sm font-medium text-brand-green">
                                 A new verification link has been sent to your email address.
                             </p>
                         )}

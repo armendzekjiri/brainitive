@@ -137,14 +137,14 @@ function WorkspaceIcon({ name, logoUrl, size = 'md' }: { name: string; logoUrl?:
     };
 
     const colors = [
-        'bg-blue-600',
-        'bg-purple-600',
-        'bg-teal-600',
-        'bg-orange-500',
-        'bg-pink-600',
-        'bg-indigo-600',
-        'bg-green-600',
-        'bg-red-500',
+        'bg-brand-blue',
+        'bg-brand-slate',
+        'bg-brand-green',
+        'bg-primary',
+        'bg-brand-blue',
+        'bg-brand-slate',
+        'bg-brand-green',
+        'bg-primary',
     ];
     const colorIndex = name.charCodeAt(0) % colors.length;
 
@@ -322,7 +322,7 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                             }}
                             className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors"
                         >
-                            <div className="size-12 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                            <div className="size-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                                 <FileText className="size-6" />
                             </div>
                             <span className="text-sm font-medium">Page</span>
@@ -336,7 +336,7 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                             }}
                             className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors"
                         >
-                            <div className="size-12 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center">
+                            <div className="size-12 rounded-lg bg-brand-slate/10 text-brand-slate flex items-center justify-center">
                                 <svg className="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M12 19l7-7 3 3-7 7-3-3z" />
                                     <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
@@ -352,7 +352,7 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                                 onClick={() => setItemType('board')}
                                 className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors"
                             >
-                                <div className="size-12 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center">
+                                <div className="size-12 rounded-lg bg-brand-slate/10 text-brand-slate flex items-center justify-center">
                                     <Kanban className="size-6" />
                                 </div>
                                 <span className="text-sm font-medium">Board</span>
@@ -412,7 +412,7 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                                                 {p.type === 'folder' ? (
                                                     <Folder className="size-3.5 shrink-0 text-amber-600" />
                                                 ) : p.is_whiteboard ? (
-                                                    <PencilRuler className="size-3.5 shrink-0 text-violet-500" />
+                                                    <PencilRuler className="size-3.5 shrink-0 text-brand-slate" />
                                                 ) : (
                                                     <FileText className="size-3.5 shrink-0 text-blue-600" />
                                                 )}
@@ -579,7 +579,7 @@ function PageTreeItem({
                         className="flex min-w-0 flex-1 items-center gap-2 px-1 py-1.5 hover:bg-accent rounded-md transition-colors text-left text-sm text-muted-foreground hover:text-foreground"
                     >
                         {page.is_whiteboard ? (
-                            <PencilRuler className="size-4 shrink-0 text-violet-500" />
+                            <PencilRuler className="size-4 shrink-0 text-brand-slate" />
                         ) : (
                             <span className="shrink-0 text-base">{page.icon || '📄'}</span>
                         )}
@@ -645,7 +645,7 @@ function PageTreeItem({
             style={{ paddingLeft: `${level * 12 + 24}px` }}
         >
             {page.is_whiteboard ? (
-                <PencilRuler className="size-4 shrink-0 text-violet-500" />
+                <PencilRuler className="size-4 shrink-0 text-brand-slate" />
             ) : (
                 <span className="shrink-0 text-base">{page.icon || '📄'}</span>
             )}
@@ -961,13 +961,13 @@ function AppSidebar({
                             <button className="flex items-center gap-3 w-full px-2 py-2 hover:bg-accent rounded-lg transition-colors text-left">
                                 <Avatar className="size-8">
                                     {user.avatar_display && <AvatarImage src={user.avatar_display} alt="" />}
-                                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm font-semibold">
+                                    <AvatarFallback className="bg-gradient-to-br from-brand-blue to-brand-slate text-white text-sm font-semibold">
                                         {user.name.charAt(0).toUpperCase()}
                                     </AvatarFallback>
                                 </Avatar>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium truncate">{user.name}</p>
-                                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                                    <p className="text-xs text-sidebar-foreground/60 truncate">{user.email}</p>
                                 </div>
                                 <ChevronsUpDown className="size-4 text-muted-foreground shrink-0" />
                             </button>
@@ -981,7 +981,7 @@ function AppSidebar({
                             <div className="flex items-center gap-3 p-2 mb-2">
                                 <Avatar className="size-10">
                                     {user.avatar_display && <AvatarImage src={user.avatar_display} alt="" />}
-                                    <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white font-semibold">
+                                    <AvatarFallback className="bg-gradient-to-br from-brand-blue to-brand-slate text-white font-semibold">
                                         {user.name.charAt(0).toUpperCase()}
                                     </AvatarFallback>
                                 </Avatar>
