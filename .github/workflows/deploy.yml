@@ -34,6 +34,7 @@ jobs:
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
+            php artisan optimize:clear
             echo ">>> Restarting queue workers (if running)..."
             (php artisan queue:restart 2>/dev/null || true)
             echo ">>> Deployment finished."
