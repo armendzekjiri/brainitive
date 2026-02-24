@@ -66,7 +66,7 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                     className="flex items-center gap-3 py-2.5 px-3 -mx-3 rounded-lg hover:bg-muted/80 transition-colors group min-w-0"
                 >
                     {isFolder ? (
-                        <Folder className="size-5 shrink-0 text-brand-slate" />
+                        <Folder className="size-5 shrink-0 text-primary" />
                     ) : (
                         <span className="text-lg shrink-0 w-6 text-center">{page.icon || '📄'}</span>
                     )}
@@ -84,15 +84,15 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
         <AppLayout>
             <Head title={project.name} />
 
-            <div className="min-h-screen bg-gradient-to-b from-muted/30 to-background">
-                <div className="p-6 md:p-8 lg:p-10 max-w-6xl mx-auto space-y-10">
-                    {/* Header card */}
-                    <Card className="overflow-hidden border-0 shadow-lg bg-card">
+            <div className="min-h-screen bg-muted/30">
+                <div className="p-6 md:p-8 lg:p-10 max-w-6xl mx-auto space-y-6">
+                    {/* Header card - solid bar uses blue when no project color */}
+                    <Card className="overflow-hidden border border-border bg-card shadow-sm">
                         <div
-                            className="h-2 w-full"
-                            style={{ backgroundColor: project.color || '#6366f1' }}
+                            className="h-1.5 w-full"
+                            style={{ backgroundColor: project.color || '#0E83DC' }}
                         />
-                        <CardContent className="pt-6 pb-6">
+                        <CardContent className="pt-5 pb-5">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
                                 <div className="flex items-start gap-5 min-w-0">
                                     <ProjectIcon project={project} size="xl" className="shadow-lg" />
@@ -165,7 +165,7 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                     </Card>
 
                     {/* Boards + Documents + Whiteboards */}
-                    <div className="grid gap-8 lg:grid-cols-2">
+                    <div className="grid gap-6 lg:grid-cols-2">
                         {/* Boards Section */}
                         <Card>
                             <CardHeader className="pb-3">
@@ -270,11 +270,11 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                     </div>
 
                     {/* Whiteboards - full width section */}
-                    <Card className="mt-8">
+                    <Card className="mt-2">
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-2">
-                                    <div className="size-9 rounded-lg bg-brand-slate/10 flex items-center justify-center">
-                                        <PencilRuler className="size-5 text-brand-slate" />
+                                    <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                                        <PencilRuler className="size-5 text-primary" />
                                     </div>
                                     <div>
                                         <CardTitle className="text-lg">Whiteboards</CardTitle>
@@ -287,7 +287,7 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                             <CardContent>
                                 {!hasWhiteboards ? (
                                     <div className="flex flex-col items-center justify-center py-10 rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                        <PencilRuler className="size-10 text-brand-slate/50 mb-3" />
+                                        <PencilRuler className="size-10 text-primary/50 mb-3" />
                                         <p className="text-sm text-muted-foreground text-center max-w-[280px]">
                                             Create a whiteboard from the sidebar (Pages → Whiteboard) to draw diagrams and sketches.
                                         </p>
@@ -300,11 +300,11 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                                                 href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
                                             >
                                                 <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-muted/80 transition-colors group">
-                                                    <div className="size-11 rounded-xl bg-brand-slate/10 flex items-center justify-center shrink-0">
-                                                        <PencilRuler className="size-5 text-brand-slate" />
+                                                    <div className="size-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                                                        <PencilRuler className="size-5 text-primary" />
                                                     </div>
                                                     <div className="min-w-0 flex-1">
-                                                        <p className="font-semibold text-foreground group-hover:text-brand-slate transition-colors truncate">
+                                                        <p className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
                                                             {page.name}
                                                         </p>
                                                         <Badge variant="secondary" className="text-xs mt-1">

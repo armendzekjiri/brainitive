@@ -57,80 +57,78 @@ export default function WorkspacesShow({ auth, workspace, userRole }: Props) {
             <Head title={workspace.name} />
 
             <div className="min-h-screen bg-muted/30">
-                {/* Cover + profile header */}
-                <div className="relative">
-                    {/* Cover image or gradient */}
-                    <div
-                        className="h-48 w-full bg-gradient-to-br from-primary/20 via-primary/10 to-muted md:h-56"
-                        style={
-                            workspace.header_image_display
-                                ? {
-                                      backgroundImage: `url(${workspace.header_image_display})`,
-                                      backgroundSize: 'cover',
-                                      backgroundPosition: 'center',
-                                  }
-                                : undefined
-                        }
-                    >
-                        {workspace.header_image_display && (
-                            <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/20 to-transparent" />
-                        )}
-                    </div>
+                {/* Cover - image or gradient only, no text on top */}
+                <div
+                    className="h-40 w-full md:h-48"
+                    style={
+                        workspace.header_image_display
+                            ? {
+                                  backgroundImage: `url(${workspace.header_image_display})`,
+                                  backgroundSize: 'cover',
+                                  backgroundPosition: 'center',
+                              }
+                            : undefined
+                    }
+                >
+                    {workspace.header_image_display ? null : (
+                        <div className="h-full w-full bg-gradient-to-br from-primary/30 via-primary/15 to-muted" />
+                    )}
+                </div>
 
-                    {/* Profile row overlapping cover */}
-                    <div className="relative z-10 -mt-16 px-6 pb-8 md:-mt-20 md:px-10">
-                        <div className="mx-auto max-w-5xl">
-                            <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-                                <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-end">
-                                    <WorkspaceLogo
-                                        workspace={workspace}
-                                        className="size-24 shrink-0 md:size-28"
-                                    />
-                                    <div className="space-y-1">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-                                                {workspace.name}
-                                            </h1>
-                                            <Badge
-                                                variant="secondary"
-                                                className="capitalize font-medium"
-                                            >
-                                                {userRole}
-                                            </Badge>
-                                        </div>
-                                        <p className="max-w-xl text-sm text-muted-foreground md:text-base">
-                                            {workspace.description || 'No description yet.'}
-                                        </p>
-                                        {canManage && (
-                                            <Link
-                                                href={route('workspaces.edit', workspace.slug)}
-                                                className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                                            >
-                                                <Settings className="size-4" />
-                                                Edit workspace
-                                            </Link>
-                                        )}
+                {/* Workspace header: solid background so title/description are always readable */}
+                <div className="bg-background border-b border-border">
+                    <div className="mx-auto max-w-5xl px-6 py-6 md:px-10 md:py-8">
+                        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+                                <WorkspaceLogo
+                                    workspace={workspace}
+                                    className="size-20 shrink-0 md:size-24 -mt-12 md:-mt-14 border-4 border-background shadow-xl"
+                                />
+                                <div className="space-y-1.5 min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+                                            {workspace.name}
+                                        </h1>
+                                        <Badge
+                                            variant="secondary"
+                                            className="capitalize font-medium"
+                                        >
+                                            {userRole}
+                                        </Badge>
                                     </div>
+                                    <p className="max-w-xl text-sm text-muted-foreground md:text-base">
+                                        {workspace.description || 'No description yet.'}
+                                    </p>
+                                    {canManage && (
+                                        <Link
+                                            href={route('workspaces.edit', workspace.slug)}
+                                            className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                                        >
+                                            <Settings className="size-4" />
+                                            Edit workspace
+                                        </Link>
+                                    )}
                                 </div>
-                                {canCreateProjects && (
-                                    <Link
-                                        href={route('projects.create', workspace.slug)}
-                                        className="shrink-0"
-                                    >
-                                        <Button size="lg" className="gap-2 shadow-md">
-                                            <Plus className="size-5" />
-                                            New Project
-                                        </Button>
-                                    </Link>
-                                )}
                             </div>
+                            {canCreateProjects && (
+                                <Link
+                                    href={route('projects.create', workspace.slug)}
+                                    className="shrink-0"
+                                >
+                                    <Button size="lg" className="gap-2">
+                                        <Plus className="size-5" />
+                                        New Project
+                                    </Button>
+                                </Link>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                <div className="mx-auto max-w-5xl px-6 pb-12 md:px-10">
+                {/* Content - tight spacing after header */}
+                <div className="mx-auto max-w-5xl px-6 py-6 pb-12 md:px-10">
                     {/* Bookmarks section */}
-                    <section className="mb-12">
+                    <section className="mb-10">
                         <div className="mb-4 flex items-center justify-between">
                             <h2 className="flex items-center gap-2 text-lg font-semibold">
                                 <BookmarkIcon className="size-5 text-primary" />
