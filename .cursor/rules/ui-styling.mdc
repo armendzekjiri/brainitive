@@ -1,0 +1,79 @@
+---
+description: Rules for UI styling with Tailwind and shadcn/ui
+globs: resources/js/**/*.tsx, resources/css/**/*.css, tailwind.config.js
+alwaysApply: false
+---
+
+# UI & Styling Rules
+
+## Tailwind CSS
+
+- Version 3 with JIT mode
+- Dark mode: `class` strategy (used in app interior, not on public pages)
+- Always use utility classes; avoid custom CSS except for animations
+
+## Brand Palette
+
+| Name | Hex | Usage |
+|---|---|---|
+| Blue | `#0E83DC` | Primary buttons, links, active states |
+| Dark Slate | `#485E72` | Body text, headings, secondary buttons |
+| Green | `#69A748` | Success indicators, checkmarks, publish |
+| Light Gray | `#C0C5C0` | Borders, dividers, muted backgrounds |
+| Page BG | `#F4F6F8` | Public page backgrounds |
+
+## Public Pages Theme
+
+- Background: `bg-[#F4F6F8]`
+- Text: `text-[#485E72]`
+- Cards: `bg-white/70 backdrop-blur-sm border border-[#C0C5C0]/30 rounded-2xl`
+- Hover cards: `hover:bg-white hover:shadow-xl hover:shadow-[#485E72]/[0.06] hover:-translate-y-1`
+- Primary buttons: `bg-[#0E83DC] text-white shadow-lg shadow-[#0E83DC]/20 hover:bg-[#0b6fbf] rounded-xl`
+- Secondary buttons: `border-2 border-[#C0C5C0]/60 bg-white/60 backdrop-blur-sm text-[#485E72] rounded-xl`
+- Links: `text-[#0E83DC] hover:text-[#0b6fbf]`
+- Muted text: `text-[#485E72]/60`
+- Badges: `rounded-full border bg-[color]/5 text-[color] text-xs font-semibold px-4 py-1.5`
+
+## shadcn/ui
+
+- Style: **new-york**
+- Import from `@/components/ui/`
+- CSS variables defined in `resources/css/app.css` under `:root` and `.dark`
+- Use `cn()` from `@/lib/utils` for merging classes
+
+## Animation Classes
+
+Available custom animation utilities (defined in `resources/css/app.css`):
+- `.animate-fade-in` — fade in 0.6s
+- `.animate-fade-in-up` — fade in + slide up 0.7s (starts with `opacity: 0`)
+- `.animate-pulse-slow` — gentle pulse 4s infinite
+
+## Icons
+
+- Only **Lucide React** — never mix icon libraries
+- Consistent sizing per context:
+  - Nav items: `h-3.5 w-3.5`
+  - Feature cards: `h-5 w-5` with `strokeWidth={1.8}`
+  - Hero icons: `h-6 w-6`
+  - Section badges: `h-3.5 w-3.5`
+
+## Spacing & Layout
+
+- Max width for content: `max-w-6xl mx-auto`
+- Section padding: `px-6 py-24 sm:py-32`
+- Card padding: `p-6`
+- Gap between cards: `gap-5`
+- Border radius: `rounded-2xl` for cards, `rounded-xl` for buttons, `rounded-full` for badges
+
+## Glass Morphism Pattern
+
+```
+bg-white/70 backdrop-blur-sm border border-[#C0C5C0]/30
+```
+
+## Responsive
+
+- Mobile-first approach
+- Breakpoints: `sm:`, `md:`, `lg:`
+- Mobile menu at `md:` breakpoint
+- Grid: `grid sm:grid-cols-2 lg:grid-cols-4`

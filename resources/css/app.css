@@ -123,6 +123,10 @@
 }
 
 /* Landing page animations */
+html {
+  scroll-behavior: smooth;
+}
+
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -150,5 +154,10 @@
 }
 .animate-pulse-slow {
   animation: pulse-slow 4s ease-in-out infinite;
+}
+
+/* Scroll offset for sticky header anchor links */
+[id] {
+  scroll-margin-top: 5rem;
 }
 

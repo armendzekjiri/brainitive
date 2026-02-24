@@ -1,0 +1,63 @@
+---
+description: Global project rules for Brainitive – always applied
+globs:
+alwaysApply: true
+---
+
+# Brainitive — Project Overview
+
+Brainitive is an all-in-one workspace platform for teams: workspaces, Kanban boards, wiki/docs, rich editors, whiteboard (Excalidraw), and bookmarks. It's a Laravel 12 + Inertia.js + React 18 + TypeScript monolith.
+
+## Brand Colors
+
+- Blue: `#0E83DC` (primary actions, links)
+- Dark Slate: `#485E72` (text, headings, secondary)
+- Green: `#69A748` (success, checkmarks, publishing)
+- Light Gray: `#C0C5C0` (borders, muted elements)
+- Page Background: `#F4F6F8`
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | PHP 8.2, Laravel 12 |
+| Frontend | React 18, TypeScript 5, Inertia.js v2 |
+| CSS | Tailwind CSS 3 + shadcn/ui (new-york style) + Radix UI |
+| Rich Text | Editor.js, Tiptap 3, Lexical |
+| Whiteboard | Excalidraw |
+| Auth | Laravel Breeze + Sanctum, email verification |
+| Authorization | Policy-based + Spatie laravel-permission |
+| Routing | Ziggy (route() helper in JS) |
+| Forms | react-hook-form + Zod |
+| Icons | Lucide React |
+| Toasts | Sonner |
+| DB | SQLite default (configurable) |
+| Queue | Laravel queue |
+| Code Style | Laravel Pint (PHP), Prettier-like (TS/TSX) |
+
+## Data Hierarchy
+
+```
+Workspace → Project → Board → Column → Item
+Workspace → Project → Page (nested tree)
+Workspace → Bookmark → BookmarkItem
+```
+
+## Roles
+
+- **Workspace**: owner, admin, editor, viewer, member
+- **Project**: admin, editor, viewer
+- **Bookmark**: creator, editor, viewer (collaborator)
+- **Instance Admin**: bypasses all policy checks
+
+## Key Conventions
+
+- Use `slug` for route model binding on Workspace, Project, Board
+- Use `uuid` for route model binding on Page, Bookmark
+- Auto-generate UUID and slug in model `boot()` creating event
+- Use `$fillable` arrays (not `$guarded`) on all models
+- Use `SoftDeletes` on main models
+- Inline validation in controllers (not separate FormRequest classes, except ProfileUpdateRequest)
+- Inertia responses: `Inertia::render('PageName', [...props])`
+- TypeScript interfaces in `resources/js/types/index.d.ts`
+- Path alias: `@/` → `resources/js/`

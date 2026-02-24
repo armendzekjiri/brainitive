@@ -1,0 +1,113 @@
+---
+description: Rules for React/TypeScript/Inertia frontend code
+globs: resources/js/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Frontend Rules — React + TypeScript + Inertia.js
+
+## Architecture
+
+- **Inertia.js v2** — No API layer. Controllers render Inertia pages with props.
+- **Pages**: `resources/js/Pages/` — Each file maps to a route via `Inertia::render('PageName')`
+- **Layouts**: `resources/js/Layouts/` — `AppLayout.tsx` (main sidebar layout), `GuestLayout.tsx` (auth pages)
+- **Components**: `resources/js/components/` (custom) + `resources/js/components/ui/` (shadcn/ui) + `resources/js/Components/` (legacy Breeze)
+- **Hooks**: `resources/js/hooks/`
+- **Types**: `resources/js/types/index.d.ts` — All entity interfaces
+- **Utilities**: `resources/js/lib/utils.ts` — `cn()` helper (clsx + tailwind-merge)
+
+## Path Aliases
+
+```
+@/ → resources/js/
+ziggy-js → vendor/tightenco/ziggy
+```
+
+## Component Patterns
+
+### Page Components
+
+```tsx
+import { Head } from '@inertiajs/react';
+import AppLayout from '@/Layouts/AppLayout';
+
+interface Props {
+    entity: EntityType;
+}
+
+export default function MyPage({ entity }: Props) {
+    return (
+        <AppLayout>
+            <Head title="Page Title" />
+            {/* content */}
+        </AppLayout>
+    );
+}
+```
+
+### Inertia Forms
+
+```tsx
+import { useForm } from '@inertiajs/react';
+
+const { data, setData, post, processing, errors } = useForm({
+    name: '',
+});
+
+const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    post(route('resource.store'));
+};
+```
+
+### shadcn/ui Components
+
+- Import from `@/components/ui/*` (new-york style)
+- Available: alert-dialog, avatar, badge, breadcrumb, button, card, collapsible, command, dialog, dropdown-menu, form, input, label, popover, scroll-area, select, separator, sheet, sidebar, skeleton, table, tabs, textarea, tooltip
+- Use `cn()` from `@/lib/utils` for conditional class merging
+
+## Styling
+
+- **Tailwind CSS 3** with utility-first approach
+- **Brand colors**: use hex values directly (`#0E83DC`, `#485E72`, `#69A748`, `#C0C5C0`)
+- **CSS variables** for shadcn/ui theming (defined in `resources/css/app.css`)
+- **Font**: Hanken Grotesk / Inter (loaded via Google Fonts)
+- No dark/light toggle on public pages — single unified light theme with brand colors
+- App interior uses shadcn/ui CSS variable-based theming (light/dark support)
+
+## Icons
+
+- Use **Lucide React** exclusively (`lucide-react` package)
+- Import individual icons: `import { IconName } from 'lucide-react'`
+- Standard sizing: `h-4 w-4` (small), `h-5 w-5` (medium), `h-6 w-6` (large)
+
+## Routing in JavaScript
+
+- Use Ziggy's `route()` helper: `route('routename', { param: value })`
+- Use `<Link href={route('routename')}>` for Inertia navigation
+- Use `router.visit()`, `router.post()` for programmatic navigation
+
+## Forms & Validation
+
+- **react-hook-form** + **Zod** for complex client-side forms
+- **Inertia useForm** for simple CRUD forms
+- Always show server-side errors from `errors` prop
+
+## Rich Text Editors
+
+- **Editor.js** — used in note/content contexts
+- **Tiptap 3** — used for rich page editing (tables, code blocks, mentions)
+- **Lexical** — used for advanced document editing (checklist, markdown shortcuts)
+- Each editor has its own component in `resources/js/components/editor/`
+
+## TypeScript Types
+
+- All entity interfaces defined in `resources/js/types/index.d.ts`
+- Key types: `User`, `Workspace`, `Project`, `Board`, `BoardColumn`, `Item`, `Page`, `Bookmark`, `BookmarkItem`, `Label`, `Comment`, `Attachment`
+- `PageProps` extends Inertia's base props with `auth.user`
+- Always type component props with explicit interfaces
+
+## Toasts & Feedback
+
+- Use **Sonner** for toast notifications: `toast.success('Message')`
+- Flash messages come from Inertia shared data via `usePage().props.flash`

@@ -1,0 +1,90 @@
+---
+description: Rules for Laravel backend code (PHP models, controllers, routes, policies, migrations)
+globs: app/**/*.php, routes/**/*.php, database/**/*.php, config/**/*.php, tests/**/*.php
+alwaysApply: false
+---
+
+# Laravel Backend Rules
+
+## Models (`app/Models/`)
+
+- Extend `Illuminate\Database\Eloquent\Model`
+- Use traits: `HasFactory`, `SoftDeletes` (on main entities)
+- Always define `protected $fillable = [...]` — never use `$guarded`
+- Define `casts()` method for JSON/array/datetime fields
+- Auto-generate UUID and slug in `boot()` via `static::creating()` callback
+- Use `$appends` for computed display attributes (e.g. image URLs)
+- Override `getRouteKeyName()` to return `'slug'` or `'uuid'` as appropriate
+- Define explicit return types on relationships: `BelongsTo`, `HasMany`, `BelongsToMany`, `HasOne`
+- Current models: User, Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, ItemLink, Label, Comment, Attachment, Page, Bookmark, BookmarkItem, ActivityLog, InstanceAdmin, InstanceSettings, WorkspaceInvitation
+
+### Example Model Pattern
+
+```php
+class Example extends Model
+{
+    use HasFactory, SoftDeletes;
+
+    protected $fillable = ['uuid', 'name', 'slug', ...];
+
+    protected function casts(): array
+    {
+        return ['settings' => 'array', 'is_public' => 'boolean'];
+    }
+
+    protected static function boot(): void
+    {
+        parent::boot();
+        static::creating(function ($model) {
+            $model->uuid ??= (string) Str::uuid();
+            $model->slug ??= Str::slug($model->name);
+        });
+    }
+
+    public function getRouteKeyName(): string
+    {
+        return 'slug';
+    }
+}
+```
+
+## Controllers (`app/Http/Controllers/`)
+
+- Extend base `Controller`
+- Use `$this->authorize('ability', $model)` for policy checks
+- Use inline `$request->validate([...])` for validation
+- Return Inertia responses: `Inertia::render('Page/Name', ['prop' => $data])`
+- Use eager loading to avoid N+1: `->with(['relation.nested'])` or closure-based eager loading
+- Redirects: `redirect()->route('name')` or `back()`
+- Flash messages: `session()->flash('success', 'Message')`
+- For file uploads: store on `public` disk with UUID filenames
+- Scoped routes: use workspace slug → project slug → board slug nesting
+
+## Authorization (Policies)
+
+- Policies in `app/Policies/` — one per main model
+- Instance admins bypass all checks (configured via `Gate::before()` in `AppServiceProvider`)
+- Policy methods: `viewAny`, `view`, `create`, `update`, `delete`, plus custom (`manageMembers`, `inviteMembers`, etc.)
+- Check workspace/project role via `$user->workspaceRole($workspace)` and `$user->projectRole($project)`
+- Roles hierarchy: owner > admin > editor > viewer
+
+## Routes (`routes/web.php`)
+
+- Public pages: `/`, `/privacy`, `/terms`, `/cookies`
+- Auth group: `middleware(['auth', 'verified'])`
+- Nested resource routes scoped by workspace slug and project slug
+- Use Ziggy named routes (`->name('routename')`) — all routes must be named
+
+## Migrations
+
+- Use `$table->uuid('uuid')->unique()` on every main model
+- Use `$table->string('slug')->unique()` where applicable
+- Use `$table->softDeletes()` on main entities
+- Use `$table->foreignId('...')->constrained()->cascadeOnDelete()` for foreign keys
+
+## Testing
+
+- PHPUnit 11 with `tests/Feature/` and `tests/Unit/`
+- Testing DB: SQLite in-memory (`:memory:`)
+- Use `RefreshDatabase` trait in feature tests
+- Use `actingAs($user)` for authenticated tests
