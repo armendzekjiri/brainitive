@@ -1,6 +1,8 @@
 import {
     $applyNodeReplacement,
     DecoratorNode,
+    DOMConversionMap,
+    DOMConversionOutput,
     DOMExportOutput,
     EditorConfig,
     LexicalNode,
@@ -122,6 +124,32 @@ function StickyNoteComponent({
         }
     }, [isEditing]);
 
+    // Block keyboard events from reaching Lexical's root element listeners while editing.
+    // Lexical attaches its keydown handler to the contentEditable root in the bubble phase
+    // and calls preventDefault() on arrow keys for cursor management, which prevents the
+    // textarea from moving its own cursor. The fix: register a bubble-phase listener on
+    // the sticky note container div. It fires as the event bubbles UP from the textarea
+    // but before it reaches the Lexical root, so stopPropagation() here ensures Lexical
+    // never sees it while the textarea handles it natively first.
+    useEffect(() => {
+        if (!isEditing) return;
+        const container = containerRef.current;
+        if (!container) return;
+
+        const blockForLexical = (e: KeyboardEvent) => {
+            if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) {
+                e.stopPropagation();
+                if (e.key === 'Escape') {
+                    setEditText(text);
+                    setIsEditing(false);
+                }
+            }
+        };
+
+        container.addEventListener('keydown', blockForLexical);
+        return () => container.removeEventListener('keydown', blockForLexical);
+    }, [isEditing, text]);
+
     const handleSave = () => {
         editor.update(() => {
             const node = $getNodeByKey(nodeKey);
@@ -172,12 +200,6 @@ function StickyNoteComponent({
                             ref={textareaRef}
                             value={editText}
                             onChange={(e) => setEditText(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Escape') {
-                                    setEditText(text);
-                                    setIsEditing(false);
-                                }
-                            }}
                             className="w-full min-h-[80px] bg-transparent border-none resize-none focus:outline-none text-sm"
                             placeholder="Write your note..."
                         />
@@ -258,14 +280,36 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
 
     exportDOM(): DOMExportOutput {
         const element = document.createElement('div');
-        element.className = 'sticky-note';
-        element.style.backgroundColor = this.__color;
-        element.textContent = this.__text;
+        element.setAttribute('data-lexical-sticky-note', JSON.stringify({
+            color: this.__color,
+            text: this.__text,
+            x: this.__x,
+            y: this.__y,
+        }));
         return { element };
     }
 
-    static importDOM(): null {
-        return null;
+    static importDOM(): DOMConversionMap | null {
+        return {
+            div: (node: Node) => {
+                if (!(node instanceof HTMLElement)) return null;
+                if (!node.hasAttribute('data-lexical-sticky-note')) return null;
+                return {
+                    conversion: (domNode: Node): DOMConversionOutput | null => {
+                        if (!(domNode instanceof HTMLElement)) return null;
+                        const raw = domNode.getAttribute('data-lexical-sticky-note');
+                        if (!raw) return null;
+                        try {
+                            const { color, text, x, y } = JSON.parse(raw);
+                            return { node: $createStickyNoteNode({ color, text, x, y }) };
+                        } catch {
+                            return null;
+                        }
+                    },
+                    priority: 2,
+                };
+            },
+        };
     }
 
     setColor(color: string): void {

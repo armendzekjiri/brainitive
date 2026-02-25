@@ -2,7 +2,7 @@ import { Extension } from '@tiptap/core';
 import { ReactRenderer } from '@tiptap/react';
 import Suggestion from '@tiptap/suggestion';
 import tippy, { Instance as TippyInstance } from 'tippy.js';
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
     Heading1,
     Heading2,
@@ -182,26 +182,40 @@ interface CommandListProps {
 export const CommandList = forwardRef<{ onKeyDown: (props: { event: KeyboardEvent }) => boolean }, CommandListProps>(
     ({ items, command }, ref) => {
         const [selectedIndex, setSelectedIndex] = useState(0);
+        const selectedIndexRef = useRef(0);
+        const itemsRef = useRef(items);
 
         useEffect(() => {
             setSelectedIndex(0);
+            selectedIndexRef.current = 0;
+        }, [items]);
+
+        useEffect(() => {
+            itemsRef.current = items;
         }, [items]);
 
         useImperativeHandle(ref, () => ({
             onKeyDown: ({ event }: { event: KeyboardEvent }) => {
+                const current = selectedIndexRef.current;
+                const len = itemsRef.current.length;
+
                 if (event.key === 'ArrowUp') {
-                    setSelectedIndex((selectedIndex + items.length - 1) % items.length);
+                    const next = (current + len - 1) % len;
+                    setSelectedIndex(next);
+                    selectedIndexRef.current = next;
                     return true;
                 }
 
                 if (event.key === 'ArrowDown') {
-                    setSelectedIndex((selectedIndex + 1) % items.length);
+                    const next = (current + 1) % len;
+                    setSelectedIndex(next);
+                    selectedIndexRef.current = next;
                     return true;
                 }
 
                 if (event.key === 'Enter') {
-                    if (items[selectedIndex]) {
-                        command(items[selectedIndex]);
+                    if (itemsRef.current[current]) {
+                        command(itemsRef.current[current]);
                     }
                     return true;
                 }

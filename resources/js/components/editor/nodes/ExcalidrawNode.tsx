@@ -1,6 +1,8 @@
 import {
     $applyNodeReplacement,
     DecoratorNode,
+    DOMConversionMap,
+    DOMConversionOutput,
     DOMExportOutput,
     EditorConfig,
     LexicalNode,
@@ -22,6 +24,11 @@ import {
     KEY_DELETE_COMMAND,
 } from 'lexical';
 import { createPortal } from 'react-dom';
+import '@excalidraw/excalidraw/index.css';
+
+// exportToBlob loaded alongside Excalidraw
+const getExportToBlob = () =>
+    import('@excalidraw/excalidraw').then((m) => m.exportToBlob);
 
 // Lazy load Excalidraw to reduce bundle size
 const Excalidraw = lazy(() =>
@@ -29,6 +36,8 @@ const Excalidraw = lazy(() =>
         default: module.Excalidraw,
     }))
 );
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface ExcalidrawPayload {
     data: string;
@@ -42,108 +51,144 @@ export type SerializedExcalidrawNode = Spread<
     SerializedLexicalNode
 >;
 
-// Modal component for Excalidraw
-function ExcalidrawModal({
+// ─── Full-screen editor ───────────────────────────────────────────────────────
+
+function ExcalidrawFullEditor({
     isOpen,
-    onClose,
-    elements,
-    onChange,
+    initialElements,
+    initialAppState,
+    onSave,
+    onDiscard,
 }: {
     isOpen: boolean;
-    onClose: () => void;
-    elements: any[];
-    onChange: (elements: readonly any[], appState: any) => void;
+    initialElements: any[];
+    initialAppState: any;
+    onSave: (newData: string, previewDataUrl: string) => void;
+    onDiscard: () => void;
 }) {
-    // Handle escape key to close modal
+    const excalidrawApiRef = useRef<any>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [hasChanges, setHasChanges] = useState(false);
+
+    // Block Escape from propagating to the parent Lexical editor while open
     useEffect(() => {
         if (!isOpen) return;
-
-        const handleKeyDown = (e: KeyboardEvent) => {
+        const block = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
+                e.stopImmediatePropagation();
                 e.preventDefault();
-                e.stopPropagation();
-                onClose();
             }
         };
+        document.addEventListener('keydown', block, true);
+        return () => document.removeEventListener('keydown', block, true);
+    }, [isOpen]);
 
-        document.addEventListener('keydown', handleKeyDown, true);
-        return () => document.removeEventListener('keydown', handleKeyDown, true);
-    }, [isOpen, onClose]);
+    const handleChange = useCallback((_elements: readonly any[], _appState: any) => {
+        setHasChanges(true);
+    }, []);
+
+    const handleSave = useCallback(async () => {
+        const api = excalidrawApiRef.current;
+        if (!api) return;
+        setIsSaving(true);
+        try {
+            const elements = api.getSceneElements();
+            const appState = api.getAppState();
+            const files = api.getFiles();
+
+            // Export a PNG preview
+            const exportFn = await getExportToBlob();
+            const blob = await exportFn({
+                elements,
+                appState: { ...appState, exportBackground: true },
+                files,
+                mimeType: 'image/png',
+                quality: 0.85,
+            });
+
+            const previewDataUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+            });
+
+            const newData = JSON.stringify({
+                elements,
+                appState: { viewBackgroundColor: appState.viewBackgroundColor ?? '#ffffff' },
+                previewDataUrl,
+            });
+
+            onSave(newData, previewDataUrl);
+        } catch (err) {
+            console.error('Excalidraw export failed', err);
+        } finally {
+            setIsSaving(false);
+        }
+    }, [onSave]);
 
     if (!isOpen) return null;
 
-    const handleBackdropClick = (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onClose();
-    };
-
-    const handleModalClick = (e: React.MouseEvent) => {
-        e.stopPropagation();
-    };
-
     return createPortal(
-        <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center"
-            onClick={handleBackdropClick}
-        >
-            {/* Backdrop */}
-            <div className="absolute inset-0 bg-black/50" />
-
-            {/* Modal */}
-            <div
-                className="relative bg-white rounded-lg shadow-2xl w-[95vw] h-[90vh] max-w-[1600px] flex flex-col overflow-hidden"
-                onClick={handleModalClick}
-            >
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-                    <div className="flex items-center gap-2">
-                        <svg className="w-6 h-6 text-purple-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M12 19l7-7 3 3-7 7-3-3z" />
-                            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
-                            <path d="M2 2l7.586 7.586" />
-                            <circle cx="11" cy="11" r="2" />
-                        </svg>
-                        <h2 className="text-lg font-semibold">Excalidraw Whiteboard</h2>
-                    </div>
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-white">
+            {/* Toolbar — mirrors the blade page whiteboard */}
+            <div className="flex items-center justify-between px-4 py-2 border-b bg-white shrink-0" style={{ height: '52px' }}>
+                <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-purple-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                        <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                        <path d="M2 2l7.586 7.586" />
+                        <circle cx="11" cy="11" r="2" />
+                    </svg>
+                    <span className="font-semibold text-sm">Excalidraw Whiteboard</span>
+                </div>
+                <div className="flex items-center gap-2">
                     <button
-                        onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onClose();
-                        }}
-                        className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                        type="button"
+                        onClick={onDiscard}
+                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white hover:bg-gray-50 transition-colors"
                     >
-                        Done
+                        Discard
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={isSaving || !hasChanges}
+                        className="px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        {isSaving ? 'Saving…' : 'Save & close'}
                     </button>
                 </div>
+            </div>
 
-                {/* Excalidraw Container */}
-                <div className="flex-1 relative">
-                    <Suspense fallback={
-                        <div className="w-full h-full bg-muted animate-pulse flex items-center justify-center">
-                            <div className="text-center">
-                                <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                                <p className="text-muted-foreground">Loading Excalidraw...</p>
-                            </div>
+            {/* Drawing canvas */}
+            <div className="flex-1 relative overflow-hidden">
+                <Suspense fallback={
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+                        <div className="text-center">
+                            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                            <p className="text-sm text-gray-500">Loading Excalidraw…</p>
                         </div>
-                    }>
-                        <div className="absolute inset-0">
-                            <Excalidraw
-                                initialData={{
-                                    elements: elements,
-                                    scrollToContent: true,
-                                }}
-                                onChange={onChange}
-                            />
-                        </div>
-                    </Suspense>
-                </div>
+                    </div>
+                }>
+                    <div className="absolute inset-0">
+                        <Excalidraw
+                            excalidrawAPI={(api: any) => { excalidrawApiRef.current = api; }}
+                            initialData={{
+                                elements: initialElements,
+                                appState: initialAppState,
+                                scrollToContent: true,
+                            }}
+                            onChange={handleChange}
+                        />
+                    </div>
+                </Suspense>
             </div>
         </div>,
         document.body
     );
 }
+
+// ─── Thumbnail preview component ─────────────────────────────────────────────
 
 function ExcalidrawComponent({
     data,
@@ -157,12 +202,16 @@ function ExcalidrawComponent({
     const [isSelected, setSelected, clearSelection] = useLexicalNodeSelection(nodeKey);
     const [isEditing, setIsEditing] = useState(false);
     const [elements, setElements] = useState<any[]>([]);
+    const [appState, setAppState] = useState<any>({});
+    const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
 
     useEffect(() => {
         if (data) {
             try {
                 const parsed = JSON.parse(data);
                 setElements(parsed.elements || []);
+                setAppState(parsed.appState || {});
+                setPreviewDataUrl(parsed.previewDataUrl || null);
             } catch {
                 setElements([]);
             }
@@ -203,27 +252,18 @@ function ExcalidrawComponent({
                 },
                 COMMAND_PRIORITY_LOW
             ),
-            editor.registerCommand(
-                KEY_DELETE_COMMAND,
-                onDelete,
-                COMMAND_PRIORITY_LOW
-            ),
-            editor.registerCommand(
-                KEY_BACKSPACE_COMMAND,
-                onDelete,
-                COMMAND_PRIORITY_LOW
-            )
+            editor.registerCommand(KEY_DELETE_COMMAND, onDelete, COMMAND_PRIORITY_LOW),
+            editor.registerCommand(KEY_BACKSPACE_COMMAND, onDelete, COMMAND_PRIORITY_LOW)
         );
     }, [clearSelection, editor, isSelected, nodeKey, onDelete, setSelected]);
 
-    const handleChange = useCallback((excalidrawElements: readonly any[], appState: any) => {
-        const newData = JSON.stringify({
-            elements: excalidrawElements,
-            appState: { viewBackgroundColor: appState.viewBackgroundColor },
-        });
-
-        // Update local elements state for preview
-        setElements([...excalidrawElements]);
+    const handleSave = useCallback((newData: string, newPreviewDataUrl: string) => {
+        try {
+            const parsed = JSON.parse(newData);
+            setElements(parsed.elements || []);
+            setAppState(parsed.appState || {});
+        } catch { /* ignore */ }
+        setPreviewDataUrl(newPreviewDataUrl);
 
         editor.update(() => {
             const node = $getNodeByKey(nodeKey);
@@ -231,54 +271,76 @@ function ExcalidrawComponent({
                 node.setData(newData);
             }
         });
+
+        setIsEditing(false);
     }, [editor, nodeKey]);
 
     return (
         <>
             <div ref={containerRef} className="relative my-4" draggable="false">
+                {/* Thumbnail */}
                 <div
-                    className={`relative rounded-lg overflow-hidden border bg-white cursor-pointer hover:border-primary/50 transition-colors ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
-                    style={{ height: '200px' }}
+                    className={`relative rounded-lg overflow-hidden border bg-white cursor-pointer hover:border-purple-400 transition-colors group ${isSelected ? 'ring-2 ring-purple-500 ring-offset-2' : ''}`}
+                    style={{ minHeight: '180px' }}
                     onClick={() => setIsEditing(true)}
                 >
-                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50">
-                        {elements.length > 0 ? (
+                    {previewDataUrl ? (
+                        <>
+                            <img
+                                src={previewDataUrl}
+                                alt="Excalidraw drawing preview"
+                                className="w-full object-contain bg-white block"
+                                style={{ maxHeight: '400px' }}
+                            />
+                            {/* Edit overlay on hover */}
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10">
+                                <span className="px-3 py-1.5 bg-white rounded-md shadow text-sm font-medium text-gray-800 flex items-center gap-1.5">
+                                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                    </svg>
+                                    Edit drawing
+                                </span>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="w-full flex items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50" style={{ minHeight: '180px' }}>
                             <div className="text-center text-muted-foreground">
-                                <svg className="w-16 h-16 mx-auto mb-3 text-purple-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                <svg className="w-14 h-14 mx-auto mb-3 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                                     <path d="M12 19l7-7 3 3-7 7-3-3z" />
                                     <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
                                     <path d="M2 2l7.586 7.586" />
                                     <circle cx="11" cy="11" r="2" />
                                 </svg>
-                                <p className="text-sm font-medium text-foreground">Click to edit drawing</p>
-                                <p className="text-xs text-muted-foreground mt-1">{elements.length} element(s)</p>
+                                {elements.length > 0 ? (
+                                    <>
+                                        <p className="text-sm font-medium text-foreground">Click to edit drawing</p>
+                                        <p className="text-xs text-muted-foreground mt-1">{elements.length} element(s) — save to generate preview</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-sm font-medium text-foreground">Click to start drawing</p>
+                                        <p className="text-xs text-muted-foreground mt-1">Opens full-screen Excalidraw whiteboard</p>
+                                    </>
+                                )}
                             </div>
-                        ) : (
-                            <div className="text-center text-muted-foreground">
-                                <svg className="w-16 h-16 mx-auto mb-3 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                    <path d="M12 19l7-7 3 3-7 7-3-3z" />
-                                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
-                                    <path d="M2 2l7.586 7.586" />
-                                    <circle cx="11" cy="11" r="2" />
-                                </svg>
-                                <p className="text-sm font-medium text-foreground">Click to start drawing</p>
-                                <p className="text-xs text-muted-foreground mt-1">Opens Excalidraw whiteboard</p>
-                            </div>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* Excalidraw Modal */}
-            <ExcalidrawModal
+            <ExcalidrawFullEditor
                 isOpen={isEditing}
-                onClose={() => setIsEditing(false)}
-                elements={elements}
-                onChange={handleChange}
+                initialElements={elements}
+                initialAppState={appState}
+                onSave={handleSave}
+                onDiscard={() => setIsEditing(false)}
             />
         </>
     );
 }
+
+// ─── Lexical node ─────────────────────────────────────────────────────────────
 
 export class ExcalidrawNode extends DecoratorNode<JSX.Element> {
     __data: string;
@@ -310,14 +372,27 @@ export class ExcalidrawNode extends DecoratorNode<JSX.Element> {
 
     exportDOM(): DOMExportOutput {
         const element = document.createElement('div');
-        element.className = 'excalidraw-embed';
-        element.setAttribute('data-excalidraw', this.__data);
-        element.innerHTML = '<p>[Excalidraw Drawing]</p>';
+        element.setAttribute('data-lexical-excalidraw', this.__data);
+        // No inner HTML — prevents Lexical from creating stray paragraph nodes on re-import
         return { element };
     }
 
-    static importDOM(): null {
-        return null;
+    static importDOM(): DOMConversionMap | null {
+        return {
+            div: (node: Node) => {
+                if (!(node instanceof HTMLElement)) return null;
+                if (!node.hasAttribute('data-lexical-excalidraw')) return null;
+                return {
+                    conversion: (domNode: Node): DOMConversionOutput | null => {
+                        if (!(domNode instanceof HTMLElement)) return null;
+                        const data = domNode.getAttribute('data-lexical-excalidraw');
+                        if (data === null) return null;
+                        return { node: $createExcalidrawNode(data) };
+                    },
+                    priority: 2,
+                };
+            },
+        };
     }
 
     setData(data: string): void {
@@ -329,7 +404,7 @@ export class ExcalidrawNode extends DecoratorNode<JSX.Element> {
         return this.__data;
     }
 
-    createDOM(config: EditorConfig): HTMLElement {
+    createDOM(_config: EditorConfig): HTMLElement {
         const div = document.createElement('div');
         div.className = 'excalidraw-container';
         return div;
@@ -340,9 +415,7 @@ export class ExcalidrawNode extends DecoratorNode<JSX.Element> {
     }
 
     decorate(): JSX.Element {
-        return (
-            <ExcalidrawComponent data={this.__data} nodeKey={this.getKey()} />
-        );
+        return <ExcalidrawComponent data={this.__data} nodeKey={this.getKey()} />;
     }
 }
 

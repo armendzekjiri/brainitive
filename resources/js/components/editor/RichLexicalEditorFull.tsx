@@ -244,6 +244,7 @@ function SlashCommandsPlugin() {
     const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const selectedIndexRef = useRef(0);
     const menuRef = useRef<HTMLDivElement>(null);
 
     // Modal states for various inserts
@@ -513,8 +514,14 @@ function SlashCommandsPlugin() {
         );
     }, [searchTerm, slashMenuItems]);
 
+    const filteredItemsRef = useRef(filteredItems);
+    useEffect(() => {
+        filteredItemsRef.current = filteredItems;
+    }, [filteredItems]);
+
     useEffect(() => {
         setSelectedIndex(0);
+        selectedIndexRef.current = 0;
     }, [filteredItems.length]);
 
     // Auto-scroll selected item into view
@@ -534,21 +541,25 @@ function SlashCommandsPlugin() {
                 if (showMenu) {
                     if (event.key === 'ArrowDown') {
                         event.preventDefault();
-                        setSelectedIndex(prev =>
-                            prev < filteredItems.length - 1 ? prev + 1 : 0
-                        );
+                        setSelectedIndex(prev => {
+                            const next = prev < filteredItemsRef.current.length - 1 ? prev + 1 : 0;
+                            selectedIndexRef.current = next;
+                            return next;
+                        });
                         return true;
                     }
                     if (event.key === 'ArrowUp') {
                         event.preventDefault();
-                        setSelectedIndex(prev =>
-                            prev > 0 ? prev - 1 : filteredItems.length - 1
-                        );
+                        setSelectedIndex(prev => {
+                            const next = prev > 0 ? prev - 1 : filteredItemsRef.current.length - 1;
+                            selectedIndexRef.current = next;
+                            return next;
+                        });
                         return true;
                     }
-                    if (event.key === 'Enter' && filteredItems[selectedIndex]) {
+                    if (event.key === 'Enter' && filteredItemsRef.current[selectedIndexRef.current]) {
                         event.preventDefault();
-                        // Remove the slash and any search text
+                        // Remove the slash and any search text, flushed synchronously before onSelect
                         editor.update(() => {
                             const selection = $getSelection();
                             if ($isRangeSelection(selection)) {
@@ -560,11 +571,12 @@ function SlashCommandsPlugin() {
                                     if (slashIndex !== -1) {
                                         const newText = text.substring(0, slashIndex);
                                         node.setTextContent(newText);
+                                        node.select(newText.length, newText.length);
                                     }
                                 }
                             }
-                        });
-                        filteredItems[selectedIndex].onSelect(editor);
+                        }, { discrete: true });
+                        filteredItemsRef.current[selectedIndexRef.current].onSelect(editor);
                         setShowMenu(false);
                         setSearchTerm('');
                         return true;
@@ -661,10 +673,11 @@ function SlashCommandsPlugin() {
                     if (slashIndex !== -1) {
                         const newText = text.substring(0, slashIndex);
                         node.setTextContent(newText);
+                        node.select(newText.length, newText.length);
                     }
                 }
             }
-        });
+        }, { discrete: true });
         item.onSelect(editor);
         setShowMenu(false);
         setSearchTerm('');
@@ -1677,6 +1690,7 @@ interface RichLexicalEditorProps {
     placeholder?: string;
     showToolbar?: boolean;
     minHeight?: string;
+    maxHeight?: string;
     className?: string;
     contentKey?: string;
 }
@@ -1688,6 +1702,7 @@ export function RichLexicalEditor({
     placeholder = 'Start typing, or press / for commands...',
     showToolbar = true,
     minHeight = '200px',
+    maxHeight,
     className,
     contentKey,
 }: RichLexicalEditorProps) {
@@ -1741,7 +1756,11 @@ export function RichLexicalEditor({
         <LexicalComposer initialConfig={initialConfig}>
             <div className={cn("border rounded-lg overflow-hidden bg-background", className)}>
                 <ToolbarPlugin showToolbar={showToolbar && editable} />
-                <div className="relative" ref={onRef}>
+                <div
+                    className={cn("relative", maxHeight && "overflow-y-auto")}
+                    style={maxHeight ? { maxHeight } : undefined}
+                    ref={onRef}
+                >
                     <RichTextPlugin
                         contentEditable={
                             <ContentEditable
