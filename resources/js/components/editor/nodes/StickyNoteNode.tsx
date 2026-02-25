@@ -355,6 +355,59 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
         return false;
     }
 
+    // Encode full node data as a JSON attribute so HTML round-trips work.
+    // The editor saves as HTML (not Lexical JSON), so without this the
+    // sticky note is lost on every save.
+    exportDOM(): { element: HTMLElement } {
+        const el = document.createElement('div');
+        el.setAttribute('data-lexical-sticky', JSON.stringify({
+            color: this.__color,
+            xOffset: this.__x,
+            yOffset: this.__y,
+            caption: this.__caption.toJSON(),
+        }));
+        el.style.display = 'none';
+        return { element: el };
+    }
+
+    static importDOM(): { div: (node: Node) => { conversion: (domNode: Node) => { node: StickyNoteNode } | null; priority: 2 } | null } | null {
+        return {
+            div: (node: Node) => {
+                if (!(node instanceof HTMLElement)) return null;
+                // Support both new attribute and old 'data-lexical-sticky-note' format
+                const hasNew = node.hasAttribute('data-lexical-sticky');
+                const hasOld = node.hasAttribute('data-lexical-sticky-note');
+                if (!hasNew && !hasOld) return null;
+                return {
+                    conversion: (domNode: Node): { node: StickyNoteNode } | null => {
+                        if (!(domNode instanceof HTMLElement)) return null;
+                        const raw = domNode.getAttribute('data-lexical-sticky')
+                            ?? domNode.getAttribute('data-lexical-sticky-note');
+                        if (!raw) return null;
+                        try {
+                            const parsed = JSON.parse(raw);
+                            // New format uses xOffset/yOffset/caption; old format used x/y/text
+                            const color = parsed.color ?? 'yellow';
+                            const xOffset = parsed.xOffset ?? parsed.x ?? 0;
+                            const yOffset = parsed.yOffset ?? parsed.y ?? 0;
+                            const stickyNode = new StickyNoteNode(xOffset, yOffset, color);
+                            if (parsed.caption?.editorState) {
+                                const editorState = stickyNode.__caption.parseEditorState(parsed.caption.editorState);
+                                if (!editorState.isEmpty()) {
+                                    stickyNode.__caption.setEditorState(editorState);
+                                }
+                            }
+                            return { node: $applyNodeReplacement(stickyNode) };
+                        } catch {
+                            return null;
+                        }
+                    },
+                    priority: 2 as const,
+                };
+            },
+        };
+    }
+
     setPosition(x: number, y: number): void {
         const writable = this.getWritable();
         writable.__x = x;
