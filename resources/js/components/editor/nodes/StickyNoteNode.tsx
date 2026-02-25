@@ -300,8 +300,8 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
                         const raw = domNode.getAttribute('data-lexical-sticky-note');
                         if (!raw) return null;
                         try {
-                            const { color, text, x, y } = JSON.parse(raw);
-                            return { node: $createStickyNoteNode({ color, text, x, y }) };
+                            const { color, text } = JSON.parse(raw);
+                            return { node: $createStickyNoteNode(color, text) };
                         } catch {
                             return null;
                         }
