@@ -1,46 +1,262 @@
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
+import { useLexicalEditable } from '@lexical/react/useLexicalEditable';
 import {
-    $deleteTableColumn__EXPERIMENTAL,
-    $deleteTableRow__EXPERIMENTAL,
+    $computeTableMapSkipCellCheck,
+    $deleteTableColumnAtSelection,
+    $deleteTableRowAtSelection,
     $getNodeTriplet,
     $getTableCellNodeFromLexicalNode,
     $getTableColumnIndexFromTableCellNode,
     $getTableNodeFromLexicalNodeOrThrow,
     $getTableRowIndexFromTableCellNode,
-    $insertTableColumn__EXPERIMENTAL,
-    $insertTableRow__EXPERIMENTAL,
+    $insertTableColumnAtSelection,
+    $insertTableRowAtSelection,
     $isTableCellNode,
     $isTableRowNode,
     $isTableSelection,
+    $mergeCells,
     $unmergeCell,
+    getTableElement,
     getTableObserverFromTableElement,
-    HTMLTableElementWithWithTableSelectionState,
     TableCellHeaderStates,
     TableCellNode,
-    TableRowNode,
+    TableObserver,
     TableSelection,
 } from '@lexical/table';
+import { mergeRegister } from '@lexical/utils';
 import {
-    $createParagraphNode,
-    $getRoot,
     $getSelection,
-    $isParagraphNode,
     $isRangeSelection,
-    $isTextNode,
+    $setSelection,
+    COMMAND_PRIORITY_CRITICAL,
+    SELECTION_CHANGE_COMMAND,
 } from 'lexical';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { ReactPortal, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-    Plus,
-    Trash2,
-    ArrowUp,
     ArrowDown,
     ArrowLeft,
     ArrowRight,
+    ArrowUp,
+    ChevronDown,
     Columns,
+    Merge,
     Rows,
-    Grid3X3,
+    Scissors,
+    Trash2,
 } from 'lucide-react';
+
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+function computeSelectionCount(selection: TableSelection): { columns: number; rows: number } {
+    const shape = selection.getShape();
+    return { columns: shape.toX - shape.fromX + 1, rows: shape.toY - shape.fromY + 1 };
+}
+
+function $canUnmerge(): boolean {
+    const selection = $getSelection();
+    if (
+        ($isRangeSelection(selection) && !selection.isCollapsed()) ||
+        ($isTableSelection(selection) && !selection.anchor.is(selection.focus)) ||
+        (!$isRangeSelection(selection) && !$isTableSelection(selection))
+    ) {
+        return false;
+    }
+    const [cell] = $getNodeTriplet(selection.anchor);
+    return cell.__colSpan > 1 || cell.__rowSpan > 1;
+}
+
+// ─── dropdown menu ──────────────────────────────────────────────────────────
+
+type TableActionMenuProps = {
+    contextRef: React.RefObject<HTMLButtonElement | null>;
+    tableCellNode: TableCellNode;
+    cellMerge: boolean;
+    onClose: () => void;
+};
+
+function TableActionMenu({ contextRef, tableCellNode: _tableCellNode, cellMerge, onClose }: TableActionMenuProps) {
+    const [editor] = useLexicalComposerContext();
+    const dropDownRef = useRef<HTMLDivElement | null>(null);
+    const [tableCellNode, setTableCellNode] = useState(_tableCellNode);
+    const [selectionCounts, setSelectionCounts] = useState({ columns: 1, rows: 1 });
+    const [canMergeCells, setCanMergeCells] = useState(false);
+    const [canUnmergeCell, setCanUnmergeCell] = useState(false);
+
+    useEffect(() => {
+        return editor.registerMutationListener(TableCellNode, (mutations) => {
+            if (mutations.get(tableCellNode.getKey()) === 'updated') {
+                editor.getEditorState().read(() => setTableCellNode((n) => n.getLatest()));
+            }
+        });
+    }, [editor, tableCellNode]);
+
+    useEffect(() => {
+        editor.getEditorState().read(() => {
+            const sel = $getSelection();
+            if ($isTableSelection(sel)) {
+                const counts = computeSelectionCount(sel);
+                setSelectionCounts(counts);
+                setCanMergeCells(counts.columns > 1 || counts.rows > 1);
+            }
+            setCanUnmergeCell($canUnmerge());
+        });
+    }, [editor]);
+
+    // Position dropdown next to button, keeping inside viewport
+    useEffect(() => {
+        const btn = contextRef.current;
+        const drop = dropDownRef.current;
+        if (!btn || !drop) return;
+        const btnRect = btn.getBoundingClientRect();
+        const dropRect = drop.getBoundingClientRect();
+        const margin = 5;
+        let left = btnRect.right + margin;
+        if (left + dropRect.width > window.innerWidth) left = btnRect.left - dropRect.width - margin;
+        let top = btnRect.top;
+        if (top + dropRect.height > window.innerHeight) top = btnRect.bottom - dropRect.height;
+        drop.style.left = `${Math.max(margin, left)}px`;
+        drop.style.top = `${Math.max(margin, top)}px`;
+    }, [contextRef]);
+
+    useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            const target = e.target as Node;
+            if (
+                dropDownRef.current && !dropDownRef.current.contains(target) &&
+                contextRef.current && !contextRef.current.contains(target)
+            ) onClose();
+        };
+        window.addEventListener('click', handleClick);
+        return () => window.removeEventListener('click', handleClick);
+    }, [onClose, contextRef]);
+
+    const clearSelection = useCallback(() => {
+        editor.update(() => {
+            if (tableCellNode.isAttached()) {
+                const tableNode = $getTableNodeFromLexicalNodeOrThrow(tableCellNode);
+                const tableEl = getTableElement(tableNode, editor.getElementByKey(tableNode.getKey()));
+                const observer = tableEl ? getTableObserverFromTableElement(tableEl) : null;
+                observer?.$clearHighlight();
+                tableNode.markDirty();
+            }
+            $setSelection(null);
+        });
+    }, [editor, tableCellNode]);
+
+    const close = useCallback(() => { clearSelection(); onClose(); }, [clearSelection, onClose]);
+
+    const insertRowAbove = () => { editor.update(() => $insertTableRowAtSelection(false)); close(); };
+    const insertRowBelow = () => { editor.update(() => $insertTableRowAtSelection(true)); close(); };
+    const deleteRow = () => { editor.update(() => $deleteTableRowAtSelection()); close(); };
+    const insertColBefore = () => { editor.update(() => $insertTableColumnAtSelection(false)); close(); };
+    const insertColAfter = () => { editor.update(() => $insertTableColumnAtSelection(true)); close(); };
+    const deleteCol = () => { editor.update(() => $deleteTableColumnAtSelection()); close(); };
+    const deleteTable = () => { editor.update(() => $getTableNodeFromLexicalNodeOrThrow(tableCellNode).remove()); close(); };
+
+    const mergeCells = () => {
+        editor.update(() => {
+            const sel = $getSelection();
+            if (!$isTableSelection(sel)) return;
+            $mergeCells(sel.getNodes().filter($isTableCellNode) as TableCellNode[]);
+        });
+        close();
+    };
+    const unmergeCells = () => { editor.update(() => $unmergeCell()); close(); };
+
+    const toggleRowHeader = useCallback(() => {
+        editor.update(() => {
+            const tableNode = $getTableNodeFromLexicalNodeOrThrow(tableCellNode);
+            const rowIdx = $getTableRowIndexFromTableCellNode(tableCellNode);
+            const [gridMap] = $computeTableMapSkipCellCheck(tableNode, null, null);
+            const seen = new Set<TableCellNode>();
+            const newStyle = tableCellNode.getHeaderStyles() ^ TableCellHeaderStates.ROW;
+            for (let col = 0; col < gridMap[rowIdx].length; col++) {
+                const mc = gridMap[rowIdx][col];
+                if (mc?.cell && !seen.has(mc.cell)) { seen.add(mc.cell); mc.cell.setHeaderStyles(newStyle, TableCellHeaderStates.ROW); }
+            }
+        });
+        close();
+    }, [editor, tableCellNode, close]);
+
+    const toggleColHeader = useCallback(() => {
+        editor.update(() => {
+            const tableNode = $getTableNodeFromLexicalNodeOrThrow(tableCellNode);
+            const colIdx = $getTableColumnIndexFromTableCellNode(tableCellNode);
+            const [gridMap] = $computeTableMapSkipCellCheck(tableNode, null, null);
+            const seen = new Set<TableCellNode>();
+            const newStyle = tableCellNode.getHeaderStyles() ^ TableCellHeaderStates.COLUMN;
+            for (let row = 0; row < gridMap.length; row++) {
+                const mc = gridMap[row][colIdx];
+                if (mc?.cell && !seen.has(mc.cell)) { seen.add(mc.cell); mc.cell.setHeaderStyles(newStyle, TableCellHeaderStates.COLUMN); }
+            }
+        });
+        close();
+    }, [editor, tableCellNode, close]);
+
+    const rowHeaderActive = (tableCellNode.__headerState & TableCellHeaderStates.ROW) === TableCellHeaderStates.ROW;
+    const colHeaderActive = (tableCellNode.__headerState & TableCellHeaderStates.COLUMN) === TableCellHeaderStates.COLUMN;
+    const rows = selectionCounts.rows;
+    const cols = selectionCounts.columns;
+
+    return createPortal(
+        <div
+            ref={dropDownRef}
+            className="fixed z-[300] w-56 bg-popover border rounded-lg shadow-xl py-1 text-sm"
+            onClick={(e) => e.stopPropagation()}
+        >
+            {cellMerge && canMergeCells && (
+                <button type="button" className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted transition-colors" onClick={mergeCells}>
+                    <Merge className="w-4 h-4 shrink-0" /> Merge cells
+                </button>
+            )}
+            {cellMerge && canUnmergeCell && (
+                <button type="button" className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted transition-colors" onClick={unmergeCells}>
+                    <Scissors className="w-4 h-4 shrink-0" /> Unmerge cells
+                </button>
+            )}
+            {cellMerge && (canMergeCells || canUnmergeCell) && <hr className="my-1" />}
+
+            <div className="px-3 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">Rows</div>
+            <button type="button" className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted transition-colors" onClick={insertRowAbove}>
+                <ArrowUp className="w-4 h-4 shrink-0" /> Insert {rows === 1 ? 'row' : `${rows} rows`} above
+            </button>
+            <button type="button" className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted transition-colors" onClick={insertRowBelow}>
+                <ArrowDown className="w-4 h-4 shrink-0" /> Insert {rows === 1 ? 'row' : `${rows} rows`} below
+            </button>
+            <button type="button" className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted transition-colors text-red-500" onClick={deleteRow}>
+                <Trash2 className="w-4 h-4 shrink-0" /> Delete {rows === 1 ? 'row' : `${rows} rows`}
+            </button>
+            <hr className="my-1" />
+
+            <div className="px-3 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">Columns</div>
+            <button type="button" className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted transition-colors" onClick={insertColBefore}>
+                <ArrowLeft className="w-4 h-4 shrink-0" /> Insert {cols === 1 ? 'column' : `${cols} columns`} left
+            </button>
+            <button type="button" className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted transition-colors" onClick={insertColAfter}>
+                <ArrowRight className="w-4 h-4 shrink-0" /> Insert {cols === 1 ? 'column' : `${cols} columns`} right
+            </button>
+            <button type="button" className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted transition-colors text-red-500" onClick={deleteCol}>
+                <Trash2 className="w-4 h-4 shrink-0" /> Delete {cols === 1 ? 'column' : `${cols} columns`}
+            </button>
+            <hr className="my-1" />
+
+            <div className="px-3 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">Table</div>
+            <button type="button" className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted transition-colors" onClick={toggleRowHeader}>
+                <Rows className="w-4 h-4 shrink-0" /> {rowHeaderActive ? 'Remove' : 'Add'} row header
+            </button>
+            <button type="button" className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted transition-colors" onClick={toggleColHeader}>
+                <Columns className="w-4 h-4 shrink-0" /> {colHeaderActive ? 'Remove' : 'Add'} column header
+            </button>
+            <button type="button" className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted transition-colors text-red-500" onClick={deleteTable}>
+                <Trash2 className="w-4 h-4 shrink-0" /> Delete table
+            </button>
+        </div>,
+        document.body,
+    );
+}
+
+// ─── container ──────────────────────────────────────────────────────────────
 
 function TableCellActionMenuContainer({
     anchorElem,
@@ -50,277 +266,139 @@ function TableCellActionMenuContainer({
     cellMerge: boolean;
 }) {
     const [editor] = useLexicalComposerContext();
-    const menuButtonRef = useRef<HTMLDivElement>(null);
-    const menuRootRef = useRef<HTMLDivElement>(null);
+    const menuButtonRef = useRef<HTMLDivElement | null>(null);
+    const menuRootRef = useRef<HTMLButtonElement | null>(null);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [tableCellNode, setTableCellNode] = useState<TableCellNode | null>(null);
-    const [selectionCounts, setSelectionCounts] = useState({
-        columns: 1,
-        rows: 1,
-    });
-    const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+    const [tableCellNode, setTableMenuCellNode] = useState<TableCellNode | null>(null);
 
-    useEffect(() => {
-        return editor.registerUpdateListener(() => {
-            editor.getEditorState().read(() => {
-                const selection = $getSelection();
-                const nativeSelection = window.getSelection();
-                const activeElement = document.activeElement;
+    const $moveMenu = useCallback(() => {
+        const menu = menuButtonRef.current;
+        const selection = $getSelection();
+        const nativeSelection = window.getSelection();
+        const activeElement = document.activeElement;
 
-                if ($isRangeSelection(selection)) {
-                    const anchorNode = selection.anchor.getNode();
-                    const tableCellNodeFromSelection = $getTableCellNodeFromLexicalNode(anchorNode);
-
-                    if (tableCellNodeFromSelection) {
-                        const tableCellElement = editor.getElementByKey(tableCellNodeFromSelection.getKey());
-                        if (tableCellElement) {
-                            const rect = tableCellElement.getBoundingClientRect();
-                            setMenuPosition({
-                                x: rect.right - 24,
-                                y: rect.top + 4,
-                            });
-                        }
-                        setTableCellNode(tableCellNodeFromSelection);
-                    } else {
-                        setTableCellNode(null);
-                    }
-                } else if ($isTableSelection(selection)) {
-                    const nodes = selection.getNodes();
-                    const tableCells = nodes.filter($isTableCellNode);
-                    if (tableCells.length > 0) {
-                        setTableCellNode(tableCells[0]);
-
-                        // Count selection
-                        const rowSet = new Set<string>();
-                        const columnSet = new Set<number>();
-                        tableCells.forEach(cell => {
-                            const parent = cell.getParent();
-                            if ($isTableRowNode(parent)) {
-                                rowSet.add(parent.getKey());
-                            }
-                            columnSet.add($getTableColumnIndexFromTableCellNode(cell));
-                        });
-                        setSelectionCounts({
-                            columns: columnSet.size,
-                            rows: rowSet.size,
-                        });
-                    }
-                }
-            });
-        });
-    }, [editor]);
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (
-                menuRootRef.current &&
-                !menuRootRef.current.contains(event.target as Node) &&
-                menuButtonRef.current &&
-                !menuButtonRef.current.contains(event.target as Node)
-            ) {
-                setIsMenuOpen(false);
+        function disable() {
+            if (menu) {
+                menu.classList.remove('table-cell-action-button-container--active');
+                menu.classList.add('table-cell-action-button-container--inactive');
             }
-        };
-
-        if (isMenuOpen) {
-            document.addEventListener('click', handleClickOutside);
-            return () => document.removeEventListener('click', handleClickOutside);
+            setTableMenuCellNode(null);
         }
-    }, [isMenuOpen]);
 
-    const insertTableRowAbove = useCallback(() => {
-        editor.update(() => {
-            if (tableCellNode) {
-                $insertTableRow__EXPERIMENTAL(false);
-            }
-        });
-        setIsMenuOpen(false);
-    }, [editor, tableCellNode]);
+        if (selection == null || menu == null) return disable();
 
-    const insertTableRowBelow = useCallback(() => {
-        editor.update(() => {
-            if (tableCellNode) {
-                $insertTableRow__EXPERIMENTAL(true);
-            }
-        });
-        setIsMenuOpen(false);
-    }, [editor, tableCellNode]);
+        const rootElement = editor.getRootElement();
+        let tableObserver: TableObserver | null = null;
+        let tableCellParentNodeDOM: HTMLElement | null = null;
 
-    const insertTableColumnBefore = useCallback(() => {
-        editor.update(() => {
-            if (tableCellNode) {
-                $insertTableColumn__EXPERIMENTAL(false);
-            }
-        });
-        setIsMenuOpen(false);
-    }, [editor, tableCellNode]);
+        if (
+            $isRangeSelection(selection) &&
+            rootElement !== null &&
+            nativeSelection !== null &&
+            rootElement.contains(nativeSelection.anchorNode)
+        ) {
+            const cellFromSel = $getTableCellNodeFromLexicalNode(selection.anchor.getNode());
+            if (!cellFromSel) return disable();
 
-    const insertTableColumnAfter = useCallback(() => {
-        editor.update(() => {
-            if (tableCellNode) {
-                $insertTableColumn__EXPERIMENTAL(true);
-            }
-        });
-        setIsMenuOpen(false);
-    }, [editor, tableCellNode]);
+            tableCellParentNodeDOM = editor.getElementByKey(cellFromSel.getKey()) as HTMLElement | null;
+            if (!tableCellParentNodeDOM || !cellFromSel.isAttached()) return disable();
 
-    const deleteTableRow = useCallback(() => {
-        editor.update(() => {
-            if (tableCellNode) {
-                $deleteTableRow__EXPERIMENTAL();
-            }
-        });
-        setIsMenuOpen(false);
-    }, [editor, tableCellNode]);
+            const tableNode = $getTableNodeFromLexicalNodeOrThrow(cellFromSel);
+            const tableEl = getTableElement(tableNode, editor.getElementByKey(tableNode.getKey()));
+            if (!tableEl) return disable();
 
-    const deleteTableColumn = useCallback(() => {
-        editor.update(() => {
-            if (tableCellNode) {
-                $deleteTableColumn__EXPERIMENTAL();
-            }
-        });
-        setIsMenuOpen(false);
-    }, [editor, tableCellNode]);
+            tableObserver = getTableObserverFromTableElement(tableEl);
+            setTableMenuCellNode(cellFromSel);
+        } else if ($isTableSelection(selection)) {
+            const anchorNode = $getTableCellNodeFromLexicalNode(selection.anchor.getNode());
+            if (!$isTableCellNode(anchorNode)) return disable();
 
-    const deleteTable = useCallback(() => {
-        editor.update(() => {
-            if (tableCellNode) {
-                const tableNode = $getTableNodeFromLexicalNodeOrThrow(tableCellNode);
-                tableNode.remove();
-            }
-        });
-        setIsMenuOpen(false);
-    }, [editor, tableCellNode]);
+            tableCellParentNodeDOM = editor.getElementByKey(anchorNode.getKey()) as HTMLElement | null;
+            if (!tableCellParentNodeDOM) return disable();
 
-    const toggleHeaderRow = useCallback(() => {
-        editor.update(() => {
-            if (tableCellNode) {
-                const tableNode = $getTableNodeFromLexicalNodeOrThrow(tableCellNode);
-                const firstRow = tableNode.getFirstChild();
-                if ($isTableRowNode(firstRow)) {
-                    firstRow.getChildren().forEach(cell => {
-                        if ($isTableCellNode(cell)) {
-                            const headerState = cell.getHeaderStyles();
-                            const newHeaderState = headerState === TableCellHeaderStates.ROW
-                                ? TableCellHeaderStates.NO_STATUS
-                                : TableCellHeaderStates.ROW;
-                            cell.setHeaderStyles(newHeaderState);
-                        }
-                    });
-                }
-            }
-        });
-        setIsMenuOpen(false);
-    }, [editor, tableCellNode]);
+            const tableNode = $getTableNodeFromLexicalNodeOrThrow(anchorNode);
+            const tableEl = getTableElement(tableNode, editor.getElementByKey(tableNode.getKey()));
+            if (!tableEl) return disable();
 
-    if (!tableCellNode) {
-        return null;
-    }
+            tableObserver = getTableObserverFromTableElement(tableEl);
+            setTableMenuCellNode(anchorNode);
+        } else if (!activeElement) {
+            return disable();
+        }
+
+        if (tableObserver === null || tableCellParentNodeDOM === null) return disable();
+
+        const enabled = !tableObserver.isSelecting;
+        menu.classList.toggle('table-cell-action-button-container--active', enabled);
+        menu.classList.toggle('table-cell-action-button-container--inactive', !enabled);
+
+        if (enabled) {
+            const cellRect = tableCellParentNodeDOM.getBoundingClientRect();
+            const anchorRect = anchorElem.getBoundingClientRect();
+            // Place the button INSIDE the cell: right-align it so its right edge
+            // sits 2 px from the cell's right border (button is 20px wide → offset 22px).
+            // This prevents the last column from causing a horizontal scroll.
+            const BUTTON_WIDTH = 20;
+            const BUTTON_INSET = 2; // px gap from cell right border
+            const x = cellRect.right - anchorRect.left - BUTTON_WIDTH - BUTTON_INSET;
+            const y = cellRect.top - anchorRect.top;
+            menu.style.transform = `translate(${x}px, ${y}px)`;
+        }
+    }, [editor, anchorElem]);
+
+    useEffect(() => {
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const callback = () => { timeoutId = undefined; editor.getEditorState().read($moveMenu); };
+        const delayedCallback = () => { if (timeoutId === undefined) timeoutId = setTimeout(callback, 0); return false; };
+
+        return mergeRegister(
+            editor.registerUpdateListener(delayedCallback),
+            editor.registerCommand(SELECTION_CHANGE_COMMAND, delayedCallback, COMMAND_PRIORITY_CRITICAL),
+            editor.registerRootListener((rootElement, prevRootElement) => {
+                prevRootElement?.removeEventListener('pointerup', delayedCallback);
+                if (rootElement) { rootElement.addEventListener('pointerup', delayedCallback); delayedCallback(); }
+            }),
+            () => clearTimeout(timeoutId),
+        );
+    }, [editor, $moveMenu]);
+
+    const prevTableCellDOM = useRef(tableCellNode);
+    useEffect(() => {
+        if (prevTableCellDOM.current !== tableCellNode) setIsMenuOpen(false);
+        prevTableCellDOM.current = tableCellNode;
+    }, [tableCellNode]);
 
     return (
-        <>
-            <div
-                ref={menuButtonRef}
-                className="absolute z-10"
-                style={{
-                    left: `${menuPosition.x}px`,
-                    top: `${menuPosition.y}px`,
-                }}
-            >
-                <button
-                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="w-5 h-5 flex items-center justify-center rounded bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
-                    title="Table actions"
-                >
-                    <Grid3X3 className="w-3 h-3" />
-                </button>
-            </div>
-
-            {isMenuOpen && (
-                <div
-                    ref={menuRootRef}
-                    className="fixed z-50 w-56 bg-popover border rounded-lg shadow-lg py-1"
-                    style={{
-                        left: `${menuPosition.x - 200}px`,
-                        top: `${menuPosition.y + 24}px`,
-                    }}
-                >
-                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Rows
-                    </div>
+        <div
+            className="table-cell-action-button-container table-cell-action-button-container--inactive"
+            ref={menuButtonRef}
+        >
+            {tableCellNode != null && (
+                <>
                     <button
-                        onClick={insertTableRowAbove}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors"
+                        type="button"
+                        className="table-cell-action-button"
+                        onClick={(e) => { e.stopPropagation(); setIsMenuOpen((o) => !o); }}
+                        ref={menuRootRef}
+                        title="Table options"
                     >
-                        <ArrowUp className="w-4 h-4" />
-                        Insert row above
+                        <ChevronDown className="w-3 h-3" />
                     </button>
-                    <button
-                        onClick={insertTableRowBelow}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors"
-                    >
-                        <ArrowDown className="w-4 h-4" />
-                        Insert row below
-                    </button>
-                    <button
-                        onClick={deleteTableRow}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors text-red-500"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                        Delete row
-                    </button>
-
-                    <div className="border-t my-1" />
-
-                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Columns
-                    </div>
-                    <button
-                        onClick={insertTableColumnBefore}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors"
-                    >
-                        <ArrowLeft className="w-4 h-4" />
-                        Insert column before
-                    </button>
-                    <button
-                        onClick={insertTableColumnAfter}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors"
-                    >
-                        <ArrowRight className="w-4 h-4" />
-                        Insert column after
-                    </button>
-                    <button
-                        onClick={deleteTableColumn}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors text-red-500"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                        Delete column
-                    </button>
-
-                    <div className="border-t my-1" />
-
-                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                        Table
-                    </div>
-                    <button
-                        onClick={toggleHeaderRow}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors"
-                    >
-                        <Rows className="w-4 h-4" />
-                        Toggle header row
-                    </button>
-                    <button
-                        onClick={deleteTable}
-                        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-muted transition-colors text-red-500"
-                    >
-                        <Trash2 className="w-4 h-4" />
-                        Delete table
-                    </button>
-                </div>
+                    {isMenuOpen && (
+                        <TableActionMenu
+                            contextRef={menuRootRef}
+                            onClose={() => setIsMenuOpen(false)}
+                            tableCellNode={tableCellNode}
+                            cellMerge={cellMerge}
+                        />
+                    )}
+                </>
             )}
-        </>
+        </div>
     );
 }
+
+// ─── plugin export ───────────────────────────────────────────────────────────
 
 export default function TableActionMenuPlugin({
     anchorElem = document.body,
@@ -328,12 +406,10 @@ export default function TableActionMenuPlugin({
 }: {
     anchorElem?: HTMLElement;
     cellMerge?: boolean;
-}) {
+}): ReactPortal | null {
+    const isEditable = useLexicalEditable();
     return createPortal(
-        <TableCellActionMenuContainer
-            anchorElem={anchorElem}
-            cellMerge={cellMerge}
-        />,
-        anchorElem
+        isEditable ? <TableCellActionMenuContainer anchorElem={anchorElem} cellMerge={cellMerge} /> : null,
+        anchorElem,
     );
 }

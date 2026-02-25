@@ -169,8 +169,188 @@ html {
   animation: pulse-slow 4s ease-in-out infinite;
 }
 
+/* Neutralize Tailwind prose overrides inside Lexical code blocks */
+.prose .lexical-code-block,
+.prose-sm .lexical-code-block {
+  background-color: rgb(240, 242, 245);
+  color: #1a1a1a;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: normal;
+  padding: 8px 8px 8px 0;
+}
+
+.dark .prose .lexical-code-block,
+.dark .prose-sm .lexical-code-block {
+  background-color: #282c34;
+  color: #abb2bf;
+}
+
+.prose .lexical-code-block::before,
+.prose-sm .lexical-code-block::before {
+  content: attr(data-gutter);
+}
+
 /* Scroll offset for sticky header anchor links */
 [id] {
   scroll-margin-top: 5rem;
 }
 
+/* ─── Lexical Code Block ────────────────────────────────────────────────── */
+.lexical-code-block {
+  display: block;
+  background-color: rgb(240, 242, 245);
+  color: #1a1a1a;
+  font-family: Menlo, Consolas, Monaco, monospace;
+  font-size: 13px;
+  line-height: 1.53;
+  padding: 8px 8px 8px 0;
+  border-radius: 6px;
+  margin: 8px 0;
+  overflow-x: auto;
+  tab-size: 2;
+  white-space: pre;
+  position: relative;
+}
+
+/* Sticky line-number gutter — float+sticky (same as Lexical playground) */
+.lexical-code-block::before {
+  content: attr(data-gutter);
+  position: sticky;
+  background-color: #eaedf2;
+  left: 0;
+  float: left;
+  top: 0;
+  z-index: 3;
+  min-height: 100%;
+  border-right: 1px solid #d0d4dc;
+  padding: 8px 10px 8px 8px;
+  color: #888;
+  font-size: 12px;
+  line-height: 1.53;
+  white-space: pre-wrap;
+  text-align: right;
+  min-width: 28px;
+  margin-right: 10px;
+  margin-top: -8px;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.dark .lexical-code-block {
+  background-color: #282c34;
+  color: #abb2bf;
+}
+
+.dark .lexical-code-block::before {
+  background-color: #21252b;
+  border-right-color: #3e4451;
+  color: #636d83;
+}
+
+/* ── Table cell selection highlights ─────────────────────────────────────── */
+.lexical-table-cell-selected {
+  background-color: hsl(var(--primary) / 0.12);
+  caret-color: transparent;
+}
+.dark .lexical-table-cell-selected {
+  background-color: hsl(var(--primary) / 0.2);
+}
+.lexical-table-cell-primary-selected {
+  border: 2px solid hsl(var(--primary));
+  display: block;
+  height: calc(100% - 2px);
+  position: absolute;
+  width: calc(100% - 2px);
+  left: 0;
+  top: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ── Table action button container ───────────────────────────────────────── */
+.table-cell-action-button-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+  z-index: 10;
+}
+.table-cell-action-button-container--inactive {
+  display: none;
+}
+.table-cell-action-button-container--active {
+  display: block;
+}
+.table-cell-action-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background-color: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
+  cursor: pointer;
+  color: hsl(var(--muted-foreground));
+  transition: background-color 0.15s, color 0.15s;
+}
+.table-cell-action-button:hover {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+/* ── Table cells (custom theme classes) ──────────────────────────────────── */
+.lexical-table-cell {
+  border: 1px solid hsl(var(--border));
+  padding: 8px;
+  min-width: 75px;
+  position: relative;
+  vertical-align: top;
+  text-align: start;
+  outline: none;
+  overflow: hidden;
+}
+.lexical-table-cell-header {
+  border: 1px solid hsl(var(--border));
+  padding: 8px;
+  position: relative;
+  vertical-align: top;
+  text-align: start;
+  outline: none;
+  overflow: hidden;
+  background-color: hsl(var(--muted));
+  font-weight: 600;
+}
+
+/* ── Scrollable table wrapper (hasHorizontalScroll) ─────────────────────── */
+.lexical-table-scrollable-wrapper {
+  overflow-x: auto;
+  width: 100%;
+  margin: 1rem 0 0.5rem;
+}
+/* When table has explicit colWidths the table's own width is set via colgroup;
+   table-layout: fixed ensures the column widths are respected strictly.    */
+.lexical-table-scrollable-wrapper > table {
+  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+/* ── TableCellResizer handles ────────────────────────────────────────────── */
+.TableCellResizer__resizer {
+  position: fixed;
+  touch-action: none;
+  z-index: 200;
+}
+.TableCellResizer__ui {
+  pointer-events: auto;
+}
+@media (pointer: coarse) {
+  /* Highlight resize handles on touch devices */
+  .TableCellResizer__resizer {
+    background-color: #76b6ff;
+    mix-blend-mode: color;
+  }
+}

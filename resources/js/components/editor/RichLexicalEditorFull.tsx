@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useState, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -13,11 +14,14 @@ import { TabIndentationPlugin } from '@lexical/react/LexicalTabIndentationPlugin
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import {
     $getRoot,
+    $getNodeByKey,
     $createParagraphNode,
     $createTextNode,
     $getSelection,
     $isRangeSelection,
+    $isParagraphNode,
     FORMAT_TEXT_COMMAND,
+    FORMAT_ELEMENT_COMMAND,
     UNDO_COMMAND,
     REDO_COMMAND,
     COMMAND_PRIORITY_LOW,
@@ -26,6 +30,8 @@ import {
     $isTextNode,
     createCommand,
     LexicalCommand,
+    RangeSelection,
+    $getNearestNodeFromDOMNode,
 } from 'lexical';
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
 import {
@@ -33,6 +39,8 @@ import {
     QuoteNode,
     $createHeadingNode,
     $createQuoteNode,
+    $isHeadingNode,
+    $isQuoteNode,
 } from '@lexical/rich-text';
 import {
     ListNode,
@@ -42,9 +50,10 @@ import {
     INSERT_ORDERED_LIST_COMMAND,
     INSERT_UNORDERED_LIST_COMMAND,
     INSERT_CHECK_LIST_COMMAND,
+    $isListNode,
 } from '@lexical/list';
 import { LinkNode, AutoLinkNode, TOGGLE_LINK_COMMAND, $isLinkNode } from '@lexical/link';
-import { CodeNode, CodeHighlightNode, $createCodeNode } from '@lexical/code';
+import { CodeNode, CodeHighlightNode, $createCodeNode, $isCodeNode, registerCodeHighlighting, getLanguageFriendlyName, normalizeCodeLang, getCodeLanguageOptions } from '@lexical/code';
 import {
     TableNode,
     TableCellNode,
@@ -54,7 +63,8 @@ import {
 import { HorizontalRuleNode, INSERT_HORIZONTAL_RULE_COMMAND } from '@lexical/react/LexicalHorizontalRuleNode';
 import { HorizontalRulePlugin } from '@lexical/react/LexicalHorizontalRulePlugin';
 import { TRANSFORMERS } from '@lexical/markdown';
-import { $setBlocksType } from '@lexical/selection';
+import { $setBlocksType, $patchStyleText, $getSelectionStyleValueForProperty } from '@lexical/selection';
+import { $getNearestNodeOfType } from '@lexical/utils';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -106,6 +116,15 @@ import {
     Figma,
     Pencil,
     Calendar,
+    AlignLeft,
+    AlignCenter,
+    AlignRight,
+    AlignJustify,
+    GripVertical,
+    Plus,
+    Copy,
+    Check,
+    Wand2,
 } from 'lucide-react';
 
 // Import custom nodes
@@ -143,6 +162,7 @@ import {
 } from './nodes';
 
 import TableActionMenuPlugin from './plugins/TableActionMenuPlugin';
+import TableCellResizerPlugin from './plugins/TableCellResizerPlugin';
 
 // Custom commands
 export const INSERT_IMAGE_COMMAND: LexicalCommand<{ src: string; altText: string }> = createCommand();
@@ -180,7 +200,7 @@ const theme = {
         },
     },
     quote: 'border-l-4 border-primary/30 pl-4 italic text-muted-foreground my-4 py-2',
-    code: 'bg-muted px-1.5 py-0.5 rounded font-mono text-sm',
+    code: 'lexical-code-block',
     codeHighlight: {
         atrule: 'text-purple-500',
         attr: 'text-blue-500',
@@ -201,10 +221,10 @@ const theme = {
         keyword: 'text-purple-500',
         namespace: 'text-red-500',
         number: 'text-orange-500',
-        operator: 'text-gray-600',
+        operator: 'text-gray-400',
         prolog: 'text-gray-500',
-        property: 'text-blue-500',
-        punctuation: 'text-gray-600',
+        property: 'text-blue-400',
+        punctuation: 'text-gray-400',
         regex: 'text-green-500',
         selector: 'text-yellow-500',
         string: 'text-green-500',
@@ -221,12 +241,83 @@ const theme = {
         strikethrough: 'line-through',
         code: 'bg-muted px-1.5 py-0.5 rounded font-mono text-sm',
     },
-    table: 'border-collapse border border-border my-4 w-full',
-    tableCell: 'border border-border p-2 min-w-[75px] relative',
-    tableCellHeader: 'border border-border p-2 bg-muted font-semibold',
+    table: 'border-collapse border border-border my-4',
+    tableCell: 'lexical-table-cell',
+    tableCellHeader: 'lexical-table-cell-header',
+    tableScrollableWrapper: 'lexical-table-scrollable-wrapper',
+    tableCellSelected: 'lexical-table-cell-selected',
+    tableCellPrimarySelected: 'lexical-table-cell-primary-selected',
+    tableCellSortedIndicator: 'lexical-table-cell-sorted',
     horizontalRule: 'border-t border-border my-6',
     image: 'inline-block my-2',
 };
+
+// ─── Toolbar constants ─────────────────────────────────────────────────────────
+
+const FONT_FAMILIES = [
+    { label: 'Default', value: '' },
+    { label: 'Arial', value: 'Arial' },
+    { label: 'Courier New', value: 'Courier New' },
+    { label: 'Georgia', value: 'Georgia' },
+    { label: 'Times New Roman', value: 'Times New Roman' },
+    { label: 'Trebuchet MS', value: 'Trebuchet MS' },
+    { label: 'Verdana', value: 'Verdana' },
+];
+
+const COLOR_PALETTE = [
+    '#000000', '#262626', '#595959', '#8c8c8c', '#bfbfbf', '#d9d9d9', '#f0f0f0', '#ffffff',
+    '#ff4d4f', '#ff7a45', '#ffa940', '#ffd666', '#95de64', '#5cdbd3', '#69c0ff', '#b37feb',
+    '#ff85c2', '#ff9c6e', '#ffc069', '#ffe58f', '#b7eb8f', '#87e8de', '#91d5ff', '#d3adf7',
+    '#ffa39e', '#ffbb96', '#ffd591', '#ffe7ba', '#d9f7be', '#b5f5ec', '#bae7ff', '#efdbff',
+];
+
+const ALIGN_OPTIONS = [
+    { label: 'Left Align', value: 'left', icon: AlignLeft },
+    { label: 'Center Align', value: 'center', icon: AlignCenter },
+    { label: 'Right Align', value: 'right', icon: AlignRight },
+    { label: 'Justify', value: 'justify', icon: AlignJustify },
+];
+
+// ─── ColorPicker component ─────────────────────────────────────────────────────
+
+function ColorPicker({ color, onChange, label }: { color: string; onChange: (c: string) => void; label: string }) {
+    const [custom, setCustom] = useState(color || '#000000');
+    return (
+        <div className="p-3 w-52">
+            <div className="text-xs font-medium mb-2 text-muted-foreground">{label}</div>
+            <div className="grid grid-cols-8 gap-1 mb-2">
+                {COLOR_PALETTE.map((c) => (
+                    <button
+                        key={c}
+                        type="button"
+                        title={c}
+                        className={cn(
+                            'w-5 h-5 rounded-sm border border-border/60 hover:scale-110 transition-transform',
+                            color === c && 'ring-2 ring-primary ring-offset-1'
+                        )}
+                        style={{ backgroundColor: c }}
+                        onClick={() => onChange(c)}
+                    />
+                ))}
+            </div>
+            <div className="flex items-center gap-2">
+                <div
+                    className="w-5 h-5 rounded-sm border border-border shrink-0"
+                    style={{ backgroundColor: custom }}
+                />
+                <input
+                    type="text"
+                    value={custom}
+                    onChange={(e) => setCustom(e.target.value)}
+                    onBlur={() => onChange(custom)}
+                    onKeyDown={(e) => e.key === 'Enter' && onChange(custom)}
+                    className="flex-1 text-xs border rounded px-1.5 py-1 bg-background outline-none focus:ring-1 ring-primary"
+                    placeholder="#000000"
+                />
+            </div>
+        </div>
+    );
+}
 
 // Slash command menu items interface
 interface SlashMenuItem {
@@ -828,44 +919,134 @@ function SlashCommandsPlugin() {
 
 // Modal Components
 function InsertImageModal({ open, onClose, onInsert }: { open: boolean; onClose: () => void; onInsert: (src: string, alt: string) => void }) {
+    const [tab, setTab] = useState<'upload' | 'url'>('upload');
     const [src, setSrc] = useState('');
     const [alt, setAlt] = useState('');
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState('');
+    const [dragOver, setDragOver] = useState(false);
+    const [preview, setPreview] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleSubmit = () => {
-        if (src) {
-            onInsert(src, alt || 'Image');
-            setSrc('');
-            setAlt('');
+    const reset = () => {
+        setSrc(''); setAlt(''); setUploadError(''); setPreview(null); setDragOver(false);
+    };
+
+    const handleClose = () => { reset(); onClose(); };
+
+    const uploadFile = async (file: File) => {
+        if (!file.type.startsWith('image/')) { setUploadError('Please select an image file.'); return; }
+        setUploading(true); setUploadError('');
+        const formData = new FormData();
+        formData.append('image', file);
+        const csrf = document.head.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+        try {
+            const res = await fetch('/upload/image', {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                body: formData,
+            });
+            const data = await res.json();
+            if (data.success && data.file?.url) {
+                setPreview(data.file.url);
+                setSrc(data.file.url);
+                if (!alt) setAlt(file.name.replace(/\.[^.]+$/, ''));
+            } else {
+                setUploadError('Upload failed. Please try again.');
+            }
+        } catch {
+            setUploadError('Upload failed. Please try again.');
+        } finally {
+            setUploading(false);
         }
     };
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) uploadFile(file);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault(); setDragOver(false);
+        const file = e.dataTransfer.files?.[0];
+        if (file) uploadFile(file);
+    };
+
+    const handleSubmit = () => {
+        if (src) { onInsert(src, alt || 'Image'); reset(); }
+    };
+
     return (
-        <Dialog open={open} onOpenChange={onClose}>
-            <DialogContent>
+        <Dialog open={open} onOpenChange={handleClose}>
+            <DialogContent className="max-w-md">
                 <DialogHeader>
                     <DialogTitle>Insert Image</DialogTitle>
                 </DialogHeader>
-                <div className="space-y-4">
-                    <div>
-                        <Label>Image URL</Label>
-                        <Input
-                            value={src}
-                            onChange={(e) => setSrc(e.target.value)}
-                            placeholder="https://example.com/image.jpg"
-                        />
-                    </div>
-                    <div>
-                        <Label>Alt Text</Label>
-                        <Input
-                            value={alt}
-                            onChange={(e) => setAlt(e.target.value)}
-                            placeholder="Image description"
-                        />
-                    </div>
+
+                {/* Tabs */}
+                <div className="flex border-b mb-4">
+                    {(['upload', 'url'] as const).map(t => (
+                        <button key={t} type="button"
+                            className={cn('px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                                tab === t ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground')}
+                            onClick={() => { setTab(t); reset(); }}>
+                            {t === 'upload' ? 'Upload File' : 'From URL'}
+                        </button>
+                    ))}
                 </div>
+
+                {tab === 'upload' ? (
+                    <div className="space-y-3">
+                        {/* Drop zone */}
+                        <div
+                            className={cn('border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors',
+                                dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 hover:bg-muted/30')}
+                            onClick={() => fileInputRef.current?.click()}
+                            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                            onDragLeave={() => setDragOver(false)}
+                            onDrop={handleDrop}
+                        >
+                            {uploading ? (
+                                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                                    <div className="size-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                    <p className="text-sm">Uploading…</p>
+                                </div>
+                            ) : preview ? (
+                                <div className="flex flex-col items-center gap-2">
+                                    <img src={preview} alt="preview" className="max-h-40 max-w-full rounded object-contain" />
+                                    <p className="text-xs text-muted-foreground">Click or drop to replace</p>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                                    <ImageIcon className="size-8 opacity-40" />
+                                    <p className="text-sm">Drop an image here, or <span className="text-primary font-medium">click to browse</span></p>
+                                    <p className="text-xs">JPEG, PNG, GIF, WebP — up to 10 MB</p>
+                                </div>
+                            )}
+                        </div>
+                        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                        {uploadError && <p className="text-sm text-destructive">{uploadError}</p>}
+                        <div>
+                            <Label className="text-xs">Alt Text</Label>
+                            <Input value={alt} onChange={(e) => setAlt(e.target.value)} placeholder="Image description" className="mt-1" />
+                        </div>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        <div>
+                            <Label className="text-xs">Image URL</Label>
+                            <Input value={src} onChange={(e) => setSrc(e.target.value)} placeholder="https://example.com/image.jpg" className="mt-1" />
+                        </div>
+                        <div>
+                            <Label className="text-xs">Alt Text</Label>
+                            <Input value={alt} onChange={(e) => setAlt(e.target.value)} placeholder="Image description" className="mt-1" />
+                        </div>
+                    </div>
+                )}
+
                 <DialogFooter>
-                    <Button variant="outline" onClick={onClose}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={!src}>Insert</Button>
+                    <Button variant="outline" onClick={handleClose}>Cancel</Button>
+                    <Button onClick={handleSubmit} disabled={!src || uploading}>Insert</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -1348,6 +1529,232 @@ function CommandsPlugin() {
     return null;
 }
 
+// ─── Draggable Block Plugin ────────────────────────────────────────────────────
+
+function DraggableBlockPlugin({ anchorElem }: { anchorElem: HTMLElement | null }) {
+    const [editor] = useLexicalComposerContext();
+    const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+    // Viewport-relative coords (for position:fixed via portal)
+    const [handlePos, setHandlePos] = useState({ top: 0, left: 0 });
+    const [showAddMenu, setShowAddMenu] = useState(false);
+    const [dropLine, setDropLine] = useState<{ top: number; left: number; width: number } | null>(null);
+    const draggedKeyRef = useRef<string | null>(null);
+    const isDraggingRef = useRef(false);
+    const isOverHandleRef = useRef(false);
+    const [draggedKey, setDraggedKey] = useState<string | null>(null);
+
+    const getTopBlockUnderY = useCallback((clientY: number): { key: string; el: HTMLElement } | null => {
+        if (!anchorElem) return null;
+        let found: { key: string; el: HTMLElement } | null = null;
+        editor.getEditorState().read(() => {
+            const root = $getRoot();
+            for (const child of root.getChildren()) {
+                const key = child.getKey();
+                const el = editor.getElementByKey(key) as HTMLElement | null;
+                if (el) {
+                    const r = el.getBoundingClientRect();
+                    if (clientY >= r.top - 2 && clientY <= r.bottom + 2) {
+                        found = { key, el };
+                        break;
+                    }
+                }
+            }
+        });
+        return found;
+    }, [editor, anchorElem]);
+
+    // Hide handle on any scroll so stale fixed positions don't linger
+    useEffect(() => {
+        const onScroll = () => { if (!isDraggingRef.current) setHoveredKey(null); };
+        window.addEventListener('scroll', onScroll, true);
+        return () => window.removeEventListener('scroll', onScroll, true);
+    }, []);
+
+    useEffect(() => {
+        if (!anchorElem) return;
+        const onMouseMove = (e: MouseEvent) => {
+            if (isDraggingRef.current) return;
+            const block = getTopBlockUnderY(e.clientY);
+            if (block) {
+                setHoveredKey(block.key);
+                const r = block.el.getBoundingClientRect();
+                // Store raw viewport coords — used with position:fixed
+                setHandlePos({ top: r.top, left: r.left });
+            } else {
+                setHoveredKey(null);
+            }
+        };
+        const onMouseLeave = () => { if (!isDraggingRef.current && !isOverHandleRef.current) setHoveredKey(null); };
+        anchorElem.addEventListener('mousemove', onMouseMove);
+        anchorElem.addEventListener('mouseleave', onMouseLeave);
+        return () => {
+            anchorElem.removeEventListener('mousemove', onMouseMove);
+            anchorElem.removeEventListener('mouseleave', onMouseLeave);
+        };
+    }, [anchorElem, getTopBlockUnderY]);
+
+    useEffect(() => {
+        const onDragOver = (e: DragEvent) => {
+            if (!isDraggingRef.current || !anchorElem) return;
+            e.preventDefault();
+            e.dataTransfer!.dropEffect = 'move';
+            const block = getTopBlockUnderY(e.clientY);
+            if (block && block.key !== draggedKeyRef.current) {
+                const r = block.el.getBoundingClientRect();
+                const isAbove = e.clientY < r.top + r.height / 2;
+                // Viewport coords for fixed drop line
+                setDropLine({ top: isAbove ? r.top : r.bottom, left: r.left, width: r.width });
+            } else {
+                setDropLine(null);
+            }
+        };
+        const onDrop = (e: DragEvent) => {
+            if (!isDraggingRef.current || !draggedKeyRef.current) return;
+            e.preventDefault();
+            const block = getTopBlockUnderY(e.clientY);
+            if (block && block.key !== draggedKeyRef.current) {
+                const r = block.el.getBoundingClientRect();
+                const isAbove = e.clientY < r.top + r.height / 2;
+                editor.update(() => {
+                    const dragged = $getNodeByKey(draggedKeyRef.current!);
+                    const target = $getNodeByKey(block.key);
+                    if (dragged && target) {
+                        if (isAbove) target.insertBefore(dragged);
+                        else target.insertAfter(dragged);
+                    }
+                });
+            }
+            isDraggingRef.current = false;
+            draggedKeyRef.current = null;
+            setDraggedKey(null);
+            setDropLine(null);
+        };
+        const onDragEnd = () => {
+            isDraggingRef.current = false;
+            draggedKeyRef.current = null;
+            setDraggedKey(null);
+            setDropLine(null);
+        };
+        document.addEventListener('dragover', onDragOver);
+        document.addEventListener('drop', onDrop);
+        document.addEventListener('dragend', onDragEnd);
+        return () => {
+            document.removeEventListener('dragover', onDragOver);
+            document.removeEventListener('drop', onDrop);
+            document.removeEventListener('dragend', onDragEnd);
+        };
+    }, [editor, anchorElem, getTopBlockUnderY]);
+
+    const handleDragStart = (e: React.DragEvent) => {
+        if (!hoveredKey) return;
+        isDraggingRef.current = true;
+        draggedKeyRef.current = hoveredKey;
+        setDraggedKey(hoveredKey);
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', hoveredKey);
+    };
+
+    const insertBlockAfter = (type: string) => {
+        if (!hoveredKey) return;
+        editor.update(() => {
+            const node = $getNodeByKey(hoveredKey);
+            if (!node) return;
+            let newNode: any;
+            if (type === 'h1') newNode = $createHeadingNode('h1');
+            else if (type === 'h2') newNode = $createHeadingNode('h2');
+            else if (type === 'h3') newNode = $createHeadingNode('h3');
+            else if (type === 'quote') newNode = $createQuoteNode();
+            else if (type === 'code') newNode = $createCodeNode();
+            else newNode = $createParagraphNode();
+            const text = $createTextNode('');
+            newNode.append(text);
+            node.insertAfter(newNode);
+            text.select();
+        });
+        setShowAddMenu(false);
+    };
+
+    // Render via portal into document.body so overflow:hidden on the editor wrapper never clips the handles
+    const handles = hoveredKey ? createPortal(
+        <>
+            <div
+                className="fixed z-[200] flex items-center gap-0"
+                style={{ top: handlePos.top + 2, left: handlePos.left - 60 }}
+                onMouseEnter={() => { isOverHandleRef.current = true; }}
+                onMouseLeave={() => { isOverHandleRef.current = false; setHoveredKey(null); }}
+            >
+                <Popover open={showAddMenu} onOpenChange={setShowAddMenu}>
+                    <PopoverTrigger asChild>
+                        <button
+                            type="button"
+                            className="h-6 w-6 flex items-center justify-center rounded hover:bg-accent text-muted-foreground/60 hover:text-foreground transition-colors"
+                            title="Add block below"
+                        >
+                            <Plus className="size-3.5" />
+                        </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-48 p-1" align="start">
+                        {[
+                            { label: 'Paragraph', value: 'paragraph', icon: <Type className="size-3.5" /> },
+                            { label: 'Heading 1', value: 'h1', icon: <Heading1 className="size-3.5" /> },
+                            { label: 'Heading 2', value: 'h2', icon: <Heading2 className="size-3.5" /> },
+                            { label: 'Heading 3', value: 'h3', icon: <Heading3 className="size-3.5" /> },
+                            { label: 'Quote', value: 'quote', icon: <QuoteIcon className="size-3.5" /> },
+                            { label: 'Code Block', value: 'code', icon: <FileCode className="size-3.5" /> },
+                            { label: 'Bullet List', value: 'bullet', icon: <List className="size-3.5" /> },
+                            { label: 'Numbered List', value: 'number', icon: <ListOrdered className="size-3.5" /> },
+                        ].map(bt => (
+                            <button
+                                key={bt.value}
+                                type="button"
+                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted text-left"
+                                onClick={() => {
+                                    if (bt.value === 'bullet') {
+                                        insertBlockAfter('paragraph');
+                                        editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined);
+                                    } else if (bt.value === 'number') {
+                                        insertBlockAfter('paragraph');
+                                        editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined);
+                                    } else {
+                                        insertBlockAfter(bt.value);
+                                    }
+                                }}
+                            >
+                                {bt.icon}
+                                {bt.label}
+                            </button>
+                        ))}
+                    </PopoverContent>
+                </Popover>
+
+                <button
+                    type="button"
+                    className="h-6 w-6 flex items-center justify-center rounded hover:bg-accent text-muted-foreground/60 hover:text-foreground transition-colors cursor-grab active:cursor-grabbing"
+                    draggable
+                    onDragStart={handleDragStart}
+                    title="Drag to reorder"
+                >
+                    <GripVertical className="size-3.5" />
+                </button>
+            </div>
+            {dropLine && (
+                <div
+                    className="fixed bg-primary h-0.5 z-[200] pointer-events-none rounded"
+                    style={{ top: dropLine.top, left: dropLine.left, width: dropLine.width }}
+                />
+            )}
+        </>,
+        document.body
+    ) : (dropLine ? createPortal(
+        <div
+            className="fixed bg-primary h-0.5 z-[200] pointer-events-none rounded"
+            style={{ top: dropLine.top, left: dropLine.left, width: dropLine.width }}
+        />,
+        document.body
+    ) : null);
+
+    return <>{handles}</>;
+}
 // Toolbar Plugin
 function ToolbarPlugin({ showToolbar = true }: { showToolbar?: boolean }) {
     const [editor] = useLexicalComposerContext();
@@ -1357,8 +1764,37 @@ function ToolbarPlugin({ showToolbar = true }: { showToolbar?: boolean }) {
     const [isStrikethrough, setIsStrikethrough] = useState(false);
     const [isCode, setIsCode] = useState(false);
     const [isLink, setIsLink] = useState(false);
+    const [blockType, setBlockType] = useState('paragraph');
+    const [fontSize, setFontSize] = useState('15');
+    const [fontFamily, setFontFamily] = useState('');
+    const [fontColor, setFontColor] = useState('#000000');
+    const [bgColor, setBgColor] = useState('transparent');
+    const [elementFormat, setElementFormat] = useState('left');
     const [linkUrl, setLinkUrl] = useState('');
     const [showLinkInput, setShowLinkInput] = useState(false);
+    const [showFontColorPicker, setShowFontColorPicker] = useState(false);
+    const [showBgColorPicker, setShowBgColorPicker] = useState(false);
+    const [showInsertMenu, setShowInsertMenu] = useState(false);
+    const [showAlignMenu, setShowAlignMenu] = useState(false);
+    const [showCaseMenu, setShowCaseMenu] = useState(false);
+    const [showBlockMenu, setShowBlockMenu] = useState(false);
+    const [showFontFamilyMenu, setShowFontFamilyMenu] = useState(false);
+    // Toolbar's own modal states (mirror of slash command modals)
+    const [showImageModal, setShowImageModal] = useState(false);
+    const [showTableModal, setShowTableModal] = useState(false);
+    const [showYouTubeModal, setShowYouTubeModal] = useState(false);
+
+    const BLOCK_TYPE_OPTIONS = [
+        { label: 'Normal', value: 'paragraph', icon: <Type className="size-4" /> },
+        { label: 'Heading 1', value: 'h1', icon: <Heading1 className="size-4" /> },
+        { label: 'Heading 2', value: 'h2', icon: <Heading2 className="size-4" /> },
+        { label: 'Heading 3', value: 'h3', icon: <Heading3 className="size-4" /> },
+        { label: 'Quote', value: 'quote', icon: <QuoteIcon className="size-4" /> },
+        { label: 'Code Block', value: 'code', icon: <FileCode className="size-4" /> },
+        { label: 'Bullet List', value: 'bullet', icon: <List className="size-4" /> },
+        { label: 'Numbered List', value: 'number', icon: <ListOrdered className="size-4" /> },
+        { label: 'Check List', value: 'check', icon: <ListChecks className="size-4" /> },
+    ];
 
     const updateToolbar = useCallback(() => {
         const selection = $getSelection();
@@ -1368,239 +1804,526 @@ function ToolbarPlugin({ showToolbar = true }: { showToolbar?: boolean }) {
             setIsUnderline(selection.hasFormat('underline'));
             setIsStrikethrough(selection.hasFormat('strikethrough'));
             setIsCode(selection.hasFormat('code'));
-
             const node = selection.anchor.getNode();
             const parent = node.getParent();
             setIsLink($isLinkNode(parent) || $isLinkNode(node));
+
+            const rawSize = $getSelectionStyleValueForProperty(selection as RangeSelection, 'font-size', '15px');
+            setFontSize(rawSize ? rawSize.replace('px', '') : '15');
+            setFontFamily($getSelectionStyleValueForProperty(selection as RangeSelection, 'font-family', '').replace(/['"]/g, ''));
+            setFontColor($getSelectionStyleValueForProperty(selection as RangeSelection, 'color', '#000000') || '#000000');
+            setBgColor($getSelectionStyleValueForProperty(selection as RangeSelection, 'background-color', 'transparent') || 'transparent');
+
+            const anchorNode = selection.anchor.getNode();
+            const element = anchorNode.getKey() === 'root' ? anchorNode : anchorNode.getTopLevelElementOrThrow();
+            if ($isHeadingNode(element)) {
+                setBlockType(element.getTag());
+            } else if ($isListNode(element)) {
+                const parentList = $getNearestNodeOfType<ListNode>(anchorNode, ListNode);
+                const listType = (parentList ?? element).getListType();
+                setBlockType(listType === 'bullet' ? 'bullet' : listType === 'number' ? 'number' : 'check');
+            } else if ($isCodeNode(element)) {
+                setBlockType('code');
+            } else if ($isQuoteNode(element)) {
+                setBlockType('quote');
+            } else {
+                setBlockType('paragraph');
+            }
+            if ('getFormatType' in element) {
+                setElementFormat((element as any).getFormatType() || 'left');
+            }
         }
     }, []);
 
     useEffect(() => {
         return editor.registerUpdateListener(({ editorState }) => {
-            editorState.read(() => {
-                updateToolbar();
-            });
+            editorState.read(() => updateToolbar());
         });
     }, [editor, updateToolbar]);
 
+    const applyBlockType = (type: string) => {
+        editor.update(() => {
+            const sel = $getSelection();
+            if (!$isRangeSelection(sel)) return;
+            switch (type) {
+                case 'paragraph': $setBlocksType(sel, () => $createParagraphNode()); break;
+                case 'h1': case 'h2': case 'h3':
+                    $setBlocksType(sel, () => $createHeadingNode(type as 'h1' | 'h2' | 'h3')); break;
+                case 'quote': $setBlocksType(sel, () => $createQuoteNode()); break;
+                case 'code': $setBlocksType(sel, () => $createCodeNode()); break;
+                case 'bullet': editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined); break;
+                case 'number': editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined); break;
+                case 'check': editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined); break;
+            }
+        }, { discrete: true });
+        setShowBlockMenu(false);
+    };
+
+    const applyFontSize = (size: string) => {
+        const num = parseInt(size, 10);
+        if (isNaN(num) || num < 6 || num > 96) return;
+        editor.update(() => {
+            const sel = $getSelection();
+            if ($isRangeSelection(sel)) $patchStyleText(sel as RangeSelection, { 'font-size': num + 'px' });
+        });
+        setFontSize(String(num));
+    };
+
     const insertLink = useCallback(() => {
-        if (!linkUrl) {
-            editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
-        } else {
-            editor.dispatchCommand(TOGGLE_LINK_COMMAND, linkUrl);
-        }
+        if (!linkUrl) editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
+        else editor.dispatchCommand(TOGGLE_LINK_COMMAND, linkUrl);
         setShowLinkInput(false);
         setLinkUrl('');
     }, [editor, linkUrl]);
 
     if (!showToolbar) return null;
 
+    const currentBlock = BLOCK_TYPE_OPTIONS.find(b => b.value === blockType) ?? BLOCK_TYPE_OPTIONS[0];
+    const currentFont = FONT_FAMILIES.find(f => f.value === fontFamily) ?? FONT_FAMILIES[0];
+    const currentAlign = ALIGN_OPTIONS.find(a => a.value === elementFormat) ?? ALIGN_OPTIONS[0];
+    const AlignIcon = currentAlign.icon;
+
+    const Divider = () => <div className="w-px h-5 bg-border mx-0.5 shrink-0" />;
+
     return (
-        <div className="flex items-center gap-0.5 p-1.5 border-b bg-muted/30 flex-wrap">
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={cn("h-8 w-8 p-0", isBold && "bg-muted")}
-                onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold')}
-                title="Bold (Ctrl+B)"
-            >
-                <Bold className="h-4 w-4" />
-            </Button>
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={cn("h-8 w-8 p-0", isItalic && "bg-muted")}
-                onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic')}
-                title="Italic (Ctrl+I)"
-            >
-                <Italic className="h-4 w-4" />
-            </Button>
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={cn("h-8 w-8 p-0", isUnderline && "bg-muted")}
-                onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline')}
-                title="Underline (Ctrl+U)"
-            >
-                <Underline className="h-4 w-4" />
-            </Button>
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={cn("h-8 w-8 p-0", isStrikethrough && "bg-muted")}
-                onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'strikethrough')}
-                title="Strikethrough"
-            >
-                <Strikethrough className="h-4 w-4" />
-            </Button>
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={cn("h-8 w-8 p-0", isCode && "bg-muted")}
-                onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'code')}
-                title="Inline Code"
-            >
-                <Code className="h-4 w-4" />
-            </Button>
+        <>
+            <div className="flex items-center gap-0.5 px-1.5 py-1 border-b bg-muted/30 flex-wrap min-h-[40px]">
+                {/* Undo / Redo */}
+                <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0"
+                    onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)} title="Undo (Ctrl+Z)">
+                    <Undo2 className="h-4 w-4" />
+                </Button>
+                <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0"
+                    onClick={() => editor.dispatchCommand(REDO_COMMAND, undefined)} title="Redo (Ctrl+Y)">
+                    <Redo2 className="h-4 w-4" />
+                </Button>
 
-            <div className="w-px h-5 bg-border mx-1" />
+                <Divider />
 
-            <Popover open={showLinkInput} onOpenChange={setShowLinkInput}>
-                <PopoverTrigger asChild>
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={cn("h-8 w-8 p-0", isLink && "bg-muted")}
-                        title="Insert Link"
-                    >
-                        <Link className="h-4 w-4" />
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80 p-3" align="start">
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium">URL</label>
-                        <Input
-                            value={linkUrl}
-                            onChange={(e) => setLinkUrl(e.target.value)}
-                            placeholder="https://example.com"
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    insertLink();
-                                }
-                            }}
-                        />
-                        <div className="flex justify-end gap-2">
-                            {isLink && (
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                        editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
-                                        setShowLinkInput(false);
-                                    }}
-                                >
-                                    Remove Link
-                                </Button>
-                            )}
-                            <Button size="sm" onClick={insertLink}>
-                                {isLink ? 'Update' : 'Insert'}
-                            </Button>
+                {/* Block type */}
+                <Popover open={showBlockMenu} onOpenChange={setShowBlockMenu}>
+                    <PopoverTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm" className="h-8 px-2 gap-1 text-xs max-w-[120px]">
+                            {currentBlock.icon}
+                            <span className="truncate">{currentBlock.label}</span>
+                            <ChevronDown className="size-3 opacity-60 shrink-0" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-44 p-1" align="start">
+                        {BLOCK_TYPE_OPTIONS.map(bt => (
+                            <button key={bt.value} type="button"
+                                className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted text-left', blockType === bt.value && 'bg-muted font-medium')}
+                                onClick={() => applyBlockType(bt.value)}
+                            >
+                                {bt.icon} {bt.label}
+                            </button>
+                        ))}
+                    </PopoverContent>
+                </Popover>
+
+                <Divider />
+
+                {/* Font family */}
+                <Popover open={showFontFamilyMenu} onOpenChange={setShowFontFamilyMenu}>
+                    <PopoverTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm" className="h-8 px-2 gap-1 text-xs min-w-[72px] max-w-[100px]">
+                            <span className="truncate" style={{ fontFamily: fontFamily || undefined }}>{currentFont.label}</span>
+                            <ChevronDown className="size-3 opacity-60 shrink-0" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-44 p-1" align="start">
+                        {FONT_FAMILIES.map(ff => (
+                            <button key={ff.value} type="button"
+                                className={cn('w-full flex items-center px-2 py-1.5 rounded text-sm hover:bg-muted text-left', fontFamily === ff.value && 'bg-muted font-medium')}
+                                style={{ fontFamily: ff.value || undefined }}
+                                onClick={() => {
+                                    editor.update(() => {
+                                        const sel = $getSelection();
+                                        if ($isRangeSelection(sel)) $patchStyleText(sel as RangeSelection, { 'font-family': ff.value });
+                                    });
+                                    setFontFamily(ff.value);
+                                    setShowFontFamilyMenu(false);
+                                }}
+                            >
+                                {ff.label}
+                            </button>
+                        ))}
+                    </PopoverContent>
+                </Popover>
+
+                {/* Font size */}
+                <div className="flex items-center border rounded-md overflow-hidden h-8 shrink-0">
+                    <button type="button"
+                        className="h-8 w-6 flex items-center justify-center hover:bg-muted text-sm select-none"
+                        onClick={() => applyFontSize(String(Math.max(6, Number(fontSize) - 1)))}
+                    >-</button>
+                    <input
+                        type="text"
+                        value={fontSize}
+                        onChange={(e) => setFontSize(e.target.value)}
+                        onBlur={(e) => applyFontSize(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && applyFontSize(fontSize)}
+                        className="w-8 text-center text-xs bg-transparent outline-none border-x"
+                    />
+                    <button type="button"
+                        className="h-8 w-6 flex items-center justify-center hover:bg-muted text-sm select-none"
+                        onClick={() => applyFontSize(String(Math.min(96, Number(fontSize) + 1)))}
+                    >+</button>
+                </div>
+
+                <Divider />
+
+                {/* Text formats */}
+                <Button type="button" variant="ghost" size="sm" className={cn('h-8 w-8 p-0', isBold && 'bg-accent')}
+                    onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold')} title="Bold (Ctrl+B)">
+                    <Bold className="h-4 w-4" />
+                </Button>
+                <Button type="button" variant="ghost" size="sm" className={cn('h-8 w-8 p-0', isItalic && 'bg-accent')}
+                    onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic')} title="Italic (Ctrl+I)">
+                    <Italic className="h-4 w-4" />
+                </Button>
+                <Button type="button" variant="ghost" size="sm" className={cn('h-8 w-8 p-0', isUnderline && 'bg-accent')}
+                    onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline')} title="Underline (Ctrl+U)">
+                    <Underline className="h-4 w-4" />
+                </Button>
+                <Button type="button" variant="ghost" size="sm" className={cn('h-8 w-8 p-0', isCode && 'bg-accent')}
+                    onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'code')} title="Inline Code">
+                    <Code className="h-4 w-4" />
+                </Button>
+
+                {/* Link */}
+                <Popover open={showLinkInput} onOpenChange={setShowLinkInput}>
+                    <PopoverTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm" className={cn('h-8 w-8 p-0', isLink && 'bg-accent')} title="Insert Link">
+                            <Link className="h-4 w-4" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-72 p-3" align="start">
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium">URL</label>
+                            <Input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)}
+                                placeholder="https://example.com" autoFocus
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); insertLink(); } }}
+                            />
+                            <div className="flex justify-end gap-2">
+                                {isLink && (
+                                    <Button size="sm" variant="outline" onClick={() => { editor.dispatchCommand(TOGGLE_LINK_COMMAND, null); setShowLinkInput(false); }}>Remove</Button>
+                                )}
+                                <Button size="sm" onClick={insertLink}>{isLink ? 'Update' : 'Insert'}</Button>
+                            </div>
                         </div>
-                    </div>
-                </PopoverContent>
-            </Popover>
+                    </PopoverContent>
+                </Popover>
 
-            <div className="w-px h-5 bg-border mx-1" />
+                <Divider />
 
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={() => editor.update(() => {
-                    const selection = $getSelection();
-                    if ($isRangeSelection(selection)) {
-                        $setBlocksType(selection, () => $createHeadingNode('h1'));
-                    }
-                })}
-                title="Heading 1"
-            >
-                <Heading1 className="h-4 w-4" />
-            </Button>
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={() => editor.update(() => {
-                    const selection = $getSelection();
-                    if ($isRangeSelection(selection)) {
-                        $setBlocksType(selection, () => $createHeadingNode('h2'));
-                    }
-                })}
-                title="Heading 2"
-            >
-                <Heading2 className="h-4 w-4" />
-            </Button>
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={() => editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined)}
-                title="Bullet List"
-            >
-                <List className="h-4 w-4" />
-            </Button>
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={() => editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined)}
-                title="Numbered List"
-            >
-                <ListOrdered className="h-4 w-4" />
-            </Button>
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={() => editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined)}
-                title="Checklist"
-            >
-                <CheckSquare className="h-4 w-4" />
-            </Button>
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={() => editor.update(() => {
-                    const selection = $getSelection();
-                    if ($isRangeSelection(selection)) {
-                        $setBlocksType(selection, () => $createQuoteNode());
-                    }
-                })}
-                title="Quote"
-            >
-                <QuoteIcon className="h-4 w-4" />
-            </Button>
+                {/* Font color */}
+                <Popover open={showFontColorPicker} onOpenChange={setShowFontColorPicker}>
+                    <PopoverTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm" className="h-8 px-1.5 gap-0.5" title="Font Color">
+                            <div className="flex flex-col items-center gap-px">
+                                <span className="text-xs font-bold leading-none">A</span>
+                                <div className="h-[3px] w-4 rounded-sm" style={{ backgroundColor: ['transparent', '', 'initial'].includes(fontColor) ? '#000000' : fontColor }} />
+                            </div>
+                            <ChevronDown className="size-3 opacity-60" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="p-0 w-auto" align="start">
+                        <ColorPicker color={fontColor} label="Text Color" onChange={(c) => {
+                            editor.update(() => {
+                                const sel = $getSelection();
+                                if ($isRangeSelection(sel)) $patchStyleText(sel as RangeSelection, { color: c });
+                            });
+                            setFontColor(c);
+                            setShowFontColorPicker(false);
+                        }} />
+                    </PopoverContent>
+                </Popover>
 
-            <div className="w-px h-5 bg-border mx-1" />
+                {/* Background color */}
+                <Popover open={showBgColorPicker} onOpenChange={setShowBgColorPicker}>
+                    <PopoverTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm" className="h-8 px-1.5 gap-0.5" title="Background Color">
+                            <div className="flex flex-col items-center gap-px">
+                                <Palette className="size-3.5" />
+                                <div className="h-[3px] w-4 rounded-sm border border-border/40" style={{ backgroundColor: ['transparent', '', 'initial'].includes(bgColor) ? 'transparent' : bgColor }} />
+                            </div>
+                            <ChevronDown className="size-3 opacity-60" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="p-0 w-auto" align="start">
+                        <ColorPicker color={bgColor} label="Background Color" onChange={(c) => {
+                            editor.update(() => {
+                                const sel = $getSelection();
+                                if ($isRangeSelection(sel)) $patchStyleText(sel as RangeSelection, { 'background-color': c });
+                            });
+                            setBgColor(c);
+                            setShowBgColorPicker(false);
+                        }} />
+                    </PopoverContent>
+                </Popover>
 
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)}
-                title="Undo (Ctrl+Z)"
-            >
-                <Undo2 className="h-4 w-4" />
-            </Button>
-            <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0"
-                onClick={() => editor.dispatchCommand(REDO_COMMAND, undefined)}
-                title="Redo (Ctrl+Y)"
-            >
-                <Redo2 className="h-4 w-4" />
-            </Button>
+                <Divider />
 
-            <div className="ml-auto text-xs text-muted-foreground">
-                Type <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">/</kbd> for commands
+                {/* Text case */}
+                <Popover open={showCaseMenu} onOpenChange={setShowCaseMenu}>
+                    <PopoverTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm" className="h-8 px-1.5 gap-0.5 text-xs" title="Text Case">
+                            <span className="font-medium text-sm">Aa</span>
+                            <ChevronDown className="size-3 opacity-60" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-40 p-1" align="start">
+                        {[
+                            { label: 'lowercase', value: 'lowercase' },
+                            { label: 'UPPERCASE', value: 'uppercase' },
+                            { label: 'Capitalize', value: 'capitalize' },
+                            { label: 'Normal', value: 'none' },
+                        ].map(opt => (
+                            <button key={opt.value} type="button"
+                                className="w-full flex items-center px-2 py-1.5 rounded text-sm hover:bg-muted text-left"
+                                style={{ textTransform: opt.value === 'none' ? undefined : (opt.value as any) }}
+                                onClick={() => {
+                                    editor.update(() => {
+                                        const sel = $getSelection();
+                                        if ($isRangeSelection(sel)) $patchStyleText(sel as RangeSelection, { 'text-transform': opt.value === 'none' ? '' : opt.value });
+                                    });
+                                    setShowCaseMenu(false);
+                                }}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </PopoverContent>
+                </Popover>
+
+                <Divider />
+
+                {/* Insert */}
+                <Popover open={showInsertMenu} onOpenChange={setShowInsertMenu}>
+                    <PopoverTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm" className="h-8 px-2 gap-1 text-xs">
+                            <Plus className="size-3.5" />
+                            Insert
+                            <ChevronDown className="size-3 opacity-60" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-52 p-1 max-h-80 overflow-y-auto" align="start">
+                        {[
+                            { label: 'Image', icon: <ImageIcon className="size-4" />, action: () => setShowImageModal(true) },
+                            { label: 'YouTube Video', icon: <Youtube className="size-4" />, action: () => setShowYouTubeModal(true) },
+                            { label: 'Table', icon: <Table className="size-4" />, action: () => setShowTableModal(true) },
+                            { label: 'Horizontal Rule', icon: <Minus className="size-4" />, action: () => editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined) },
+                            { label: 'Code Block', icon: <FileCode className="size-4" />, action: () => editor.update(() => { const s = $getSelection(); if ($isRangeSelection(s)) $setBlocksType(s, () => $createCodeNode()); }) },
+                            { label: 'Bullet List', icon: <List className="size-4" />, action: () => editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined) },
+                            { label: 'Numbered List', icon: <ListOrdered className="size-4" />, action: () => editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined) },
+                            { label: 'Check List', icon: <ListChecks className="size-4" />, action: () => editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined) },
+                            { label: 'Columns Layout', icon: <Columns className="size-4" />, action: () => editor.dispatchCommand(INSERT_LAYOUT_COMMAND, '1fr 1fr') },
+                            { label: 'Collapsible', icon: <ChevronDown className="size-4" />, action: () => editor.dispatchCommand(INSERT_COLLAPSIBLE_COMMAND, undefined) },
+                            { label: 'Sticky Note', icon: <StickyNote className="size-4" />, action: () => editor.dispatchCommand(INSERT_STICKY_NOTE_COMMAND, undefined) },
+                            { label: 'Poll', icon: <BarChart3 className="size-4" />, action: () => editor.dispatchCommand(INSERT_POLL_COMMAND, undefined) },
+                            { label: 'Page Break', icon: <Scissors className="size-4" />, action: () => editor.dispatchCommand(INSERT_PAGE_BREAK_COMMAND, undefined) },
+                        ].map(item => (
+                            <button key={item.label} type="button"
+                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted text-left"
+                                onClick={() => { item.action(); setShowInsertMenu(false); }}
+                            >
+                                {item.icon} {item.label}
+                            </button>
+                        ))}
+                    </PopoverContent>
+                </Popover>
+
+                <Divider />
+
+                {/* Alignment */}
+                <Popover open={showAlignMenu} onOpenChange={setShowAlignMenu}>
+                    <PopoverTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm" className="h-8 px-2 gap-1 text-xs">
+                            <AlignIcon className="size-4" />
+                            <span className="text-xs hidden sm:inline">{currentAlign.label}</span>
+                            <ChevronDown className="size-3 opacity-60" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-44 p-1" align="start">
+                        {ALIGN_OPTIONS.map(opt => {
+                            const Icon = opt.icon;
+                            return (
+                                <button key={opt.value} type="button"
+                                    className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted text-left', elementFormat === opt.value && 'bg-muted font-medium')}
+                                    onClick={() => { editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, opt.value as any); setShowAlignMenu(false); }}
+                                >
+                                    <Icon className="size-4" /> {opt.label}
+                                </button>
+                            );
+                        })}
+                    </PopoverContent>
+                </Popover>
             </div>
+
+            {/* Toolbar-owned modals */}
+            <InsertImageModal open={showImageModal} onClose={() => setShowImageModal(false)}
+                onInsert={(src, alt) => { editor.dispatchCommand(INSERT_IMAGE_COMMAND, { src, altText: alt }); setShowImageModal(false); }} />
+            <InsertYouTubeModal open={showYouTubeModal} onClose={() => setShowYouTubeModal(false)}
+                onInsert={(id) => { editor.dispatchCommand(INSERT_YOUTUBE_COMMAND, id); setShowYouTubeModal(false); }} />
+            <InsertTableModal open={showTableModal} onClose={() => setShowTableModal(false)}
+                onInsert={(rows, cols) => { editor.dispatchCommand(INSERT_TABLE_COMMAND, { rows: String(rows), columns: String(cols) }); setShowTableModal(false); }} />
+        </>
+    );
+}
+
+// Code syntax highlighting + line numbers
+function CodeHighlightPlugin() {
+    const [editor] = useLexicalComposerContext();
+    useEffect(() => registerCodeHighlighting(editor), [editor]);
+    return null;
+}
+
+// Floating code action menu (language label + copy + format)
+function CodeActionMenuPlugin({ anchorElem }: { anchorElem: HTMLElement | null }) {
+    const [editor] = useLexicalComposerContext();
+    const [isShown, setIsShown] = useState(false);
+    const [lang, setLang] = useState('');
+    const [isCopied, setIsCopied] = useState(false);
+    const [isFormatted, setIsFormatted] = useState(false);
+    const [position, setPosition] = useState({ top: '0', right: '0' });
+    const [shouldListen, setShouldListen] = useState(false);
+    const codeDOMNodeRef = useRef<HTMLElement | null>(null);
+    const codeSetRef = useRef<Set<string>>(new Set());
+    const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const fmtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Track code node mutations
+    useEffect(() => {
+        return editor.registerMutationListener(CodeNode, (mutations) => {
+            for (const [key, type] of mutations) {
+                if (type === 'created') codeSetRef.current.add(key);
+                else if (type === 'destroyed') codeSetRef.current.delete(key);
+            }
+            setShouldListen(codeSetRef.current.size > 0);
+        }, { skipInitialization: false });
+    }, [editor]);
+
+    useEffect(() => {
+        if (!shouldListen || !anchorElem) return;
+
+        let moveTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const onMouseMove = (e: MouseEvent) => {
+            if (moveTimer) clearTimeout(moveTimer);
+            moveTimer = setTimeout(() => {
+                const target = e.target as HTMLElement;
+                const codeDOMNode = target.closest<HTMLElement>('code.lexical-code-block');
+                const isOutside = !(codeDOMNode || target.closest('[data-code-menu]'));
+
+                if (isOutside) { setIsShown(false); return; }
+                if (!codeDOMNode) return;
+
+                codeDOMNodeRef.current = codeDOMNode;
+
+                // Use read() — synchronous, no async issues
+                let _lang = '';
+                editor.getEditorState().read(() => {
+                    const node = $getNearestNodeFromDOMNode(codeDOMNode);
+                    if ($isCodeNode(node)) _lang = node.getLanguage() ?? '';
+                });
+
+                const ar = anchorElem.getBoundingClientRect();
+                const cr = codeDOMNode.getBoundingClientRect();
+                setLang(_lang);
+                setIsShown(true);
+                setPosition({
+                    top: `${cr.top - ar.top + anchorElem.scrollTop + 6}px`,
+                    right: `${ar.right - cr.right + 10}px`,
+                });
+            }, 50);
+        };
+
+        document.addEventListener('mousemove', onMouseMove);
+        return () => {
+            setIsShown(false);
+            if (moveTimer) clearTimeout(moveTimer);
+            document.removeEventListener('mousemove', onMouseMove);
+        };
+    }, [shouldListen, anchorElem, editor]);
+
+    const handleCopy = async () => {
+        const codeDOMNode = codeDOMNodeRef.current;
+        if (!codeDOMNode) return;
+        // Read synchronously first, then write to clipboard
+        let content = '';
+        editor.getEditorState().read(() => {
+            const node = $getNearestNodeFromDOMNode(codeDOMNode);
+            if ($isCodeNode(node)) content = node.getTextContent();
+        });
+        try {
+            await navigator.clipboard.writeText(content);
+            setIsCopied(true);
+            if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+            copyTimerRef.current = setTimeout(() => setIsCopied(false), 2000);
+        } catch {}
+    };
+
+    const handleLangChange = (newLang: string) => {
+        const codeDOMNode = codeDOMNodeRef.current;
+        if (!codeDOMNode) return;
+        editor.update(() => {
+            const node = $getNearestNodeFromDOMNode(codeDOMNode);
+            if ($isCodeNode(node)) node.setLanguage(newLang);
+        });
+        setLang(newLang);
+    };
+
+    // "Format" — re-applies indentation by re-setting language (triggers re-highlight)
+    const handleFormat = () => {
+        const codeDOMNode = codeDOMNodeRef.current;
+        if (!codeDOMNode) return;
+        editor.update(() => {
+            const node = $getNearestNodeFromDOMNode(codeDOMNode);
+            if ($isCodeNode(node)) {
+                const currentLang = node.getLanguage() ?? '';
+                node.setLanguage('');
+                node.setLanguage(currentLang);
+            }
+        });
+        setIsFormatted(true);
+        if (fmtTimerRef.current) clearTimeout(fmtTimerRef.current);
+        fmtTimerRef.current = setTimeout(() => setIsFormatted(false), 2000);
+    };
+
+    const friendlyName = lang ? getLanguageFriendlyName(lang) : 'Plain text';
+    const langOptions = getCodeLanguageOptions();
+
+    if (!isShown) return null;
+
+    const btnCls = 'flex items-center justify-center w-7 h-7 rounded border border-transparent hover:border-border/60 text-muted-foreground hover:text-foreground bg-transparent hover:bg-muted/60 transition-colors cursor-pointer';
+
+    return (
+        <div
+            data-code-menu
+            className="absolute z-40 flex items-center gap-1 select-none"
+            style={{ top: position.top, right: position.right }}
+        >
+            {/* Language selector */}
+            <select
+                className="text-[11px] bg-transparent text-muted-foreground border border-transparent hover:border-border/60 hover:bg-muted/60 rounded px-1.5 py-1 cursor-pointer outline-none transition-colors"
+                value={lang}
+                onChange={(e) => handleLangChange(e.target.value)}
+                title="Change language"
+            >
+                <option value="">{friendlyName}</option>
+                {langOptions.map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                ))}
+            </select>
+            {/* Format / prettify button */}
+            <button type="button" className={btnCls} onClick={handleFormat} title="Format code">
+                {isFormatted ? <Check className="size-3.5" /> : <Wand2 className="size-3.5" />}
+            </button>
+            {/* Copy button */}
+            <button type="button" className={btnCls} onClick={handleCopy} title="Copy code">
+                {isCopied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+            </button>
         </div>
     );
 }
@@ -1754,7 +2477,7 @@ export function RichLexicalEditor({
 
     return (
         <LexicalComposer initialConfig={initialConfig}>
-            <div className={cn("border rounded-lg overflow-hidden bg-background", className)}>
+            <div className={cn("border rounded-lg overflow-hidden bg-white dark:bg-card", className)}>
                 <ToolbarPlugin showToolbar={showToolbar && editable} />
                 <div
                     className={cn("relative", maxHeight && "overflow-y-auto")}
@@ -1766,12 +2489,13 @@ export function RichLexicalEditor({
                             <ContentEditable
                                 className={cn(
                                     "outline-none p-4 text-sm prose prose-sm max-w-none",
+                                    editable && "pl-16",
                                     !editable && "cursor-default"
                                 )}
                                 style={{ minHeight }}
                                 aria-placeholder={placeholder}
                                 placeholder={
-                                    <div className="absolute top-4 left-4 text-muted-foreground pointer-events-none text-sm">
+                                    <div className="absolute top-4 left-16 text-muted-foreground pointer-events-none text-sm">
                                         {placeholder}
                                     </div>
                                 }
@@ -1784,16 +2508,24 @@ export function RichLexicalEditor({
                 <ListPlugin />
                 <CheckListPlugin />
                 <LinkPlugin />
-                <TablePlugin hasCellMerge hasCellBackgroundColor />
+                <TablePlugin hasCellMerge hasCellBackgroundColor hasHorizontalScroll />
                 <HorizontalRulePlugin />
                 <TabIndentationPlugin />
                 <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
                 <SlashCommandsPlugin />
                 <CommandsPlugin />
+                <CodeHighlightPlugin />
                 <InitialContentPlugin content={content} editable={editable} contentKey={contentKey} />
                 <HtmlOnChangePlugin onChange={onChange} />
+                {floatingAnchorElem && (
+                    <CodeActionMenuPlugin anchorElem={floatingAnchorElem} />
+                )}
                 {floatingAnchorElem && editable && (
-                    <TableActionMenuPlugin anchorElem={floatingAnchorElem} />
+                    <>
+                        <TableActionMenuPlugin anchorElem={floatingAnchorElem} />
+                        <TableCellResizerPlugin />
+                        <DraggableBlockPlugin anchorElem={floatingAnchorElem} />
+                    </>
                 )}
             </div>
         </LexicalComposer>
