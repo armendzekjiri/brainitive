@@ -69,9 +69,7 @@ class BoardController extends Controller
                                 },
                                 'comments' => function ($c) {
                                     $c->whereNull('parent_id')
-                                        ->with(['user:id,name,email', 'replies' => function ($r) {
-                                            $r->with('user:id,name,email')->orderBy('created_at', 'asc');
-                                        }])
+                                        ->with(['user:id,name,email', 'replies'])
                                         ->orderBy('created_at', 'desc');
                                 }
                             ]);
@@ -293,7 +291,20 @@ class BoardController extends Controller
             'outgoingLinks.targetItem.board:id,name,slug',
             'incomingLinks.sourceItem:id,key,title,board_id',
             'incomingLinks.sourceItem.board:id,name,slug',
+            'attachments' => function ($q) {
+                $q->with('user:id,name,email')->orderBy('created_at', 'desc');
+            },
+            'comments' => function ($q) {
+                $q->whereNull('parent_id')
+                    ->with(['user:id,name,email', 'replies'])
+                    ->orderBy('created_at', 'desc');
+            },
         ]);
+
+        // Add URLs to attachments
+        foreach ($item->attachments as $attachment) {
+            $attachment->url = asset('storage/' . $attachment->path);
+        }
 
         $itemTypes = ItemType::forProject($project)->get();
         $priorities = ItemPriority::forProject($project)->orderBy('order')->get();

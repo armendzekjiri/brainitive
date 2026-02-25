@@ -43,11 +43,13 @@ class Comment extends Model
     }
 
     /**
-     * Get replies to this comment.
+     * Get replies to this comment (recursive — loads all nesting levels).
      */
     public function replies(): HasMany
     {
-        return $this->hasMany(Comment::class, 'parent_id')->orderBy('created_at');
+        return $this->hasMany(Comment::class, 'parent_id')
+            ->with(['user:id,name,email', 'replies'])
+            ->orderBy('created_at');
     }
 
     /**
