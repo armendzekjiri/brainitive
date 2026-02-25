@@ -1420,11 +1420,11 @@ function CommandsPlugin() {
         const removeStickyNoteCommand = editor.registerCommand(
             INSERT_STICKY_NOTE_COMMAND,
             () => {
-                const stickyNoteNode = $createStickyNoteNode();
-                const selection = $getSelection();
-                if ($isRangeSelection(selection)) {
-                    selection.insertNodes([stickyNoteNode]);
-                }
+                editor.update(() => {
+                    const root = $getRoot();
+                    const stickyNoteNode = $createStickyNoteNode(0, 0);
+                    root.append(stickyNoteNode);
+                });
                 return true;
             },
             COMMAND_PRIORITY_HIGH

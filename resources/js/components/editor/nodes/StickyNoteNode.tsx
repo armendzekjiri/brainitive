@@ -1,338 +1,353 @@
-import {
-    $applyNodeReplacement,
-    DecoratorNode,
-    DOMConversionMap,
-    DOMConversionOutput,
-    DOMExportOutput,
+/**
+ * Sticky note node — matches the Lexical playground's StickyNode approach:
+ *  • Rendered via createPortal to document.body (absolutely positioned)
+ *  • Draggable by pointer events
+ *  • Caption is a LexicalNestedComposer + PlainTextPlugin
+ *  • Colors: 'yellow' | 'pink'
+ */
+
+import type {
     EditorConfig,
+    LexicalEditor,
     LexicalNode,
+    LexicalUpdateJSON,
     NodeKey,
+    SerializedEditor,
     SerializedLexicalNode,
     Spread,
 } from 'lexical';
-import { Suspense, useCallback, useRef, useEffect, useState } from 'react';
-import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
-import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
-import { mergeRegister } from '@lexical/utils';
-import {
-    $getNodeByKey,
-    $getSelection,
-    $isNodeSelection,
-    CLICK_COMMAND,
-    COMMAND_PRIORITY_LOW,
-    KEY_BACKSPACE_COMMAND,
-    KEY_DELETE_COMMAND,
-} from 'lexical';
+import type { JSX } from 'react';
 
-export interface StickyNotePayload {
-    color: string;
-    text: string;
-    x?: number;
-    y?: number;
-    key?: NodeKey;
-}
+import * as React from 'react';
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { $applyNodeReplacement, $setSelection, createEditor, DecoratorNode } from 'lexical';
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
+import { LexicalNestedComposer } from '@lexical/react/LexicalNestedComposer';
+import { PlainTextPlugin } from '@lexical/react/LexicalPlainTextPlugin';
+import { ContentEditable } from '@lexical/react/LexicalContentEditable';
+import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
+import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
+import { createEmptyHistoryState } from '@lexical/history';
+import { calculateZoomLevel } from '@lexical/utils';
+import { $getNodeByKey } from 'lexical';
+
+// ─── Theme for the nested sticky editor ──────────────────────────────────────
+const StickyEditorTheme = {
+    paragraph: 'StickyNode__contentEditable',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+export type StickyNoteColor = 'pink' | 'yellow';
 
 export type SerializedStickyNoteNode = Spread<
     {
-        color: string;
-        text: string;
-        x: number;
-        y: number;
+        xOffset: number;
+        yOffset: number;
+        color: StickyNoteColor;
+        caption: SerializedEditor;
     },
     SerializedLexicalNode
 >;
 
-const STICKY_COLORS = [
-    { name: 'yellow', bg: 'bg-yellow-100', border: 'border-yellow-300', header: 'bg-yellow-200' },
-    { name: 'pink', bg: 'bg-pink-100', border: 'border-pink-300', header: 'bg-pink-200' },
-    { name: 'blue', bg: 'bg-blue-100', border: 'border-blue-300', header: 'bg-blue-200' },
-    { name: 'green', bg: 'bg-green-100', border: 'border-green-300', header: 'bg-green-200' },
-    { name: 'purple', bg: 'bg-purple-100', border: 'border-purple-300', header: 'bg-purple-200' },
-];
+type Positioning = {
+    isDragging: boolean;
+    offsetX: number;
+    offsetY: number;
+    rootElementRect: null | DOMRect;
+    x: number;
+    y: number;
+};
 
-function StickyNoteComponent({
-    color,
-    text,
+// ─── Positioning helpers ──────────────────────────────────────────────────────
+function positionSticky(stickyElem: HTMLElement, positioning: Positioning): void {
+    const style = stickyElem.style;
+    const rootElementRect = positioning.rootElementRect;
+    const rectLeft = rootElementRect !== null ? rootElementRect.left : 0;
+    const rectTop = rootElementRect !== null ? rootElementRect.top : 0;
+    style.top = rectTop + positioning.y + 'px';
+    style.left = rectLeft + positioning.x + 'px';
+}
+
+// ─── StickyComponent (React) ─────────────────────────────────────────────────
+function StickyComponent({
+    x,
+    y,
     nodeKey,
+    color,
+    caption,
 }: {
-    color: string;
-    text: string;
+    caption: LexicalEditor;
+    color: StickyNoteColor;
     nodeKey: NodeKey;
-}) {
+    x: number;
+    y: number;
+}): JSX.Element {
     const [editor] = useLexicalComposerContext();
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [isSelected, setSelected, clearSelection] = useLexicalNodeSelection(nodeKey);
-    const [isEditing, setIsEditing] = useState(false);
-    const [editText, setEditText] = useState(text);
-    const [currentColor, setCurrentColor] = useState(color);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const stickyContainerRef = useRef<null | HTMLDivElement>(null);
+    const positioningRef = useRef<Positioning>({
+        isDragging: false,
+        offsetX: 0,
+        offsetY: 0,
+        rootElementRect: null,
+        x: 0,
+        y: 0,
+    });
 
-    const colorConfig = STICKY_COLORS.find(c => c.name === currentColor) || STICKY_COLORS[0];
+    // Sync x/y props into positioning ref whenever they change
+    useEffect(() => {
+        const position = positioningRef.current;
+        position.x = x;
+        position.y = y;
+        const stickyContainer = stickyContainerRef.current;
+        if (stickyContainer !== null) {
+            positionSticky(stickyContainer, position);
+        }
+    }, [x, y]);
 
-    const onDelete = useCallback(
-        (payload: KeyboardEvent) => {
-            if (isSelected && $isNodeSelection($getSelection()) && !isEditing) {
-                const event: KeyboardEvent = payload;
-                event.preventDefault();
-                const node = $getNodeByKey(nodeKey);
-                if ($isStickyNoteNode(node)) {
-                    node.remove();
+    // Track root element resize and reposition on window resize
+    useLayoutEffect(() => {
+        const position = positioningRef.current;
+        const resizeObserver = new ResizeObserver((entries) => {
+            for (let i = 0; i < entries.length; i++) {
+                const { target } = entries[i];
+                position.rootElementRect = (target as HTMLElement).getBoundingClientRect();
+                const stickyContainer = stickyContainerRef.current;
+                if (stickyContainer !== null) {
+                    positionSticky(stickyContainer, position);
                 }
             }
-            return false;
-        },
-        [isSelected, nodeKey, isEditing]
-    );
+        });
 
-    useEffect(() => {
-        return mergeRegister(
-            editor.registerCommand<MouseEvent>(
-                CLICK_COMMAND,
-                (payload) => {
-                    const event = payload;
-                    if (containerRef.current && containerRef.current.contains(event.target as Node)) {
-                        if (!isEditing) {
-                            if (event.shiftKey) {
-                                setSelected(!isSelected);
-                            } else {
-                                clearSelection();
-                                setSelected(true);
-                            }
-                        }
-                        return true;
-                    }
-                    return false;
-                },
-                COMMAND_PRIORITY_LOW
-            ),
-            editor.registerCommand(
-                KEY_DELETE_COMMAND,
-                onDelete,
-                COMMAND_PRIORITY_LOW
-            ),
-            editor.registerCommand(
-                KEY_BACKSPACE_COMMAND,
-                onDelete,
-                COMMAND_PRIORITY_LOW
-            )
-        );
-    }, [clearSelection, editor, isSelected, nodeKey, onDelete, setSelected, isEditing]);
-
-    useEffect(() => {
-        if (isEditing && textareaRef.current) {
-            textareaRef.current.focus();
-        }
-    }, [isEditing]);
-
-    // Block keyboard events from reaching Lexical's root element listeners while editing.
-    // Lexical attaches its keydown handler to the contentEditable root in the bubble phase
-    // and calls preventDefault() on arrow keys for cursor management, which prevents the
-    // textarea from moving its own cursor. The fix: register a bubble-phase listener on
-    // the sticky note container div. It fires as the event bubbles UP from the textarea
-    // but before it reaches the Lexical root, so stopPropagation() here ensures Lexical
-    // never sees it while the textarea handles it natively first.
-    useEffect(() => {
-        if (!isEditing) return;
-        const container = containerRef.current;
-        if (!container) return;
-
-        const blockForLexical = (e: KeyboardEvent) => {
-            if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) {
-                e.stopPropagation();
-                if (e.key === 'Escape') {
-                    setEditText(text);
-                    setIsEditing(false);
+        const removeRootListener = editor.registerRootListener(
+            (nextRootElem, prevRootElem) => {
+                if (prevRootElem !== null) {
+                    resizeObserver.unobserve(prevRootElem);
                 }
+                if (nextRootElem !== null) {
+                    resizeObserver.observe(nextRootElem);
+                }
+            },
+        );
+
+        const handleWindowResize = () => {
+            const rootElement = editor.getRootElement();
+            const stickyContainer = stickyContainerRef.current;
+            if (rootElement !== null && stickyContainer !== null) {
+                position.rootElementRect = rootElement.getBoundingClientRect();
+                positionSticky(stickyContainer, position);
             }
         };
 
-        container.addEventListener('keydown', blockForLexical);
-        return () => container.removeEventListener('keydown', blockForLexical);
-    }, [isEditing, text]);
+        window.addEventListener('resize', handleWindowResize);
+        return () => {
+            window.removeEventListener('resize', handleWindowResize);
+            removeRootListener();
+        };
+    }, [editor]);
 
-    const handleSave = () => {
+    // Add CSS transition after initial mount (so it doesn't animate on load)
+    useEffect(() => {
+        const stickyContainer = stickyContainerRef.current;
+        if (stickyContainer !== null) {
+            setTimeout(() => {
+                stickyContainer.style.setProperty(
+                    'transition',
+                    'top 0.3s ease 0s, left 0.3s ease 0s',
+                );
+            }, 500);
+        }
+    }, []);
+
+    // ── Pointer drag handlers ──────────────────────────────────────────────
+    const handlePointerMove = (event: PointerEvent) => {
+        const stickyContainer = stickyContainerRef.current;
+        const positioning = positioningRef.current;
+        const rootElementRect = positioning.rootElementRect;
+        const zoom = calculateZoomLevel(stickyContainer);
+        if (
+            stickyContainer !== null &&
+            positioning.isDragging &&
+            rootElementRect !== null
+        ) {
+            positioning.x =
+                event.pageX / zoom - positioning.offsetX - rootElementRect.left;
+            positioning.y =
+                event.pageY / zoom - positioning.offsetY - rootElementRect.top;
+            positionSticky(stickyContainer, positioning);
+        }
+    };
+
+    const handlePointerUp = (_event: PointerEvent) => {
+        const stickyContainer = stickyContainerRef.current;
+        const positioning = positioningRef.current;
+        if (stickyContainer !== null) {
+            positioning.isDragging = false;
+            stickyContainer.classList.remove('dragging');
+            editor.update(() => {
+                const node = $getNodeByKey(nodeKey);
+                if ($isStickyNoteNode(node)) {
+                    node.setPosition(positioning.x, positioning.y);
+                }
+            });
+        }
+        document.removeEventListener('pointermove', handlePointerMove);
+        document.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    // ── Action handlers ────────────────────────────────────────────────────
+    const handleDelete = () => {
         editor.update(() => {
             const node = $getNodeByKey(nodeKey);
             if ($isStickyNoteNode(node)) {
-                node.setText(editText);
-                node.setColor(currentColor);
+                node.remove();
             }
         });
-        setIsEditing(false);
     };
 
-    const handleColorChange = (newColor: string) => {
-        setCurrentColor(newColor);
+    const handleColorChange = () => {
         editor.update(() => {
             const node = $getNodeByKey(nodeKey);
             if ($isStickyNoteNode(node)) {
-                node.setColor(newColor);
+                node.toggleColor();
             }
         });
     };
+
+    const historyState = useMemo(() => createEmptyHistoryState(), []);
 
     return (
-        <div
-            ref={containerRef}
-            className={`relative inline-block w-64 rounded-lg shadow-lg ${colorConfig.bg} ${colorConfig.border} border-2 ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
-            draggable="false"
-        >
-            {/* Header with color picker */}
-            <div className={`${colorConfig.header} px-3 py-2 rounded-t-md flex justify-between items-center`}>
-                <span className="text-xs font-medium text-gray-700">Sticky Note</span>
-                <div className="flex gap-1">
-                    {STICKY_COLORS.map(c => (
-                        <button
-                            key={c.name}
-                            onClick={() => handleColorChange(c.name)}
-                            className={`w-4 h-4 rounded-full ${c.bg} ${c.border} border ${currentColor === c.name ? 'ring-2 ring-gray-600 ring-offset-1' : ''}`}
-                            title={c.name}
-                        />
-                    ))}
-                </div>
-            </div>
-
-            {/* Content */}
-            <div className="p-3 min-h-[100px]">
-                {isEditing ? (
-                    <div>
-                        <textarea
-                            ref={textareaRef}
-                            value={editText}
-                            onChange={(e) => setEditText(e.target.value)}
-                            className="w-full min-h-[80px] bg-transparent border-none resize-none focus:outline-none text-sm"
-                            placeholder="Write your note..."
-                        />
-                        <div className="flex justify-end gap-1 mt-2">
-                            <button
-                                onClick={() => {
-                                    setEditText(text);
-                                    setIsEditing(false);
-                                }}
-                                className="px-2 py-1 text-xs bg-white/50 rounded"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleSave}
-                                className="px-2 py-1 text-xs bg-gray-800 text-white rounded"
-                            >
-                                Save
-                            </button>
-                        </div>
-                    </div>
-                ) : (
-                    <div
-                        className="text-sm whitespace-pre-wrap cursor-pointer min-h-[60px]"
-                        onDoubleClick={() => setIsEditing(true)}
-                        title="Double-click to edit"
-                    >
-                        {text || <span className="text-gray-400 italic">Double-click to add text...</span>}
-                    </div>
-                )}
+        <div ref={stickyContainerRef} className="sticky-note-container">
+            <div
+                className={`sticky-note ${color}`}
+                onPointerDown={(event) => {
+                    const stickyContainer = stickyContainerRef.current;
+                    if (
+                        stickyContainer == null ||
+                        event.button === 2 ||
+                        event.target !== stickyContainer.firstChild
+                    ) {
+                        // Right-click or click inside editor — don't drag
+                        return;
+                    }
+                    const positioning = positioningRef.current;
+                    const { top, left } = stickyContainer.getBoundingClientRect();
+                    const zoom = calculateZoomLevel(stickyContainer);
+                    positioning.offsetX = event.clientX / zoom - left;
+                    positioning.offsetY = event.clientY / zoom - top;
+                    positioning.isDragging = true;
+                    stickyContainer.classList.add('dragging');
+                    document.addEventListener('pointermove', handlePointerMove);
+                    document.addEventListener('pointerup', handlePointerUp);
+                    event.preventDefault();
+                }}>
+                <button
+                    onClick={handleDelete}
+                    className="delete"
+                    aria-label="Delete sticky note"
+                    title="Delete">
+                    X
+                </button>
+                <button
+                    onClick={handleColorChange}
+                    className="color"
+                    aria-label="Change sticky note color"
+                    title="Toggle color">
+                    <i className="bucket" />
+                </button>
+                <LexicalNestedComposer
+                    initialEditor={caption}
+                    initialTheme={StickyEditorTheme}>
+                    <HistoryPlugin externalHistoryState={historyState} />
+                    <PlainTextPlugin
+                        contentEditable={
+                            <ContentEditable
+                                placeholder={
+                                    <div className="StickyNode__placeholder">
+                                        What's up?
+                                    </div>
+                                }
+                                className="StickyNode__contentEditable"
+                                aria-placeholder="What's up?"
+                            />
+                        }
+                        ErrorBoundary={LexicalErrorBoundary}
+                    />
+                </LexicalNestedComposer>
             </div>
         </div>
     );
 }
 
+// ─── StickyNoteNode ───────────────────────────────────────────────────────────
 export class StickyNoteNode extends DecoratorNode<JSX.Element> {
-    __color: string;
-    __text: string;
     __x: number;
     __y: number;
+    __color: StickyNoteColor;
+    __caption: LexicalEditor;
 
     static getType(): string {
-        return 'sticky-note';
+        return 'sticky';
     }
 
     static clone(node: StickyNoteNode): StickyNoteNode {
-        return new StickyNoteNode(node.__color, node.__text, node.__x, node.__y, node.__key);
+        return new StickyNoteNode(
+            node.__x,
+            node.__y,
+            node.__color,
+            node.__caption,
+            node.__key,
+        );
     }
 
     static importJSON(serializedNode: SerializedStickyNoteNode): StickyNoteNode {
-        return $createStickyNoteNode(serializedNode.color, serializedNode.text);
+        return new StickyNoteNode(
+            serializedNode.xOffset,
+            serializedNode.yOffset,
+            serializedNode.color,
+        ).updateFromJSON(serializedNode);
+    }
+
+    updateFromJSON(serializedNode: LexicalUpdateJSON<SerializedStickyNoteNode>): this {
+        const stickyNode = super.updateFromJSON(serializedNode);
+        const captionData = serializedNode.caption;
+        const nestedEditor = stickyNode.__caption;
+        if (captionData?.editorState) {
+            const editorState = nestedEditor.parseEditorState(captionData.editorState);
+            if (!editorState.isEmpty()) {
+                nestedEditor.setEditorState(editorState);
+            }
+        }
+        return stickyNode;
     }
 
     constructor(
-        color: string = 'yellow',
-        text: string = '',
-        x: number = 0,
-        y: number = 0,
-        key?: NodeKey
+        x: number,
+        y: number,
+        color: StickyNoteColor,
+        caption?: LexicalEditor,
+        key?: NodeKey,
     ) {
         super(key);
-        this.__color = color;
-        this.__text = text;
         this.__x = x;
         this.__y = y;
+        this.__caption = caption || createEditor();
+        this.__color = color;
     }
 
     exportJSON(): SerializedStickyNoteNode {
         return {
-            type: 'sticky-note',
-            version: 1,
+            ...super.exportJSON(),
+            caption: this.__caption.toJSON(),
             color: this.__color,
-            text: this.__text,
-            x: this.__x,
-            y: this.__y,
+            xOffset: this.__x,
+            yOffset: this.__y,
         };
     }
 
-    exportDOM(): DOMExportOutput {
-        const element = document.createElement('div');
-        element.setAttribute('data-lexical-sticky-note', JSON.stringify({
-            color: this.__color,
-            text: this.__text,
-            x: this.__x,
-            y: this.__y,
-        }));
-        return { element };
-    }
-
-    static importDOM(): DOMConversionMap | null {
-        return {
-            div: (node: Node) => {
-                if (!(node instanceof HTMLElement)) return null;
-                if (!node.hasAttribute('data-lexical-sticky-note')) return null;
-                return {
-                    conversion: (domNode: Node): DOMConversionOutput | null => {
-                        if (!(domNode instanceof HTMLElement)) return null;
-                        const raw = domNode.getAttribute('data-lexical-sticky-note');
-                        if (!raw) return null;
-                        try {
-                            const { color, text } = JSON.parse(raw);
-                            return { node: $createStickyNoteNode(color, text) };
-                        } catch {
-                            return null;
-                        }
-                    },
-                    priority: 2,
-                };
-            },
-        };
-    }
-
-    setColor(color: string): void {
-        const writable = this.getWritable();
-        writable.__color = color;
-    }
-
-    setText(text: string): void {
-        const writable = this.getWritable();
-        writable.__text = text;
-    }
-
-    getColor(): string {
-        return this.__color;
-    }
-
-    getText(): string {
-        return this.__text;
-    }
-
-    createDOM(config: EditorConfig): HTMLElement {
+    createDOM(_config: EditorConfig): HTMLElement {
         const div = document.createElement('div');
-        div.className = 'sticky-note-container inline-block';
+        div.style.display = 'contents';
         return div;
     }
 
@@ -340,23 +355,48 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
         return false;
     }
 
-    decorate(): JSX.Element {
-        return (
-            <StickyNoteComponent
-                color={this.__color}
-                text={this.__text}
-                nodeKey={this.getKey()}
-            />
+    setPosition(x: number, y: number): void {
+        const writable = this.getWritable();
+        writable.__x = x;
+        writable.__y = y;
+        $setSelection(null);
+    }
+
+    toggleColor(): void {
+        const writable = this.getWritable();
+        writable.__color = writable.__color === 'pink' ? 'yellow' : 'pink';
+    }
+
+    decorate(_editor: LexicalEditor, _config: EditorConfig): JSX.Element {
+        return createPortal(
+            <Suspense fallback={null}>
+                <StickyComponent
+                    color={this.__color}
+                    x={this.__x}
+                    y={this.__y}
+                    nodeKey={this.getKey()}
+                    caption={this.__caption}
+                />
+            </Suspense>,
+            document.body,
         );
+    }
+
+    isIsolated(): true {
+        return true;
     }
 }
 
-export function $createStickyNoteNode(color: string = 'yellow', text: string = ''): StickyNoteNode {
-    return $applyNodeReplacement(new StickyNoteNode(color, text));
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+export function $createStickyNoteNode(
+    xOffset: number = 0,
+    yOffset: number = 0,
+): StickyNoteNode {
+    return $applyNodeReplacement(new StickyNoteNode(xOffset, yOffset, 'yellow'));
 }
 
 export function $isStickyNoteNode(
-    node: LexicalNode | null | undefined
+    node: LexicalNode | null | undefined,
 ): node is StickyNoteNode {
     return node instanceof StickyNoteNode;
 }
