@@ -353,6 +353,7 @@ function SlashCommandsPlugin() {
     const [selectedIndex, setSelectedIndex] = useState(0);
     const selectedIndexRef = useRef(0);
     const menuRef = useRef<HTMLDivElement>(null);
+    const slashAnchorRef = useRef<{ key: string; offset: number } | null>(null);
 
     // Modal states for various inserts
     const [showImageModal, setShowImageModal] = useState(false);
@@ -733,6 +734,7 @@ function SlashCommandsPlugin() {
                         if (domSelection && domSelection.rangeCount > 0) {
                             const range = domSelection.getRangeAt(0);
                             const rect = range.getBoundingClientRect();
+                            slashAnchorRef.current = { key: node.getKey(), offset };
                             setMenuPosition({
                                 top: rect.bottom + window.scrollY + 5,
                                 left: rect.left + window.scrollX,
@@ -769,22 +771,35 @@ function SlashCommandsPlugin() {
     }, [showMenu]);
 
     const handleSelectItem = (item: SlashMenuItem) => {
+        editor.focus();
+        const anchor = slashAnchorRef.current;
         editor.update(() => {
-            const selection = $getSelection();
-            if ($isRangeSelection(selection)) {
-                const anchor = selection.anchor;
-                const node = anchor.getNode();
-                if ($isTextNode(node)) {
-                    const text = node.getTextContent();
-                    const slashIndex = text.lastIndexOf('/');
-                    if (slashIndex !== -1) {
-                        const newText = text.substring(0, slashIndex);
-                        node.setTextContent(newText);
-                        node.select(newText.length, newText.length);
+            const node = anchor ? $getNodeByKey(anchor.key) : null;
+            if (node && $isTextNode(node)) {
+                const text = node.getTextContent();
+                const slashIndex = text.lastIndexOf('/');
+                if (slashIndex !== -1) {
+                    const newText = text.substring(0, slashIndex);
+                    node.setTextContent(newText);
+                    node.select(newText.length, newText.length);
+                }
+            } else {
+                const selection = $getSelection();
+                if ($isRangeSelection(selection)) {
+                    const anchorNode = selection.anchor.getNode();
+                    if ($isTextNode(anchorNode)) {
+                        const text = anchorNode.getTextContent();
+                        const slashIndex = text.lastIndexOf('/');
+                        if (slashIndex !== -1) {
+                            const newText = text.substring(0, slashIndex);
+                            anchorNode.setTextContent(newText);
+                            anchorNode.select(newText.length, newText.length);
+                        }
                     }
                 }
             }
         }, { discrete: true });
+        slashAnchorRef.current = null;
         item.onSelect(editor);
         setShowMenu(false);
         setSearchTerm('');
@@ -1446,15 +1461,19 @@ function CommandsPlugin() {
             COMMAND_PRIORITY_HIGH
         );
 
-        // Poll command
+        // Poll command — run in next tick so slash-menu update has committed and selection is correct
         const removePollCommand = editor.registerCommand(
             INSERT_POLL_COMMAND,
             () => {
-                const pollNode = $createPollNode();
-                const selection = $getSelection();
-                if ($isRangeSelection(selection)) {
-                    selection.insertNodes([pollNode]);
-                }
+                queueMicrotask(() => {
+                    editor.update(() => {
+                        const selection = $getSelection();
+                        if ($isRangeSelection(selection)) {
+                            const pollNode = $createPollNode();
+                            selection.insertNodes([pollNode]);
+                        }
+                    });
+                });
                 return true;
             },
             COMMAND_PRIORITY_HIGH
