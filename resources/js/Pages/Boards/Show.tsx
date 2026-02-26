@@ -983,6 +983,7 @@ function ItemEditModal({
                                             contentKey={`${item.id}-edit-${editorKey}`}
                                             workspaceSlug={workspace.slug}
                                             itemTitle={titleValue}
+                                            projectName={project.name}
                                         />
                                         <div className="flex items-center gap-2 mt-3 justify-end">
                                             <Button variant="outline" size="sm" onClick={cancelDescription}>Discard</Button>
