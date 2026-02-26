@@ -225,25 +225,32 @@ class AiController extends Controller
                 $chatUrl = $baseUrl . '/chat/completions';
             }
 
+            $payload = [
+                'model'    => $model,
+                'messages' => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user',   'content' => $userMessage],
+                ],
+                'max_completion_tokens' => 4096,
+            ];
+
             $response = Http::timeout(60)
                 ->withHeaders([
                     'Authorization' => 'Bearer ' . $apiKey,
                     'Content-Type'  => 'application/json',
                 ])
-                ->post($chatUrl, [
-                    'model'    => $model,
-                    'messages' => [
-                        ['role' => 'system', 'content' => $systemPrompt],
-                        ['role' => 'user',   'content' => $userMessage],
-                    ],
-                    'temperature' => 0.7,
-                    'max_tokens'  => 4096,
-                ]);
+                ->post($chatUrl, $payload);
 
             if (! $response->successful()) {
+                $body = $response->json();
+                $apiMessage = $body['error']['message'] ?? $body['error']['code'] ?? $body['message'] ?? null;
+                $detail = $apiMessage
+                    ? ' ' . (is_string($apiMessage) ? $apiMessage : json_encode($apiMessage))
+                    : ' (' . $response->body() . ')';
+
                 return response()->json([
                     'success' => false,
-                    'message' => 'AI request failed: ' . $response->status() . ' ' . $response->reason(),
+                    'message' => 'AI request failed: ' . $response->status() . ' ' . $response->reason() . $detail,
                 ], 422);
             }
 

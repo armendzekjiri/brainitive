@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import {
@@ -403,6 +403,9 @@ function ItemCard({
                     </div>
                     {item.assignee ? (
                         <Avatar className="size-6 ring-2 ring-background">
+                            {item.assignee.avatar_display && (
+                                <AvatarImage src={item.assignee.avatar_display} alt={item.assignee.name} />
+                            )}
                             <AvatarFallback className="text-[10px] bg-gradient-to-br from-brand-blue to-brand-slate text-white font-semibold">
                                 {item.assignee.name.charAt(0).toUpperCase()}
                             </AvatarFallback>
@@ -1196,7 +1199,10 @@ function ItemEditModal({
                                                 {projectUsers.map((user) => (
                                                     <SelectItem key={user.id} value={user.id.toString()}>
                                                         <div className="flex items-center gap-2">
-                                                            <Avatar className="size-5"><AvatarFallback className="text-[10px]">{user.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
+                                                            <Avatar className="size-5">
+                                                                {user.avatar_display && <AvatarImage src={user.avatar_display} alt={user.name} />}
+                                                                <AvatarFallback className="text-[10px]">{user.name.charAt(0).toUpperCase()}</AvatarFallback>
+                                                            </Avatar>
                                                             {user.name}
                                                         </div>
                                                     </SelectItem>
@@ -1447,6 +1453,9 @@ function ListView({
                                     {item.assignee ? (
                                         <div className="flex items-center gap-2">
                                             <Avatar className="size-6">
+                                                {item.assignee.avatar_display && (
+                                                    <AvatarImage src={item.assignee.avatar_display} alt={item.assignee.name} />
+                                                )}
                                                 <AvatarFallback className="text-xs">
                                                     {item.assignee.name.charAt(0).toUpperCase()}
                                                 </AvatarFallback>
