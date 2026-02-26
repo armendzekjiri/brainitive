@@ -143,10 +143,11 @@ class AiController extends Controller
         $this->authorize('view', $workspace);
 
         $validated = $request->validate([
-            'content'       => 'required|string|max:50000',
-            'instruction'   => 'nullable|string|max:2000',
-            'title'         => 'nullable|string|max:500',
-            'is_selection'  => 'nullable|boolean',
+            'content'         => 'required|string|max:50000',
+            'instruction'    => 'nullable|string|max:2000',
+            'title'          => 'nullable|string|max:500',
+            'is_selection'   => 'nullable|boolean',
+            'generate_prompt' => 'nullable|boolean',
         ]);
 
         $settings = $workspace->settings ?? [];
@@ -164,44 +165,56 @@ class AiController extends Controller
             ], 422);
         }
 
-        $isSelection = $validated['is_selection'] ?? false;
-        $title = $validated['title'] ?? null;
+        $generatePrompt = $validated['generate_prompt'] ?? false;
 
-        $instruction = $validated['instruction']
-            ?? 'Rewrite the following content to be clearer, more professional, and better structured.';
-
-        $systemPrompt = 'You are a professional writing assistant integrated into a project management tool. '
-            . 'Your task is to improve the quality of text content based on the user\'s instruction. '
-            . 'Use rich formatting to make the content more readable and engaging: '
-            . '- Use relevant emojis where appropriate (e.g. ✅, 📌, 🔧, 🚀, 💡, ⚠️, 📝, 🎯) '
-            . '- Use bullet points (<ul><li>) and numbered lists (<ol><li>) to organize information '
-            . '- Use <strong> for emphasis on key terms and <em> for secondary emphasis '
-            . '- Use headings (<h3>, <h4>) when structuring longer content '
-            . '- Use <p> tags to separate paragraphs properly '
-            . 'Always return valid HTML. Do NOT wrap the output in markdown code fences. '
-            . 'Do NOT add any preamble, explanation, or commentary — return ONLY the improved content as HTML.';
-
-        // Prevent translation unless explicitly requested
-        if (stripos($instruction, 'translate') === false) {
-            $systemPrompt .= ' Do NOT translate the content to another language unless the user instruction explicitly requests translation.';
-        }
-
-        if ($isSelection) {
-            $systemPrompt .= ' The user has selected a specific piece of text from a larger document. '
-                . 'Improve only that selected portion. Keep the result concise and contextually appropriate.';
-        }
-
-        // Build the user message with context
-        $userMessage = $instruction . "\n\n";
-
-        if ($title) {
-            $userMessage .= "Context — this is the description for a task/item titled: \"{$title}\"\n\n";
-        }
-
-        if ($isSelection) {
-            $userMessage .= "Selected text:\n" . $validated['content'];
+        if ($generatePrompt) {
+            $systemPrompt = 'You are an expert prompt engineer. Your job is to output a single, ready-to-use PROMPT — i.e. text that the user will copy and paste into an AI assistant (e.g. ChatGPT, Claude) to get a result. '
+                . 'The output must be written AS IF the user is speaking to the AI: use second person ("You are...", "Please...", "I need you to..."). '
+                . 'Do NOT output a structured document with labels like "Role:", "Context:", "Task:". Do NOT describe the task from the outside. '
+                . 'Output ONE block of instructions that an AI can follow directly. Weave in the context (title, project, description) naturally inside that prompt. '
+                . 'Example style: "You are a senior software engineer. I have a feature: [title]. Project: [project]. [description]. Please create a technical spec with acceptance criteria, complexity, and effort estimate." '
+                . 'Output ONLY this prompt text. No preamble, no meta-commentary. Plain text or simple <p> tags only.';
+            $userMessage = $validated['content'];
         } else {
-            $userMessage .= $validated['content'];
+            $isSelection = $validated['is_selection'] ?? false;
+            $title = $validated['title'] ?? null;
+
+            $instruction = $validated['instruction']
+                ?? 'Rewrite the following content to be clearer, more professional, and better structured.';
+
+            $systemPrompt = 'You are a professional writing assistant integrated into a project management tool. '
+                . 'Your task is to improve the quality of text content based on the user\'s instruction. '
+                . 'Use rich formatting to make the content more readable and engaging: '
+                . '- Use relevant emojis where appropriate (e.g. ✅, 📌, 🔧, 🚀, 💡, ⚠️, 📝, 🎯) '
+                . '- Use bullet points (<ul><li>) and numbered lists (<ol><li>) to organize information '
+                . '- Use <strong> for emphasis on key terms and <em> for secondary emphasis '
+                . '- Use headings (<h3>, <h4>) when structuring longer content '
+                . '- Use <p> tags to separate paragraphs properly '
+                . 'Always return valid HTML. Do NOT wrap the output in markdown code fences. '
+                . 'Do NOT add any preamble, explanation, or commentary — return ONLY the improved content as HTML.';
+
+            // Prevent translation unless explicitly requested
+            if (stripos($instruction, 'translate') === false) {
+                $systemPrompt .= ' Do NOT translate the content to another language unless the user instruction explicitly requests translation.';
+            }
+
+            if ($isSelection) {
+                $systemPrompt .= ' The user has selected a specific piece of text from a larger document. '
+                    . 'Improve only that selected portion. Keep the result concise and contextually appropriate.';
+            }
+
+            // Build the user message with context
+            $userMessage = $instruction . "\n\n";
+
+            if ($title) {
+                $userMessage .= "Context — this is the description for a task/item titled: \"{$title}\"\n\n";
+            }
+
+            if ($isSelection) {
+                $userMessage .= "Selected text:\n" . $validated['content'];
+            } else {
+                $userMessage .= $validated['content'];
+            }
         }
 
         try {

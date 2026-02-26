@@ -140,6 +140,7 @@ import {
     MoreHorizontal,
     Briefcase,
     SmilePlus,
+    Lightbulb,
 } from 'lucide-react';
 
 // Import custom nodes
@@ -1774,7 +1775,16 @@ function DraggableBlockPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
 const RichLexicalOnChangeContext = createContext<((html: string) => void) | null>(null);
 
 // Toolbar Plugin
-function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle }: { showToolbar?: boolean; workspaceSlug?: string; itemTitle?: string }) {
+/** Strip HTML to plain text and optionally truncate. */
+function htmlToPlainText(html: string, maxLength = 500): string {
+    if (!html?.trim()) return '';
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    const text = (div.textContent || div.innerText || '').replace(/\s+/g, ' ').trim();
+    return maxLength && text.length > maxLength ? text.slice(0, maxLength) + '…' : text;
+}
+
+function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle, projectName }: { showToolbar?: boolean; workspaceSlug?: string; itemTitle?: string; projectName?: string }) {
     const [editor] = useLexicalComposerContext();
     const onChangeFromContext = useContext(RichLexicalOnChangeContext);
     const [isBold, setIsBold] = useState(false);
@@ -1823,16 +1833,19 @@ function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle }: { showT
             .catch(() => setAiConfigured(false));
     }, [workspaceSlug]);
 
-    // AI generate helper
-    const handleAiGenerate = async (instruction: string) => {
+    // AI generate helper. When contentOverride is set, use it as content (e.g. for "Generate prompt"). When generatePrompt is true, backend returns a generated prompt.
+    const handleAiGenerate = async (instruction: string, contentOverride?: string, generatePrompt?: boolean) => {
         setAiGenerating(true);
         setAiError(null);
         setAiResult(null);
         try {
-            let contentToSend = '';
-            if (aiMode === 'selection' && aiSelectedText) {
+            let contentToSend: string;
+            if (contentOverride !== undefined) {
+                contentToSend = contentOverride;
+            } else if (aiMode === 'selection' && aiSelectedText) {
                 contentToSend = aiSelectedText;
             } else {
+                contentToSend = '';
                 editor.getEditorState().read(() => {
                     contentToSend = $generateHtmlFromNodes(editor);
                 });
@@ -1841,7 +1854,8 @@ function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle }: { showT
                 content: contentToSend,
                 instruction: instruction || undefined,
                 title: itemTitle || undefined,
-                is_selection: aiMode === 'selection',
+                is_selection: generatePrompt ? false : aiMode === 'selection',
+                generate_prompt: generatePrompt ?? false,
             });
             if (res.data.success) {
                 setAiResult(res.data.content);
@@ -2320,6 +2334,26 @@ function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle }: { showT
                                                     {!aiGenerating && !aiResult && (
                                                     <div className="py-1 flex-1 min-h-0 overflow-y-auto">
                                                         <div className="px-4 py-1 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Actions</div>
+                                                        <button
+                                                            type="button"
+                                                            className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left transition-colors border-b border-border/50"
+                                                            onClick={() => {
+                                                                let contentHtml = '';
+                                                                editor.getEditorState().read(() => {
+                                                                    contentHtml = $generateHtmlFromNodes(editor);
+                                                                });
+                                                                const descriptionPlain = htmlToPlainText(contentHtml, 500);
+                                                                const lines: string[] = [];
+                                                                if (itemTitle?.trim()) lines.push(`Title: ${itemTitle.trim()}`);
+                                                                if (projectName?.trim()) lines.push(`Project: ${projectName.trim()}`);
+                                                                if (descriptionPlain) lines.push(`Description: ${descriptionPlain}`);
+                                                                const contextText = lines.join('\n\n') || 'No context provided.';
+                                                                handleAiGenerate('', contextText, true);
+                                                            }}
+                                                        >
+                                                            <Lightbulb className="size-4 text-amber-500 shrink-0" />
+                                                            Generate prompt
+                                                        </button>
                                                         {[
                                                             { label: 'Improve description', instruction: 'Rewrite to be clearer, more professional, and better structured. Improve the overall quality.', icon: Wand2 },
                                                             { label: 'Summarize writing', instruction: 'Summarize this text into a concise version, keeping only the most important points.', icon: AlignEndHorizontal },
@@ -2693,6 +2727,7 @@ interface RichLexicalEditorProps {
     contentKey?: string;
     workspaceSlug?: string;
     itemTitle?: string;
+    projectName?: string;
 }
 
 export function RichLexicalEditor({
@@ -2707,6 +2742,7 @@ export function RichLexicalEditor({
     contentKey,
     workspaceSlug,
     itemTitle,
+    projectName,
 }: RichLexicalEditorProps) {
     const [floatingAnchorElem, setFloatingAnchorElem] = useState<HTMLDivElement | null>(null);
 
@@ -2758,7 +2794,7 @@ export function RichLexicalEditor({
         <LexicalComposer initialConfig={initialConfig}>
             <RichLexicalOnChangeContext.Provider value={onChange}>
             <div className={cn("border rounded-lg overflow-hidden bg-white dark:bg-card", className)}>
-                <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} />
+                <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} projectName={projectName} />
                 <div
                     className={cn("relative", maxHeight && "overflow-y-auto")}
                     style={maxHeight ? { maxHeight } : undefined}
