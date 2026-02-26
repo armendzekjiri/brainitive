@@ -59,11 +59,13 @@ class BoardController extends Controller
                 $query->orderBy('position')->with([
                     'items' => function ($q) {
                         $q->orderBy('position')
+                            ->withCount('children')
                             ->with([
                                 'assignee:id,name,email,avatar',
                                 'itemType',
                                 'priority',
                                 'labels',
+                                'parent:id,key,title,board_id',
                                 'attachments' => function ($a) {
                                     $a->with('user:id,name,email')->orderBy('created_at', 'desc');
                                 },
@@ -244,6 +246,8 @@ class BoardController extends Controller
     {
         $this->authorize('createItems', $board);
 
+        $subtaskTypeId = ItemType::forProject($project)->where('slug', 'subtask')->value('id');
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -251,7 +255,30 @@ class BoardController extends Controller
             'item_type_id' => 'nullable|exists:item_types,id',
             'priority_id' => 'nullable|exists:item_priorities,id',
             'assigned_to' => 'nullable|exists:users,id',
+            'parent_id' => [
+                'nullable',
+                'exists:items,id',
+                function ($attribute, $value, $fail) use ($board, $subtaskTypeId, $request) {
+                    if ($value === null) {
+                        return;
+                    }
+                    $parent = Item::find($value);
+                    if (! $parent || $parent->board_id !== $board->id) {
+                        $fail('Parent task must be on the same board.');
+                        return;
+                    }
+                    if ($parent->parent_id !== null) {
+                        $fail('Parent task must be a root task.');
+                        return;
+                    }
+                },
+            ],
         ]);
+
+        $itemTypeId = $validated['item_type_id'] ?? ItemType::where('is_default', true)->first()?->id;
+        if ($subtaskTypeId && (int) $itemTypeId === (int) $subtaskTypeId && empty($validated['parent_id'])) {
+            return back()->withErrors(['parent_id' => 'Subtasks must have a parent task.']);
+        }
 
         // Get the next position in the column
         $maxPosition = Item::where('column_id', $validated['column_id'])->max('position') ?? 0;
@@ -260,7 +287,8 @@ class BoardController extends Controller
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
             'column_id' => $validated['column_id'],
-            'item_type_id' => $validated['item_type_id'] ?? ItemType::where('is_default', true)->first()?->id,
+            'parent_id' => $validated['parent_id'] ?? null,
+            'item_type_id' => $itemTypeId,
             'priority_id' => $validated['priority_id'] ?? ItemPriority::where('is_default', true)->first()?->id,
             'assigned_to' => $validated['assigned_to'] ?? null,
             'key' => $project->getNextItemKey(),
@@ -367,6 +395,8 @@ class BoardController extends Controller
     {
         $this->authorize('update', $item);
 
+        $subtaskTypeId = ItemType::forProject($project)->where('slug', 'subtask')->value('id');
+
         $validated = $request->validate([
             'title' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
@@ -376,7 +406,50 @@ class BoardController extends Controller
             'start_date' => 'nullable|date',
             'due_date' => 'nullable|date',
             'story_points' => 'nullable|integer|min:0',
+            'parent_id' => [
+                'nullable',
+                'exists:items,id',
+                function ($attribute, $value, $fail) use ($board, $item) {
+                    if ($value === null) {
+                        return;
+                    }
+                    if ((int) $value === $item->id) {
+                        $fail('An item cannot be its own parent.');
+                        return;
+                    }
+                    $parent = Item::find($value);
+                    if (! $parent || $parent->board_id !== $board->id) {
+                        $fail('Parent task must be on the same board.');
+                        return;
+                    }
+                    if ($parent->parent_id !== null) {
+                        $fail('Parent task must be a root task.');
+                        return;
+                    }
+                    // No cycle: walk parent chain from candidate; must not reach current item
+                    $current = $parent;
+                    while ($current->parent_id !== null) {
+                        $current = Item::find($current->parent_id);
+                        if (! $current) {
+                            break;
+                        }
+                        if ($current->id === $item->id) {
+                            $fail('Parent would create a circular reference.');
+                            return;
+                        }
+                    }
+                },
+            ],
         ]);
+
+        $itemTypeId = array_key_exists('item_type_id', $validated) ? $validated['item_type_id'] : $item->item_type_id;
+        $effectiveTypeId = $itemTypeId ?? $item->itemType?->id;
+        if ($subtaskTypeId && (int) $effectiveTypeId === (int) $subtaskTypeId) {
+            $newParentId = array_key_exists('parent_id', $validated) ? $validated['parent_id'] : $item->parent_id;
+            if (empty($newParentId)) {
+                return back()->withErrors(['parent_id' => 'Subtasks must have a parent task.']);
+            }
+        }
 
         $item->update($validated);
 

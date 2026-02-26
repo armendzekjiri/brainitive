@@ -168,12 +168,26 @@ class AiController extends Controller
         $generatePrompt = $validated['generate_prompt'] ?? false;
 
         if ($generatePrompt) {
-            $systemPrompt = 'You are an expert prompt engineer. Your job is to output a single, ready-to-use PROMPT — i.e. text that the user will copy and paste into an AI assistant (e.g. ChatGPT, Claude) to get a result. '
-                . 'The output must be written AS IF the user is speaking to the AI: use second person ("You are...", "Please...", "I need you to..."). '
-                . 'Do NOT output a structured document with labels like "Role:", "Context:", "Task:". Do NOT describe the task from the outside. '
-                . 'Output ONE block of instructions that an AI can follow directly. Weave in the context (title, project, description) naturally inside that prompt. '
-                . 'Example style: "You are a senior software engineer. I have a feature: [title]. Project: [project]. [description]. Please create a technical spec with acceptance criteria, complexity, and effort estimate." '
-                . 'Output ONLY this prompt text. No preamble, no meta-commentary. Plain text or simple <p> tags only.';
+            $systemPrompt = <<<PROMPT
+            You are a prompt generator embedded in a Jira-like app.
+            
+            Your job: transform the user's card text into ONE excellent, copy-paste prompt for a separate AI assistant.
+            
+            Output rules:
+            - Output ONLY the final prompt text (plain text or simple <p> HTML). No preamble, no explanations, no analysis.
+            - The prompt must be written as if the user is speaking to the AI assistant (first person: "I", "my", "please").
+            - Do NOT use labeled template sections like "Role:", "Context:", "Task:", "Input:", "Output:".
+            - Do NOT repeat the raw card text verbatim unless it’s necessary; instead, distill and integrate it naturally.
+            - Do not invent missing requirements. If key info is missing, include a short list of precise follow-up questions at the end of the prompt.
+            
+            Quality requirements for the prompt you output:
+            - Start the prompt with: "You are a senior software engineer and technical product partner."
+            - Instruct the AI assistant to first restate the goal in 1–2 sentences to confirm understanding.
+            - Then instruct the AI assistant to produce an implementation-ready result with: scope/non-scope, approach, edge cases, acceptance criteria, test plan, and effort/complexity estimate.
+            - If relevant, also require: API/DB changes, validation & error handling, security, performance, logging/observability, and rollout/migration notes.
+            
+            Now generate the single prompt.
+            PROMPT;
             $userMessage = $validated['content'];
         } else {
             $isSelection = $validated['is_selection'] ?? false;

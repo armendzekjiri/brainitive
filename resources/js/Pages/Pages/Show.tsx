@@ -1,6 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, useForm, router, Link, usePage } from '@inertiajs/react';
-import type { OutputData } from '@editorjs/editorjs';
 import { PageProps, Workspace, Project, Page as PageType, User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -57,12 +56,13 @@ import {
     Pencil,
     Eye,
     PencilRuler,
+    List as ListIcon,
+    Maximize2,
+    Minimize2,
 } from 'lucide-react';
 import { useState, useEffect, useRef, FormEvent, Fragment, useCallback } from 'react';
-import EditorJSComponent, { HeadingItem } from '@/components/editor/EditorJS';
-import '@/components/editor/editorjs.css';
+import { RichLexicalEditor, TocHeading } from '@/components/editor/RichLexicalEditorFull';
 import { cn } from '@/lib/utils';
-import { List as ListIcon } from 'lucide-react';
 import { flattenPagesForParentSelect } from '@/lib/pageTree';
 import {
     Select,
@@ -204,91 +204,6 @@ function ChildPageCard({ page, workspace, project }: { page: PageType & { uuid?:
             </div>
             <ChevronRight className="size-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
         </Link>
-    );
-}
-
-// Table of Contents Component - Fixed on right side
-function TableOfContents({ headings }: { headings: HeadingItem[] }) {
-    const [activeId, setActiveId] = useState<string>('');
-
-    useEffect(() => {
-        const handleScroll = () => {
-            const headingElements = document.querySelectorAll('.ce-header[id]');
-            let currentActiveId = '';
-
-            headingElements.forEach((heading) => {
-                const rect = heading.getBoundingClientRect();
-                if (rect.top <= 120) {
-                    currentActiveId = heading.id || '';
-                }
-            });
-
-            setActiveId(currentActiveId);
-        };
-
-        window.addEventListener('scroll', handleScroll, { passive: true });
-        handleScroll(); // Initial check
-        return () => window.removeEventListener('scroll', handleScroll);
-    }, [headings]);
-
-    const scrollToHeading = (id: string) => {
-        const element = document.getElementById(id);
-        if (element) {
-            // Get the sticky header height (approximately 60px)
-            const headerOffset = 80;
-            const elementPosition = element.getBoundingClientRect().top;
-            const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
-
-            window.scrollTo({
-                top: offsetPosition,
-                behavior: 'smooth'
-            });
-        }
-    };
-
-    if (headings.length === 0) {
-        return null;
-    }
-
-    const minLevel = Math.min(...headings.map(h => h.level));
-
-    return (
-        <div className="w-56">
-            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-3">
-                <ListIcon className="size-4" />
-                <span>On this page</span>
-            </div>
-            <nav className="space-y-1">
-                {headings.map((heading) => {
-                    const indent = (heading.level - minLevel) * 12;
-                    const isActive = activeId === heading.id;
-
-                    return (
-                        <button
-                            key={heading.id}
-                            onClick={() => scrollToHeading(heading.id)}
-                            className={cn(
-                                'block w-full text-left text-sm py-1 px-2 rounded-md transition-colors truncate',
-                                'hover:bg-accent hover:text-accent-foreground',
-                                isActive
-                                    ? 'text-primary font-medium bg-primary/5'
-                                    : 'text-muted-foreground'
-                            )}
-                            style={{ paddingLeft: `${8 + indent}px` }}
-                            title={heading.text}
-                        >
-                            <ChevronRight
-                                className={cn(
-                                    'size-3 inline-block mr-1 opacity-50',
-                                    heading.level === minLevel && 'hidden'
-                                )}
-                            />
-                            {heading.text || 'Untitled'}
-                        </button>
-                    );
-                })}
-            </nav>
-        </div>
     );
 }
 
@@ -455,6 +370,118 @@ function AddSubpageDialog({
     );
 }
 
+// Table of Contents (Lexical edition) – fixed sidebar on right
+function PageTableOfContents({ headings, headerOffset }: { headings: TocHeading[]; headerOffset: number }) {
+    const [activeId, setActiveId] = useState<string>('');
+
+    useEffect(() => {
+        if (headings.length === 0) return;
+
+        const els = Array.from(document.querySelectorAll<HTMLElement>(
+            '.lexical-editor-content h1, .lexical-editor-content h2, .lexical-editor-content h3, .lexical-editor-content h4'
+        ));
+        if (els.length === 0) return;
+
+        // Track which headings are above the fold - last one wins as "active"
+        const visibleAbove = new Set<number>();
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    const idx = els.indexOf(entry.target as HTMLElement);
+                    if (idx === -1) return;
+                    if (entry.isIntersecting) {
+                        visibleAbove.delete(idx);
+                    } else if (entry.boundingClientRect.top < 0) {
+                        // heading scrolled above the viewport
+                        visibleAbove.add(idx);
+                    } else {
+                        visibleAbove.delete(idx);
+                    }
+                });
+
+                if (visibleAbove.size > 0) {
+                    // The heading just after the last one that scrolled above
+                    const lastAbove = Math.max(...visibleAbove);
+                    const nextIdx = lastAbove + 1 < els.length ? lastAbove + 1 : lastAbove;
+                    setActiveId(`toc-${nextIdx}`);
+                } else {
+                    setActiveId(els.length > 0 ? 'toc-0' : '');
+                }
+            },
+            {
+                // rootMargin: push the top boundary up so heading triggers just as it leaves view
+                rootMargin: `-${headerOffset + 10}px 0px 0px 0px`,
+                threshold: 0,
+            }
+        );
+
+        els.forEach((el) => observer.observe(el));
+        return () => observer.disconnect();
+    }, [headings, headerOffset]);
+
+    if (headings.length === 0) return null;
+    const minLevel = Math.min(...headings.map((h) => h.level));
+
+    const scrollTo = (h: TocHeading) => {
+        const els = document.querySelectorAll<HTMLElement>(
+            '.lexical-editor-content h1, .lexical-editor-content h2, .lexical-editor-content h3, .lexical-editor-content h4'
+        );
+        const el = els[h.index];
+        if (!el) return;
+        // Let the browser figure out the scroll container - works with any overflow element
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+
+    return (
+        <div className="w-56">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 px-2">
+                <ListIcon className="size-3.5" />
+                <span>On this page</span>
+            </div>
+            <nav className="space-y-0.5">
+                {headings.map((h) => {
+                    const depth = h.level - minLevel;
+                    const isActive = activeId === h.id;
+                    return (
+                        <button
+                            key={h.id}
+                            onClick={() => scrollTo(h)}
+                            className={cn(
+                                'flex items-center w-full text-left rounded-md transition-colors',
+                                'hover:bg-accent hover:text-accent-foreground',
+                                depth === 0 && 'text-sm font-medium py-1 px-2',
+                                depth === 1 && 'text-[13px] py-0.5',
+                                depth >= 2 && 'text-xs py-0.5',
+                                isActive
+                                    ? 'text-primary bg-primary/5'
+                                    : depth === 0 ? 'text-foreground/80' : 'text-muted-foreground',
+                            )}
+                            style={{ paddingLeft: `${8 + depth * 14}px` }}
+                            title={h.text}
+                        >
+                            {depth > 0 && (
+                                <span className="mr-1.5 shrink-0 text-muted-foreground/40">{'–'.repeat(depth)}</span>
+                            )}
+                            <span className="truncate">{h.text || 'Untitled'}</span>
+                        </button>
+                    );
+                })}
+            </nav>
+        </div>
+    );
+}
+
+// Extract HTML string from stored page content (handles lexical format and legacy formats)
+function extractHtmlContent(content: Record<string, any> | null | undefined): string | null {
+    if (!content) return null;
+    // New Lexical format: { type: 'lexical', html: '...' }
+    if (content.type === 'lexical' && typeof content.html === 'string') {
+        return content.html;
+    }
+    return null;
+}
+
 export default function PageShow({ workspace, project, page, breadcrumbs }: Props) {
     // Redirect Excalidraw pages to full-page editor (unless they just came back from the editor)
     useEffect(() => {
@@ -468,9 +495,10 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
     const [addSubpageOpen, setAddSubpageOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
-    const [headings, setHeadings] = useState<HeadingItem[]>([]);
-    const [contentWithEmbedImage, setContentWithEmbedImage] = useState<Record<string, unknown> | null>(null);
-    const appliedEmbedReturnRef = useRef(false);
+    const [headings, setHeadings] = useState<TocHeading[]>([]);
+    const [isFullWidth, setIsFullWidth] = useState(() => {
+        try { return localStorage.getItem(`page-full-width-${page.uuid}`) === 'true'; } catch { return false; }
+    });
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Edit mode state - published pages start in view mode
@@ -480,49 +508,14 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
     const [formData, setFormData] = useState({
         name: page.name,
         icon: page.icon || '📄',
-        content: page.content || { type: 'doc', content: [] },
     });
 
-    // When returning from Excalidraw embed editor: merge image_url into block and save
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const from = params.get('from');
-        const blockId = params.get('block_id');
-        const imageUrl = params.get('image_url');
-        if (from !== 'excalidraw_embed' || !blockId || !imageUrl || appliedEmbedReturnRef.current) return;
-        const raw = page.content as { blocks?: Array<{ id?: string; type?: string; data?: Record<string, unknown> }> } | null;
-        const blocks = raw?.blocks ?? [];
-        const idx = blocks.findIndex((b) => b.id === blockId && b.type === 'excalidrawEmbed');
-        if (idx < 0) return;
-        appliedEmbedReturnRef.current = true;
-        const decodedUrl = decodeURIComponent(imageUrl);
-        const newBlocks = blocks.map((b, i) =>
-            i === idx && b.data ? { ...b, data: { ...b.data, imageUrl: decodedUrl } } : b
-        );
-        const merged = { ...raw, blocks: newBlocks };
-        setContentWithEmbedImage(merged);
-        router.put(route('pages.update', [workspace.slug, project.slug, page.uuid]), {
-            content: JSON.stringify(merged),
-        }, {
-            preserveScroll: true,
-            preserveState: true,
-            onSuccess: () => {
-                const url = new URL(window.location.href);
-                url.searchParams.delete('from');
-                url.searchParams.delete('block_id');
-                url.searchParams.delete('diagram_id');
-                url.searchParams.delete('image_url');
-                window.history.replaceState({}, '', url.pathname + url.search);
-            },
-        });
-    }, [page.uuid, page.content, workspace.slug, project.slug]);
 
     // Update formData and editing state when page prop changes
     useEffect(() => {
         setFormData({
             name: page.name,
             icon: page.icon || '📄',
-            content: page.content || { type: 'doc', content: [] },
         });
         // Reset to view mode if page is published
         setIsEditing(page.status !== 'published');
@@ -548,8 +541,8 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
         });
     };
 
-    // Debounced content save
-    const handleUpdateContent = useCallback((content: any) => {
+    // Debounced content save - receives HTML string from RichLexicalEditor
+    const handleUpdateContent = useCallback((html: string) => {
         setIsSaving(true);
 
         // Clear any existing timeout
@@ -560,7 +553,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
         // Debounce save - wait 1 second after last change
         saveTimeoutRef.current = setTimeout(() => {
             router.put(route('pages.update', [workspace.slug, project.slug, page.uuid]), {
-                content: JSON.stringify(content),
+                content: JSON.stringify({ type: 'lexical', html }),
             }, {
                 preserveScroll: true,
                 preserveState: true,
@@ -583,25 +576,6 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
             }
         };
     }, []);
-
-    const handleExcalidrawEmbedInsert = useCallback(
-        async (content: OutputData, diagramId: string, blockId: string) => {
-            await new Promise<void>((resolve, reject) => {
-                router.put(route('pages.update', [workspace.slug, project.slug, page.uuid]), {
-                    content: JSON.stringify(content),
-                }, {
-                    preserveScroll: true,
-                    preserveState: true,
-                    onSuccess: () => resolve(),
-                    onError: () => reject(new Error('Failed to save')),
-                });
-            });
-            const url = route('pages.excalidraw', [workspace.slug, project.slug, page.uuid])
-                + '?embed=1&diagram_id=' + encodeURIComponent(diagramId) + '&block_id=' + encodeURIComponent(blockId);
-            window.location.href = url;
-        },
-        [workspace.slug, project.slug, page.uuid]
-    );
 
     const handlePublish = () => {
         router.post(route('pages.publish', [workspace.slug, project.slug, page.uuid]), {}, {
@@ -646,17 +620,11 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
         <AppLayout>
             <Head title={`${page.name} - ${project.name}`} />
 
-            <div className="min-h-full bg-background relative">
-                {/* Table of Contents - Fixed on right side outside main content (only for doc pages) */}
-                {page.type === 'page' && !isExcalidrawPage(page.content) && headings.length > 0 && (
-                    <div className="hidden xl:block fixed right-8 top-32 z-20 max-h-[calc(100vh-10rem)] overflow-y-auto">
-                        <TableOfContents headings={headings} />
-                    </div>
-                )}
+            <div className="h-full flex flex-col bg-background">
 
-                {/* Header */}
-                <div className="border-b bg-background/95 backdrop-blur sticky top-0 z-10">
-                    <div className="max-w-6xl mx-auto px-6 py-3">
+                {/* Breadcrumb bar — always visible, outside the scroll panels */}
+                <div className="shrink-0 border-b bg-background/95 backdrop-blur z-10">
+                    <div className={cn("mx-auto px-6 py-3", !isFullWidth && "max-w-6xl")}>
                         <div className="flex items-center justify-between">
                             {/* Breadcrumbs */}
                             <Breadcrumb>
@@ -739,6 +707,21 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
 
                                 {/* Unpublish in dropdown for published pages */}
 
+                                {/* Full-width toggle */}
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-8"
+                                    title={isFullWidth ? 'Exit full width' : 'Full width'}
+                                    onClick={() => {
+                                        const next = !isFullWidth;
+                                        setIsFullWidth(next);
+                                        try { localStorage.setItem(`page-full-width-${page.uuid}`, String(next)); } catch {}
+                                    }}
+                                >
+                                    {isFullWidth ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                                </Button>
+
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button variant="ghost" size="icon" className="size-8">
@@ -779,8 +762,15 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                     </div>
                 </div>
 
-                {/* Content */}
-                <div className="max-w-6xl mx-auto px-6 py-8">
+                {/* Two-panel row: content | TOC — each scrolls independently */}
+                <div className="flex-1 overflow-hidden flex">
+
+                {/* Page content panel */}
+                <div className="flex-1 overflow-y-auto bg-white">
+                <div className={cn(
+                    "mx-auto px-6 pt-6 pb-8",
+                    !isFullWidth && "max-w-6xl"
+                )}>
                     {/* Icon and Title */}
                     <div className="mb-8">
                         <div className="flex items-center gap-3">
@@ -821,7 +811,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                         </div>
                     </div>
 
-                    <Separator className="mb-8" />
+                    <Separator className="mb-2" />
 
                     {/* Whiteboard page: show preview image/card, click to open editor */}
                     {page.type === 'page' && isExcalidrawPage(page.content) && (
@@ -850,21 +840,22 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                         </div>
                     )}
 
-                    {/* Page Content - Editor.js (documents only; Excalidraw pages use preview above) */}
+                    {/* Page Content - RichLexicalEditor (documents only; Excalidraw pages use preview above) */}
                     {page.type === 'page' && !isExcalidrawPage(page.content) && (
-                        <EditorJSComponent
+                        <RichLexicalEditor
                             key={`${page.uuid}-${isEditing}`}
-                            content={(contentWithEmbedImage ?? page.content) as any || { blocks: [] }}
+                            content={extractHtmlContent(page.content as any)}
                             onChange={handleUpdateContent}
-                            onHeadingsChange={setHeadings}
                             editable={isEditing}
-                            placeholder="Click here and start writing, or type / for commands..."
-                            excalidrawEmbedConfig={{
-                                getEmbedEditorUrl: ({ diagramId, blockId }) =>
-                                    route('pages.excalidraw', [workspace.slug, project.slug, page.uuid]) +
-                                    '?embed=1&diagram_id=' + encodeURIComponent(diagramId) + '&block_id=' + encodeURIComponent(blockId),
-                            }}
-                            onExcalidrawEmbedInsert={handleExcalidrawEmbedInsert}
+                            placeholder="Click here and start writing, or press / for commands..."
+                            showToolbar={isEditing}
+                            minHeight="400px"
+                            workspaceSlug={workspace.slug}
+                            contentKey={`page-${page.uuid}-${isEditing}`}
+                            onHeadingsChange={setHeadings}
+                            className="border-0 rounded-none shadow-none bg-transparent overflow-visible"
+                            stickyToolbar={isEditing}
+                            stickyTopOffset={0}
                         />
                     )}
 
@@ -915,6 +906,19 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                         </div>
                     )}
                 </div>
+                </div>
+
+                {/* TOC panel — own scroll, naturally aligned next to content */}
+                {page.type === 'page' && !isExcalidrawPage(page.content) && headings.length > 0 && (
+                    <div className="hidden xl:flex w-64 shrink-0 flex-col border-l bg-background overflow-y-auto overflow-x-hidden px-4 pt-6">
+                        <PageTableOfContents
+                            headings={headings}
+                            headerOffset={0}
+                        />
+                    </div>
+                )}
+
+                </div>{/* end panels row */}
             </div>
 
             {/* Delete Confirmation Dialog */}

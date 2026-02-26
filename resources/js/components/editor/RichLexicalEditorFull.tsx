@@ -1803,7 +1803,7 @@ function htmlToPlainText(html: string, maxLength = 500): string {
     return maxLength && text.length > maxLength ? text.slice(0, maxLength) + '…' : text;
 }
 
-function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle, projectName }: { showToolbar?: boolean; workspaceSlug?: string; itemTitle?: string; projectName?: string }) {
+function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle, projectName, stickyToolbar = false, stickyTopOffset = 52 }: { showToolbar?: boolean; workspaceSlug?: string; itemTitle?: string; projectName?: string; stickyToolbar?: boolean; stickyTopOffset?: number }) {
     const [editor] = useLexicalComposerContext();
     const onChangeFromContext = useContext(RichLexicalOnChangeContext);
     const [isBold, setIsBold] = useState(false);
@@ -1991,7 +1991,13 @@ function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle, projectNa
 
     return (
         <React.Fragment>
-            <div className="flex items-center gap-0.5 px-1.5 py-1 border-b bg-muted/30 flex-wrap min-h-[40px]">
+            <div
+                className={cn(
+                    "flex items-center gap-0.5 px-1.5 py-1 border-b bg-muted/30 flex-wrap min-h-[40px]",
+                    stickyToolbar && "sticky z-[9] bg-background/95 backdrop-blur shadow-sm"
+                )}
+                style={stickyToolbar ? { top: stickyTopOffset } : undefined}
+            >
                 {/* Undo / Redo */}
                 <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0"
                     onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)} title="Undo (Ctrl+Z)">
@@ -2734,6 +2740,34 @@ function HtmlOnChangePlugin({ onChange }: { onChange: (html: string) => void }) 
     return null;
 }
 
+export interface TocHeading {
+    id: string;
+    text: string;
+    level: number;
+    index: number;
+}
+
+function HeadingsExtractorPlugin({ onHeadingsChange }: { onHeadingsChange: (headings: TocHeading[]) => void }) {
+    const [editor] = useLexicalComposerContext();
+
+    useEffect(() => {
+        return editor.registerUpdateListener(() => {
+            const rootEl = editor.getRootElement();
+            if (!rootEl) return;
+            const els = rootEl.querySelectorAll('h1, h2, h3, h4');
+            const headings: TocHeading[] = [];
+            els.forEach((el, i) => {
+                const level = parseInt(el.tagName.replace('H', ''), 10);
+                const text = (el.textContent ?? '').trim();
+                if (text) headings.push({ id: `toc-${i}`, text, level, index: i });
+            });
+            onHeadingsChange(headings);
+        });
+    }, [editor, onHeadingsChange]);
+
+    return null;
+}
+
 interface RichLexicalEditorProps {
     content: string | null;
     onChange: (content: string) => void;
@@ -2747,6 +2781,9 @@ interface RichLexicalEditorProps {
     workspaceSlug?: string;
     itemTitle?: string;
     projectName?: string;
+    onHeadingsChange?: (headings: TocHeading[]) => void;
+    stickyToolbar?: boolean;
+    stickyTopOffset?: number;
 }
 
 export function RichLexicalEditor({
@@ -2762,6 +2799,9 @@ export function RichLexicalEditor({
     workspaceSlug,
     itemTitle,
     projectName,
+    onHeadingsChange,
+    stickyToolbar = false,
+    stickyTopOffset = 52,
 }: RichLexicalEditorProps) {
     const [floatingAnchorElem, setFloatingAnchorElem] = useState<HTMLDivElement | null>(null);
 
@@ -2813,7 +2853,7 @@ export function RichLexicalEditor({
         <LexicalComposer initialConfig={initialConfig}>
             <RichLexicalOnChangeContext.Provider value={onChange}>
             <div className={cn("border rounded-lg overflow-hidden bg-white dark:bg-card", className)}>
-                <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} projectName={projectName} />
+                <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} projectName={projectName} stickyToolbar={stickyToolbar} stickyTopOffset={stickyTopOffset} />
                 <div
                     className={cn("relative", maxHeight && "overflow-y-auto")}
                     style={maxHeight ? { maxHeight } : undefined}
@@ -2823,7 +2863,7 @@ export function RichLexicalEditor({
                         contentEditable={
                             <ContentEditable
                                 className={cn(
-                                    "outline-none p-4 text-sm prose prose-sm max-w-none",
+                                    "lexical-editor-content outline-none p-4 text-sm prose prose-sm max-w-none",
                                     editable && "pl-16",
                                     !editable && "cursor-default"
                                 )}
@@ -2852,6 +2892,7 @@ export function RichLexicalEditor({
                 <CodeHighlightPlugin />
                 <InitialContentPlugin content={content} editable={editable} contentKey={contentKey} />
                 <HtmlOnChangePlugin onChange={onChange} />
+                {onHeadingsChange && <HeadingsExtractorPlugin onHeadingsChange={onHeadingsChange} />}
                 {floatingAnchorElem && (
                     <CodeActionMenuPlugin anchorElem={floatingAnchorElem} />
                 )}

@@ -346,6 +346,10 @@ function ItemCard({
                             <DropdownMenuItem
                                 onClick={(e) => {
                                     e.stopPropagation();
+                                    const hasSubtasks = (item.children_count ?? 0) > 0;
+                                    if (hasSubtasks && !window.confirm(`This task has ${item.children_count} subtask(s). Deleting it will delete those subtasks too. Continue?`)) {
+                                        return;
+                                    }
                                     router.delete(route('boards.items.destroy', [workspace.slug, project.slug, board.slug, item.id]));
                                 }}
                                 className="text-destructive focus:text-destructive"
@@ -358,6 +362,20 @@ function ItemCard({
 
                 {/* Title */}
                 <p className="text-sm font-medium mb-3 line-clamp-2 leading-snug">{item.title}</p>
+
+                {/* Parent (subtask link) */}
+                {item.parent && (
+                    <div className="mb-2">
+                        <Link
+                            href={route('boards.items.show', [workspace.slug, project.slug, board.slug, item.parent.id])}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-[10px] text-muted-foreground hover:text-primary hover:underline flex items-center gap-1"
+                        >
+                            <ChevronUp className="size-3 shrink-0" />
+                            <span>Parent: {item.parent.key}</span>
+                        </Link>
+                    </div>
+                )}
 
                 {/* Labels */}
                 {item.labels && item.labels.length > 0 && (
@@ -428,27 +446,41 @@ function CreateItemInline({
     project,
     board,
     itemTypes,
+    rootItems,
 }: {
     column: BoardColumn;
     workspace: Workspace;
     project: Project;
     board: Board;
     itemTypes: ItemType[];
+    rootItems: Item[];
 }) {
     const [isCreating, setIsCreating] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
+    const subtaskTypeId = itemTypes.find((t) => t.slug === 'subtask')?.id?.toString();
     const { data, setData, post, processing, reset } = useForm({
         title: '',
         column_id: column.id,
         item_type_id: itemTypes.find((t) => t.slug === 'task')?.id?.toString() || '',
+        parent_id: '' as string | number,
     });
+
+    const isSubtask = data.item_type_id === subtaskTypeId;
+    const canSubmit = data.title.trim() && (!isSubtask || (data.parent_id !== '' && data.parent_id != null));
 
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
-        if (!data.title.trim()) return;
-        post(route('boards.items.store', [workspace.slug, project.slug, board.slug]), {
+        if (!canSubmit) return;
+        const payload = {
+            title: data.title,
+            column_id: data.column_id,
+            item_type_id: data.item_type_id,
+            parent_id: data.parent_id ? Number(data.parent_id) : null,
+        };
+        router.post(route('boards.items.store', [workspace.slug, project.slug, board.slug]), payload, {
             onSuccess: () => {
-                reset('title');
+                reset('title', 'parent_id');
+                setData('parent_id', '');
                 inputRef.current?.focus();
             },
         });
@@ -481,7 +513,7 @@ function CreateItemInline({
     return (
         <form onSubmit={handleSubmit} className="space-y-2">
             <Card className="bg-background shadow-sm">
-                <CardContent className="p-3">
+                <CardContent className="p-3 space-y-2">
                     <Input
                         ref={inputRef}
                         value={data.title}
@@ -491,10 +523,49 @@ function CreateItemInline({
                         className="border-0 p-0 h-auto text-sm focus-visible:ring-0 placeholder:text-muted-foreground/60"
                         autoFocus
                     />
+                    <div className="flex flex-col gap-1">
+                        <Label className="text-[10px] text-muted-foreground">Type</Label>
+                        <Select value={data.item_type_id || ''} onValueChange={(v) => setData('item_type_id', v)}>
+                            <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {itemTypes.map((type) => (
+                                    <SelectItem key={type.id} value={String(type.id)}>
+                                        <div className="flex items-center gap-2">
+                                            <ItemTypeIcon slug={type.slug} />
+                                            {type.name}
+                                        </div>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <Label className="text-[10px] text-muted-foreground">
+                            Parent task {isSubtask && <span className="text-destructive">*</span>}
+                        </Label>
+                        <Select
+                            value={data.parent_id === '' || data.parent_id == null ? 'none' : String(data.parent_id)}
+                            onValueChange={(v) => setData('parent_id', v === 'none' ? '' : Number(v))}
+                        >
+                            <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="None" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                {rootItems.map((r) => (
+                                    <SelectItem key={r.id} value={String(r.id)}>
+                                        <span className="font-mono text-xs">{r.key}</span> {r.title}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </CardContent>
             </Card>
             <div className="flex items-center gap-2">
-                <Button type="submit" size="sm" disabled={processing || !data.title.trim()}>
+                <Button type="submit" size="sm" disabled={processing || !canSubmit}>
                     Create
                 </Button>
                 <Button
@@ -520,6 +591,7 @@ function BoardColumnComponent({
     project,
     board,
     itemTypes,
+    rootItems,
     onEditItem,
     onDragStart,
     onDragEnd,
@@ -532,6 +604,7 @@ function BoardColumnComponent({
     project: Project;
     board: Board;
     itemTypes: ItemType[];
+    rootItems: Item[];
     onEditItem: (item: Item) => void;
     onDragStart: (e: DragEvent, item: Item) => void;
     onDragEnd: () => void;
@@ -604,6 +677,7 @@ function BoardColumnComponent({
                     project={project}
                     board={board}
                     itemTypes={itemTypes}
+                    rootItems={rootItems}
                 />
             </div>
         </div>
@@ -684,6 +758,7 @@ function ItemEditModal({
     const [assignedTo, setAssignedTo] = useState(item?.assigned_to?.toString() || '');
     const [itemTypeId, setItemTypeId] = useState(item?.item_type_id?.toString() || '');
     const [priorityId, setPriorityId] = useState(item?.priority_id?.toString() || '');
+    const [parentId, setParentId] = useState(item?.parent_id?.toString() || '');
     const [storyPoints, setStoryPoints] = useState(item?.story_points?.toString() || '');
     const [dueDate, setDueDate] = useState(item?.due_date?.toString().split('T')[0] || '');
 
@@ -706,6 +781,7 @@ function ItemEditModal({
             setAssignedTo(item.assigned_to?.toString() || '');
             setItemTypeId(item.item_type_id?.toString() || '');
             setPriorityId(item.priority_id?.toString() || '');
+            setParentId(item.parent_id?.toString() || '');
             setStoryPoints(item.story_points?.toString() || '');
             setDueDate(item.due_date?.toString().split('T')[0] || '');
             const parsed = parseDescription(item.description);
@@ -1231,6 +1307,39 @@ function ItemEditModal({
                                     </div>
                                 </div>
 
+                                {/* Parent task */}
+                                {(() => {
+                                    const rootItemsForEdit = columns.flatMap((c) => (c as BoardColumn & { items?: Item[] }).items || []).filter((i) => !i.parent_id && i.id !== item?.id);
+                                    const isSubtaskType = itemTypes.some((t) => t.slug === 'subtask' && t.id.toString() === itemTypeId);
+                                    return (
+                                        <div className="flex items-center min-h-[40px] py-1">
+                                            <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Parent</span>
+                                            <div className="flex-1">
+                                                <Select
+                                                    value={parentId || 'none'}
+                                                    onValueChange={(v) => {
+                                                        const val = v === 'none' ? '' : v;
+                                                        setParentId(val);
+                                                        saveProp({ parent_id: val ? parseInt(val, 10) : null });
+                                                    }}
+                                                >
+                                                    <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
+                                                        <SelectValue placeholder="None" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none" disabled={isSubtaskType}>None</SelectItem>
+                                                        {rootItemsForEdit.map((r) => (
+                                                            <SelectItem key={r.id} value={r.id.toString()}>
+                                                                <span className="font-mono text-xs">{r.key}</span> {r.title}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
                                 {/* Priority */}
                                 <div className="flex items-center min-h-[40px] py-1">
                                     <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Priority</span>
@@ -1415,6 +1524,7 @@ function ListView({
                         <tr className="border-b text-left text-sm text-muted-foreground">
                             <th className="pb-3 pl-4 font-medium">Key</th>
                             <th className="pb-3 font-medium">Title</th>
+                            <th className="pb-3 font-medium">Parent</th>
                             <th className="pb-3 font-medium">Status</th>
                             <th className="pb-3 font-medium">Priority</th>
                             <th className="pb-3 font-medium">Assignee</th>
@@ -1437,6 +1547,19 @@ function ListView({
                                 </td>
                                 <td className="py-3">
                                     <span className="font-medium">{item.title}</span>
+                                </td>
+                                <td className="py-3">
+                                    {item.parent ? (
+                                        <Link
+                                            href={route('boards.items.show', [workspace.slug, project.slug, board.slug, item.parent.id])}
+                                            className="text-primary hover:underline font-mono text-sm"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            {item.parent.key}
+                                        </Link>
+                                    ) : (
+                                        <span className="text-muted-foreground text-sm">—</span>
+                                    )}
                                 </td>
                                 <td className="py-3">
                                     <Badge variant="secondary" className="font-normal">
@@ -1484,7 +1607,7 @@ function ListView({
                         ))}
                         {allItems.length === 0 && (
                             <tr>
-                                <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                                <td colSpan={8} className="py-12 text-center text-muted-foreground">
                                     No items found
                                 </td>
                             </tr>
@@ -1841,6 +1964,12 @@ export default function BoardsShow({
         ) || [],
     }));
 
+    // Root items (no parent) for parent-task selector
+    const rootItems = useMemo(
+        () => filteredColumns.flatMap((c) => c.items || []).filter((i) => !i.parent_id),
+        [filteredColumns],
+    );
+
     return (
         <AppLayout>
             <Head title={`${board.name} - ${project.name}`} />
@@ -1946,6 +2075,7 @@ export default function BoardsShow({
                                     project={project}
                                     board={board}
                                     itemTypes={itemTypes}
+                                    rootItems={rootItems}
                                     onEditItem={setEditingItem}
                                     onDragStart={handleDragStart}
                                     onDragEnd={handleDragEnd}
