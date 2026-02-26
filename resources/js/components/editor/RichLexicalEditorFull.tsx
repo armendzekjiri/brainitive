@@ -1,5 +1,7 @@
 import React, { useEffect, useCallback, useState, useRef, useMemo, createContext, useContext } from 'react';
 import { createPortal } from 'react-dom';
+import Picker from '@emoji-mart/react';
+import emojiData from '@emoji-mart/data';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -358,6 +360,7 @@ function SlashCommandsPlugin() {
     // Modal states for various inserts
     const [showImageModal, setShowImageModal] = useState(false);
     const [showGIFModal, setShowGIFModal] = useState(false);
+    const [showEmojiPickerSlash, setShowEmojiPickerSlash] = useState(false);
     const [showYouTubeModal, setShowYouTubeModal] = useState(false);
     const [showFigmaModal, setShowFigmaModal] = useState(false);
     const [showTweetModal, setShowTweetModal] = useState(false);
@@ -500,6 +503,15 @@ function SlashCommandsPlugin() {
             },
         },
         // Media
+        {
+            title: 'Emoji',
+            description: 'Insert an emoji',
+            icon: <SmilePlus className="size-4" />,
+            keywords: ['emoji', 'smile', 'icon', 'reaction', 'emoticon'],
+            onSelect: () => {
+                setShowEmojiPickerSlash(true);
+            },
+        },
         {
             title: 'Image',
             description: 'Insert an image from URL',
@@ -950,11 +962,36 @@ function SlashCommandsPlugin() {
                     setShowLayoutModal(false);
                 }}
             />
+            {/* Emoji Picker (slash command) */}
+            {showEmojiPickerSlash && createPortal(
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center"
+                    style={{ background: 'rgba(0,0,0,0.2)' }}
+                    onMouseDown={(e) => { if (e.target === e.currentTarget) setShowEmojiPickerSlash(false); }}
+                >
+                    <div onMouseDown={(e) => e.stopPropagation()}>
+                        <Picker
+                            data={emojiData}
+                            onEmojiSelect={(emoji: { native: string }) => {
+                                editor.update(() => {
+                                    const sel = $getSelection();
+                                    if ($isRangeSelection(sel)) sel.insertText(emoji.native);
+                                });
+                                setShowEmojiPickerSlash(false);
+                                editor.focus();
+                            }}
+                            theme="light"
+                            previewPosition="none"
+                            skinTonePosition="search"
+                            perLine={9}
+                        />
+                    </div>
+                </div>,
+                document.body
+            )}
         </>
     );
 }
-
-// Modal Components
 function InsertImageModal({ open, onClose, onInsert }: { open: boolean; onClose: () => void; onInsert: (src: string, alt: string) => void }) {
     const [tab, setTab] = useState<'upload' | 'url'>('upload');
     const [src, setSrc] = useState('');
@@ -1833,6 +1870,7 @@ function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle, projectNa
     const [showCaseMenu, setShowCaseMenu] = useState(false);
     const [showBlockMenu, setShowBlockMenu] = useState(false);
     const [showFontFamilyMenu, setShowFontFamilyMenu] = useState(false);
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     // Toolbar's own modal states (mirror of slash command modals)
     const [showImageModal, setShowImageModal] = useState(false);
     const [showTableModal, setShowTableModal] = useState(false);
@@ -2210,6 +2248,34 @@ function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle, projectNa
                                 {opt.label}
                             </button>
                         ))}
+                    </PopoverContent>
+                </Popover>
+
+                <Divider />
+
+                {/* Emoji picker */}
+                <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+                    <PopoverTrigger asChild>
+                        <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" title="Insert Emoji">
+                            <SmilePlus className="h-4 w-4" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="p-0 w-auto border-none shadow-xl" align="start" side="bottom">
+                        <Picker
+                            data={emojiData}
+                            onEmojiSelect={(emoji: { native: string }) => {
+                                editor.update(() => {
+                                    const sel = $getSelection();
+                                    if ($isRangeSelection(sel)) sel.insertText(emoji.native);
+                                });
+                                setShowEmojiPicker(false);
+                                editor.focus();
+                            }}
+                            theme="light"
+                            previewPosition="none"
+                            skinTonePosition="search"
+                            perLine={9}
+                        />
                     </PopoverContent>
                 </Popover>
 
