@@ -1,6 +1,8 @@
 import {
     $applyNodeReplacement,
     DecoratorNode,
+    DOMConversionMap,
+    DOMConversionOutput,
     DOMExportOutput,
     EditorConfig,
     LexicalNode,
@@ -46,6 +48,25 @@ function generateUID(): string {
     return Math.random().toString(36).substring(2, 9);
 }
 
+function escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function $convertPollElement(domNode: Node): DOMConversionOutput | null {
+    const el = domNode as HTMLElement;
+    const stateRaw = el.getAttribute('data-poll-state');
+    if (!stateRaw) return null;
+    try {
+        const { question, options } = JSON.parse(stateRaw) as { question: string; options: PollOption[] };
+        const node = $createPollNode(question ?? 'What do you think?', options);
+        return { node };
+    } catch {
+        return null;
+    }
+}
+
 function PollComponent({
     question,
     options,
@@ -86,7 +107,11 @@ function PollComponent({
                 CLICK_COMMAND,
                 (payload) => {
                     const event = payload;
-                    if (containerRef.current && containerRef.current.contains(event.target as Node)) {
+                    const target = event.target as HTMLElement;
+                    if (target && (target.closest('button') || target.closest('input'))) {
+                        return false;
+                    }
+                    if (containerRef.current && containerRef.current.contains(target as Node)) {
                         if (!isEditing) {
                             if (event.shiftKey) {
                                 setSelected(!isSelected);
@@ -187,7 +212,12 @@ function PollComponent({
                                     />
                                     {editOptions.length > 2 && (
                                         <button
-                                            onClick={() => removeOption(opt.uid)}
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                removeOption(opt.uid);
+                                            }}
                                             className="px-2 text-red-500 hover:bg-red-50 rounded"
                                         >
                                             ×
@@ -197,7 +227,12 @@ function PollComponent({
                             ))}
                         </div>
                         <button
-                            onClick={addOption}
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                addOption();
+                            }}
                             className="mt-2 text-sm text-primary hover:underline"
                         >
                             + Add option
@@ -205,7 +240,10 @@ function PollComponent({
                     </div>
                     <div className="flex justify-end gap-2">
                         <button
-                            onClick={() => {
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
                                 setEditQuestion(question);
                                 setEditOptions(options);
                                 setIsEditing(false);
@@ -215,7 +253,12 @@ function PollComponent({
                             Cancel
                         </button>
                         <button
-                            onClick={handleSave}
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleSave();
+                            }}
                             className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-md"
                         >
                             Save Poll
@@ -235,7 +278,12 @@ function PollComponent({
             <div className="flex justify-between items-start mb-3">
                 <h4 className="font-medium">{question || 'Poll Question'}</h4>
                 <button
-                    onClick={() => setIsEditing(true)}
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsEditing(true);
+                    }}
                     className="text-xs text-muted-foreground hover:text-foreground"
                 >
                     Edit
@@ -249,7 +297,12 @@ function PollComponent({
                     return (
                         <button
                             key={opt.uid}
-                            onClick={() => handleVote(opt.uid)}
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleVote(opt.uid);
+                            }}
                             disabled={!!votedOption}
                             className={`w-full relative overflow-hidden text-left px-3 py-2 border rounded-md transition-all ${
                                 isVoted ? 'border-primary bg-primary/5' : 'hover:border-primary/50'
@@ -322,13 +375,25 @@ export class PollNode extends DecoratorNode<JSX.Element> {
 
     exportDOM(): DOMExportOutput {
         const element = document.createElement('div');
+        element.setAttribute('data-lexical-poll', 'true');
+        element.setAttribute(
+            'data-poll-state',
+            JSON.stringify({ question: this.__question, options: this.__options })
+        );
         element.className = 'poll';
-        element.innerHTML = `<p><strong>${this.__question}</strong></p><ul>${this.__options.map(o => `<li>${o.text}</li>`).join('')}</ul>`;
+        // Fallback for non-Lexical viewers
+        element.innerHTML = `<p><strong>${escapeHtml(this.__question)}</strong></p><ul>${this.__options.map(o => `<li>${escapeHtml(o.text)}</li>`).join('')}</ul>`;
         return { element };
     }
 
-    static importDOM(): null {
-        return null;
+    static importDOM(): DOMConversionMap | null {
+        return {
+            div: (domNode: Node) => {
+                const el = domNode as HTMLElement;
+                if (el.getAttribute('data-lexical-poll') !== 'true') return null;
+                return { conversion: $convertPollElement, priority: 1 };
+            },
+        };
     }
 
     setQuestion(question: string): void {
