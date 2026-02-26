@@ -21,6 +21,7 @@ class AuthenticatedSessionController extends Controller
         return Inertia::render('Auth/Login', [
             'canResetPassword' => Route::has('password.request'),
             'canLoginWithGoogle' => (bool) config('services.google.client_id'),
+            'canLoginWithGitHub' => (bool) config('services.github.client_id'),
             'status' => session('status'),
         ]);
     }
