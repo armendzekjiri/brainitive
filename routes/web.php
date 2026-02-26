@@ -20,6 +20,7 @@ Route::get('/', function () {
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
         'canLoginWithGoogle' => (bool) config('services.google.client_id'),
+        'canLoginWithGitHub' => (bool) config('services.github.client_id'),
     ]);
 });
 
