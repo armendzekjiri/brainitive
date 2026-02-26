@@ -60,7 +60,9 @@ import {
     Maximize2,
     Minimize2,
 } from 'lucide-react';
-import { useState, useEffect, useRef, FormEvent, Fragment, useCallback } from 'react';
+import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallback } from 'react';
+import Picker from '@emoji-mart/react';
+import emojiData from '@emoji-mart/data';
 import { RichLexicalEditor, TocHeading } from '@/components/editor/RichLexicalEditorFull';
 import { cn } from '@/lib/utils';
 import { flattenPagesForParentSelect } from '@/lib/pageTree';
@@ -92,36 +94,111 @@ function isExcalidrawPage(content: unknown): boolean {
     return c.type === 'excalidraw' || (Array.isArray(c.elements) && c.appState !== undefined);
 }
 
-// Emoji Picker (simplified)
-const commonEmojis = ['📄', '📁', '📝', '📋', '📌', '🎯', '💡', '🔥', '⭐', '📊', '📈', '🚀', '💻', '🔧', '📚', '📖'];
-
-function EmojiPicker({ value, onChange }: { value: string; onChange: (emoji: string) => void }) {
+// Page Icon Picker — full emoji-mart + custom image upload
+function PageIconPicker({ value, onChange }: { value: string; onChange: (val: string) => void }) {
     const [open, setOpen] = useState(false);
+    const [tab, setTab] = useState<'emoji' | 'upload'>('emoji');
+    const fileRef = useRef<HTMLInputElement>(null);
+
+    const isImage = value?.startsWith('data:') || value?.startsWith('http') || value?.startsWith('/');
 
     return (
-        <DropdownMenu open={open} onOpenChange={setOpen}>
-            <DropdownMenuTrigger asChild>
-                <button className="text-4xl hover:bg-accent rounded-lg p-2 transition-colors">
-                    {value || '📄'}
-                </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-64 p-2">
-                <div className="grid grid-cols-8 gap-1">
-                    {commonEmojis.map((emoji) => (
-                        <button
-                            key={emoji}
-                            onClick={() => {
-                                onChange(emoji);
-                                setOpen(false);
-                            }}
-                            className="text-xl p-1.5 hover:bg-accent rounded transition-colors"
-                        >
-                            {emoji}
-                        </button>
-                    ))}
+        <>
+            {/* Trigger button */}
+            <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="group relative size-14 flex items-center justify-center text-5xl hover:bg-accent rounded-xl transition-colors"
+                title="Change icon"
+            >
+                {isImage
+                    ? <img src={value} className="size-12 rounded-lg object-cover" alt="icon" />
+                    : <span>{value || '📄'}</span>}
+                <span className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 rounded-xl transition-opacity text-white text-xs font-medium">
+                    Edit
+                </span>
+            </button>
+
+            {/* Picker popover */}
+            {open && (
+                <div className="fixed inset-0 z-50 flex items-start justify-center pt-20" onClick={() => setOpen(false)}>
+                    <div
+                        className="bg-popover border rounded-xl shadow-2xl overflow-hidden w-[360px]"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Tabs */}
+                        <div className="flex border-b">
+                            <button
+                                className={cn('flex-1 py-2 text-sm font-medium transition-colors', tab === 'emoji' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground')}
+                                onClick={() => setTab('emoji')}
+                            >😀 Emoji</button>
+                            <button
+                                className={cn('flex-1 py-2 text-sm font-medium transition-colors', tab === 'upload' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground')}
+                                onClick={() => setTab('upload')}
+                            >🖼 Custom Image</button>
+                        </div>
+
+                        {tab === 'emoji' && (
+                            <Picker
+                                data={emojiData}
+                                onEmojiSelect={(emoji: { native: string }) => {
+                                    onChange(emoji.native);
+                                    setOpen(false);
+                                }}
+                                theme="light"
+                                previewPosition="none"
+                                skinTonePosition="search"
+                                perLine={9}
+                            />
+                        )}
+
+                        {tab === 'upload' && (
+                            <div className="p-6 flex flex-col items-center gap-4">
+                                <p className="text-sm text-muted-foreground text-center">
+                                    Upload a PNG or SVG image to use as the page icon.
+                                </p>
+                                {isImage && (
+                                    <img src={value} className="size-20 rounded-xl object-cover border" alt="current icon" />
+                                )}
+                                <input
+                                    ref={fileRef}
+                                    type="file"
+                                    accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        const reader = new FileReader();
+                                        reader.onload = (ev) => {
+                                            const result = ev.target?.result as string;
+                                            onChange(result);
+                                            setOpen(false);
+                                        };
+                                        reader.readAsDataURL(file);
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => fileRef.current?.click()}
+                                    className="px-4 py-2 rounded-lg border border-dashed border-primary text-sm font-medium hover:bg-accent transition-colors w-full text-center"
+                                >
+                                    Choose file…
+                                </button>
+                                {isImage && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { onChange('📄'); setOpen(false); }}
+                                        className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                                    >
+                                        Remove custom image
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </DropdownMenuContent>
-        </DropdownMenu>
+            )}
+        </>
     );
 }
 
@@ -371,8 +448,20 @@ function AddSubpageDialog({
 }
 
 // Table of Contents (Lexical edition) – fixed sidebar on right
-function PageTableOfContents({ headings, headerOffset }: { headings: TocHeading[]; headerOffset: number }) {
+function PageTableOfContents({ headings, headerOffset, scrollRoot }: {
+    headings: TocHeading[];
+    headerOffset: number;
+    scrollRoot?: RefObject<HTMLDivElement>;
+}) {
     const [activeId, setActiveId] = useState<string>('');
+    const tocRef = useRef<HTMLDivElement>(null);
+
+    // Auto-scroll TOC to keep active item visible
+    useEffect(() => {
+        if (!activeId || !tocRef.current) return;
+        const el = tocRef.current.querySelector<HTMLElement>(`[data-toc-id="${activeId}"]`);
+        if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, [activeId]);
 
     useEffect(() => {
         if (headings.length === 0) return;
@@ -382,7 +471,7 @@ function PageTableOfContents({ headings, headerOffset }: { headings: TocHeading[
         ));
         if (els.length === 0) return;
 
-        // Track which headings are above the fold - last one wins as "active"
+        const root = scrollRoot?.current ?? null;
         const visibleAbove = new Set<number>();
 
         const observer = new IntersectionObserver(
@@ -392,8 +481,7 @@ function PageTableOfContents({ headings, headerOffset }: { headings: TocHeading[
                     if (idx === -1) return;
                     if (entry.isIntersecting) {
                         visibleAbove.delete(idx);
-                    } else if (entry.boundingClientRect.top < 0) {
-                        // heading scrolled above the viewport
+                    } else if (entry.boundingClientRect.top < (root ? root.getBoundingClientRect().top : 0)) {
                         visibleAbove.add(idx);
                     } else {
                         visibleAbove.delete(idx);
@@ -401,7 +489,6 @@ function PageTableOfContents({ headings, headerOffset }: { headings: TocHeading[
                 });
 
                 if (visibleAbove.size > 0) {
-                    // The heading just after the last one that scrolled above
                     const lastAbove = Math.max(...visibleAbove);
                     const nextIdx = lastAbove + 1 < els.length ? lastAbove + 1 : lastAbove;
                     setActiveId(`toc-${nextIdx}`);
@@ -410,7 +497,7 @@ function PageTableOfContents({ headings, headerOffset }: { headings: TocHeading[
                 }
             },
             {
-                // rootMargin: push the top boundary up so heading triggers just as it leaves view
+                root, // use the actual scroll container, not viewport
                 rootMargin: `-${headerOffset + 10}px 0px 0px 0px`,
                 threshold: 0,
             }
@@ -418,7 +505,7 @@ function PageTableOfContents({ headings, headerOffset }: { headings: TocHeading[
 
         els.forEach((el) => observer.observe(el));
         return () => observer.disconnect();
-    }, [headings, headerOffset]);
+    }, [headings, headerOffset, scrollRoot]);
 
     if (headings.length === 0) return null;
     const minLevel = Math.min(...headings.map((h) => h.level));
@@ -439,13 +526,14 @@ function PageTableOfContents({ headings, headerOffset }: { headings: TocHeading[
                 <ListIcon className="size-3.5" />
                 <span>On this page</span>
             </div>
-            <nav className="space-y-0.5">
+            <nav ref={tocRef} className="space-y-0.5">
                 {headings.map((h) => {
                     const depth = h.level - minLevel;
                     const isActive = activeId === h.id;
                     return (
                         <button
                             key={h.id}
+                            data-toc-id={h.id}
                             onClick={() => scrollTo(h)}
                             className={cn(
                                 'flex items-center w-full text-left rounded-md transition-colors',
@@ -500,6 +588,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
         try { return localStorage.getItem(`page-full-width-${page.uuid}`) === 'true'; } catch { return false; }
     });
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const contentPanelRef = useRef<HTMLDivElement>(null);
 
     // Edit mode state - published pages start in view mode
     const [isEditing, setIsEditing] = useState(page.status !== 'published');
@@ -766,7 +855,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                 <div className="flex-1 overflow-hidden flex">
 
                 {/* Page content panel */}
-                <div className="flex-1 overflow-y-auto bg-white">
+                <div ref={contentPanelRef} className="flex-1 overflow-y-auto bg-white">
                 <div className={cn(
                     "mx-auto px-6 pt-6 pb-8",
                     !isFullWidth && "max-w-6xl"
@@ -775,9 +864,11 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                     <div className="mb-8">
                         <div className="flex items-center gap-3">
                             {isEditing ? (
-                                <EmojiPicker value={formData.icon} onChange={handleUpdateIcon} />
+                                <PageIconPicker value={formData.icon} onChange={handleUpdateIcon} />
                             ) : (
-                                <span className="text-4xl">{formData.icon}</span>
+                                (formData.icon?.startsWith('data:') || formData.icon?.startsWith('http') || formData.icon?.startsWith('/'))
+                                    ? <img src={formData.icon} className="size-14 rounded-xl object-cover" alt="icon" />
+                                    : <span className="text-5xl">{formData.icon || '📄'}</span>
                             )}
                             {isEditing ? (
                                 <PageTitleEditor title={formData.name} onSave={handleUpdateName} />
@@ -914,6 +1005,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                         <PageTableOfContents
                             headings={headings}
                             headerOffset={0}
+                            scrollRoot={contentPanelRef}
                         />
                     </div>
                 )}

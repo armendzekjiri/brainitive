@@ -735,9 +735,15 @@ function SlashCommandsPlugin() {
                             const range = domSelection.getRangeAt(0);
                             const rect = range.getBoundingClientRect();
                             slashAnchorRef.current = { key: node.getKey(), offset };
+                            // Determine whether to open below or above the cursor
+                            const MENU_HEIGHT = 460; // approx max height (header + list + padding)
+                            const spaceBelow = window.innerHeight - rect.bottom;
+                            const fitsBelow = spaceBelow >= MENU_HEIGHT;
                             setMenuPosition({
-                                top: rect.bottom + window.scrollY + 5,
-                                left: rect.left + window.scrollX,
+                                top: fitsBelow
+                                    ? rect.bottom + 5
+                                    : Math.max(5, rect.top - MENU_HEIGHT - 5),
+                                left: Math.min(rect.left, window.innerWidth - 328 - 8),
                             });
                             setShowMenu(true);
                             setSearchTerm('');
