@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Socialite\Facades\Socialite;
 
@@ -21,8 +22,16 @@ class GoogleAuthController extends Controller
     /**
      * Handle the callback from Google.
      */
-    public function callback(): RedirectResponse
+    public function callback(Request $request): RedirectResponse
     {
+        if ($request->has('error')) {
+            $message = $request->get('error') === 'access_denied'
+                ? 'You cancelled signing in with Google.'
+                : 'Something went wrong signing in with Google. Please try again.';
+
+            return redirect()->route('login')->with('status', $message);
+        }
+
         $googleUser = Socialite::driver('google')->user();
 
         $user = User::query()->where('google_id', $googleUser->getId())->first();
