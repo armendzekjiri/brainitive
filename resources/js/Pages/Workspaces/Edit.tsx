@@ -441,7 +441,7 @@ export default function WorkspacesEdit({
                     if (res.status === 302 && location) {
                         router.visit(location, { preserveScroll: true });
                     } else {
-                        router.reload({ preserveScroll: true });
+                        router.reload();
                     }
                 }
             })
@@ -488,7 +488,7 @@ export default function WorkspacesEdit({
                 if (res.status === 302 && location) {
                     router.visit(location, { preserveScroll: true });
                 } else {
-                    router.reload({ preserveScroll: true });
+                    router.reload();
                 }
             })
             .catch(() => toast.error('Failed to send invitation.'))
