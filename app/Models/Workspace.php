@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
-
+use App\Models\SnippetCollection;
 class Workspace extends Model
 {
     use HasFactory, SoftDeletes;
@@ -141,6 +141,14 @@ class Workspace extends Model
     public function bookmarks(): HasMany
     {
         return $this->hasMany(Bookmark::class)->orderBy('position');
+    }
+
+    /**
+     * Get all snippet collections in this workspace.
+     */
+    public function snippetCollections(): HasMany
+    {
+        return $this->hasMany(SnippetCollection::class)->orderBy('position');
     }
 
     /**

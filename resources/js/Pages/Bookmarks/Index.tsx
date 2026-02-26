@@ -24,7 +24,7 @@ import {
     Loader2,
     Copy,
 } from 'lucide-react';
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 
 const URL_REGEX = /^https?:\/\/[^\s]+/i;
@@ -37,6 +37,15 @@ interface Props extends PageProps {
 export default function BookmarksIndex({ workspace, bookmarks }: Props) {
     const [createOpen, setCreateOpen] = useState(false);
     const [editBookmark, setEditBookmark] = useState<Bookmark | null>(null);
+
+    // Auto-open create dialog when navigated here with ?create=true
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('create') === 'true') {
+            setCreateOpen(true);
+            window.history.replaceState({}, '', window.location.pathname);
+        }
+    }, []);
     const [pasteLoading, setPasteLoading] = useState<string | null>(null);
     const [hoveredCardSlug, setHoveredCardSlug] = useState<string | null>(null);
     const [quickTodoValue, setQuickTodoValue] = useState('');

@@ -94,6 +94,10 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
+                'invite_result' => fn () => $request->session()->get('invite_result'),
+                'invite_confirm_required' => fn () => $request->session()->get('invite_confirm_required'),
+                'invite_email' => fn () => $request->session()->get('invite_email'),
+                'invite_role' => fn () => $request->session()->get('invite_role'),
             ],
         ];
     }

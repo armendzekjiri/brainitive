@@ -41,7 +41,12 @@ export interface Workspace {
         primary_color?: string;
         secondary_color?: string;
     };
-    settings?: Record<string, unknown>;
+    settings?: {
+        ai_endpoint?: string;
+        ai_api_key?: string;
+        ai_model?: string;
+        [key: string]: unknown;
+    };
     owner_id: number;
     owner?: User;
     pivot?: {
@@ -320,4 +325,40 @@ export interface MyWorkProject {
     color?: string;
     workspace?: { id: number; name: string; slug: string };
     items: MyWorkItem[];
+}
+
+export interface SnippetCollection {
+    id: number;
+    uuid: string;
+    workspace_id: number;
+    slug: string;
+    name: string;
+    description?: string;
+    icon?: string;
+    visibility: 'private' | 'public';
+    position: number;
+    created_by: number;
+    snippets_count?: number;
+    snippets?: Snippet[];
+    creator?: User;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface Snippet {
+    id: number;
+    uuid: string;
+    collection_id: number;
+    slug: string;
+    title: string;
+    description?: string;
+    language: string;
+    content?: string;
+    visibility: 'inherit' | 'private' | 'public';
+    position: number;
+    created_by: number;
+    creator?: User;
+    collection?: SnippetCollection;
+    created_at: string;
+    updated_at: string;
 }

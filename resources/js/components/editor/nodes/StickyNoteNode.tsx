@@ -46,6 +46,8 @@ export type SerializedStickyNoteNode = Spread<
         yOffset: number;
         color: StickyNoteColor;
         caption: SerializedEditor;
+        width: number;
+        fontSize: number;
     },
     SerializedLexicalNode
 >;
@@ -69,6 +71,10 @@ function positionSticky(stickyElem: HTMLElement, positioning: Positioning): void
     style.left = rectLeft + positioning.x + 'px';
 }
 
+const MIN_WIDTH = 150;
+const MAX_FONT_SIZE = 40;
+const MIN_FONT_SIZE = 10;
+
 // ─── StickyComponent (React) ─────────────────────────────────────────────────
 function StickyComponent({
     x,
@@ -76,12 +82,16 @@ function StickyComponent({
     nodeKey,
     color,
     caption,
+    width,
+    fontSize,
 }: {
     caption: LexicalEditor;
     color: StickyNoteColor;
     nodeKey: NodeKey;
     x: number;
     y: number;
+    width: number;
+    fontSize: number;
 }): JSX.Element {
     const [editor] = useLexicalComposerContext();
     const stickyContainerRef = useRef<null | HTMLDivElement>(null);
@@ -92,6 +102,11 @@ function StickyComponent({
         rootElementRect: null,
         x: 0,
         y: 0,
+    });
+    const resizeRef = useRef<{ isResizing: boolean; startX: number; startWidth: number }>({
+        isResizing: false,
+        startX: 0,
+        startWidth: width,
     });
 
     // Sync x/y props into positioning ref whenever they change
@@ -195,6 +210,42 @@ function StickyComponent({
         document.removeEventListener('pointerup', handlePointerUp);
     };
 
+    // ── Resize handlers ────────────────────────────────────────────────────
+    const handleResizePointerMove = (event: PointerEvent) => {
+        const resize = resizeRef.current;
+        if (!resize.isResizing) return;
+        const zoom = calculateZoomLevel(stickyContainerRef.current);
+        const newWidth = Math.max(MIN_WIDTH, resize.startWidth + (event.clientX / zoom - resize.startX));
+        const noteEl = stickyContainerRef.current?.firstElementChild as HTMLElement | null;
+        if (noteEl) noteEl.style.width = newWidth + 'px';
+    };
+
+    const handleResizePointerUp = (event: PointerEvent) => {
+        const resize = resizeRef.current;
+        resize.isResizing = false;
+        const zoom = calculateZoomLevel(stickyContainerRef.current);
+        const newWidth = Math.max(MIN_WIDTH, resize.startWidth + (event.clientX / zoom - resize.startX));
+        document.removeEventListener('pointermove', handleResizePointerMove);
+        document.removeEventListener('pointerup', handleResizePointerUp);
+        editor.update(() => {
+            const node = $getNodeByKey(nodeKey);
+            if ($isStickyNoteNode(node)) {
+                node.setWidth(Math.round(newWidth));
+            }
+        });
+    };
+
+    // ── Font size handlers ─────────────────────────────────────────────────
+    const changeFontSize = (delta: number) => {
+        editor.update(() => {
+            const node = $getNodeByKey(nodeKey);
+            if ($isStickyNoteNode(node)) {
+                const next = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, node.__fontSize + delta));
+                node.setFontSize(next);
+            }
+        });
+    };
+
     // ── Action handlers ────────────────────────────────────────────────────
     const handleDelete = () => {
         editor.update(() => {
@@ -216,10 +267,30 @@ function StickyComponent({
 
     const historyState = useMemo(() => createEmptyHistoryState(), []);
 
+    // Propagate nested-editor changes to the outer editor so the outer
+    // editor becomes "dirty" and HtmlOnChangePlugin re-exports HTML with
+    // the updated caption content via exportDOM.
+    useEffect(() => {
+        return caption.registerUpdateListener(() => {
+            editor.update(() => {
+                const node = $getNodeByKey(nodeKey);
+                if ($isStickyNoteNode(node)) {
+                    // getWritable() marks the node dirty in the outer editor
+                    node.getWritable();
+                }
+            });
+        });
+    }, [caption, editor, nodeKey]);
+
     return (
         <div ref={stickyContainerRef} className="sticky-note-container">
             <div
                 className={`sticky-note ${color}`}
+                style={{
+                    width,
+                    // Expose font size as CSS custom property so contentEditable and placeholder pick it up
+                    ['--sticky-font-size' as string]: `${fontSize}px`,
+                }}
                 onPointerDown={(event) => {
                     const stickyContainer = stickyContainerRef.current;
                     if (
@@ -241,20 +312,40 @@ function StickyComponent({
                     document.addEventListener('pointerup', handlePointerUp);
                     event.preventDefault();
                 }}>
-                <button
-                    onClick={handleDelete}
-                    className="delete"
-                    aria-label="Delete sticky note"
-                    title="Delete">
-                    X
-                </button>
-                <button
-                    onClick={handleColorChange}
-                    className="color"
-                    aria-label="Change sticky note color"
-                    title="Toggle color">
-                    <i className="bucket" />
-                </button>
+                {/* Top toolbar */}
+                <div className="sticky-toolbar">
+                    <button
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => changeFontSize(-2)}
+                        className="sticky-font-btn"
+                        title="Decrease font size">
+                        A−
+                    </button>
+                    <span className="sticky-font-size">{fontSize}</span>
+                    <button
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={() => changeFontSize(2)}
+                        className="sticky-font-btn"
+                        title="Increase font size">
+                        A+
+                    </button>
+                    <button
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={handleColorChange}
+                        className="sticky-color-btn"
+                        title="Toggle color">
+                        🎨
+                    </button>
+                    <button
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={handleDelete}
+                        className="sticky-delete-btn"
+                        title="Delete">
+                        ✕
+                    </button>
+                </div>
+                {/* Wrapper gives placeholder its own positioning context */}
+                <div style={{ position: 'relative' }}>
                 <LexicalNestedComposer
                     initialEditor={caption}
                     initialTheme={StickyEditorTheme}>
@@ -274,6 +365,26 @@ function StickyComponent({
                         ErrorBoundary={LexicalErrorBoundary}
                     />
                 </LexicalNestedComposer>
+                </div>
+                {/* Resize handle (bottom-right corner) */}
+                <div
+                    className="sticky-resize-handle"
+                    title="Drag to resize"
+                    onPointerDown={(event) => {
+                        event.stopPropagation();
+                        event.preventDefault();
+                        const zoom = calculateZoomLevel(stickyContainerRef.current);
+                        const noteEl = stickyContainerRef.current?.firstElementChild as HTMLElement | null;
+                        const currentWidth = noteEl ? noteEl.offsetWidth : width;
+                        resizeRef.current = {
+                            isResizing: true,
+                            startX: event.clientX / zoom,
+                            startWidth: currentWidth,
+                        };
+                        document.addEventListener('pointermove', handleResizePointerMove);
+                        document.addEventListener('pointerup', handleResizePointerUp);
+                    }}
+                />
             </div>
         </div>
     );
@@ -285,6 +396,8 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
     __y: number;
     __color: StickyNoteColor;
     __caption: LexicalEditor;
+    __width: number;
+    __fontSize: number;
 
     static getType(): string {
         return 'sticky';
@@ -295,6 +408,8 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
             node.__x,
             node.__y,
             node.__color,
+            node.__width,
+            node.__fontSize,
             node.__caption,
             node.__key,
         );
@@ -305,6 +420,8 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
             serializedNode.xOffset,
             serializedNode.yOffset,
             serializedNode.color,
+            serializedNode.width ?? 220,
+            serializedNode.fontSize ?? 20,
         ).updateFromJSON(serializedNode);
     }
 
@@ -325,6 +442,8 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
         x: number,
         y: number,
         color: StickyNoteColor,
+        width: number = 220,
+        fontSize: number = 20,
         caption?: LexicalEditor,
         key?: NodeKey,
     ) {
@@ -333,6 +452,8 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
         this.__y = y;
         this.__caption = caption || createEditor();
         this.__color = color;
+        this.__width = width;
+        this.__fontSize = fontSize;
     }
 
     exportJSON(): SerializedStickyNoteNode {
@@ -342,6 +463,8 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
             color: this.__color,
             xOffset: this.__x,
             yOffset: this.__y,
+            width: this.__width,
+            fontSize: this.__fontSize,
         };
     }
 
@@ -364,6 +487,8 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
             color: this.__color,
             xOffset: this.__x,
             yOffset: this.__y,
+            width: this.__width,
+            fontSize: this.__fontSize,
             caption: this.__caption.toJSON(),
         }));
         el.style.display = 'none';
@@ -390,7 +515,9 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
                             const color = parsed.color ?? 'yellow';
                             const xOffset = parsed.xOffset ?? parsed.x ?? 0;
                             const yOffset = parsed.yOffset ?? parsed.y ?? 0;
-                            const stickyNode = new StickyNoteNode(xOffset, yOffset, color);
+                            const width = parsed.width ?? 220;
+                            const fontSize = parsed.fontSize ?? 20;
+                            const stickyNode = new StickyNoteNode(xOffset, yOffset, color, width, fontSize);
                             if (parsed.caption?.editorState) {
                                 const editorState = stickyNode.__caption.parseEditorState(parsed.caption.editorState);
                                 if (!editorState.isEmpty()) {
@@ -415,6 +542,16 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
         $setSelection(null);
     }
 
+    setWidth(width: number): void {
+        const writable = this.getWritable();
+        writable.__width = width;
+    }
+
+    setFontSize(fontSize: number): void {
+        const writable = this.getWritable();
+        writable.__fontSize = fontSize;
+    }
+
     toggleColor(): void {
         const writable = this.getWritable();
         writable.__color = writable.__color === 'pink' ? 'yellow' : 'pink';
@@ -427,6 +564,8 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
                     color={this.__color}
                     x={this.__x}
                     y={this.__y}
+                    width={this.__width}
+                    fontSize={this.__fontSize}
                     nodeKey={this.getKey()}
                     caption={this.__caption}
                 />
@@ -444,8 +583,10 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
 export function $createStickyNoteNode(
     xOffset: number = 0,
     yOffset: number = 0,
+    width: number = 220,
+    fontSize: number = 20,
 ): StickyNoteNode {
-    return $applyNodeReplacement(new StickyNoteNode(xOffset, yOffset, 'yellow'));
+    return $applyNodeReplacement(new StickyNoteNode(xOffset, yOffset, 'yellow', width, fontSize));
 }
 
 export function $isStickyNoteNode(

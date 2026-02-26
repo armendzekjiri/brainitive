@@ -38,7 +38,7 @@ class WorkspaceInvitation extends Model
                 $invitation->token = Str::random(64);
             }
             if (empty($invitation->expires_at)) {
-                $invitation->expires_at = now()->addDays(7);
+                $invitation->expires_at = now()->addDays(30);
             }
         });
     }
@@ -106,5 +106,25 @@ class WorkspaceInvitation extends Model
     public function scopeForEmail($query, string $email)
     {
         return $query->where('email', $email);
+    }
+
+    /**
+     * Accept all valid (non-expired, not yet accepted) workspace invitations for a user's email
+     * and add the user to those workspaces. Called after registration.
+     */
+    public static function acceptPendingForUser(User $user): void
+    {
+        $email = strtolower($user->email);
+
+        $invitations = self::query()
+            ->forEmail($email)
+            ->valid()
+            ->with(['workspace', 'inviter'])
+            ->get();
+
+        foreach ($invitations as $invitation) {
+            $invitation->markAsAccepted();
+            $invitation->workspace->addUser($user, $invitation->role, $invitation->inviter ?? null);
+        }
     }
 }

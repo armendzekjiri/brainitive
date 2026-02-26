@@ -19,7 +19,7 @@ export default function ApplicationLogo({
             alt={alt}
             width={width}
             height={height}
-            fetchPriority={priority ? 'high' : undefined}
+            {...(priority ? { fetchpriority: 'high' } : {})}
             className={className}
             {...props}
         />

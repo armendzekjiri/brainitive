@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link } from '@inertiajs/react';
-import { PageProps, Workspace, Project, Bookmark } from '@/types';
+import { PageProps, Workspace, Project, Bookmark, SnippetCollection } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,7 @@ import {
     FileText,
     Settings,
     Sparkles,
+    Code2,
 } from 'lucide-react';
 import { ProjectIcon } from '@/components/ProjectIcon';
 
@@ -20,6 +21,7 @@ interface Props extends PageProps {
     workspace: Workspace & {
         projects: (Project & { boards_count?: number; pages_count?: number })[];
         bookmarks?: Bookmark[];
+        snippet_collections?: SnippetCollection[];
     };
     userRole: string;
 }
@@ -51,6 +53,7 @@ export default function WorkspacesShow({ auth, workspace, userRole }: Props) {
     const canCreateProjects = ['admin', 'editor'].includes(userRole);
     const bookmarks = workspace.bookmarks ?? [];
     const projects = workspace.projects ?? [];
+    const snippetCollections = workspace.snippet_collections ?? [];
 
     return (
         <AppLayout>
@@ -127,76 +130,8 @@ export default function WorkspacesShow({ auth, workspace, userRole }: Props) {
 
                 {/* Content - tight spacing after header */}
                 <div className="mx-auto max-w-5xl px-6 py-6 pb-12 md:px-10">
-                    {/* Bookmarks section */}
-                    <section className="mb-10">
-                        <div className="mb-4 flex items-center justify-between">
-                            <h2 className="flex items-center gap-2 text-lg font-semibold">
-                                <BookmarkIcon className="size-5 text-primary" />
-                                Bookmarks
-                            </h2>
-                            <Link
-                                href={route('bookmarks.index', workspace.slug)}
-                                className="text-sm font-medium text-primary hover:underline"
-                            >
-                                View all
-                            </Link>
-                        </div>
-                        {bookmarks.length === 0 ? (
-                            <Card className="border-dashed bg-card/50">
-                                <CardContent className="flex flex-col items-center justify-center py-10">
-                                    <div className="size-14 rounded-2xl bg-primary/10 dark:bg-primary/20 flex items-center justify-center mb-4">
-                                        <BookmarkIcon className="size-7 text-primary" />
-                                    </div>
-                                    <p className="text-sm text-muted-foreground text-center mb-4">
-                                        No bookmarks yet. Save links and notes for this workspace.
-                                    </p>
-                                    <Link href={route('bookmarks.index', workspace.slug)}>
-                                        <Button variant="outline" size="sm" className="gap-2">
-                                            <Plus className="size-4" />
-                                            Add bookmarks
-                                        </Button>
-                                    </Link>
-                                </CardContent>
-                            </Card>
-                        ) : (
-                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                {bookmarks.map((bookmark) => (
-                                    <Link
-                                        key={bookmark.id}
-                                        href={route('bookmarks.show', [workspace.slug, bookmark.slug])}
-                                    >
-                                        <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 group">
-                                            <CardContent className="p-4">
-                                                <div className="flex items-start gap-3">
-                                                    <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 dark:bg-primary/20 overflow-hidden">
-                                                        {bookmark.icon_display && (bookmark.icon_display.startsWith('http') || bookmark.icon_display.startsWith('/')) ? (
-                                                            <img src={bookmark.icon_display} alt="" className="size-full object-cover" />
-                                                        ) : (
-                                                            <span className="text-2xl leading-none">{bookmark.icon_display || '🔖'}</span>
-                                                        )}
-                                                    </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <h3 className="font-semibold truncate group-hover:text-primary transition-colors">
-                                                            {bookmark.name}
-                                                        </h3>
-                                                        {bookmark.description && (
-                                                            <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
-                                                                {bookmark.description}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-1" />
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    </Link>
-                                ))}
-                            </div>
-                        )}
-                    </section>
-
                     {/* Projects section */}
-                    <section>
+                    <section className="mb-10">
                         <div className="mb-4 flex items-center justify-between">
                             <h2 className="flex items-center gap-2 text-lg font-semibold">
                                 <LayoutGrid className="size-5 text-primary" />
@@ -277,6 +212,145 @@ export default function WorkspacesShow({ auth, workspace, userRole }: Props) {
                                                             <span>documents</span>
                                                         </span>
                                                     </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Bookmarks section */}
+                    <section className="mb-10">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h2 className="flex items-center gap-2 text-lg font-semibold">
+                                <BookmarkIcon className="size-5 text-primary" />
+                                Bookmarks
+                            </h2>
+                            <Link
+                                href={route('bookmarks.index', workspace.slug)}
+                                className="text-sm font-medium text-primary hover:underline"
+                            >
+                                View all
+                            </Link>
+                        </div>
+                        {bookmarks.length === 0 ? (
+                            <Card className="border-dashed bg-card/50">
+                                <CardContent className="flex flex-col items-center justify-center py-10">
+                                    <div className="size-14 rounded-2xl bg-primary/10 dark:bg-primary/20 flex items-center justify-center mb-4">
+                                        <BookmarkIcon className="size-7 text-primary" />
+                                    </div>
+                                    <p className="text-sm text-muted-foreground text-center mb-4">
+                                        No bookmarks yet. Save links and notes for this workspace.
+                                    </p>
+                                    <Link href={route('bookmarks.index', workspace.slug)}>
+                                        <Button variant="outline" size="sm" className="gap-2">
+                                            <Plus className="size-4" />
+                                            Add bookmarks
+                                        </Button>
+                                    </Link>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {bookmarks.map((bookmark) => (
+                                    <Link
+                                        key={bookmark.id}
+                                        href={route('bookmarks.show', [workspace.slug, bookmark.slug])}
+                                    >
+                                        <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 group">
+                                            <CardContent className="p-4">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 dark:bg-primary/20 overflow-hidden">
+                                                        {bookmark.icon_display && (bookmark.icon_display.startsWith('http') || bookmark.icon_display.startsWith('/')) ? (
+                                                            <img src={bookmark.icon_display} alt="" className="size-full object-cover" />
+                                                        ) : (
+                                                            <span className="text-2xl leading-none">{bookmark.icon_display || '🔖'}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h3 className="font-semibold truncate group-hover:text-primary transition-colors">
+                                                            {bookmark.name}
+                                                        </h3>
+                                                        {bookmark.description && (
+                                                            <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                                                                {bookmark.description}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-1" />
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Snippets section */}
+                    <section>
+                        <div className="mb-4 flex items-center justify-between">
+                            <h2 className="flex items-center gap-2 text-lg font-semibold">
+                                <Code2 className="size-5 text-primary" />
+                                Snippets
+                            </h2>
+                            <Link
+                                href={route('snippets.index', workspace.slug)}
+                                className="text-sm font-medium text-primary hover:underline"
+                            >
+                                View all
+                            </Link>
+                        </div>
+                        {snippetCollections.length === 0 ? (
+                            <Card className="border-dashed bg-card/50">
+                                <CardContent className="flex flex-col items-center justify-center py-10">
+                                    <div className="size-14 rounded-2xl bg-primary/10 dark:bg-primary/20 flex items-center justify-center mb-4">
+                                        <Code2 className="size-7 text-primary" />
+                                    </div>
+                                    <p className="text-sm text-muted-foreground text-center mb-4">
+                                        No snippet collections yet. Save and organize code snippets.
+                                    </p>
+                                    <Link href={route('snippets.index', workspace.slug)}>
+                                        <Button variant="outline" size="sm" className="gap-2">
+                                            <Plus className="size-4" />
+                                            Add snippets
+                                        </Button>
+                                    </Link>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {snippetCollections.map((collection) => (
+                                    <Link
+                                        key={collection.id}
+                                        href={route('snippets.show', [workspace.slug, collection.id])}
+                                    >
+                                        <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 group">
+                                            <CardContent className="p-4">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 dark:bg-primary/20 overflow-hidden">
+                                                        {collection.icon && (collection.icon.startsWith('http') || collection.icon.startsWith('/')) ? (
+                                                            <img src={collection.icon} alt="" className="size-7 rounded object-contain" />
+                                                        ) : (
+                                                            <span className="text-2xl leading-none">{collection.icon || '📋'}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h3 className="font-semibold truncate group-hover:text-primary transition-colors">
+                                                            {collection.name}
+                                                        </h3>
+                                                        <p className="mt-0.5 text-xs text-muted-foreground">
+                                                            {collection.snippets_count ?? 0} snippet{(collection.snippets_count ?? 0) !== 1 ? 's' : ''}
+                                                        </p>
+                                                        {collection.description && (
+                                                            <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                                                                {collection.description}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-1" />
                                                 </div>
                                             </CardContent>
                                         </Card>
