@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useCallback, useState, useRef, useMemo, createContext, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
@@ -92,6 +92,7 @@ import {
     Code,
     Undo2,
     Redo2,
+    X,
     Link,
     Heading1,
     Heading2,
@@ -125,6 +126,20 @@ import {
     Copy,
     Check,
     Wand2,
+    Sparkles,
+    Loader2,
+    RotateCcw,
+    MessageSquare,
+    Languages,
+    TextSelect,
+    FileText as FileTextIcon,
+    ArrowRight,
+    SpellCheck,
+    AlignEndHorizontal,
+    ChevronsDownUp,
+    MoreHorizontal,
+    Briefcase,
+    SmilePlus,
 } from 'lucide-react';
 
 // Import custom nodes
@@ -1755,9 +1770,13 @@ function DraggableBlockPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
 
     return <>{handles}</>;
 }
+// Context so toolbar (e.g. AI Replace) can notify parent of content changes for save
+const RichLexicalOnChangeContext = createContext<((html: string) => void) | null>(null);
+
 // Toolbar Plugin
-function ToolbarPlugin({ showToolbar = true }: { showToolbar?: boolean }) {
+function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle }: { showToolbar?: boolean; workspaceSlug?: string; itemTitle?: string }) {
     const [editor] = useLexicalComposerContext();
+    const onChangeFromContext = useContext(RichLexicalOnChangeContext);
     const [isBold, setIsBold] = useState(false);
     const [isItalic, setIsItalic] = useState(false);
     const [isUnderline, setIsUnderline] = useState(false);
@@ -1783,6 +1802,58 @@ function ToolbarPlugin({ showToolbar = true }: { showToolbar?: boolean }) {
     const [showImageModal, setShowImageModal] = useState(false);
     const [showTableModal, setShowTableModal] = useState(false);
     const [showYouTubeModal, setShowYouTubeModal] = useState(false);
+    // AI rewrite states
+    const [showAiPopover, setShowAiPopover] = useState(false);
+    const [showAiDialog, setShowAiDialog] = useState(false);
+    const [aiInstruction, setAiInstruction] = useState('');
+    const [aiGenerating, setAiGenerating] = useState(false);
+    const [aiResult, setAiResult] = useState<string | null>(null);
+    const [aiError, setAiError] = useState<string | null>(null);
+    const [aiSelectedText, setAiSelectedText] = useState<string | null>(null);
+    const [aiMode, setAiMode] = useState<'selection' | 'full'>('full');
+    const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+    const [showMorePresets, setShowMorePresets] = useState(false);
+    const aiInputRef = useRef<HTMLInputElement>(null);
+
+    // Check if AI is configured for this workspace
+    useEffect(() => {
+        if (!workspaceSlug) return;
+        window.axios.get(route('ai.settings', workspaceSlug))
+            .then((res: any) => setAiConfigured(!!res.data.ai_configured))
+            .catch(() => setAiConfigured(false));
+    }, [workspaceSlug]);
+
+    // AI generate helper
+    const handleAiGenerate = async (instruction: string) => {
+        setAiGenerating(true);
+        setAiError(null);
+        setAiResult(null);
+        try {
+            let contentToSend = '';
+            if (aiMode === 'selection' && aiSelectedText) {
+                contentToSend = aiSelectedText;
+            } else {
+                editor.getEditorState().read(() => {
+                    contentToSend = $generateHtmlFromNodes(editor);
+                });
+            }
+            const res = await window.axios.post(route('ai.generate', workspaceSlug), {
+                content: contentToSend,
+                instruction: instruction || undefined,
+                title: itemTitle || undefined,
+                is_selection: aiMode === 'selection',
+            });
+            if (res.data.success) {
+                setAiResult(res.data.content);
+            } else {
+                setAiError(res.data.message || 'AI generation failed.');
+            }
+        } catch (err: any) {
+            setAiError(err.response?.data?.message || 'Failed to generate AI content.');
+        } finally {
+            setAiGenerating(false);
+        }
+    };
 
     const BLOCK_TYPE_OPTIONS = [
         { label: 'Normal', value: 'paragraph', icon: <Type className="size-4" /> },
@@ -1886,7 +1957,7 @@ function ToolbarPlugin({ showToolbar = true }: { showToolbar?: boolean }) {
     const Divider = () => <div className="w-px h-5 bg-border mx-0.5 shrink-0" />;
 
     return (
-        <>
+        <React.Fragment>
             <div className="flex items-center gap-0.5 px-1.5 py-1 border-b bg-muted/30 flex-wrap min-h-[40px]">
                 {/* Undo / Redo */}
                 <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0"
@@ -2159,41 +2230,241 @@ function ToolbarPlugin({ showToolbar = true }: { showToolbar?: boolean }) {
                         })}
                     </PopoverContent>
                 </Popover>
-            </div>
 
-            {/* Toolbar-owned modals */}
-            <InsertImageModal open={showImageModal} onClose={() => setShowImageModal(false)}
-                onInsert={(src, alt) => { editor.dispatchCommand(INSERT_IMAGE_COMMAND, { src, altText: alt }); setShowImageModal(false); }} />
-            <InsertYouTubeModal open={showYouTubeModal} onClose={() => setShowYouTubeModal(false)}
-                onInsert={(id) => { editor.dispatchCommand(INSERT_YOUTUBE_COMMAND, id); setShowYouTubeModal(false); }} />
-            <InsertTableModal open={showTableModal} onClose={() => setShowTableModal(false)}
-                onInsert={(rows, cols) => { editor.dispatchCommand(INSERT_TABLE_COMMAND, { rows: String(rows), columns: String(cols) }); setShowTableModal(false); }} />
-        </>
-    );
+                {/* AI button — opens modal for AI assistant */}
+                {workspaceSlug && aiConfigured && (
+                    <>
+                        <Divider />
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 gap-1.5 text-xs text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30"
+                            title="AI Assistant"
+                            onClick={() => {
+                                setShowAiPopover(true);
+                                setAiResult(null);
+                                setAiError(null);
+                                setAiInstruction('');
+                                setShowMorePresets(false);
+                                let selectedText = '';
+                                editor.getEditorState().read(() => {
+                                    const selection = $getSelection();
+                                    if ($isRangeSelection(selection) && !selection.isCollapsed()) {
+                                        selectedText = selection.getTextContent();
+                                    }
+                                });
+                                if (selectedText.trim()) {
+                                    setAiSelectedText(selectedText);
+                                    setAiMode('selection');
+                                } else {
+                                    setAiSelectedText(null);
+                                    setAiMode('full');
+                                }
+                                setTimeout(() => aiInputRef.current?.focus(), 100);
+                            }}
+                        >
+                            <Sparkles className="size-4" />
+                            <span className="hidden sm:inline">AI</span>
+                        </Button>
+                        <Dialog open={showAiPopover} onOpenChange={(open) => {
+                            if (!aiGenerating) {
+                                setShowAiPopover(open);
+                            }
+                        }}>
+                            <DialogContent
+                                                    overlayClassName="bg-black/10 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+                                                    className="left-1/2 -translate-x-1/2 right-auto top-auto bottom-0 w-full max-w-6xl h-[55vh] max-h-[55vh] rounded-t-xl overflow-hidden p-0 shadow-2xl focus:outline-none focus-visible:outline-none focus-visible:ring-0 data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom flex flex-col"
+                                                    style={{ minWidth: 420, minHeight: 200 }}
+                                                >
+                                                    <div className="flex flex-col min-h-0 flex-1">
+                                                    <div className="flex items-center gap-2 border-b px-4 py-3 shrink-0">
+                                                        <Sparkles className="size-4 shrink-0 text-purple-500" />
+                                                        <input
+                                                            ref={aiInputRef}
+                                                            type="text"
+                                                            value={aiInstruction}
+                                                            onChange={(e) => setAiInstruction(e.target.value)}
+                                                            placeholder="Tell AI what to do..."
+                                                            className="flex-1 bg-transparent text-sm outline-none ring-0 border-0 shadow-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0"
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter' && aiInstruction.trim() && !aiGenerating) {
+                                                                    e.preventDefault();
+                                                                    handleAiGenerate(aiInstruction);
+                                                                }
+                                                            }}
+                                                            disabled={aiGenerating}
+                                                        />
+                                                        {!aiGenerating && aiInstruction.trim() && (
+                                                            <button
+                                                                type="button"
+                                                                className="text-purple-600 hover:text-purple-700 p-0.5"
+                                                                onClick={() => handleAiGenerate(aiInstruction)}
+                                                            >
+                                                                <ArrowRight className="size-4" />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                    {aiMode === 'selection' && aiSelectedText && (
+                                                        <div className="px-4 py-1.5 bg-purple-50 dark:bg-purple-950/20 border-b text-xs text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                                                            <TextSelect className="size-3 shrink-0" />
+                                                            <span className="truncate">Selected: &ldquo;{aiSelectedText.length > 50 ? aiSelectedText.slice(0, 50) + '…' : aiSelectedText}&rdquo;</span>
+                                                        </div>
+                                                    )}
+                                                    {aiError && (
+                                                        <div className="px-4 py-2 bg-destructive/10 text-destructive text-xs flex items-center gap-1.5 border-b">
+                                                            <X className="size-3 shrink-0" />
+                                                            {aiError}
+                                                        </div>
+                                                    )}
+                                                    {!aiGenerating && !aiResult && (
+                                                    <div className="py-1 flex-1 min-h-0 overflow-y-auto">
+                                                        <div className="px-4 py-1 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Actions</div>
+                                                        {[
+                                                            { label: 'Improve description', instruction: 'Rewrite to be clearer, more professional, and better structured. Improve the overall quality.', icon: Wand2 },
+                                                            { label: 'Summarize writing', instruction: 'Summarize this text into a concise version, keeping only the most important points.', icon: AlignEndHorizontal },
+                                                            { label: 'Improve writing', instruction: 'Improve the writing quality — better word choices, sentence flow, and readability.', icon: Pencil },
+                                                            { label: 'Fix spelling & grammar', instruction: 'Fix all spelling, grammar, and punctuation errors. Keep the same meaning and style.', icon: SpellCheck },
+                                                        ].map((preset) => {
+                                                            const Icon = preset.icon;
+                                                            return (
+                                                                <button
+                                                                    key={preset.label}
+                                                                    type="button"
+                                                                    className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left transition-colors"
+                                                                    onClick={() => handleAiGenerate(preset.instruction)}
+                                                                >
+                                                                    <Icon className="size-4 text-muted-foreground shrink-0" />
+                                                                    {preset.label}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                        {!showMorePresets ? (
+                                                            <button
+                                                                type="button"
+                                                                className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left transition-colors text-muted-foreground"
+                                                                onClick={() => setShowMorePresets(true)}
+                                                            >
+                                                                <MoreHorizontal className="size-4 shrink-0" />
+                                                                Show more
+                                                            </button>
+                                                        ) : (
+                                                            <>
+                                                                {[
+                                                                    { label: 'Make concise', instruction: 'Make this text more concise while preserving all key information.', icon: ChevronsDownUp },
+                                                                    { label: 'Make formal', instruction: 'Rewrite this in a formal, professional tone suitable for business communication.', icon: Briefcase },
+                                                                    { label: 'Simplify language', instruction: 'Simplify the language to make it easy to understand for anyone.', icon: SmilePlus },
+                                                                    { label: 'Translate to English', instruction: 'Translate this text to English.', icon: Languages },
+                                                                    { label: 'Translate to German', instruction: 'Translate this text to German.', icon: Languages },
+                                                                ].map((preset) => {
+                                                                    const Icon = preset.icon;
+                                                                    return (
+                                                                        <button
+                                                                            key={preset.label}
+                                                                            type="button"
+                                                                            className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left transition-colors"
+                                                                            onClick={() => handleAiGenerate(preset.instruction)}
+                                                                        >
+                                                                            <Icon className="size-4 text-muted-foreground shrink-0" />
+                                                                            {preset.label}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                    )}
+                                                    {aiResult ? (
+                                                        <div className="flex flex-col flex-1 min-h-0 border-t">
+                                                            <div className="px-4 pt-3 pb-2 shrink-0">
+                                                                <div className="flex items-center gap-2 text-sm font-medium text-purple-700 dark:text-purple-300">
+                                                                    <Sparkles className="size-4" />
+                                                                    AI Suggestion
+                                                                </div>
+                                                            </div>
+                                                            <div
+                                                                className="px-4 py-3 prose prose-sm max-w-none text-sm flex-1 min-h-0 overflow-y-auto"
+                                                                dangerouslySetInnerHTML={{ __html: aiResult }}
+                                                            />
+                                                            <div className="flex gap-1.5 px-4 py-3 border-t bg-muted/30 shrink-0">
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white flex-1"
+                                                                    onClick={() => {
+                                                                        const newHtml = aiResult!;
+                                                                        editor.update(() => {
+                                                                            const root = $getRoot();
+                                                                            root.clear();
+                                                                            const parser = new DOMParser();
+                                                                            const dom = parser.parseFromString(newHtml, 'text/html');
+                                                                            const nodes = $generateNodesFromDOM(editor, dom);
+                                                                            if (nodes.length === 0) {
+                                                                                const paragraph = $createParagraphNode();
+                                                                                paragraph.append($createTextNode(newHtml));
+                                                                                root.append(paragraph);
+                                                                            } else {
+                                                                                nodes.forEach(node => root.append(node));
+                                                                            }
+                                                                        }, { tag: 'ai-replace' });
+                                                                        // Ensure parent state is updated so Save persists (Lexical listener may not fire in time)
+                                                                        onChangeFromContext?.(newHtml);
+                                                                        setTimeout(() => setShowAiPopover(false), 100);
+                                                                    }}
+                                                                >
+                                                                    <Check className="size-3" />
+                                                                    Replace
+                                                                </Button>
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    className="h-7 text-xs gap-1"
+                                                                    onClick={() => { setAiResult(null); setAiError(null); }}
+                                                                >
+                                                                    <RotateCcw className="size-3" />
+                                                                    Retry
+                                                                </Button>
+                                                                <Button
+                                                                    type="button"
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    className="h-7 text-xs"
+                                                                    onClick={() => setShowAiPopover(false)}
+                                                                >
+                                                                    Discard
+                                                                </Button>
+                                                            </div>
+                                                        </div>
+                                                    ) : aiGenerating ? (
+                                                        <div className="flex flex-1 min-h-0 items-center justify-center gap-3 px-4 py-6">
+                                                            <Loader2 className="size-5 animate-spin text-purple-600" />
+                                                            <span className="text-sm text-muted-foreground">Generating with AI...</span>
+                                                        </div>
+                                                    ) : null}
+                                                    </div>
+                                                </DialogContent>
+                                            </Dialog>
+                                        </>
+                                    )}
+                </div>
+                                </React.Fragment>
+                            );
 }
 
-// Code syntax highlighting + line numbers
-function CodeHighlightPlugin() {
-    const [editor] = useLexicalComposerContext();
-    useEffect(() => registerCodeHighlighting(editor), [editor]);
-    return null;
-}
-
-// Floating code action menu (language label + copy + format)
 function CodeActionMenuPlugin({ anchorElem }: { anchorElem: HTMLElement | null }) {
     const [editor] = useLexicalComposerContext();
-    const [isShown, setIsShown] = useState(false);
-    const [lang, setLang] = useState('');
-    const [isCopied, setIsCopied] = useState(false);
-    const [isFormatted, setIsFormatted] = useState(false);
-    const [position, setPosition] = useState({ top: '0', right: '0' });
+    const codeSetRef = useRef<Set<string>>(new Set());
     const [shouldListen, setShouldListen] = useState(false);
     const codeDOMNodeRef = useRef<HTMLElement | null>(null);
-    const codeSetRef = useRef<Set<string>>(new Set());
+    const [isShown, setIsShown] = useState(false);
+    const [position, setPosition] = useState({ top: '0', right: '0' });
+    const [lang, setLang] = useState('');
+    const [isCopied, setIsCopied] = useState(false);
     const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [isFormatted, setIsFormatted] = useState(false);
     const fmtTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Track code node mutations
     useEffect(() => {
         return editor.registerMutationListener(CodeNode, (mutations) => {
             for (const [key, type] of mutations) {
@@ -2221,7 +2492,6 @@ function CodeActionMenuPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
 
                 codeDOMNodeRef.current = codeDOMNode;
 
-                // Use read() — synchronous, no async issues
                 let _lang = '';
                 editor.getEditorState().read(() => {
                     const node = $getNearestNodeFromDOMNode(codeDOMNode);
@@ -2250,7 +2520,6 @@ function CodeActionMenuPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
     const handleCopy = async () => {
         const codeDOMNode = codeDOMNodeRef.current;
         if (!codeDOMNode) return;
-        // Read synchronously first, then write to clipboard
         let content = '';
         editor.getEditorState().read(() => {
             const node = $getNearestNodeFromDOMNode(codeDOMNode);
@@ -2274,7 +2543,6 @@ function CodeActionMenuPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
         setLang(newLang);
     };
 
-    // "Format" — re-applies indentation by re-setting language (triggers re-highlight)
     const handleFormat = () => {
         const codeDOMNode = codeDOMNodeRef.current;
         if (!codeDOMNode) return;
@@ -2304,7 +2572,6 @@ function CodeActionMenuPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
             className="absolute z-40 flex items-center gap-1 select-none"
             style={{ top: position.top, right: position.right }}
         >
-            {/* Language selector */}
             <select
                 className="text-[11px] bg-transparent text-muted-foreground border border-transparent hover:border-border/60 hover:bg-muted/60 rounded px-1.5 py-1 cursor-pointer outline-none transition-colors"
                 value={lang}
@@ -2316,16 +2583,23 @@ function CodeActionMenuPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
                     <option key={val} value={val}>{label}</option>
                 ))}
             </select>
-            {/* Format / prettify button */}
             <button type="button" className={btnCls} onClick={handleFormat} title="Format code">
                 {isFormatted ? <Check className="size-3.5" /> : <Wand2 className="size-3.5" />}
             </button>
-            {/* Copy button */}
             <button type="button" className={btnCls} onClick={handleCopy} title="Copy code">
                 {isCopied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
             </button>
         </div>
     );
+}
+
+// Plugin to register code syntax highlighting
+function CodeHighlightPlugin() {
+    const [editor] = useLexicalComposerContext();
+    useEffect(() => {
+        return registerCodeHighlighting(editor);
+    }, [editor]);
+    return null;
 }
 
 // Plugin to set initial content
@@ -2391,8 +2665,9 @@ function HtmlOnChangePlugin({ onChange }: { onChange: (html: string) => void }) 
                 return;
             }
 
-            // Only trigger onChange if there are dirty elements or leaves (actual content changes)
-            if (dirtyElements.size === 0 && dirtyLeaves.size === 0) {
+            // Trigger onChange on actual content changes, or when content was replaced by AI (tagged update)
+            const isAiReplace = typeof tags?.has === 'function' && tags.has('ai-replace');
+            if (!isAiReplace && dirtyElements.size === 0 && dirtyLeaves.size === 0) {
                 return;
             }
 
@@ -2416,6 +2691,8 @@ interface RichLexicalEditorProps {
     maxHeight?: string;
     className?: string;
     contentKey?: string;
+    workspaceSlug?: string;
+    itemTitle?: string;
 }
 
 export function RichLexicalEditor({
@@ -2428,6 +2705,8 @@ export function RichLexicalEditor({
     maxHeight,
     className,
     contentKey,
+    workspaceSlug,
+    itemTitle,
 }: RichLexicalEditorProps) {
     const [floatingAnchorElem, setFloatingAnchorElem] = useState<HTMLDivElement | null>(null);
 
@@ -2477,8 +2756,9 @@ export function RichLexicalEditor({
 
     return (
         <LexicalComposer initialConfig={initialConfig}>
+            <RichLexicalOnChangeContext.Provider value={onChange}>
             <div className={cn("border rounded-lg overflow-hidden bg-white dark:bg-card", className)}>
-                <ToolbarPlugin showToolbar={showToolbar && editable} />
+                <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} />
                 <div
                     className={cn("relative", maxHeight && "overflow-y-auto")}
                     style={maxHeight ? { maxHeight } : undefined}
@@ -2528,6 +2808,7 @@ export function RichLexicalEditor({
                     </>
                 )}
             </div>
+            </RichLexicalOnChangeContext.Provider>
         </LexicalComposer>
     );
 }

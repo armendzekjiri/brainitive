@@ -4,6 +4,10 @@ import React, { PropsWithChildren, useState, FormEvent, useEffect, useCallback, 
 import { PageProps, Workspace, Project, Board, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn } from '@/types';
 import { cn } from '@/lib/utils';
 import { SearchModal } from '@/components/SearchModal';
+import { CommandPalette, CmdIcon, PaletteCommand } from '@/components/CommandPalette';
+import { QuickCreateSnippetModal } from '@/components/QuickCreateSnippetModal';
+import { QuickCreateBookmarkModal } from '@/components/QuickCreateBookmarkModal';
+import { GlobalStickyNotes } from '@/components/GlobalStickyNotes';
 import { SidebarResizer, getInitialSidebarWidth } from '@/components/SidebarResizer';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import ApplicationLogo from '@/Components/ApplicationLogo';
@@ -65,7 +69,9 @@ import {
     Kanban,
     ListTodo,
     Bookmark as BookmarkIcon,
+    Code2,
     PencilRuler,
+    StickyNote,
 } from 'lucide-react';
 import {
     Select,
@@ -232,6 +238,208 @@ function WorkspaceSwitcher({ workspaces, currentWorkspace }: { workspaces: Works
                 </DropdownMenuItem>
             </DropdownMenuContent>
         </DropdownMenu>
+    );
+}
+
+// Project Switcher (same UX pattern as WorkspaceSwitcher)
+function ProjectSwitcher({
+    projects,
+    currentProject,
+    onSelect,
+    workspace,
+}: {
+    projects: (Project & { boards: Board[]; pages?: PageType[] })[];
+    currentProject?: Project & { boards: Board[]; pages?: PageType[] };
+    onSelect: (project: Project & { boards: Board[]; pages?: PageType[] }) => void;
+    workspace: Workspace;
+}) {
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <button className="flex items-center gap-3 w-full px-3 py-2.5 hover:bg-accent rounded-lg transition-colors text-left">
+                    {currentProject ? (
+                        <ProjectIcon project={currentProject} size="md" />
+                    ) : (
+                        <div className="size-8 rounded-md bg-muted flex items-center justify-center">
+                            <FolderKanban className="size-4 text-muted-foreground" />
+                        </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Project</p>
+                        <p className="text-sm font-semibold truncate">
+                            {currentProject?.name || 'Select Project'}
+                        </p>
+                    </div>
+                    <ChevronsUpDown className="size-4 text-muted-foreground shrink-0" />
+                </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+                className="w-72 p-2"
+                align="start"
+                side="bottom"
+                sideOffset={4}
+            >
+                <DropdownMenuLabel className="text-xs font-medium text-muted-foreground px-2 py-1.5">
+                    Your projects
+                </DropdownMenuLabel>
+                {projects.map((project) => (
+                    <DropdownMenuItem
+                        key={project.id}
+                        onClick={() => onSelect(project)}
+                        className="flex items-center gap-3 p-2 cursor-pointer rounded-md"
+                    >
+                        <ProjectIcon project={project} size="sm" />
+                        <span className="flex-1 text-sm font-medium truncate">{project.name}</span>
+                        {currentProject?.id === project.id && (
+                            <Check className="size-4 text-primary" />
+                        )}
+                    </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator className="my-2" />
+                <DropdownMenuItem
+                    onClick={() => router.visit(route('projects.create', workspace.slug))}
+                    className="flex items-center gap-3 p-2 cursor-pointer rounded-md text-primary"
+                >
+                    <div className="size-6 rounded-md border-2 border-dashed border-primary/50 flex items-center justify-center">
+                        <Plus className="size-3.5" />
+                    </div>
+                    <span className="text-sm font-medium">Create project</span>
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+}
+
+// Selected project content displayed inline in sidebar
+function ProjectContent({
+    project,
+    workspace,
+    onAddItem,
+    currentPageUuid,
+}: {
+    project: Project & { boards: Board[]; pages?: PageType[] };
+    workspace: Workspace;
+    onAddItem: (projectId: number, parentId?: number) => void;
+    currentPageUuid?: string | null;
+}) {
+    const hasContent = (project.boards && project.boards.length > 0) || (project.pages && project.pages.length > 0);
+
+    if (!hasContent) {
+        return (
+            <div className="px-2 py-6 text-center">
+                <p className="text-xs text-muted-foreground mb-3">No boards or pages yet</p>
+                <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => onAddItem(project.id)}
+                >
+                    <Plus className="size-4 mr-1.5" />
+                    Add content
+                </Button>
+            </div>
+        );
+    }
+
+    const rootDocs = project.pages?.filter((p) => p.type === 'page' && !p.is_whiteboard) || [];
+    const rootWhiteboards = project.pages?.filter((p) => p.type === 'page' && p.is_whiteboard) || [];
+    const rootFolders = project.pages?.filter((p) => p.type === 'folder') || [];
+
+    return (
+        <SidebarMenu className="space-y-0.5">
+            {/* Boards */}
+            {project.boards?.length > 0 && (
+                <>
+                    <div className="px-2 py-1">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Boards</span>
+                    </div>
+                    {project.boards.map((board) => (
+                        <SidebarMenuItem key={board.id}>
+                            <Link
+                                href={route('boards.show', [workspace.slug, project.slug, board.slug])}
+                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                            >
+                                <LayoutGrid className="size-4 shrink-0" />
+                                <span className="min-w-0 truncate">{board.name}</span>
+                            </Link>
+                        </SidebarMenuItem>
+                    ))}
+                </>
+            )}
+
+            {/* Pages */}
+            {rootDocs.length > 0 && (
+                <>
+                    {project.boards?.length > 0 && <div className="border-t border-border/50 my-1.5" />}
+                    <div className="px-2 py-1">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Pages</span>
+                    </div>
+                    {rootDocs.map((page) => (
+                        <PageTreeItem
+                            key={page.id}
+                            page={page}
+                            workspace={workspace}
+                            project={project}
+                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
+                            currentPageUuid={currentPageUuid}
+                        />
+                    ))}
+                </>
+            )}
+
+            {/* Whiteboards */}
+            {rootWhiteboards.length > 0 && (
+                <>
+                    {(project.boards?.length > 0 || rootDocs.length > 0) && <div className="border-t border-border/50 my-1.5" />}
+                    <div className="px-2 py-1">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Whiteboards</span>
+                    </div>
+                    {rootWhiteboards.map((page) => (
+                        <PageTreeItem
+                            key={page.id}
+                            page={page}
+                            workspace={workspace}
+                            project={project}
+                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
+                            currentPageUuid={currentPageUuid}
+                        />
+                    ))}
+                </>
+            )}
+
+            {/* Folders */}
+            {rootFolders.length > 0 && (
+                <>
+                    {(project.boards?.length > 0 || rootDocs.length > 0 || rootWhiteboards.length > 0) && (
+                        <div className="border-t border-border/50 my-1.5" />
+                    )}
+                    <div className="px-2 py-1">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Folders</span>
+                    </div>
+                    {rootFolders.map((page) => (
+                        <PageTreeItem
+                            key={page.id}
+                            page={page}
+                            workspace={workspace}
+                            project={project}
+                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
+                            currentPageUuid={currentPageUuid}
+                        />
+                    ))}
+                </>
+            )}
+
+            {/* Add content button */}
+            <SidebarMenuItem>
+                <button
+                    onClick={() => onAddItem(project.id)}
+                    className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground w-full text-left mt-1"
+                >
+                    <Plus className="size-4 shrink-0" />
+                    <span className="min-w-0 truncate">Add content</span>
+                </button>
+            </SidebarMenuItem>
+        </SidebarMenu>
     );
 }
 
@@ -813,6 +1021,60 @@ function AppSidebar({
 }) {
     const { auth, currentPageUuid } = usePage<PageProps>().props;
     const user = auth.user;
+    const projects = currentWorkspace?.projects || [];
+
+    // Determine active project from URL context
+    const detectActiveProject = useCallback(() => {
+        if (!projects.length) return null;
+        // Check if current page uuid belongs to a project
+        if (currentPageUuid) {
+            const match = projects.find(p => projectContainsPageUuid(p, currentPageUuid));
+            if (match) return match;
+        }
+        // Check URL for project slug
+        const path = window.location.pathname;
+        const projectMatch = path.match(/\/projects\/([^\/]+)/);
+        if (projectMatch) {
+            const slug = projectMatch[1];
+            const match = projects.find(p => p.slug === slug);
+            if (match) return match;
+        }
+        return null;
+    }, [projects, currentPageUuid]);
+
+    // Selected project state persisted in localStorage
+    const [activeProjectId, setActiveProjectId] = useState<number | null>(() => {
+        if (typeof window === 'undefined') return null;
+        const saved = localStorage.getItem(`sidebar-active-project-${currentWorkspace?.id}`);
+        return saved ? parseInt(saved, 10) : null;
+    });
+
+    // Resolve the active project object
+    const activeProject = projects.find(p => p.id === activeProjectId) || null;
+
+    // Auto-detect project from URL on mount and navigation
+    useEffect(() => {
+        const detected = detectActiveProject();
+        if (detected) {
+            setActiveProjectId(detected.id);
+            if (currentWorkspace) {
+                localStorage.setItem(`sidebar-active-project-${currentWorkspace.id}`, String(detected.id));
+            }
+        } else if (!activeProject && projects.length > 0) {
+            // Fallback: select first project if nothing saved/detected
+            setActiveProjectId(projects[0].id);
+            if (currentWorkspace) {
+                localStorage.setItem(`sidebar-active-project-${currentWorkspace.id}`, String(projects[0].id));
+            }
+        }
+    }, [currentPageUuid, projects.length]);
+
+    const handleSelectProject = (project: Project & { boards: Board[]; pages?: PageType[] }) => {
+        setActiveProjectId(project.id);
+        if (currentWorkspace) {
+            localStorage.setItem(`sidebar-active-project-${currentWorkspace.id}`, String(project.id));
+        }
+    };
 
     // Modal state
     const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -834,10 +1096,9 @@ function AppSidebar({
         <>
             <Sidebar className="border-r border-border/50 overflow-hidden min-w-0 flex flex-col">
                 <SidebarHeader className="p-3 pb-0">
-                    <Link href={route('workspaces.index')} className="flex items-center justify-center py-2 mb-2 rounded-lg hover:bg-accent/50 transition-colors">
+                    <Link href={route('workspaces.index')} className="flex items-center justify-center py-2 rounded-lg hover:bg-accent/50 transition-colors">
                         <ApplicationLogo className="h-8 w-auto object-contain" alt="Brainitive" />
                     </Link>
-                    <WorkspaceSwitcher workspaces={workspaces} currentWorkspace={currentWorkspace} />
                 </SidebarHeader>
 
                 {/* Main Navigation - Fixed, not scrollable */}
@@ -887,86 +1148,64 @@ function AppSidebar({
                                 </Link>
                             </SidebarMenuItem>
                         )}
-                        <SidebarMenuItem>
-                            <button
-                                type="button"
-                                onClick={() => onOpenSearch?.()}
-                                className="flex items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors w-full text-left"
-                            >
-                                <Search className="size-5 text-muted-foreground" />
-                                <span className="text-sm font-medium">Search</span>
-                            </button>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                            <button className="flex items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors w-full text-left">
-                                <Bell className="size-5 text-muted-foreground" />
-                                <span className="text-sm font-medium">Notifications</span>
-                            </button>
-                        </SidebarMenuItem>
                         {currentWorkspace && (
                             <SidebarMenuItem>
                                 <Link
-                                    href={route('workspaces.edit', currentWorkspace.slug)}
+                                    href={route('snippets.index', currentWorkspace.slug)}
                                     className="flex items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors"
                                 >
-                                    <Settings className="size-5 text-muted-foreground" />
-                                    <span className="text-sm font-medium">Settings</span>
+                                    <Code2 className="size-5 text-muted-foreground" />
+                                    <span className="text-sm font-medium">Snippets</span>
                                 </Link>
                             </SidebarMenuItem>
                         )}
                     </SidebarMenu>
                 </div>
 
-                <Separator className="mx-3 my-4" />
+                <Separator className="mx-3" />
 
-                {/* Projects Section - Scrollable */}
-                <SidebarContent className="px-3">
-                    <SidebarGroup className="py-4">
-                        <div className="flex min-w-0 items-center justify-between gap-2 px-2 mb-2">
-                            <SidebarGroupLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wider p-0 m-0 truncate">
-                                Projects
-                            </SidebarGroupLabel>
-                            {currentWorkspace && (
-                                <Link href={route('projects.create', currentWorkspace.slug)} className="shrink-0">
-                                    <Button variant="ghost" size="icon" className="size-6 hover:bg-accent">
-                                        <Plus className="size-4" />
-                                    </Button>
-                                </Link>
-                            )}
+                {/* Project Switcher */}
+                {currentWorkspace && projects.length > 0 ? (
+                    <div className="px-3 pt-2 flex-shrink-0">
+                        <ProjectSwitcher
+                            projects={projects}
+                            currentProject={activeProject || undefined}
+                            onSelect={handleSelectProject}
+                            workspace={currentWorkspace}
+                        />
+                    </div>
+                ) : currentWorkspace ? (
+                    <div className="px-3 py-4 flex-shrink-0">
+                        <div className="px-2 py-6 text-center">
+                            <div className="size-12 rounded-full bg-muted mx-auto mb-3 flex items-center justify-center">
+                                <FolderKanban className="size-6 text-muted-foreground" />
+                            </div>
+                            <p className="text-sm font-medium mb-1">No projects yet</p>
+                            <p className="text-xs text-muted-foreground mb-4">Create your first project to get started</p>
+                            <Link href={route('projects.create', currentWorkspace.slug)}>
+                                <Button size="sm" className="w-full">
+                                    <Plus className="size-4 mr-1.5" />
+                                    Create Project
+                                </Button>
+                            </Link>
                         </div>
-                        <SidebarGroupContent>
-                            {currentWorkspace && currentWorkspace.projects && currentWorkspace.projects.length > 0 ? (
-                                <SidebarMenu className="space-y-0.5">
-                                    {currentWorkspace.projects.map((project) => (
-                                        <ProjectItem
-                                            key={project.id}
-                                            project={project}
-                                            workspace={currentWorkspace}
-                                            isActive={false}
-                                            onAddItem={handleAddItem}
-                                            currentPageUuid={currentPageUuid}
-                                        />
-                                    ))}
-                                </SidebarMenu>
-                            ) : (
-                                <div className="px-2 py-6 text-center">
-                                    <div className="size-12 rounded-full bg-muted mx-auto mb-3 flex items-center justify-center">
-                                        <FolderKanban className="size-6 text-muted-foreground" />
-                                    </div>
-                                    <p className="text-sm font-medium mb-1">No projects yet</p>
-                                    <p className="text-xs text-muted-foreground mb-4">Create your first project to get started</p>
-                                    {currentWorkspace && (
-                                        <Link href={route('projects.create', currentWorkspace.slug)}>
-                                            <Button size="sm" className="w-full">
-                                                <Plus className="size-4 mr-1.5" />
-                                                Create Project
-                                            </Button>
-                                        </Link>
-                                    )}
-                                </div>
-                            )}
-                        </SidebarGroupContent>
-                    </SidebarGroup>
+                    </div>
+                ) : null}
+
+                {/* Selected Project Content - Scrollable */}
+                <SidebarContent className="px-3">
+                    {activeProject && currentWorkspace && (
+                        <SidebarGroup className="py-2">
+                            <SidebarGroupContent>
+                                <ProjectContent
+                                    project={activeProject}
+                                    workspace={currentWorkspace}
+                                    onAddItem={handleAddItem}
+                                    currentPageUuid={currentPageUuid}
+                                />
+                            </SidebarGroupContent>
+                        </SidebarGroup>
+                    )}
                 </SidebarContent>
 
                 <SidebarFooter className="p-3 pt-0">
@@ -982,18 +1221,19 @@ function AppSidebar({
                                 </Avatar>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium truncate">{user.name}</p>
-                                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                                    <p className="text-xs text-muted-foreground truncate">{currentWorkspace?.name || user.email}</p>
                                 </div>
                                 <ChevronsUpDown className="size-4 text-muted-foreground shrink-0" />
                             </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
-                            className="w-64 p-2"
+                            className="w-72 p-2"
                             side="top"
                             align="start"
                             sideOffset={4}
                         >
-                            <div className="flex items-center gap-3 p-2 mb-2">
+                            {/* User info */}
+                            <div className="flex items-center gap-3 p-2 mb-1">
                                 <Avatar className="size-10">
                                     {user.avatar_display && <AvatarImage src={user.avatar_display} alt="" />}
                                     <AvatarFallback className="bg-gradient-to-br from-brand-blue to-brand-slate text-white font-semibold">
@@ -1006,12 +1246,50 @@ function AppSidebar({
                                 </div>
                             </div>
                             <DropdownMenuSeparator />
+
+                            {/* Workspace switcher section */}
+                            <DropdownMenuLabel className="text-xs font-medium text-muted-foreground px-2 py-1.5 mt-1">
+                                Workspace
+                            </DropdownMenuLabel>
+                            {workspaces.map((workspace) => (
+                                <DropdownMenuItem
+                                    key={workspace.id}
+                                    onClick={() => router.visit(route('workspaces.show', workspace.slug))}
+                                    className="flex items-center gap-3 p-2 cursor-pointer rounded-md"
+                                >
+                                    <WorkspaceIcon name={workspace.name} logoUrl={workspace.logo_display} size="sm" />
+                                    <span className="flex-1 text-sm font-medium truncate">{workspace.name}</span>
+                                    {currentWorkspace?.id === workspace.id && (
+                                        <Check className="size-4 text-primary" />
+                                    )}
+                                </DropdownMenuItem>
+                            ))}
+                            <DropdownMenuItem
+                                onClick={() => router.visit(route('workspaces.create'))}
+                                className="flex items-center gap-3 p-2 cursor-pointer rounded-md text-primary"
+                            >
+                                <div className="size-6 rounded-md border-2 border-dashed border-primary/50 flex items-center justify-center">
+                                    <Plus className="size-3.5" />
+                                </div>
+                                <span className="text-sm font-medium">Create workspace</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+
+                            {/* Account actions */}
                             <DropdownMenuItem asChild className="cursor-pointer">
                                 <Link href={route('profile.edit')} className="flex items-center gap-3 p-2">
                                     <User className="size-4" />
                                     <span className="text-sm">Profile settings</span>
                                 </Link>
                             </DropdownMenuItem>
+                            {currentWorkspace && (
+                                <DropdownMenuItem asChild className="cursor-pointer">
+                                    <Link href={route('workspaces.edit', currentWorkspace.slug)} className="flex items-center gap-3 p-2">
+                                        <Settings className="size-4" />
+                                        <span className="text-sm">Workspace settings</span>
+                                    </Link>
+                                </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem className="flex items-center gap-3 p-2 cursor-pointer">
                                 <HelpCircle className="size-4" />
                                 <span className="text-sm">Help & support</span>
@@ -1334,6 +1612,9 @@ export default function AppLayout({ children, title }: Props) {
     const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
     const [createTaskModalOpen, setCreateTaskModalOpen] = useState(false);
     const [searchModalOpen, setSearchModalOpen] = useState(false);
+    const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+    const [quickCreateSnippetOpen, setQuickCreateSnippetOpen] = useState(false);
+    const [quickCreateBookmarkOpen, setQuickCreateBookmarkOpen] = useState(false);
     const [preSelectedProjectId, setPreSelectedProjectId] = useState<number | undefined>();
     const [preSelectedBoardId, setPreSelectedBoardId] = useState<number | undefined>();
     const [preSelectedColumnId, setPreSelectedColumnId] = useState<number | undefined>();
@@ -1342,9 +1623,14 @@ export default function AppLayout({ children, title }: Props) {
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+            const key = e.key.toLowerCase();
+            if (key === 'k' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
                 e.preventDefault();
                 setSearchModalOpen((open) => !open);
+            }
+            if (e.key === '.' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                setCommandPaletteOpen((open) => !open);
             }
         };
         window.addEventListener('keydown', handleKeyDown);
@@ -1369,6 +1655,63 @@ export default function AppLayout({ children, title }: Props) {
         openCreateTaskModal,
         closeCreateTaskModal,
     };
+
+    const commandPaletteCommands: PaletteCommand[] = [
+        // ── Navigation ──────────────────────────────────────────────────────
+        ...(currentWorkspace ? [
+            {
+                id: 'nav-bookmarks',
+                label: 'Go to Bookmarks',
+                description: 'Open your bookmark collections',
+                icon: <CmdIcon color="#0969da"><BookmarkIcon className="size-4" /></CmdIcon>,
+                group: 'Navigation',
+                action: () => router.visit(route('bookmarks.index', currentWorkspace.slug)),
+            },
+            {
+                id: 'nav-snippets',
+                label: 'Go to Snippets',
+                description: 'Open your code snippet collections',
+                icon: <CmdIcon color="#1a7f37"><Code2 className="size-4" /></CmdIcon>,
+                group: 'Navigation',
+                action: () => router.visit(route('snippets.index', currentWorkspace.slug)),
+            },
+        ] as PaletteCommand[] : []),
+
+        // ── Create ──────────────────────────────────────────────────────────
+        ...(currentWorkspace ? [
+            {
+                id: 'create-snippet',
+                label: 'Create Snippet',
+                description: 'Add a code snippet to a collection',
+                icon: <CmdIcon color="#1a7f37"><Code2 className="size-4" /></CmdIcon>,
+                group: 'Create',
+                action: () => setQuickCreateSnippetOpen(true),
+            },
+            {
+                id: 'create-bookmark',
+                label: 'Create Bookmark',
+                description: 'Add a link, to-do or note to a collection',
+                icon: <CmdIcon color="#0969da"><BookmarkIcon className="size-4" /></CmdIcon>,
+                group: 'Create',
+                action: () => setQuickCreateBookmarkOpen(true),
+            },
+        ] as PaletteCommand[] : []),
+
+        // ── Actions ─────────────────────────────────────────────────────────
+        {
+            id: 'create-sticky-note',
+            label: 'Create Sticky Note',
+            description: 'Add a sticky note to this page',
+            icon: (
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-yellow-100 text-yellow-700">
+                    <StickyNote className="size-4" />
+                </div>
+            ),
+            group: 'Actions',
+            action: () =>
+                window.dispatchEvent(new CustomEvent('page-sticky-note:create')),
+        },
+    ];
 
     return (
         <GlobalCreateModalContext.Provider value={globalCreateModalValue}>
@@ -1405,6 +1748,26 @@ export default function AppLayout({ children, title }: Props) {
                 open={searchModalOpen}
                 onOpenChange={setSearchModalOpen}
             />
+            <CommandPalette
+                open={commandPaletteOpen}
+                onOpenChange={setCommandPaletteOpen}
+                extraCommands={commandPaletteCommands}
+            />
+            {currentWorkspace && (
+                <>
+                    <QuickCreateSnippetModal
+                        open={quickCreateSnippetOpen}
+                        onOpenChange={setQuickCreateSnippetOpen}
+                        workspaceSlug={currentWorkspace.slug}
+                    />
+                    <QuickCreateBookmarkModal
+                        open={quickCreateBookmarkOpen}
+                        onOpenChange={setQuickCreateBookmarkOpen}
+                        workspaceSlug={currentWorkspace.slug}
+                    />
+                </>
+            )}
+            <GlobalStickyNotes />
             <Toaster richColors position="bottom-right" closeButton />
         </GlobalCreateModalContext.Provider>
     );

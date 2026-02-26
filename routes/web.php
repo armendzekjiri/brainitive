@@ -1,12 +1,16 @@
 <?php
 
+use App\Http\Controllers\AiController;
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BookmarkController;
+use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\MyWorkController;
 use App\Http\Controllers\PageController;
+use App\Http\Controllers\PageStickyNoteController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\SearchController;
+use App\Http\Controllers\SnippetController;
 use App\Http\Controllers\WorkspaceController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -63,7 +67,16 @@ Route::get('/site.webmanifest', function () {
 // Public bookmark view (view only, no auth)
 Route::get('/share/bookmarks/{uuid}', [BookmarkController::class, 'showPublic'])->name('bookmarks.public.show');
 
+// Public snippet share views (no auth)
+Route::get('/share/snippets/{uuid}', [SnippetController::class, 'showPublicSnippet'])->name('snippets.public.show');
+Route::get('/share/snippet-collections/{uuid}', [SnippetController::class, 'showPublicCollection'])->name('snippet-collections.public.show');
+
+// Workspace invitation (guest can view; auth user with matching email can accept)
+Route::get('/invite/{token}', [InvitationController::class, 'show'])->name('invitations.show');
+
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::post('/invite/{token}/accept', [InvitationController::class, 'accept'])->name('invitations.accept');
+
     // Dashboard redirects to workspaces
     Route::get('/dashboard', function () {
         return redirect()->route('workspaces.index');
@@ -82,11 +95,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('workspaces/{workspace}/members', [WorkspaceController::class, 'inviteMember'])->name('workspaces.members.invite');
     Route::patch('workspaces/{workspace}/members/{user}', [WorkspaceController::class, 'updateMemberRole'])->name('workspaces.members.update');
     Route::delete('workspaces/{workspace}/members/{user}', [WorkspaceController::class, 'removeMember'])->name('workspaces.members.remove');
+    Route::delete('workspaces/{workspace}/invitations/{invitation}', [WorkspaceController::class, 'cancelInvitation'])->name('workspaces.invitations.destroy');
 
     // Workspace-scoped routes
     Route::prefix('workspaces/{workspace}')->group(function () {
+        // AI settings & generation
+        Route::get('ai/settings', [AiController::class, 'getSettings'])->name('ai.settings');
+        Route::post('ai/settings', [AiController::class, 'saveSettings'])->name('ai.settings.save');
+        Route::post('ai/models', [AiController::class, 'fetchModels'])->name('ai.models');
+        Route::post('ai/generate', [AiController::class, 'generate'])->name('ai.generate');
+
         // Bookmarks (workspace level)
         Route::get('bookmarks', [BookmarkController::class, 'index'])->name('bookmarks.index');
+        Route::get('bookmarks/list', [BookmarkController::class, 'listBookmarks'])->name('bookmarks.list');
         Route::post('bookmarks', [BookmarkController::class, 'store'])->name('bookmarks.store');
         Route::post('bookmarks/upload-icon-temp', [BookmarkController::class, 'uploadIconTemp'])->name('bookmarks.icon.upload-temp');
         Route::get('bookmarks/{bookmark}', [BookmarkController::class, 'show'])->name('bookmarks.show');
@@ -100,6 +121,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('bookmarks/{bookmark}/collaborators', [BookmarkController::class, 'inviteCollaborator'])->name('bookmarks.collaborators.invite');
         Route::put('bookmarks/{bookmark}/collaborators/{user}', [BookmarkController::class, 'updateCollaborator'])->name('bookmarks.collaborators.update');
         Route::delete('bookmarks/{bookmark}/collaborators/{user}', [BookmarkController::class, 'removeCollaborator'])->name('bookmarks.collaborators.remove');
+
+        // Snippets (workspace level)
+        Route::get('snippets', [SnippetController::class, 'index'])->name('snippets.index');
+        Route::get('snippets/list', [SnippetController::class, 'listCollections'])->name('snippets.list');
+        Route::post('snippets', [SnippetController::class, 'storeCollection'])->name('snippets.store');
+        Route::post('snippets/upload-icon-temp', [SnippetController::class, 'uploadIconTemp'])->name('snippets.icon.upload-temp');
+        Route::get('snippets/{collection}', [SnippetController::class, 'showCollection'])->name('snippets.show');
+        Route::put('snippets/{collection}', [SnippetController::class, 'updateCollection'])->name('snippets.update');
+        Route::delete('snippets/{collection}', [SnippetController::class, 'destroyCollection'])->name('snippets.destroy');
+        Route::post('snippets/{collection}/snippets', [SnippetController::class, 'storeSnippet'])->name('snippets.snippets.store');
+        Route::put('snippets/{collection}/snippets/{snippet}', [SnippetController::class, 'updateSnippet'])->name('snippets.snippets.update');
+        Route::delete('snippets/{collection}/snippets/{snippet}', [SnippetController::class, 'destroySnippet'])->name('snippets.snippets.destroy');
 
         // Projects (nested under workspaces) - scoped to workspace
         Route::resource('projects', ProjectController::class)->scoped([
@@ -163,6 +196,12 @@ Route::middleware('auth')->group(function () {
     // File uploads
     Route::post('/upload/image', [App\Http\Controllers\FileController::class, 'uploadImage'])->name('upload.image');
     Route::post('/upload/document', [App\Http\Controllers\FileController::class, 'uploadDocument'])->name('upload.document');
+
+    // Page-level sticky notes (per user, per URL)
+    Route::get('/api/page-sticky-notes', [PageStickyNoteController::class, 'index'])->name('page-sticky-notes.index');
+    Route::post('/api/page-sticky-notes', [PageStickyNoteController::class, 'store'])->name('page-sticky-notes.store');
+    Route::patch('/api/page-sticky-notes/{note}', [PageStickyNoteController::class, 'update'])->name('page-sticky-notes.update');
+    Route::delete('/api/page-sticky-notes/{note}', [PageStickyNoteController::class, 'destroy'])->name('page-sticky-notes.destroy');
 });
 
 require __DIR__.'/auth.php';

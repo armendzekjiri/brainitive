@@ -7,12 +7,14 @@ use App\Models\Bookmark;
 use App\Models\Item;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\SnippetCollection;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\Route;
 use App\Policies\BoardPolicy;
 use App\Policies\BookmarkPolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\ProjectPolicy;
+use App\Policies\SnippetPolicy;
 use App\Policies\WorkspacePolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Vite;
@@ -41,6 +43,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Board::class, BoardPolicy::class);
         Gate::policy(Bookmark::class, BookmarkPolicy::class);
         Gate::policy(Item::class, ItemPolicy::class);
+        Gate::policy(SnippetCollection::class, SnippetPolicy::class);
 
         // Instance admins bypass all permission checks
         Gate::before(function ($user, $ability) {

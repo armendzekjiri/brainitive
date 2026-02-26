@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, useForm, router } from '@inertiajs/react';
+import { Head, useForm, router, usePage } from '@inertiajs/react';
 import { PageProps, Workspace, User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -53,19 +53,46 @@ import {
     ArrowLeft,
     Mail,
     UserPlus,
+    Bot,
+    Loader2,
+    Check,
+    AlertCircle,
+    Eye,
+    EyeOff,
+    Sparkles,
 } from 'lucide-react';
-import { useState, FormEvent, ChangeEvent } from 'react';
+import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { Link } from '@inertiajs/react';
+import { toast } from 'sonner';
+import axios from 'axios';
+
+interface PendingInvitation {
+    id: number;
+    email: string;
+    role: string;
+    expires_at: string;
+    created_at: string;
+    inviter: { id: number; name: string } | null;
+}
 
 interface Props extends PageProps {
     workspace: Workspace & {
         users: User[];
         owner: User;
     };
+    pendingInvitations?: PendingInvitation[];
     userRole: string;
     timezones: string[];
     industries: Record<string, string>;
     companySizes: Record<string, string>;
+    flash?: {
+        success?: string;
+        error?: string;
+        invite_result?: 'invitation_sent' | 'member_added';
+        invite_confirm_required?: boolean;
+        invite_email?: string;
+        invite_role?: string;
+    };
 }
 
 // Generate consistent colors for workspace icons
@@ -83,20 +110,267 @@ function getWorkspaceColor(name: string): string {
     return colors[name.charCodeAt(0) % colors.length];
 }
 
+/**
+ * AI Settings Tab — configure endpoint, API key, and model for AI features.
+ */
+function AiSettingsTab({ workspace }: { workspace: Workspace }) {
+    const [aiEndpoint, setAiEndpoint] = useState('');
+    const [aiApiKey, setAiApiKey] = useState('');
+    const [aiModel, setAiModel] = useState('');
+    const [models, setModels] = useState<string[]>([]);
+    const [showKey, setShowKey] = useState(false);
+    const [loadingModels, setLoadingModels] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [modelsError, setModelsError] = useState<string | null>(null);
+    const [hasExistingKey, setHasExistingKey] = useState(false);
+
+    // Load current settings on mount
+    useEffect(() => {
+        window.axios.get(route('ai.settings', workspace.slug))
+            .then((res: any) => {
+                const d = res.data;
+                setAiEndpoint(d.ai_endpoint || '');
+                setAiModel(d.ai_model || '');
+                setHasExistingKey(!!d.ai_api_key);
+            })
+            .catch(() => {});
+    }, [workspace.slug]);
+
+    const handleFetchModels = async () => {
+        setLoadingModels(true);
+        setModelsError(null);
+        setModels([]);
+        try {
+            const payload: Record<string, string> = {};
+            if (aiEndpoint) payload.ai_endpoint = aiEndpoint;
+            if (aiApiKey) payload.ai_api_key = aiApiKey;
+
+            const res = await window.axios.post(route('ai.models', workspace.slug), payload);
+            if (res.data.success && res.data.models?.length) {
+                setModels(res.data.models);
+                // Auto-select first model if none selected
+                if (!aiModel && res.data.models.length > 0) {
+                    setAiModel(res.data.models[0]);
+                }
+            } else {
+                setModelsError(res.data.message || 'No models found.');
+            }
+        } catch (err: any) {
+            setModelsError(err.response?.data?.message || 'Failed to fetch models.');
+        } finally {
+            setLoadingModels(false);
+        }
+    };
+
+    const handleSave = async () => {
+        setSaving(true);
+        setMessage(null);
+        try {
+            const payload: Record<string, string | null> = {
+                ai_endpoint: aiEndpoint || null,
+                ai_model: aiModel || null,
+            };
+            // Only send API key if user typed a new one
+            if (aiApiKey) {
+                payload.ai_api_key = aiApiKey;
+            }
+
+            const res = await window.axios.post(route('ai.settings.save', workspace.slug), payload);
+            setMessage({ type: 'success', text: res.data.message || 'Settings saved.' });
+            if (aiApiKey) {
+                setHasExistingKey(true);
+                setAiApiKey('');
+            }
+        } catch (err: any) {
+            setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to save settings.' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="text-xl flex items-center gap-3">
+                    <Sparkles className="size-5 text-primary" />
+                    AI Configuration
+                </CardTitle>
+                <CardDescription>
+                    Connect an OpenAI-compatible AI provider to enable AI-powered features like content rewriting in item descriptions.
+                    Provide your API endpoint and key, then select a model.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+                {/* Endpoint */}
+                <div className="space-y-2">
+                    <Label htmlFor="ai_endpoint" className="text-base font-medium">
+                        API Endpoint
+                    </Label>
+                    <Input
+                        id="ai_endpoint"
+                        value={aiEndpoint}
+                        onChange={(e) => setAiEndpoint(e.target.value)}
+                        placeholder="https://api.openai.com"
+                        className="h-11"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                        The base URL of your OpenAI-compatible API provider (e.g. OpenAI, Ollama, OpenRouter, Azure, etc.)
+                    </p>
+                </div>
+
+                {/* API Key */}
+                <div className="space-y-2">
+                    <Label htmlFor="ai_api_key" className="text-base font-medium">
+                        API Key
+                    </Label>
+                    <div className="relative">
+                        <Input
+                            id="ai_api_key"
+                            type={showKey ? 'text' : 'password'}
+                            value={aiApiKey}
+                            onChange={(e) => setAiApiKey(e.target.value)}
+                            placeholder={hasExistingKey ? '••••••••  (key saved — enter new key to replace)' : 'sk-...'}
+                            className="h-11 pr-10"
+                        />
+                        <button
+                            type="button"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            onClick={() => setShowKey(!showKey)}
+                        >
+                            {showKey ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                        </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        Your API key is encrypted before storage and never exposed to the browser.
+                    </p>
+                </div>
+
+                {/* Fetch Models */}
+                <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={handleFetchModels}
+                            disabled={loadingModels || (!aiEndpoint)}
+                            className="gap-2"
+                        >
+                            {loadingModels ? (
+                                <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                                <Bot className="size-4" />
+                            )}
+                            {loadingModels ? 'Fetching models...' : 'Fetch Available Models'}
+                        </Button>
+                        {!aiEndpoint && (
+                            <span className="text-xs text-muted-foreground">Enter an endpoint first</span>
+                        )}
+                    </div>
+
+                    {modelsError && (
+                        <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 p-3 rounded-lg">
+                            <AlertCircle className="size-4 shrink-0" />
+                            {modelsError}
+                        </div>
+                    )}
+
+                    {/* Model Selection */}
+                    {models.length > 0 && (
+                        <div className="space-y-2">
+                            <Label className="text-base font-medium">Select Model</Label>
+                            <Select value={aiModel} onValueChange={setAiModel}>
+                                <SelectTrigger className="h-11">
+                                    <SelectValue placeholder="Choose a model..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {models.map((m) => (
+                                        <SelectItem key={m} value={m}>
+                                            {m}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
+                    {/* Show current model if saved but models not fetched */}
+                    {models.length === 0 && aiModel && (
+                        <div className="space-y-2">
+                            <Label className="text-base font-medium">Current Model</Label>
+                            <div className="flex items-center gap-2 p-3 rounded-lg border bg-muted/30">
+                                <Check className="size-4 text-green-600" />
+                                <span className="text-sm font-mono">{aiModel}</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <Separator />
+
+                {/* Save */}
+                <div className="flex items-center gap-4">
+                    <Button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={saving || !aiEndpoint}
+                        className="gap-2"
+                    >
+                        {saving ? (
+                            <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                            <Check className="size-4" />
+                        )}
+                        {saving ? 'Saving...' : 'Save AI Settings'}
+                    </Button>
+
+                    {message && (
+                        <div className={`flex items-center gap-2 text-sm ${message.type === 'success' ? 'text-green-600' : 'text-destructive'}`}>
+                            {message.type === 'success' ? <Check className="size-4" /> : <AlertCircle className="size-4" />}
+                            {message.text}
+                        </div>
+                    )}
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
 export default function WorkspacesEdit({
     workspace,
+    pendingInvitations = [],
     userRole,
     timezones,
     industries,
     companySizes,
 }: Props) {
+    const { props } = usePage<Props>();
+
+    const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+    const [inviteConfirmPending, setInviteConfirmPending] = useState<{ email: string; role: string } | null>(null);
+    const [inviteSending, setInviteSending] = useState(false);
+    const [settingsTab, setSettingsTab] = useState<'general' | 'branding' | 'members' | 'ai' | 'danger'>('general');
+
+    useEffect(() => {
+        const message = props.flash?.success;
+        if (message) {
+            toast.success(message);
+        }
+    }, [props.flash?.success]);
+
+    useEffect(() => {
+        const message = props.flash?.error;
+        if (message) {
+            toast.error(message);
+        }
+    }, [props.flash?.error]);
+
     const [logoPreview, setLogoPreview] = useState<string | null>(
         workspace.logo_display ?? (workspace.logo ? `/storage/${workspace.logo}` : null)
     );
     const [headerPreview, setHeaderPreview] = useState<string | null>(
         workspace.header_image_display ?? (workspace.header_image ? `/storage/${workspace.header_image}` : null)
     );
-    const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
     // Form for workspace settings
     const { data, setData, post, processing, errors } = useForm({
@@ -127,7 +401,9 @@ export default function WorkspacesEdit({
     const inviteForm = useForm({
         email: '',
         role: 'member' as 'admin' | 'editor' | 'member' | 'viewer',
+        confirm_send_invitation: false as boolean,
     });
+
 
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
@@ -136,14 +412,87 @@ export default function WorkspacesEdit({
         });
     };
 
+    const inviteUrl = route('workspaces.members.invite', workspace.slug);
+
     const handleInviteMember = (e: FormEvent) => {
         e.preventDefault();
-        inviteForm.post(route('workspaces.members.invite', workspace.slug), {
-            onSuccess: () => {
+        const email = inviteForm.data.email.trim().toLowerCase();
+        const role = inviteForm.data.role;
+        if (!email) return;
+        setInviteSending(true);
+        axios
+            .post(inviteUrl, { email, role }, {
+                headers: {
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    Accept: 'application/json',
+                },
+                validateStatus: (status) => status === 200 || status === 302 || status === 409,
+                maxRedirects: 0,
+            })
+            .then((res) => {
+                if (res.status === 409 && res.data?.confirm_required) {
+                    setInviteConfirmPending({ email: res.data.email, role: res.data.role });
+                } else {
+                    setInviteDialogOpen(false);
+                    setInviteConfirmPending(null);
+                    inviteForm.reset();
+                    const location = res.headers?.location ?? (res.headers as Record<string, string>)?.['location'];
+                    if (res.status === 302 && location) {
+                        router.visit(location, { preserveScroll: true });
+                    } else {
+                        router.reload({ preserveScroll: true });
+                    }
+                }
+            })
+            .catch((err) => {
+                if (err.response?.status === 409 && err.response?.data?.confirm_required) {
+                    setInviteConfirmPending({
+                        email: err.response.data.email,
+                        role: err.response.data.role,
+                    });
+                } else {
+                    toast.error(err.response?.data?.message ?? 'Something went wrong.');
+                }
+            })
+            .finally(() => setInviteSending(false));
+    };
+
+    const handleConfirmSendInvitation = (e: FormEvent) => {
+        e.preventDefault();
+        if (!inviteConfirmPending) return;
+        setInviteSending(true);
+        axios
+            .post(
+                inviteUrl,
+                {
+                    email: inviteConfirmPending.email,
+                    role: inviteConfirmPending.role,
+                    confirm_send_invitation: true,
+                },
+                {
+                    headers: {
+                        'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        Accept: 'application/json',
+                    },
+                    validateStatus: (status) => status === 200 || status === 302,
+                    maxRedirects: 0,
+                }
+            )
+            .then((res) => {
                 setInviteDialogOpen(false);
+                setInviteConfirmPending(null);
                 inviteForm.reset();
-            },
-        });
+                const location = res.headers?.location ?? (res.headers as Record<string, string>)?.['location'];
+                if (res.status === 302 && location) {
+                    router.visit(location, { preserveScroll: true });
+                } else {
+                    router.reload({ preserveScroll: true });
+                }
+            })
+            .catch(() => toast.error('Failed to send invitation.'))
+            .finally(() => setInviteSending(false));
     };
 
     const handleUpdateRole = (userId: number, role: string) => {
@@ -258,7 +607,7 @@ export default function WorkspacesEdit({
                     </div>
 
                     {/* Tabs */}
-                    <Tabs defaultValue="general" className="pb-16">
+                    <Tabs value={settingsTab} onValueChange={(v) => setSettingsTab(v as typeof settingsTab)} className="pb-16">
                         <TabsList className="mb-8 h-12 p-1">
                             <TabsTrigger value="general" className="gap-2 px-4 h-10">
                                 <Settings className="size-4" />
@@ -271,6 +620,10 @@ export default function WorkspacesEdit({
                             <TabsTrigger value="members" className="gap-2 px-4 h-10">
                                 <Users className="size-4" />
                                 Members
+                            </TabsTrigger>
+                            <TabsTrigger value="ai" className="gap-2 px-4 h-10">
+                                <Bot className="size-4" />
+                                AI
                             </TabsTrigger>
                             <TabsTrigger value="danger" className="gap-2 px-4 h-10 text-destructive data-[state=active]:text-destructive">
                                 <Shield className="size-4" />
@@ -698,7 +1051,13 @@ export default function WorkspacesEdit({
                                                 Manage who has access to this workspace.
                                             </CardDescription>
                                         </div>
-                                        <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+                                        <Dialog
+                                            open={inviteDialogOpen}
+                                            onOpenChange={(open) => {
+                                                setInviteDialogOpen(open);
+                                                if (!open) setInviteConfirmPending(null);
+                                            }}
+                                        >
                                             <DialogTrigger asChild>
                                                 <Button className="gap-2">
                                                     <UserPlus className="size-4" />
@@ -709,92 +1068,124 @@ export default function WorkspacesEdit({
                                                 <DialogHeader>
                                                     <DialogTitle className="text-xl flex items-center gap-3">
                                                         <Mail className="size-5 text-primary" />
-                                                        Invite Team Member
+                                                        {inviteConfirmPending ? 'Send invitation?' : 'Invite Team Member'}
                                                     </DialogTitle>
                                                     <DialogDescription>
-                                                        Enter the email address of the person you want to invite.
+                                                        {inviteConfirmPending ? (
+                                                            <>
+                                                                <strong>{inviteConfirmPending.email}</strong> is not on our platform. Send them an invitation to sign up? Click &quot;Send invitation&quot; below to send the email and add them as pending — they&apos;ll join this workspace when they register within 30 days.
+                                                            </>
+                                                        ) : (
+                                                            'Enter the email address of the person you want to invite.'
+                                                        )}
                                                     </DialogDescription>
                                                 </DialogHeader>
-                                                <form onSubmit={handleInviteMember} className="space-y-5 mt-4">
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="invite-email" className="text-base font-medium">
-                                                            Email Address
-                                                        </Label>
-                                                        <div className="relative">
-                                                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                                                            <Input
-                                                                id="invite-email"
-                                                                type="email"
-                                                                value={inviteForm.data.email}
-                                                                onChange={(e) => inviteForm.setData('email', e.target.value)}
-                                                                className="h-11 pl-10"
-                                                                placeholder="colleague@example.com"
-                                                                required
-                                                            />
+                                                {inviteConfirmPending ? (
+                                                    <form onSubmit={handleConfirmSendInvitation} className="space-y-5 mt-4">
+                                                        <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                                                            <p className="font-medium text-foreground">{inviteConfirmPending.email}</p>
+                                                            <p className="text-muted-foreground">Role: {inviteConfirmPending.role}</p>
                                                         </div>
-                                                        {inviteForm.errors.email && (
-                                                            <p className="text-sm text-destructive">{inviteForm.errors.email}</p>
-                                                        )}
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <Label htmlFor="invite-role" className="text-base font-medium">
-                                                            Role
-                                                        </Label>
-                                                        <Select
-                                                            value={inviteForm.data.role}
-                                                            onValueChange={(value: 'admin' | 'editor' | 'member' | 'viewer') =>
-                                                                inviteForm.setData('role', value)
-                                                            }
-                                                        >
-                                                            <SelectTrigger className="h-11">
-                                                                <SelectValue placeholder="Select role" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="admin">
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-medium">Admin</span>
-                                                                        <span className="text-xs text-muted-foreground">Full access to all settings</span>
-                                                                    </div>
-                                                                </SelectItem>
-                                                                <SelectItem value="editor">
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-medium">Editor</span>
-                                                                        <span className="text-xs text-muted-foreground">Can create and edit content</span>
-                                                                    </div>
-                                                                </SelectItem>
-                                                                <SelectItem value="member">
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-medium">Member</span>
-                                                                        <span className="text-xs text-muted-foreground">Standard team member access</span>
-                                                                    </div>
-                                                                </SelectItem>
-                                                                <SelectItem value="viewer">
-                                                                    <div className="flex flex-col">
-                                                                        <span className="font-medium">Viewer</span>
-                                                                        <span className="text-xs text-muted-foreground">Read-only access</span>
-                                                                    </div>
-                                                                </SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div className="flex justify-end gap-3 pt-2">
-                                                        <Button
-                                                            type="button"
-                                                            variant="outline"
-                                                            onClick={() => setInviteDialogOpen(false)}
-                                                        >
-                                                            Cancel
-                                                        </Button>
-                                                        <Button type="submit" disabled={inviteForm.processing} className="gap-2">
-                                                            {inviteForm.processing ? 'Sending...' : (
-                                                                <>
-                                                                    <UserPlus className="size-4" />
-                                                                    Send Invite
-                                                                </>
+                                                        <div className="flex justify-end gap-3 pt-2">
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                onClick={() => setInviteConfirmPending(null)}
+                                                            >
+                                                                Cancel
+                                                            </Button>
+                                                            <Button type="submit" disabled={inviteSending} className="gap-2">
+                                                                {inviteSending ? 'Sending...' : (
+                                                                    <>
+                                                                        <UserPlus className="size-4" />
+                                                                        Send invitation
+                                                                    </>
+                                                                )}
+                                                            </Button>
+                                                        </div>
+                                                    </form>
+                                                ) : (
+                                                    <form onSubmit={handleInviteMember} className="space-y-5 mt-4">
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="invite-email" className="text-base font-medium">
+                                                                Email Address
+                                                            </Label>
+                                                            <div className="relative">
+                                                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                                                                <Input
+                                                                    id="invite-email"
+                                                                    type="email"
+                                                                    value={inviteForm.data.email}
+                                                                    onChange={(e) => inviteForm.setData('email', e.target.value)}
+                                                                    className="h-11 pl-10"
+                                                                    placeholder="colleague@example.com"
+                                                                    required
+                                                                />
+                                                            </div>
+                                                            {inviteForm.errors.email && (
+                                                                <p className="text-sm text-destructive">{inviteForm.errors.email}</p>
                                                             )}
-                                                        </Button>
-                                                    </div>
-                                                </form>
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <Label htmlFor="invite-role" className="text-base font-medium">
+                                                                Role
+                                                            </Label>
+                                                            <Select
+                                                                value={inviteForm.data.role}
+                                                                onValueChange={(value: 'admin' | 'editor' | 'member' | 'viewer') =>
+                                                                    inviteForm.setData('role', value)
+                                                                }
+                                                            >
+                                                                <SelectTrigger className="h-11">
+                                                                    <SelectValue placeholder="Select role" />
+                                                                </SelectTrigger>
+                                                                <SelectContent>
+                                                                    <SelectItem value="admin">
+                                                                        <div className="flex flex-col">
+                                                                            <span className="font-medium">Admin</span>
+                                                                            <span className="text-xs text-muted-foreground">Full access to all settings</span>
+                                                                        </div>
+                                                                    </SelectItem>
+                                                                    <SelectItem value="editor">
+                                                                        <div className="flex flex-col">
+                                                                            <span className="font-medium">Editor</span>
+                                                                            <span className="text-xs text-muted-foreground">Can create and edit content</span>
+                                                                        </div>
+                                                                    </SelectItem>
+                                                                    <SelectItem value="member">
+                                                                        <div className="flex flex-col">
+                                                                            <span className="font-medium">Member</span>
+                                                                            <span className="text-xs text-muted-foreground">Standard team member access</span>
+                                                                        </div>
+                                                                    </SelectItem>
+                                                                    <SelectItem value="viewer">
+                                                                        <div className="flex flex-col">
+                                                                            <span className="font-medium">Viewer</span>
+                                                                            <span className="text-xs text-muted-foreground">Read-only access</span>
+                                                                        </div>
+                                                                    </SelectItem>
+                                                                </SelectContent>
+                                                            </Select>
+                                                        </div>
+                                                        <div className="flex justify-end gap-3 pt-2">
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                onClick={() => setInviteDialogOpen(false)}
+                                                            >
+                                                                Cancel
+                                                            </Button>
+                                                            <Button type="submit" disabled={inviteSending} className="gap-2">
+                                                                {inviteSending ? 'Sending...' : (
+                                                                    <>
+                                                                        <UserPlus className="size-4" />
+                                                                        Send Invite
+                                                                    </>
+                                                                )}
+                                                            </Button>
+                                                        </div>
+                                                    </form>
+                                                )}
                                             </DialogContent>
                                         </Dialog>
                                     </div>
@@ -884,7 +1275,60 @@ export default function WorkspacesEdit({
                                                 </div>
                                             ))}
 
-                                        {workspace.users.length <= 1 && (
+                                        {/* Pending invitations */}
+                                        {canManage && pendingInvitations.length > 0 && (
+                                            <div className="space-y-3 pt-6 border-t">
+                                                <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                                    <Mail className="size-4" />
+                                                    Pending invitations
+                                                </h4>
+                                                {pendingInvitations.map((inv) => (
+                                                    <div
+                                                        key={inv.id}
+                                                        className="flex items-center justify-between p-4 rounded-lg bg-muted/30 border border-dashed"
+                                                    >
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="size-12 rounded-full bg-muted flex items-center justify-center">
+                                                                <Mail className="size-5 text-muted-foreground" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-medium">{inv.email}</p>
+                                                                <p className="text-sm text-muted-foreground">
+                                                                    {inv.role} · Invited {new Date(inv.created_at).toLocaleDateString()} · Expires {new Date(inv.expires_at).toLocaleDateString()}
+                                                                    {inv.inviter && ` · by ${inv.inviter.name}`}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive border-destructive/30">
+                                                                    Cancel invite
+                                                                </Button>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader>
+                                                                    <AlertDialogTitle>Cancel invitation?</AlertDialogTitle>
+                                                                    <AlertDialogDescription>
+                                                                        The invitation sent to <strong>{inv.email}</strong> will be revoked. They will no longer be able to join this workspace using that link.
+                                                                    </AlertDialogDescription>
+                                                                </AlertDialogHeader>
+                                                                <AlertDialogFooter>
+                                                                    <AlertDialogCancel>Keep</AlertDialogCancel>
+                                                                    <AlertDialogAction
+                                                                        onClick={() => router.delete(route('workspaces.invitations.destroy', [workspace.slug, inv.id]))}
+                                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                                    >
+                                                                        Cancel invitation
+                                                                    </AlertDialogAction>
+                                                                </AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {workspace.users.length <= 1 && pendingInvitations.length === 0 && (
                                             <div className="text-center py-12">
                                                 <div className="size-16 rounded-full bg-muted mx-auto mb-4 flex items-center justify-center">
                                                     <Users className="size-8 text-muted-foreground" />
@@ -902,6 +1346,11 @@ export default function WorkspacesEdit({
                                     </div>
                                 </CardContent>
                             </Card>
+                        </TabsContent>
+
+                        {/* AI Settings */}
+                        <TabsContent value="ai">
+                            <AiSettingsTab workspace={workspace} />
                         </TabsContent>
 
                         {/* Danger Zone */}

@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Models\Workspace;
+use App\Models\WorkspaceInvitation;
+use App\Notifications\WorkspaceInvitationNotification;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -84,6 +87,9 @@ class WorkspaceController extends Controller
             'bookmarks' => function ($query) {
                 $query->limit(6)->orderBy('position');
             },
+            'snippetCollections' => function ($query) {
+                $query->withCount('snippets')->limit(6);
+            },
             'users:id,name,email',
             'owner:id,name,email',
         ]);
@@ -99,20 +105,33 @@ class WorkspaceController extends Controller
     }
 
     /**
-     * Show the form for editing the specified workspace.
+     * Build the props array for the Workspaces/Edit page (shared by edit() and inviteMember when returning confirm step).
      */
-    public function edit(Request $request, Workspace $workspace): Response
+    private function editPageProps(Request $request, Workspace $workspace): array
     {
-        $this->authorize('update', $workspace);
-
         $workspace->load(['users:id,name,email', 'owner:id,name,email']);
+
+        $pendingInvitations = $workspace->invitations()
+            ->valid()
+            ->with('inviter:id,name')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(fn ($inv) => [
+                'id' => $inv->id,
+                'email' => $inv->email,
+                'role' => $inv->role,
+                'expires_at' => $inv->expires_at->toIso8601String(),
+                'created_at' => $inv->created_at->toIso8601String(),
+                'inviter' => $inv->inviter ? ['id' => $inv->inviter->id, 'name' => $inv->inviter->name] : null,
+            ]);
 
         $userRole = $request->user()->isInstanceAdmin()
             ? 'admin'
             : $request->user()->workspaceRole($workspace);
 
-        return Inertia::render('Workspaces/Edit', [
+        return [
             'workspace' => $workspace,
+            'pendingInvitations' => $pendingInvitations,
             'userRole' => $userRole,
             'timezones' => \DateTimeZone::listIdentifiers(),
             'industries' => [
@@ -139,7 +158,17 @@ class WorkspaceController extends Controller
                 '1001-5000' => '1001-5000 employees',
                 '5001+' => '5001+ employees',
             ],
-        ]);
+        ];
+    }
+
+    /**
+     * Show the form for editing the specified workspace.
+     */
+    public function edit(Request $request, Workspace $workspace): Response
+    {
+        $this->authorize('update', $workspace);
+
+        return Inertia::render('Workspaces/Edit', $this->editPageProps($request, $workspace));
     }
 
     /**
@@ -204,6 +233,7 @@ class WorkspaceController extends Controller
 
     /**
      * Invite a member to the workspace.
+     * If the email belongs to an existing user, add them. If not, ask for confirmation then create a pending invitation (30 days) and send an email.
      */
     public function inviteMember(Request $request, Workspace $workspace)
     {
@@ -212,27 +242,56 @@ class WorkspaceController extends Controller
         $validated = $request->validate([
             'email' => 'required|email',
             'role' => 'required|in:admin,editor,member,viewer',
+            'confirm_send_invitation' => 'sometimes|boolean',
         ]);
 
-        // Find user by email
-        $user = User::where('email', $validated['email'])->first();
+        $email = strtolower($validated['email']);
+        $user = User::where('email', $email)->first();
 
-        if (!$user) {
+        if ($user) {
+            // Existing user: add to workspace if not already a member
+            if ($workspace->users()->where('user_id', $user->id)->exists()) {
+                return redirect()->back()
+                    ->withErrors(['email' => 'This user is already a member of this workspace.']);
+            }
+            $workspace->addUser($user, $validated['role'], $request->user());
+
             return redirect()->back()
-                ->withErrors(['email' => 'No user found with this email address.']);
+                ->with('success', "{$user->name} has been added to the workspace.")
+                ->with('invite_result', 'member_added');
         }
 
-        // Check if user is already a member
-        if ($workspace->users()->where('user_id', $user->id)->exists()) {
-            return redirect()->back()
-                ->withErrors(['email' => 'This user is already a member of this workspace.']);
+        // No user with this email: return 409 so frontend can show "send invitation?" modal without redirect
+        if (! ($validated['confirm_send_invitation'] ?? false)) {
+            return response()->json([
+                'confirm_required' => true,
+                'email' => $email,
+                'role' => $validated['role'],
+            ], 409);
         }
 
-        // Add user to workspace
-        $workspace->addUser($user, $validated['role']);
+        // Confirmed: create or refresh a pending invitation (30 days) and send email
+        $invitation = $workspace->invitations()
+            ->forEmail($email)
+            ->valid()
+            ->first();
+
+        if ($invitation) {
+            $invitation->update(['role' => $validated['role'], 'expires_at' => now()->addDays(30)]);
+        } else {
+            $invitation = $workspace->invitations()->create([
+                'email' => $email,
+                'role' => $validated['role'],
+                'invited_by' => $request->user()->id,
+            ]);
+        }
+
+        Notification::route('mail', $email)
+            ->notify(new WorkspaceInvitationNotification($invitation, $workspace, $request->user()));
 
         return redirect()->back()
-            ->with('success', "Successfully invited {$user->name} to the workspace.");
+            ->with('success', "An invitation has been sent to {$email}. If they sign up within 30 days, they'll join this workspace automatically.")
+            ->with('invite_result', 'invitation_sent');
     }
 
     /**
@@ -277,5 +336,28 @@ class WorkspaceController extends Controller
 
         return redirect()->back()
             ->with('success', "Removed {$user->name} from the workspace.");
+    }
+
+    /**
+     * Cancel a pending workspace invitation.
+     */
+    public function cancelInvitation(Request $request, Workspace $workspace, WorkspaceInvitation $invitation)
+    {
+        $this->authorize('update', $workspace);
+
+        if ($invitation->workspace_id !== $workspace->id) {
+            abort(404);
+        }
+
+        if ($invitation->accepted_at !== null) {
+            return redirect()->back()
+                ->with('error', 'This invitation has already been accepted.');
+        }
+
+        $email = $invitation->email;
+        $invitation->delete();
+
+        return redirect()->back()
+            ->with('success', "Invitation to {$email} has been cancelled.");
     }
 }

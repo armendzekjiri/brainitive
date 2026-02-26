@@ -36,6 +36,19 @@ class BookmarkController extends Controller
         ]);
     }
 
+    /** Lightweight JSON list used by the command-palette quick-create modal. */
+    public function listBookmarks(Request $request, Workspace $workspace)
+    {
+        $this->authorize('view', $workspace);
+
+        $bookmarks = $workspace->bookmarks()
+            ->select(['id', 'slug', 'name', 'icon', 'visibility'])
+            ->orderBy('position')
+            ->get();
+
+        return response()->json($bookmarks);
+    }
+
     public function show(Request $request, Workspace $workspace, Bookmark $bookmark): Response
     {
         $this->authorize('view', $bookmark);

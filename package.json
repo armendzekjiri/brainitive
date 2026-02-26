@@ -110,6 +110,7 @@
         "editorjs-alert": "^1.1.4",
         "editorjs-drag-drop": "^1.1.16",
         "editorjs-undo": "^2.0.28",
+        "highlight.js": "^11.11.1",
         "katex": "^0.16.28",
         "lexical": "^0.40.0",
         "lowlight": "^3.3.0",

@@ -709,6 +709,8 @@ export default function ItemShow({
                                             minHeight="160px"
                                             maxHeight="520px"
                                             contentKey={`${item.id}-edit-${editorKey}`}
+                                            workspaceSlug={workspace.slug}
+                                            itemTitle={titleValue}
                                         />
                                         <div className="flex items-center gap-2 mt-3 justify-end">
                                             <Button variant="outline" size="sm" onClick={cancelDescription}>Discard</Button>
