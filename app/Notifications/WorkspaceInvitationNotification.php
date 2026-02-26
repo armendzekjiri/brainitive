@@ -35,7 +35,7 @@ class WorkspaceInvitationNotification extends Notification implements ShouldQueu
      */
     public function toMail(object $notifiable): MailMessage
     {
-        $acceptUrl = route('invitations.accept', ['token' => $this->invitation->token], true);
+        $acceptUrl = route('invitations.show', ['token' => $this->invitation->token], true);
         $appName = config('app.name');
         $roleLabel = ucfirst($this->invitation->role);
 
