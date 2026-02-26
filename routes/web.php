@@ -19,6 +19,7 @@ Route::get('/', function () {
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
+        'canLoginWithGoogle' => (bool) config('services.google.client_id'),
     ]);
 });
 
