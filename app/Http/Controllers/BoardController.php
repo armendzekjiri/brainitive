@@ -60,7 +60,7 @@ class BoardController extends Controller
                     'items' => function ($q) {
                         $q->orderBy('position')
                             ->with([
-                                'assignee:id,name,email',
+                                'assignee:id,name,email,avatar',
                                 'itemType',
                                 'priority',
                                 'labels',
@@ -90,7 +90,7 @@ class BoardController extends Controller
 
         $itemTypes = ItemType::forProject($project)->get();
         $priorities = ItemPriority::forProject($project)->orderBy('order')->get();
-        $projectUsers = $project->workspace->users()->get(['users.id', 'name', 'email']);
+        $projectUsers = $project->workspace->users()->get(['users.id', 'name', 'email', 'avatar']);
         $projectLabels = $project->labels()->orderBy('name')->get();
 
         return Inertia::render('Boards/Show', [
@@ -280,7 +280,7 @@ class BoardController extends Controller
         $this->authorize('view', $item);
 
         $item->load([
-            'assignee:id,name,email',
+            'assignee:id,name,email,avatar',
             'itemType',
             'priority',
             'labels',
@@ -308,7 +308,7 @@ class BoardController extends Controller
 
         $itemTypes = ItemType::forProject($project)->get();
         $priorities = ItemPriority::forProject($project)->orderBy('order')->get();
-        $projectUsers = $project->workspace->users()->get(['users.id', 'name', 'email']);
+        $projectUsers = $project->workspace->users()->get(['users.id', 'name', 'email', 'avatar']);
         $columns = $board->columns()->orderBy('position')->get();
         $projectLabels = $project->labels()->orderBy('name')->get();
 
