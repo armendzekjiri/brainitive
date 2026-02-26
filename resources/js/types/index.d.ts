@@ -151,7 +151,9 @@ export interface Item {
     uuid: string;
     board_id: number;
     column_id: number;
-    parent_id?: number;
+    parent_id?: number | null;
+    parent?: { id: number; key: string; title: string; board_id: number } | null;
+    children_count?: number;
     item_type_id?: number;
     priority_id?: number;
     key: string;
