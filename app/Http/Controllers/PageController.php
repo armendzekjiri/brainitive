@@ -25,7 +25,7 @@ class PageController extends Controller
                 'nullable',
                 Rule::exists('pages', 'id')->where('project_id', $project->id),
             ],
-            'icon' => 'nullable|string|max:50',
+            'icon' => 'nullable|string|max:2000000',
             'content_type' => 'nullable|string|in:doc,excalidraw',
         ]);
 
@@ -247,10 +247,7 @@ class PageController extends Controller
     {
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
-            'icon' => 'nullable|string|max:50',
-            'content' => 'nullable',
-            'parent_id' => 'nullable|exists:pages,id',
-            'status' => 'sometimes|in:draft,published,archived',
+            'icon' => 'nullable|string|max:2000000',
         ]);
 
         // Handle content - it can be a string (JSON) or an array
