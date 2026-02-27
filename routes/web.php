@@ -5,6 +5,7 @@ use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BookmarkController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\MyWorkController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PageStickyNoteController;
 use App\Http\Controllers\ProfileController;
@@ -101,6 +102,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Workspace-scoped routes
     Route::prefix('workspaces/{workspace}')->group(function () {
+        Route::get('users', [WorkspaceController::class, 'users'])->name('workspaces.users.index');
+
         // AI settings & generation
         Route::get('ai/settings', [AiController::class, 'getSettings'])->name('ai.settings');
         Route::post('ai/settings', [AiController::class, 'saveSettings'])->name('ai.settings.save');
@@ -144,14 +147,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
         // Labels (nested under projects)
         Route::prefix('projects/{project:slug}')->group(function () {
+            Route::get('labels', [ProjectController::class, 'labelsJson'])->name('projects.labels.index');
             Route::post('labels', [ProjectController::class, 'storeLabel'])->name('projects.labels.store');
             Route::put('labels/{label}', [ProjectController::class, 'updateLabel'])->name('projects.labels.update');
             Route::delete('labels/{label}', [ProjectController::class, 'destroyLabel'])->name('projects.labels.destroy');
         });
 
+        // Project members (assign workspace users to project with role)
+        Route::prefix('projects/{project:slug}')->scopeBindings()->group(function () {
+            Route::post('members', [ProjectController::class, 'inviteMember'])->name('projects.members.store');
+            Route::patch('members/{user}', [ProjectController::class, 'updateMemberRole'])->name('projects.members.update');
+            Route::delete('members/{user}', [ProjectController::class, 'removeMember'])->name('projects.members.destroy');
+        });
+
         // Boards & Pages (nested under projects) - scoped to project
         Route::prefix('projects/{project}')->scopeBindings()->group(function () {
             Route::post('boards', [BoardController::class, 'store'])->name('boards.store');
+            Route::get('boards/{board:slug}/items', [BoardController::class, 'rootItemsJson'])->name('boards.root-items');
             Route::get('boards/{board:slug}', [BoardController::class, 'show'])->name('boards.show');
             Route::get('boards/{board:slug}/edit', [BoardController::class, 'edit'])->name('boards.edit');
             Route::put('boards/{board:slug}', [BoardController::class, 'update'])->name('boards.update');
@@ -204,6 +216,13 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/page-sticky-notes', [PageStickyNoteController::class, 'store'])->name('page-sticky-notes.store');
     Route::patch('/api/page-sticky-notes/{note}', [PageStickyNoteController::class, 'update'])->name('page-sticky-notes.update');
     Route::delete('/api/page-sticky-notes/{note}', [PageStickyNoteController::class, 'destroy'])->name('page-sticky-notes.destroy');
+
+    // Notifications
+    Route::get('/notifications', [NotificationController::class, 'page'])->name('notifications.page');
+    Route::get('/api/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::get('/api/notifications/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unread-count');
+    Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+    Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
 });
 
 require __DIR__.'/auth.php';

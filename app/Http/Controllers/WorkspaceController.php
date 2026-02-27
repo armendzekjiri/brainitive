@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Notifications\WorkspaceInvitationNotification;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
@@ -94,6 +95,12 @@ class WorkspaceController extends Controller
             'owner:id,name,email',
         ]);
 
+        // Only show projects the user has access to
+        $workspace->setRelation(
+            'projects',
+            $workspace->projects->filter(fn ($project) => $request->user()->hasProjectAccess($project))->values()
+        );
+
         $userRole = $request->user()->isInstanceAdmin()
             ? 'admin'
             : $request->user()->workspaceRole($workspace);
@@ -102,6 +109,18 @@ class WorkspaceController extends Controller
             'workspace' => $workspace,
             'userRole' => $userRole,
         ]);
+    }
+
+    /**
+     * Return workspace members as JSON (for assignee dropdowns, etc.).
+     */
+    public function users(Request $request, Workspace $workspace): JsonResponse
+    {
+        $this->authorize('view', $workspace);
+
+        $users = $workspace->users()->get(['users.id', 'name', 'email', 'avatar']);
+
+        return response()->json($users);
     }
 
     /**

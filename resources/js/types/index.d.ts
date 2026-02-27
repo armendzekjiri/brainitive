@@ -296,9 +296,15 @@ export type PageProps<
     currentWorkspace?: Workspace & {
         projects: (Project & { boards: (Board & { columns?: BoardColumn[] })[]; pages: Page[] })[];
     };
+    /** When inside a project-scoped route (project, board, pages), the current project id for GlobalCreateModal pre-selection */
+    currentProjectId?: number | null;
+    /** When on a board page, the current board id for GlobalCreateModal pre-selection */
+    currentBoardId?: number | null;
     currentPageUuid?: string | null;
     itemTypes?: ItemType[];
     priorities?: ItemPriority[];
+    /** Unread notification count shared by HandleInertiaRequests middleware */
+    unreadNotificationsCount?: number;
 };
 
 /** My Work page: assigned item summary */

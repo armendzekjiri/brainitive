@@ -10,6 +10,8 @@ use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Project;
 use App\Models\Workspace;
+use App\Notifications\ItemStatusChangedNotification;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -255,6 +257,8 @@ class BoardController extends Controller
             'item_type_id' => 'nullable|exists:item_types,id',
             'priority_id' => 'nullable|exists:item_priorities,id',
             'assigned_to' => 'nullable|exists:users,id',
+            'label_ids' => 'nullable|array',
+            'label_ids.*' => 'exists:labels,id',
             'parent_id' => [
                 'nullable',
                 'exists:items,id',
@@ -297,7 +301,29 @@ class BoardController extends Controller
             'position' => $maxPosition + 1,
         ]);
 
+        // Sync labels if provided
+        if (!empty($validated['label_ids'])) {
+            $validLabels = $project->labels()->whereIn('id', $validated['label_ids'])->pluck('id');
+            $item->labels()->sync($validLabels);
+        }
+
         return back()->with('success', 'Item created successfully.');
+    }
+
+    /**
+     * Return root (non-subtask) items for a board as JSON (used by global create modal).
+     */
+    public function rootItemsJson(Request $request, Workspace $workspace, Project $project, Board $board): JsonResponse
+    {
+        $this->authorize('view', $board);
+
+        $items = $board->items()
+            ->whereNull('parent_id')
+            ->select('id', 'key', 'title', 'column_id')
+            ->orderBy('position')
+            ->get();
+
+        return response()->json($items);
     }
 
     /**
@@ -315,6 +341,7 @@ class BoardController extends Controller
             'column',
             'reporter:id,name,email',
             'creator:id,name,email',
+            'watchers:id,name,email,avatar',
             'outgoingLinks.targetItem:id,key,title,board_id',
             'outgoingLinks.targetItem.board:id,name,slug',
             'incomingLinks.sourceItem:id,key,title,board_id',
@@ -379,11 +406,31 @@ class BoardController extends Controller
 
         $validated = $request->validate([
             'column_id' => 'required|exists:board_columns,id',
-            'position' => 'required|integer|min:0',
+            'position'  => 'required|integer|min:0',
         ]);
 
-        $column = BoardColumn::findOrFail($validated['column_id']);
-        $item->moveToColumn($column, $validated['position']);
+        $oldColumn = $item->column;
+        $newColumn = BoardColumn::findOrFail($validated['column_id']);
+
+        $item->moveToColumn($newColumn, $validated['position']);
+
+        // Notify all watchers when the column (status) actually changed
+        if ($oldColumn && $oldColumn->id !== $newColumn->id) {
+            $item->load('watchers');
+            $actorId = $request->user()->id;
+
+            foreach ($item->watchers as $watcher) {
+                // Don't notify the person who performed the move
+                if ($watcher->id === $actorId) continue;
+
+                $watcher->notify(new ItemStatusChangedNotification(
+                    item: $item,
+                    oldColumn: $oldColumn,
+                    newColumn: $newColumn,
+                    actor: $request->user(),
+                ));
+            }
+        }
 
         return back();
     }
