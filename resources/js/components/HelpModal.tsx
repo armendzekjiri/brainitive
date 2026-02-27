@@ -14,6 +14,16 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.2.8',
+        title: 'Icon Picker for Bookmarks & Snippets',
+        tag: 'Enhancement',
+        date: '2026-02-27',
+        items: [
+            'Updated bookmark collections to use the full emoji-mart + custom image icon picker, matching page title icons.',
+            'Updated snippet collections to use the same rich icon picker, with emoji search and custom image upload.',
+        ]
+    },
+    {
         version: 'v1.2.7',
         title: 'Project Members & Global Create',
         tag: 'Feature',
