@@ -1,7 +1,17 @@
-import React, { useEffect, useCallback, useState, useRef, useMemo, createContext, useContext } from 'react';
+import React, { useEffect, useCallback, useState, useRef, useMemo, createContext, useContext, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
-import Picker from '@emoji-mart/react';
-import emojiData from '@emoji-mart/data';
+
+// Lazy-load emoji-mart so customElements.define() is deferred until first open.
+// Top-level import breaks Vite HMR (customElements.define throws on re-registration).
+const EmojiPickerLazy = lazy(() => import('@emoji-mart/react'));
+const loadEmojiData = () => import('@emoji-mart/data').then((m) => m.default);
+function EmojiMartPicker(props: any) {
+    return (
+        <Suspense fallback={<div className="p-4 text-sm text-muted-foreground">Loading…</div>}>
+            <EmojiPickerLazy data={loadEmojiData} {...props} />
+        </Suspense>
+    );
+}
 import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
@@ -273,6 +283,7 @@ const theme = {
 // ─── Toolbar constants ─────────────────────────────────────────────────────────
 
 const FONT_FAMILIES = [
+    { label: 'Inter', value: 'Inter' },
     { label: 'Default', value: '' },
     { label: 'Arial', value: 'Arial' },
     { label: 'Courier New', value: 'Courier New' },
@@ -970,8 +981,7 @@ function SlashCommandsPlugin() {
                     onMouseDown={(e) => { if (e.target === e.currentTarget) setShowEmojiPickerSlash(false); }}
                 >
                     <div onMouseDown={(e) => e.stopPropagation()}>
-                        <Picker
-                            data={emojiData}
+                        <EmojiMartPicker
                             onEmojiSelect={(emoji: { native: string }) => {
                                 editor.update(() => {
                                     const sel = $getSelection();
@@ -1857,7 +1867,7 @@ function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle, projectNa
     const [isLink, setIsLink] = useState(false);
     const [blockType, setBlockType] = useState('paragraph');
     const [fontSize, setFontSize] = useState('15');
-    const [fontFamily, setFontFamily] = useState('');
+    const [fontFamily, setFontFamily] = useState('Inter');
     const [fontColor, setFontColor] = useState('#000000');
     const [bgColor, setBgColor] = useState('transparent');
     const [elementFormat, setElementFormat] = useState('left');
@@ -2261,8 +2271,7 @@ function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle, projectNa
                         </Button>
                     </PopoverTrigger>
                     <PopoverContent className="p-0 w-auto border-none shadow-xl" align="start" side="bottom">
-                        <Picker
-                            data={emojiData}
+                        <EmojiMartPicker
                             onEmojiSelect={(emoji: { native: string }) => {
                                 editor.update(() => {
                                     const sel = $getSelection();
@@ -2939,7 +2948,7 @@ export function RichLexicalEditor({
                                     editable && "pl-16",
                                     !editable && "cursor-default"
                                 )}
-                                style={{ minHeight }}
+                                style={{ minHeight, fontFamily: 'Inter, sans-serif' }}
                                 aria-placeholder={placeholder}
                                 placeholder={
                                     <div className="absolute top-4 left-16 text-muted-foreground pointer-events-none text-sm">

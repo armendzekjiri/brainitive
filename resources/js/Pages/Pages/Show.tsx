@@ -60,9 +60,19 @@ import {
     Maximize2,
     Minimize2,
 } from 'lucide-react';
-import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallback } from 'react';
-import Picker from '@emoji-mart/react';
-import emojiData from '@emoji-mart/data';
+import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallback, Suspense, lazy } from 'react';
+
+// Lazy-load emoji-mart to prevent customElements.define() firing at module load time
+// (breaks Vite HMR with "already defined" error which silently kills onChange).
+const EmojiPickerLazy = lazy(() => import('@emoji-mart/react'));
+const loadEmojiData = () => import('@emoji-mart/data').then((m) => m.default);
+function EmojiMartPicker(props: any) {
+    return (
+        <Suspense fallback={<div className="p-2 text-sm text-muted-foreground">Loading…</div>}>
+            <EmojiPickerLazy data={loadEmojiData} {...props} />
+        </Suspense>
+    );
+}
 import { RichLexicalEditor, TocHeading } from '@/components/editor/RichLexicalEditorFull';
 import { cn } from '@/lib/utils';
 import { flattenPagesForParentSelect } from '@/lib/pageTree';
@@ -139,8 +149,7 @@ function PageIconPicker({ value, onChange }: { value: string; onChange: (val: st
                         </div>
 
                         {tab === 'emoji' && (
-                            <Picker
-                                data={emojiData}
+                            <EmojiMartPicker
                                 onEmojiSelect={(emoji: { native: string }) => {
                                     onChange(emoji.native);
                                     setOpen(false);
@@ -272,7 +281,12 @@ function ChildPageCard({ page, workspace, project }: { page: PageType & { uuid?:
             href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
             className="flex items-center gap-3 p-4 rounded-lg border hover:border-primary/50 hover:bg-accent/50 transition-colors group"
         >
-            <span className="text-2xl">{page.icon || (page.type === 'folder' ? '📁' : '📄')}</span>
+            <span className="text-2xl">
+                {(page.icon && (page.icon.startsWith('data:') || page.icon.startsWith('http') || page.icon.startsWith('/')))
+                    ? <img src={page.icon} className="size-8 rounded-lg object-cover" alt="" />
+                    : (page.icon || (page.type === 'folder' ? '📁' : '📄'))
+                }
+            </span>
             <div className="flex-1 min-w-0">
                 <h3 className="font-medium truncate group-hover:text-primary">{page.name}</h3>
                 <p className="text-sm text-muted-foreground">
@@ -571,14 +585,6 @@ function extractHtmlContent(content: Record<string, any> | null | undefined): st
 }
 
 export default function PageShow({ workspace, project, page, breadcrumbs }: Props) {
-    // Redirect Excalidraw pages to full-page editor (unless they just came back from the editor)
-    useEffect(() => {
-        if (page.type !== 'page' || !isExcalidrawPage(page.content)) return;
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('from') === 'excalidraw') return; // Back / Save & exit: stay on page, don't redirect
-        window.location.href = route('pages.excalidraw', [workspace.slug, project.slug, page.uuid]);
-    }, [page.type, page.content, page.uuid, workspace.slug, project.slug]);
-
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [addSubpageOpen, setAddSubpageOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);

@@ -67,7 +67,9 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                 >
                     {isFolder ? (
                         <Folder className="size-5 shrink-0 text-primary" />
-                    ) : (
+                    ) : (page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
+                        ? <img src={page.icon} className="size-6 rounded object-cover shrink-0" alt="" />
+                        : (
                         <span className="text-lg shrink-0 w-6 text-center">{page.icon || '📄'}</span>
                     )}
                     <span className="truncate font-medium text-foreground group-hover:text-primary transition-colors">

@@ -1,6 +1,7 @@
 import { Link, router, usePage, useForm } from '@inertiajs/react';
+import axios from 'axios';
 import { Toaster } from 'sonner';
-import React, { PropsWithChildren, useState, FormEvent, useEffect, useCallback, createContext, useContext } from 'react';
+import React, { PropsWithChildren, useState, useRef, FormEvent, useEffect, useCallback, createContext, useContext } from 'react';
 import { PageProps, Workspace, Project, Board, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn } from '@/types';
 import { cn } from '@/lib/utils';
 import { SearchModal } from '@/components/SearchModal';
@@ -72,6 +73,7 @@ import {
     Code2,
     PencilRuler,
     StickyNote,
+    GripVertical,
 } from 'lucide-react';
 import {
     Select,
@@ -310,7 +312,118 @@ function ProjectSwitcher({
     );
 }
 
-// Selected project content displayed inline in sidebar
+// Single item wrapper: drag only starts when grabbing the grip handle.
+// This prevents the drag from accidentally collapsing/expanding the collapsible.
+function DraggableItem({
+    children,
+    onDragStart,
+    onDragEnter,
+    onDragEnd,
+}: {
+    children: React.ReactNode;
+    onDragStart: () => void;
+    onDragEnter: () => void;
+    onDragEnd: () => void;
+}) {
+    const divRef = useRef<HTMLDivElement>(null);
+    const enableDrag = () => { if (divRef.current) divRef.current.draggable = true; };
+    const disableDrag = () => { if (divRef.current) divRef.current.draggable = false; };
+
+    return (
+        <div
+            ref={divRef}
+            className="relative group/drag"
+            onDragStart={(e) => { e.stopPropagation(); onDragStart(); }}
+            onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); onDragEnter(); }}
+            onDragEnd={() => { disableDrag(); onDragEnd(); }}
+            onDragOver={(e) => e.preventDefault()}
+        >
+            {/* Grip handle - mousedown enables drag on this item only */}
+            <div
+                className="absolute left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover/drag:opacity-100 cursor-grab z-10 select-none"
+                onMouseDown={enableDrag}
+                onMouseUp={disableDrag}
+            >
+                <GripVertical className="size-3 text-muted-foreground/40" />
+            </div>
+            {children}
+        </div>
+    );
+}
+
+// Draggable group of sidebar items with DB-persisted reorder
+function DraggableSidebarGroup({
+    items,
+    workspace,
+    project,
+    level = 0,
+    onAddItem,
+    currentPageUuid,
+}: {
+    items: PageType[];
+    workspace: Workspace;
+    project: Project;
+    level?: number;
+    onAddItem: (parentId: number) => void;
+    currentPageUuid?: string | null;
+}) {
+    const [orderedItems, setOrderedItems] = useState<PageType[]>(items);
+    const dragIndexRef = useRef<number | null>(null);
+
+    // Sync when Inertia provides updated items after navigation/mutations
+    const itemKey = items.map((i) => i.id).join(',');
+    useEffect(() => {
+        setOrderedItems(items);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [itemKey]);
+
+    const handleDragStart = (index: number) => {
+        dragIndexRef.current = index;
+    };
+
+    const handleDragEnter = (index: number) => {
+        if (dragIndexRef.current === null || dragIndexRef.current === index) return;
+        const newItems = [...orderedItems];
+        const [dragged] = newItems.splice(dragIndexRef.current, 1);
+        newItems.splice(index, 0, dragged);
+        dragIndexRef.current = index;
+        setOrderedItems(newItems);
+    };
+
+    const handleDragEnd = () => {
+        if (dragIndexRef.current === null) return;
+        dragIndexRef.current = null;
+        const pagesData = orderedItems.map((page, idx) => ({
+            id: page.id,
+            position: idx,
+            parent_id: page.parent_id ?? null,
+        }));
+        axios.post(route('pages.reorder', [workspace.slug, project.slug]), { pages: pagesData });
+    };
+
+    return (
+        <>
+            {orderedItems.map((page, index) => (
+                <DraggableItem
+                    key={page.id}
+                    onDragStart={() => handleDragStart(index)}
+                    onDragEnter={() => handleDragEnter(index)}
+                    onDragEnd={handleDragEnd}
+                >
+                    <PageTreeItem
+                        page={page}
+                        workspace={workspace}
+                        project={project}
+                        level={level}
+                        onAddItem={onAddItem}
+                        currentPageUuid={currentPageUuid}
+                    />
+                </DraggableItem>
+            ))}
+        </>
+    );
+}
+
 function ProjectContent({
     project,
     workspace,
@@ -323,6 +436,10 @@ function ProjectContent({
     currentPageUuid?: string | null;
 }) {
     const hasContent = (project.boards && project.boards.length > 0) || (project.pages && project.pages.length > 0);
+    const [boardsOpen, setBoardsOpen] = useExpandedState(`project-${project.id}-boards`, true);
+    const [pagesOpen, setPagesOpen] = useExpandedState(`project-${project.id}-pages`, true);
+    const [whiteboardsOpen, setWhiteboardsOpen] = useExpandedState(`project-${project.id}-whiteboards`, true);
+    const [foldersOpen, setFoldersOpen] = useExpandedState(`project-${project.id}-folders`, true);
 
     if (!hasContent) {
         return (
@@ -350,10 +467,14 @@ function ProjectContent({
             {/* Boards */}
             {project.boards?.length > 0 && (
                 <>
-                    <div className="px-2 py-1">
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Boards</span>
-                    </div>
-                    {project.boards.map((board) => (
+                    <button
+                        onClick={() => setBoardsOpen(!boardsOpen)}
+                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
+                    >
+                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${boardsOpen ? 'rotate-90' : ''}`} />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Boards</span>
+                    </button>
+                    {boardsOpen && project.boards.map((board) => (
                         <SidebarMenuItem key={board.id}>
                             <Link
                                 href={route('boards.show', [workspace.slug, project.slug, board.slug])}
@@ -371,19 +492,22 @@ function ProjectContent({
             {rootDocs.length > 0 && (
                 <>
                     {project.boards?.length > 0 && <div className="border-t border-border/50 my-1.5" />}
-                    <div className="px-2 py-1">
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Pages</span>
-                    </div>
-                    {rootDocs.map((page) => (
-                        <PageTreeItem
-                            key={page.id}
-                            page={page}
+                    <button
+                        onClick={() => setPagesOpen(!pagesOpen)}
+                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
+                    >
+                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${pagesOpen ? 'rotate-90' : ''}`} />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Pages</span>
+                    </button>
+                    {pagesOpen && (
+                        <DraggableSidebarGroup
+                            items={rootDocs}
                             workspace={workspace}
                             project={project}
                             onAddItem={(parentId) => onAddItem(project.id, parentId)}
                             currentPageUuid={currentPageUuid}
                         />
-                    ))}
+                    )}
                 </>
             )}
 
@@ -391,19 +515,22 @@ function ProjectContent({
             {rootWhiteboards.length > 0 && (
                 <>
                     {(project.boards?.length > 0 || rootDocs.length > 0) && <div className="border-t border-border/50 my-1.5" />}
-                    <div className="px-2 py-1">
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Whiteboards</span>
-                    </div>
-                    {rootWhiteboards.map((page) => (
-                        <PageTreeItem
-                            key={page.id}
-                            page={page}
+                    <button
+                        onClick={() => setWhiteboardsOpen(!whiteboardsOpen)}
+                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
+                    >
+                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${whiteboardsOpen ? 'rotate-90' : ''}`} />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Whiteboards</span>
+                    </button>
+                    {whiteboardsOpen && (
+                        <DraggableSidebarGroup
+                            items={rootWhiteboards}
                             workspace={workspace}
                             project={project}
                             onAddItem={(parentId) => onAddItem(project.id, parentId)}
                             currentPageUuid={currentPageUuid}
                         />
-                    ))}
+                    )}
                 </>
             )}
 
@@ -413,19 +540,22 @@ function ProjectContent({
                     {(project.boards?.length > 0 || rootDocs.length > 0 || rootWhiteboards.length > 0) && (
                         <div className="border-t border-border/50 my-1.5" />
                     )}
-                    <div className="px-2 py-1">
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Folders</span>
-                    </div>
-                    {rootFolders.map((page) => (
-                        <PageTreeItem
-                            key={page.id}
-                            page={page}
+                    <button
+                        onClick={() => setFoldersOpen(!foldersOpen)}
+                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
+                    >
+                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${foldersOpen ? 'rotate-90' : ''}`} />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Folders</span>
+                    </button>
+                    {foldersOpen && (
+                        <DraggableSidebarGroup
+                            items={rootFolders}
                             workspace={workspace}
                             project={project}
                             onAddItem={(parentId) => onAddItem(project.id, parentId)}
                             currentPageUuid={currentPageUuid}
                         />
-                    ))}
+                    )}
                 </>
             )}
 
@@ -698,7 +828,10 @@ function PageTreeItem({
                             style={{ paddingLeft: `${level * 12 + 8}px` }}
                         >
                             <ChevronRight className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-                            <span className="shrink-0 text-base">{page.icon || '📁'}</span>
+                            {(page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
+                                ? <img src={page.icon} className="size-4 rounded object-cover shrink-0" alt="" />
+                                : <span className="shrink-0 text-base">{page.icon || '📁'}</span>
+                            }
                             <span className="min-w-0 truncate text-muted-foreground group-hover:text-foreground">{page.name}</span>
                         </button>
                     </CollapsibleTrigger>
@@ -723,39 +856,36 @@ function PageTreeItem({
                             const childFolders = children.filter((p) => p.type === 'folder');
                             return (
                                 <>
-                                    {childDocs.map((child) => (
-                                        <PageTreeItem
-                                            key={child.id}
-                                            page={child}
+                                    {childDocs.length > 0 && (
+                                        <DraggableSidebarGroup
+                                            items={childDocs}
                                             workspace={workspace}
                                             project={project}
                                             level={level + 1}
                                             onAddItem={onAddItem}
                                             currentPageUuid={currentPageUuid}
                                         />
-                                    ))}
-                                    {childWhiteboards.map((child) => (
-                                        <PageTreeItem
-                                            key={child.id}
-                                            page={child}
+                                    )}
+                                    {childWhiteboards.length > 0 && (
+                                        <DraggableSidebarGroup
+                                            items={childWhiteboards}
                                             workspace={workspace}
                                             project={project}
                                             level={level + 1}
                                             onAddItem={onAddItem}
                                             currentPageUuid={currentPageUuid}
                                         />
-                                    ))}
-                                    {childFolders.map((child) => (
-                                        <PageTreeItem
-                                            key={child.id}
-                                            page={child}
+                                    )}
+                                    {childFolders.length > 0 && (
+                                        <DraggableSidebarGroup
+                                            items={childFolders}
                                             workspace={workspace}
                                             project={project}
                                             level={level + 1}
                                             onAddItem={onAddItem}
                                             currentPageUuid={currentPageUuid}
                                         />
-                                    ))}
+                                    )}
                                 </>
                             );
                         })()}
@@ -771,7 +901,6 @@ function PageTreeItem({
         const childDocs = children.filter((p) => p.type === 'page' && !p.is_whiteboard);
         const childWhiteboards = children.filter((p) => p.type === 'page' && p.is_whiteboard);
         const childFolders = children.filter((p) => p.type === 'folder');
-        const baseIndent = (level + 1) * 12 + 8;
         return (
             <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                 <div className="flex min-w-0 items-center group">
@@ -789,7 +918,9 @@ function PageTreeItem({
                     >
                         {page.is_whiteboard ? (
                             <PencilRuler className="size-4 shrink-0 text-brand-slate" />
-                        ) : (
+                        ) : (page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
+                            ? <img src={page.icon} className="size-4 rounded object-cover shrink-0" alt="" />
+                            : (
                             <span className="shrink-0 text-base">{page.icon || '📄'}</span>
                         )}
                         <span className="min-w-0 truncate">{page.name}</span>
@@ -808,39 +939,36 @@ function PageTreeItem({
                 </div>
                 <CollapsibleContent>
                     <>
-                        {childDocs.map((child) => (
-                            <PageTreeItem
-                                key={child.id}
-                                page={child}
+                        {childDocs.length > 0 && (
+                            <DraggableSidebarGroup
+                                items={childDocs}
                                 workspace={workspace}
                                 project={project}
                                 level={level + 1}
                                 onAddItem={onAddItem}
                                 currentPageUuid={currentPageUuid}
                             />
-                        ))}
-                        {childWhiteboards.map((child) => (
-                            <PageTreeItem
-                                key={child.id}
-                                page={child}
+                        )}
+                        {childWhiteboards.length > 0 && (
+                            <DraggableSidebarGroup
+                                items={childWhiteboards}
                                 workspace={workspace}
                                 project={project}
                                 level={level + 1}
                                 onAddItem={onAddItem}
                                 currentPageUuid={currentPageUuid}
                             />
-                        ))}
-                        {childFolders.map((child) => (
-                            <PageTreeItem
-                                key={child.id}
-                                page={child}
+                        )}
+                        {childFolders.length > 0 && (
+                            <DraggableSidebarGroup
+                                items={childFolders}
                                 workspace={workspace}
                                 project={project}
                                 level={level + 1}
                                 onAddItem={onAddItem}
                                 currentPageUuid={currentPageUuid}
                             />
-                        ))}
+                        )}
                     </>
                 </CollapsibleContent>
             </Collapsible>
@@ -855,14 +983,105 @@ function PageTreeItem({
         >
             {page.is_whiteboard ? (
                 <PencilRuler className="size-4 shrink-0 text-brand-slate" />
-            ) : (
+            ) : (page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
+                ? <img src={page.icon} className="size-4 rounded object-cover shrink-0" alt="" />
+                : (
                 <span className="shrink-0 text-base">{page.icon || '📄'}</span>
             )}
             <span className="min-w-0 truncate">{page.name}</span>
-            {page.is_whiteboard && (
-                <span className="shrink-0 text-[10px] uppercase tracking-wider text-muted-foreground/80">Whiteboard</span>
-            )}
         </Link>
+    );
+}
+
+// Collapsible group headers inside ProjectItem inline expanded view
+function InlineProjectGroups({
+    project,
+    workspace,
+    rootDocs,
+    rootWhiteboards,
+    rootFolders,
+    onAddItem,
+    currentPageUuid,
+}: {
+    project: Project & { boards: Board[]; pages?: PageType[] };
+    workspace: Workspace;
+    rootDocs: PageType[];
+    rootWhiteboards: PageType[];
+    rootFolders: PageType[];
+    onAddItem: (projectId: number, parentId?: number) => void;
+    currentPageUuid?: string | null;
+}) {
+    const [pagesOpen, setPagesOpen] = useExpandedState(`inline-project-${project.id}-pages`, true);
+    const [whiteboardsOpen, setWhiteboardsOpen] = useExpandedState(`inline-project-${project.id}-whiteboards`, true);
+    const [foldersOpen, setFoldersOpen] = useExpandedState(`inline-project-${project.id}-folders`, true);
+    const hasBoardsBefore = (project.boards?.length ?? 0) > 0;
+
+    return (
+        <>
+            {hasBoardsBefore && <div className="border-t border-border/50 my-1.5" />}
+            {rootDocs.length > 0 && (
+                <>
+                    <button
+                        onClick={() => setPagesOpen(!pagesOpen)}
+                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
+                    >
+                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${pagesOpen ? 'rotate-90' : ''}`} />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Pages</span>
+                    </button>
+                    {pagesOpen && (
+                        <DraggableSidebarGroup
+                            items={rootDocs}
+                            workspace={workspace}
+                            project={project}
+                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
+                            currentPageUuid={currentPageUuid}
+                        />
+                    )}
+                </>
+            )}
+            {rootWhiteboards.length > 0 && (
+                <>
+                    {rootDocs.length > 0 && <div className="border-t border-border/50 my-1.5" />}
+                    <button
+                        onClick={() => setWhiteboardsOpen(!whiteboardsOpen)}
+                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
+                    >
+                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${whiteboardsOpen ? 'rotate-90' : ''}`} />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Whiteboards</span>
+                    </button>
+                    {whiteboardsOpen && (
+                        <DraggableSidebarGroup
+                            items={rootWhiteboards}
+                            workspace={workspace}
+                            project={project}
+                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
+                            currentPageUuid={currentPageUuid}
+                        />
+                    )}
+                </>
+            )}
+            {rootFolders.length > 0 && (
+                <>
+                    {(rootDocs.length > 0 || rootWhiteboards.length > 0) && <div className="border-t border-border/50 my-1.5" />}
+                    <button
+                        onClick={() => setFoldersOpen(!foldersOpen)}
+                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
+                    >
+                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${foldersOpen ? 'rotate-90' : ''}`} />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Folders</span>
+                    </button>
+                    {foldersOpen && (
+                        <DraggableSidebarGroup
+                            items={rootFolders}
+                            workspace={workspace}
+                            project={project}
+                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
+                            currentPageUuid={currentPageUuid}
+                        />
+                    )}
+                </>
+            )}
+        </>
     );
 }
 
@@ -929,7 +1148,7 @@ function ProjectItem({
                                 </Link>
                             ))}
 
-                            {/* Pages, Whiteboards, Folders - separated sections */}
+                            {/* Pages, Whiteboards, Folders - collapsible with drag */}
                             {project.pages && project.pages.length > 0 && (() => {
                                 const rootDocs = project.pages.filter((p) => p.type === 'page' && !p.is_whiteboard);
                                 const rootWhiteboards = project.pages.filter((p) => p.type === 'page' && p.is_whiteboard);
@@ -937,69 +1156,15 @@ function ProjectItem({
                                 const hasAny = rootDocs.length > 0 || rootWhiteboards.length > 0 || rootFolders.length > 0;
                                 if (!hasAny) return null;
                                 return (
-                                    <>
-                                        {(project.boards?.length ?? 0) > 0 && (
-                                            <div className="border-t border-border/50 my-1.5" />
-                                        )}
-                                        {/* Pages */}
-                                        {rootDocs.length > 0 && (
-                                            <>
-                                                <div className="px-2 py-1">
-                                                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Pages</span>
-                                                </div>
-                                                {rootDocs.map((page) => (
-                                                    <PageTreeItem
-                                                        key={page.id}
-                                                        page={page}
-                                                        workspace={workspace}
-                                                        project={project}
-                                                        onAddItem={(parentId) => onAddItem(project.id, parentId)}
-                                                        currentPageUuid={currentPageUuid}
-                                                    />
-                                                ))}
-                                            </>
-                                        )}
-                                        {/* Whiteboards */}
-                                        {rootWhiteboards.length > 0 && (
-                                            <>
-                                                {rootDocs.length > 0 && <div className="border-t border-border/50 my-1.5" />}
-                                                <div className="px-2 py-1">
-                                                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Whiteboards</span>
-                                                </div>
-                                                {rootWhiteboards.map((page) => (
-                                                    <PageTreeItem
-                                                        key={page.id}
-                                                        page={page}
-                                                        workspace={workspace}
-                                                        project={project}
-                                                        onAddItem={(parentId) => onAddItem(project.id, parentId)}
-                                                        currentPageUuid={currentPageUuid}
-                                                    />
-                                                ))}
-                                            </>
-                                        )}
-                                        {/* Folders */}
-                                        {rootFolders.length > 0 && (
-                                            <>
-                                                {(rootDocs.length > 0 || rootWhiteboards.length > 0) && (
-                                                    <div className="border-t border-border/50 my-1.5" />
-                                                )}
-                                                <div className="px-2 py-1">
-                                                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Folders</span>
-                                                </div>
-                                                {rootFolders.map((page) => (
-                                                    <PageTreeItem
-                                                        key={page.id}
-                                                        page={page}
-                                                        workspace={workspace}
-                                                        project={project}
-                                                        onAddItem={(parentId) => onAddItem(project.id, parentId)}
-                                                        currentPageUuid={currentPageUuid}
-                                                    />
-                                                ))}
-                                            </>
-                                        )}
-                                    </>
+                                    <InlineProjectGroups
+                                        project={project}
+                                        workspace={workspace}
+                                        rootDocs={rootDocs}
+                                        rootWhiteboards={rootWhiteboards}
+                                        rootFolders={rootFolders}
+                                        onAddItem={onAddItem}
+                                        currentPageUuid={currentPageUuid}
+                                    />
                                 );
                             })()}
                         </div>
