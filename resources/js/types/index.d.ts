@@ -174,6 +174,7 @@ export interface Item {
     item_type?: ItemType;
     priority?: ItemPriority;
     labels?: Label[];
+    watchers?: User[];
     outgoing_links?: ItemLink[];
     incoming_links?: ItemLink[];
     comments?: Comment[];

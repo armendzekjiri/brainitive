@@ -10,6 +10,8 @@ use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Project;
 use App\Models\Workspace;
+use App\Models\User;
+use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -307,6 +309,15 @@ class BoardController extends Controller
             $item->labels()->sync($validLabels);
         }
 
+        // Notify assignee if assigned to someone else
+        $newAssigneeId = $item->assigned_to;
+        if ($newAssigneeId && $newAssigneeId !== $request->user()->id) {
+            $assignee = User::find($newAssigneeId);
+            if ($assignee) {
+                $assignee->notify(new ItemAssignedNotification($item, $request->user()));
+            }
+        }
+
         return back()->with('success', 'Item created successfully.');
     }
 
@@ -436,6 +447,29 @@ class BoardController extends Controller
     }
 
     /**
+     * Toggle watch status on an item.
+     */
+    public function toggleWatch(Request $request, Workspace $workspace, Project $project, Board $board, Item $item)
+    {
+        $this->authorize('view', $item);
+
+        $validated = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'watch' => 'required|boolean',
+        ]);
+
+        $user = User::findOrFail($validated['user_id']);
+
+        if ($validated['watch']) {
+            $item->addWatcher($user);
+        } else {
+            $item->removeWatcher($user);
+        }
+
+        return back();
+    }
+
+    /**
      * Update an item.
      */
     public function updateItem(Request $request, Workspace $workspace, Project $project, Board $board, Item $item)
@@ -498,7 +532,22 @@ class BoardController extends Controller
             }
         }
 
+        $oldAssigneeId = $item->assigned_to;
+
         $item->update($validated);
+
+        // Notify new assignee if changed
+        $newAssigneeId = $item->assigned_to;
+        if (
+            $newAssigneeId 
+            && $newAssigneeId !== $oldAssigneeId 
+            && $newAssigneeId !== $request->user()->id
+        ) {
+            $assignee = User::find($newAssigneeId);
+            if ($assignee) {
+                $assignee->notify(new ItemAssignedNotification($item, $request->user()));
+            }
+        }
 
         return back()->with('success', 'Item updated successfully.');
     }

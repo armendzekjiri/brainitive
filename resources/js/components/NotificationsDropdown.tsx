@@ -201,7 +201,7 @@ export function NotificationsDropdown() {
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm leading-snug">
                                                 <span className="font-medium">{d.actor_name}</span>
-                                                {' moved '}
+                                                {d.type === 'item_assigned' ? ' assigned you to ' : ' moved '}
                                                 <a
                                                     href={d.item_url}
                                                     className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
@@ -212,10 +212,14 @@ export function NotificationsDropdown() {
                                                     {d.item_key}
                                                     <ExternalLink className="size-2.5" />
                                                 </a>
-                                                {' from '}
-                                                <span className="text-muted-foreground">{d.old_column}</span>
-                                                {' → '}
-                                                <span className="font-medium">{d.new_column}</span>
+                                                {d.type === 'item_status_changed' && (
+                                                    <>
+                                                        {' from '}
+                                                        <span className="text-muted-foreground">{d.old_column}</span>
+                                                        {' → '}
+                                                        <span className="font-medium">{d.new_column}</span>
+                                                    </>
+                                                )}
                                             </p>
                                             <p className="text-xs text-muted-foreground mt-0.5 truncate">{d.item_title}</p>
                                             <p className="text-[11px] text-muted-foreground/70 mt-1">{timeAgo(n.created_at)}</p>
