@@ -248,6 +248,9 @@ class PageController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'icon' => 'nullable|string|max:2000000',
+            'content' => 'nullable',
+            'parent_id' => 'nullable|exists:pages,id',
+            'status' => 'sometimes|in:draft,published,archived',
         ]);
 
         // Handle content - it can be a string (JSON) or an array
