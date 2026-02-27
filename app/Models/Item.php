@@ -59,6 +59,20 @@ class Item extends Model
                 $item->uuid = (string) Str::uuid();
             }
         });
+
+        // Auto-watch: add reporter to watchers after creation
+        static::created(function (Item $item) {
+            if ($item->reporter_id) {
+                $item->watchers()->syncWithoutDetaching([$item->reporter_id]);
+            }
+        });
+
+        // Auto-watch: add assignee when item is assigned/updated
+        static::updated(function (Item $item) {
+            if ($item->wasChanged('assigned_to') && $item->assigned_to) {
+                $item->watchers()->syncWithoutDetaching([$item->assigned_to]);
+            }
+        });
     }
 
     /**
@@ -131,6 +145,32 @@ class Item extends Model
     public function reporter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reporter_id');
+    }
+
+    /**
+     * Get the users watching this item.
+     */
+    public function watchers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'item_watchers')
+            ->withPivot('created_at')
+            ->withTimestamps();
+    }
+
+    /**
+     * Add a user to the watch list (idempotent).
+     */
+    public function addWatcher(User $user): void
+    {
+        $this->watchers()->syncWithoutDetaching([$user->id]);
+    }
+
+    /**
+     * Remove a user from the watch list.
+     */
+    public function removeWatcher(User $user): void
+    {
+        $this->watchers()->detach($user->id);
     }
 
     /**

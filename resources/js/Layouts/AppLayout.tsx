@@ -10,6 +10,8 @@ import { QuickCreateSnippetModal } from '@/components/QuickCreateSnippetModal';
 import { QuickCreateBookmarkModal } from '@/components/QuickCreateBookmarkModal';
 import { GlobalStickyNotes } from '@/components/GlobalStickyNotes';
 import { SidebarResizer, getInitialSidebarWidth } from '@/components/SidebarResizer';
+import { HelpModal } from '@/components/HelpModal';
+import { NotificationsDropdown } from '@/components/NotificationsDropdown';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import {
@@ -65,6 +67,7 @@ import {
     HelpCircle,
     FolderKanban,
     Check,
+    CheckSquare,
     FileText,
     Folder,
     Kanban,
@@ -90,8 +93,10 @@ interface Props extends PropsWithChildren {
 }
 
 // Context for global create modal
+export type GlobalCreateType = 'task' | 'page' | 'whiteboard' | 'folder';
+
 interface GlobalCreateModalContextType {
-    openCreateTaskModal: (projectId?: number, boardId?: number, columnId?: number) => void;
+    openCreateTaskModal: (projectId?: number, boardId?: number, columnId?: number, type?: GlobalCreateType) => void;
     closeCreateTaskModal: () => void;
 }
 
@@ -374,7 +379,7 @@ function DraggableSidebarGroup({
     const itemKey = items.map((i) => i.id).join(',');
     useEffect(() => {
         setOrderedItems(items);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [itemKey]);
 
     const handleDragStart = (index: number) => {
@@ -921,8 +926,8 @@ function PageTreeItem({
                         ) : (page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
                             ? <img src={page.icon} className="size-4 rounded object-cover shrink-0" alt="" />
                             : (
-                            <span className="shrink-0 text-base">{page.icon || '📄'}</span>
-                        )}
+                                <span className="shrink-0 text-base">{page.icon || '📄'}</span>
+                            )}
                         <span className="min-w-0 truncate">{page.name}</span>
                     </Link>
                     <Button
@@ -986,8 +991,8 @@ function PageTreeItem({
             ) : (page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
                 ? <img src={page.icon} className="size-4 rounded object-cover shrink-0" alt="" />
                 : (
-                <span className="shrink-0 text-base">{page.icon || '📄'}</span>
-            )}
+                    <span className="shrink-0 text-base">{page.icon || '📄'}</span>
+                )}
             <span className="min-w-0 truncate">{page.name}</span>
         </Link>
     );
@@ -1179,10 +1184,12 @@ function AppSidebar({
     workspaces,
     currentWorkspace,
     onOpenSearch,
+    onOpenHelp,
 }: {
     workspaces: Workspace[];
     currentWorkspace?: Workspace & { projects: (Project & { boards: Board[]; pages?: PageType[] })[] };
     onOpenSearch?: () => void;
+    onOpenHelp?: () => void;
 }) {
     const { auth, currentPageUuid } = usePage<PageProps>().props;
     const user = auth.user;
@@ -1238,6 +1245,7 @@ function AppSidebar({
         setActiveProjectId(project.id);
         if (currentWorkspace) {
             localStorage.setItem(`sidebar-active-project-${currentWorkspace.id}`, String(project.id));
+            router.visit(route('projects.show', [currentWorkspace.slug, project.slug]));
         }
     };
 
@@ -1455,7 +1463,7 @@ function AppSidebar({
                                     </Link>
                                 </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem className="flex items-center gap-3 p-2 cursor-pointer">
+                            <DropdownMenuItem onClick={() => onOpenHelp?.()} className="flex items-center gap-3 p-2 cursor-pointer">
                                 <HelpCircle className="size-4" />
                                 <span className="text-sm">Help & support</span>
                             </DropdownMenuItem>
@@ -1490,7 +1498,7 @@ function AppSidebar({
     );
 }
 
-function TopBar({ onCreateClick, onSearchClick }: { onCreateClick?: () => void; onSearchClick?: () => void }) {
+function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: () => void; onSearchClick?: () => void; onOpenHelp?: () => void }) {
     const { currentWorkspace } = usePage<PageProps>().props;
 
     return (
@@ -1540,10 +1548,8 @@ function TopBar({ onCreateClick, onSearchClick }: { onCreateClick?: () => void; 
 
             {/* Right side actions */}
             <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" className="size-9">
-                    <Bell className="size-5" />
-                </Button>
-                <Button variant="ghost" size="icon" className="size-9">
+                <NotificationsDropdown />
+                <Button variant="ghost" size="icon" className="size-9" onClick={() => onOpenHelp?.()}>
                     <HelpCircle className="size-5" />
                 </Button>
                 <Button size="sm" className="h-9 px-3 gap-1.5" onClick={onCreateClick}>
@@ -1559,16 +1565,18 @@ function TopBar({ onCreateClick, onSearchClick }: { onCreateClick?: () => void; 
 // GlobalCreateModal is now in @/components/GlobalCreateModal
 
 export default function AppLayout({ children, title }: Props) {
-    const { workspaces = [], currentWorkspace } = usePage<PageProps>().props;
+    const { workspaces = [], currentWorkspace, currentProjectId, currentBoardId } = usePage<PageProps>().props;
     const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
     const [createTaskModalOpen, setCreateTaskModalOpen] = useState(false);
     const [searchModalOpen, setSearchModalOpen] = useState(false);
     const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [quickCreateSnippetOpen, setQuickCreateSnippetOpen] = useState(false);
     const [quickCreateBookmarkOpen, setQuickCreateBookmarkOpen] = useState(false);
+    const [helpModalOpen, setHelpModalOpen] = useState(false);
     const [preSelectedProjectId, setPreSelectedProjectId] = useState<number | undefined>();
     const [preSelectedBoardId, setPreSelectedBoardId] = useState<number | undefined>();
     const [preSelectedColumnId, setPreSelectedColumnId] = useState<number | undefined>();
+    const [defaultCreateType, setDefaultCreateType] = useState<GlobalCreateType>('task');
 
     const onOpenSearch = useCallback(() => setSearchModalOpen(true), []);
 
@@ -1588,18 +1596,20 @@ export default function AppLayout({ children, title }: Props) {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    const openCreateTaskModal = useCallback((projectId?: number, boardId?: number, columnId?: number) => {
-        setPreSelectedProjectId(projectId);
-        setPreSelectedBoardId(boardId);
+    const openCreateTaskModal = useCallback((projectId?: number, boardId?: number, columnId?: number, type?: GlobalCreateType) => {
+        setPreSelectedProjectId(projectId ?? currentProjectId ?? undefined);
+        setPreSelectedBoardId(boardId ?? currentBoardId ?? undefined);
         setPreSelectedColumnId(columnId);
+        if (type) setDefaultCreateType(type);
         setCreateTaskModalOpen(true);
-    }, []);
+    }, [currentProjectId, currentBoardId]);
 
     const closeCreateTaskModal = useCallback(() => {
         setCreateTaskModalOpen(false);
         setPreSelectedProjectId(undefined);
         setPreSelectedBoardId(undefined);
         setPreSelectedColumnId(undefined);
+        setDefaultCreateType('task');
     }, []);
 
     const globalCreateModalValue = {
@@ -1630,6 +1640,38 @@ export default function AppLayout({ children, title }: Props) {
 
         // ── Create ──────────────────────────────────────────────────────────
         ...(currentWorkspace ? [
+            {
+                id: 'create-item',
+                label: 'Create Item',
+                description: 'Create a new task or item on a board',
+                icon: <CmdIcon color="#0E83DC"><CheckSquare className="size-4" /></CmdIcon>,
+                group: 'Create',
+                action: () => { setCommandPaletteOpen(false); openCreateTaskModal(undefined, undefined, undefined, 'task'); },
+            },
+            {
+                id: 'create-page',
+                label: 'Create Page',
+                description: 'Create a new document page',
+                icon: <CmdIcon color="#22c55e"><FileText className="size-4" /></CmdIcon>,
+                group: 'Create',
+                action: () => { setCommandPaletteOpen(false); openCreateTaskModal(undefined, undefined, undefined, 'page'); },
+            },
+            {
+                id: 'create-whiteboard',
+                label: 'Create Whiteboard',
+                description: 'Create a new Excalidraw whiteboard',
+                icon: <CmdIcon color="#8b5cf6"><PencilRuler className="size-4" /></CmdIcon>,
+                group: 'Create',
+                action: () => { setCommandPaletteOpen(false); openCreateTaskModal(undefined, undefined, undefined, 'whiteboard'); },
+            },
+            {
+                id: 'create-folder',
+                label: 'Create Folder',
+                description: 'Create a new folder in the wiki',
+                icon: <CmdIcon color="#f59e0b"><Folder className="size-4" /></CmdIcon>,
+                group: 'Create',
+                action: () => { setCommandPaletteOpen(false); openCreateTaskModal(undefined, undefined, undefined, 'folder'); },
+            },
             {
                 id: 'create-snippet',
                 label: 'Create Snippet',
@@ -1674,13 +1716,14 @@ export default function AppLayout({ children, title }: Props) {
                 }
             >
                 <AppSidebar
-                workspaces={workspaces}
-                currentWorkspace={currentWorkspace}
-                onOpenSearch={onOpenSearch}
-            />
+                    workspaces={workspaces}
+                    currentWorkspace={currentWorkspace}
+                    onOpenSearch={onOpenSearch}
+                    onOpenHelp={() => setHelpModalOpen(true)}
+                />
                 <SidebarResizer width={sidebarWidth} onWidthChange={setSidebarWidth} />
                 <SidebarInset className="flex flex-col h-screen overflow-hidden">
-                    <TopBar onCreateClick={() => openCreateTaskModal()} onSearchClick={onOpenSearch} />
+                    <TopBar onCreateClick={() => openCreateTaskModal()} onSearchClick={onOpenSearch} onOpenHelp={() => setHelpModalOpen(true)} />
                     <main className="flex-1 overflow-auto bg-muted/30">
                         {children}
                     </main>
@@ -1694,6 +1737,7 @@ export default function AppLayout({ children, title }: Props) {
                 preSelectedProjectId={preSelectedProjectId}
                 preSelectedBoardId={preSelectedBoardId}
                 preSelectedColumnId={preSelectedColumnId}
+                defaultType={defaultCreateType}
             />
             <SearchModal
                 open={searchModalOpen}
@@ -1718,6 +1762,7 @@ export default function AppLayout({ children, title }: Props) {
                     />
                 </>
             )}
+            <HelpModal open={helpModalOpen} onOpenChange={setHelpModalOpen} />
             <GlobalStickyNotes />
             <Toaster richColors position="bottom-right" closeButton />
         </GlobalCreateModalContext.Provider>

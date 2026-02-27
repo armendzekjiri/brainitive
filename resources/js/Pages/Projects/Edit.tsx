@@ -1,7 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 import { ProjectIcon } from '@/components/ProjectIcon';
-import { PageProps, Workspace, Project, Label as LabelType } from '@/types';
+import { PageProps, Workspace, Project, Label as LabelType, User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { IconPicker } from '@/components/IconPicker';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import {
     Dialog,
     DialogContent,
@@ -29,13 +36,21 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag, Users } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+export type ProjectMemberRole = 'admin' | 'editor' | 'viewer';
+
+interface ProjectMember extends User {
+    pivot: { role: ProjectMemberRole };
+}
+
 interface Props extends PageProps {
     workspace: Workspace;
-    project: Project & { labels?: LabelType[] };
+    project: Project & { labels?: LabelType[]; users?: ProjectMember[] };
+    workspaceUsers: User[];
+    canManageMembers: boolean;
 }
 
 // Predefined colors for labels and project
@@ -135,9 +150,17 @@ function LabelForm({
     );
 }
 
-export default function ProjectsEdit({ auth, workspace, project }: Props) {
+const PROJECT_ROLES: { value: ProjectMemberRole; label: string }[] = [
+    { value: 'admin', label: 'Admin' },
+    { value: 'editor', label: 'Editor' },
+    { value: 'viewer', label: 'Viewer' },
+];
+
+export default function ProjectsEdit({ auth, workspace, project, workspaceUsers, canManageMembers }: Props) {
     const [createLabelOpen, setCreateLabelOpen] = useState(false);
     const [editingLabel, setEditingLabel] = useState<LabelType | null>(null);
+    const [addMemberUserId, setAddMemberUserId] = useState<string>('');
+    const [addMemberRole, setAddMemberRole] = useState<ProjectMemberRole>('viewer');
 
     const { data, setData, put, processing, errors, isDirty } = useForm({
         name: project.name || '',
@@ -172,6 +195,26 @@ export default function ProjectsEdit({ auth, workspace, project }: Props) {
 
     const handleDeleteLabel = (labelId: number) => {
         router.delete(route('projects.labels.destroy', [workspace.slug, project.slug, labelId]));
+    };
+
+    const projectMemberIds = new Set((project.users ?? []).map((u) => u.id));
+    const availableToAdd = workspaceUsers.filter((u) => !projectMemberIds.has(u.id));
+
+    const handleAddMember = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!addMemberUserId) return;
+        router.post(route('projects.members.store', [workspace.slug, project.slug]), {
+            user_id: parseInt(addMemberUserId, 10),
+            role: addMemberRole,
+        }, { preserveScroll: true, onSuccess: () => { setAddMemberUserId(''); setAddMemberRole('viewer'); } });
+    };
+
+    const handleUpdateMemberRole = (userId: number, role: ProjectMemberRole) => {
+        router.patch(route('projects.members.update', [workspace.slug, project.slug, userId]), { role }, { preserveScroll: true });
+    };
+
+    const handleRemoveMember = (userId: number) => {
+        router.delete(route('projects.members.destroy', [workspace.slug, project.slug, userId]), { preserveScroll: true });
     };
 
     return (
@@ -409,6 +452,118 @@ export default function ProjectsEdit({ auth, workspace, project }: Props) {
                                     <p className="text-sm">No labels yet</p>
                                     <p className="text-xs">Create labels to categorize your items</p>
                                 </div>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Members */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Users className="size-5" />
+                                Members
+                            </CardTitle>
+                            <CardDescription>
+                                Only assigned members can see this project. Invite users from the workspace and set their role (Admin, Editor, or Viewer).
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                            {project.users && project.users.length > 0 ? (
+                                <div className="space-y-2">
+                                    {project.users.map((member) => (
+                                        <div
+                                            key={member.id}
+                                            className="flex items-center justify-between gap-4 p-3 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors"
+                                        >
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-medium truncate">{member.name}</p>
+                                                <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+                                            </div>
+                                            {canManageMembers ? (
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <Select
+                                                        value={member.pivot.role}
+                                                        onValueChange={(v) => handleUpdateMemberRole(member.id, v as ProjectMemberRole)}
+                                                    >
+                                                        <SelectTrigger className="h-8 w-[110px]">
+                                                            <SelectValue />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {PROJECT_ROLES.map((r) => (
+                                                                <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="size-8 text-destructive hover:text-destructive">
+                                                                <Trash2 className="size-4" />
+                                                            </Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Remove from project</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    Remove {member.name} from this project? They will no longer see it.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction
+                                                                    onClick={() => handleRemoveMember(member.id)}
+                                                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                                >
+                                                                    Remove
+                                                                </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </div>
+                                            ) : (
+                                                <Badge variant="secondary" className="shrink-0">
+                                                    {PROJECT_ROLES.find((r) => r.value === member.pivot.role)?.label ?? member.pivot.role}
+                                                </Badge>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted-foreground">No members assigned yet.</p>
+                            )}
+
+                            {canManageMembers && availableToAdd.length > 0 && (
+                                <form onSubmit={handleAddMember} className="flex flex-wrap items-end gap-2 pt-2 border-t">
+                                    <div className="flex-1 min-w-[160px] space-y-1.5">
+                                        <Label className="text-xs">Add workspace member</Label>
+                                        <Select value={addMemberUserId} onValueChange={setAddMemberUserId} required>
+                                            <SelectTrigger className="h-9">
+                                                <SelectValue placeholder="Select user…" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {availableToAdd.map((u) => (
+                                                    <SelectItem key={u.id} value={u.id.toString()}>{u.name} ({u.email})</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="w-[110px] space-y-1.5">
+                                        <Label className="text-xs">Role</Label>
+                                        <Select value={addMemberRole} onValueChange={(v) => setAddMemberRole(v as ProjectMemberRole)}>
+                                            <SelectTrigger className="h-9">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {PROJECT_ROLES.map((r) => (
+                                                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <Button type="submit" size="sm" className="h-9">Add</Button>
+                                </form>
+                            )}
+                            {canManageMembers && availableToAdd.length === 0 && project.users && project.users.length > 0 && (
+                                <p className="text-xs text-muted-foreground">All workspace members are already in this project.</p>
                             )}
                         </CardContent>
                     </Card>

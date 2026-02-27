@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Board;
 use App\Models\Label;
 use App\Models\Project;
+use App\Models\User;
 use App\Models\Workspace;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -21,11 +23,17 @@ class ProjectController extends Controller
     {
         $this->authorize('view', $workspace);
 
-        $projects = $workspace->projects()
+        $query = $workspace->projects()
             ->withCount('boards')
             ->with('creator:id,name')
-            ->latest()
-            ->get();
+            ->latest();
+
+        // Workspace admins see all projects; others only projects they are assigned to
+        if ($request->user()->workspaceRole($workspace) !== 'admin') {
+            $query->whereHas('users', fn ($q) => $q->where('user_id', $request->user()->id));
+        }
+
+        $projects = $query->get();
 
         return Inertia::render('Projects/Index', [
             'workspace' => $workspace,
@@ -65,6 +73,9 @@ class ProjectController extends Controller
             'description' => $validated['description'] ?? null,
             'created_by' => $request->user()->id,
         ]);
+
+        // Creator is added as project admin so they have access
+        $project->addUser($request->user(), 'admin');
 
         // Create a default board
         $board = $project->boards()->create([
@@ -108,15 +119,19 @@ class ProjectController extends Controller
     /**
      * Show the form for editing the specified project.
      */
-    public function edit(Workspace $workspace, Project $project): Response
+    public function edit(Request $request, Workspace $workspace, Project $project): Response
     {
         $this->authorize('update', $project);
 
-        $project->load('labels');
+        $project->load(['labels', 'users' => fn ($q) => $q->select('users.id', 'name', 'email', 'avatar')->withPivot('role')]);
+
+        $workspaceUsers = $workspace->users()->get(['users.id', 'name', 'email', 'avatar']);
 
         return Inertia::render('Projects/Edit', [
             'workspace' => $workspace,
             'project' => $project,
+            'workspaceUsers' => $workspaceUsers,
+            'canManageMembers' => $request->user()->can('manageMembers', $project),
         ]);
     }
 
@@ -208,6 +223,76 @@ class ProjectController extends Controller
     }
 
     /**
+     * Add a workspace member to the project with a role.
+     */
+    public function inviteMember(Request $request, Workspace $workspace, Project $project)
+    {
+        $this->authorize('manageMembers', $project);
+
+        $validated = $request->validate([
+            'user_id' => ['required', 'exists:users,id', Rule::in($workspace->users()->pluck('users.id'))],
+            'role' => ['required', 'string', Rule::in(['admin', 'editor', 'viewer'])],
+        ]);
+
+        $user = User::findOrFail($validated['user_id']);
+        if ($project->hasUser($user)) {
+            return back()->with('error', 'That user is already a member of this project.');
+        }
+
+        $project->addUser($user, $validated['role'], $request->user());
+
+        return back()->with('success', "{$user->name} has been added to the project.");
+    }
+
+    /**
+     * Update a project member's role.
+     */
+    public function updateMemberRole(Request $request, Workspace $workspace, Project $project, User $user)
+    {
+        $this->authorize('manageMembers', $project);
+
+        if (! $project->hasUser($user)) {
+            abort(404);
+        }
+
+        $validated = $request->validate([
+            'role' => ['required', 'string', Rule::in(['admin', 'editor', 'viewer'])],
+        ]);
+
+        $project->updateUserRole($user, $validated['role']);
+
+        return back()->with('success', 'Role updated.');
+    }
+
+    /**
+     * Remove a user from the project.
+     */
+    public function removeMember(Request $request, Workspace $workspace, Project $project, User $user)
+    {
+        $this->authorize('manageMembers', $project);
+
+        if (! $project->hasUser($user)) {
+            abort(404);
+        }
+
+        $project->removeUser($user);
+
+        return back()->with('success', 'Member removed from project.');
+    }
+
+    /**
+     * Return project labels as JSON (used by global create modal).
+     */
+    public function labelsJson(Request $request, Workspace $workspace, Project $project): JsonResponse
+    {
+        $this->authorize('view', $project);
+
+        $labels = $project->labels()->orderBy('name')->get(['id', 'name', 'color', 'slug']);
+
+        return response()->json($labels);
+    }
+
+    /**
      * Store a new label for the project.
      */
     public function storeLabel(Request $request, Workspace $workspace, Project $project)
@@ -219,7 +304,11 @@ class ProjectController extends Controller
             'color' => 'required|string|max:7',
         ]);
 
-        $project->labels()->create($validated);
+        $label = $project->labels()->create($validated);
+
+        if ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+            return response()->json($label, 201);
+        }
 
         return back()->with('success', 'Label created successfully.');
     }

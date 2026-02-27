@@ -86,6 +86,35 @@ class HandleInertiaRequests extends Middleware
                         ]);
                     }])
                     ->first();
+
+                // Only show projects the user has access to (workspace admin sees all; others only assigned projects)
+                if ($currentWorkspace && $user) {
+                    $accessible = $currentWorkspace->projects->filter(fn ($project) => $user->hasProjectAccess($project))->values();
+                    $currentWorkspace->setRelation('projects', $accessible);
+                }
+            }
+        }
+
+        $currentProjectId = null;
+        $currentBoardId = null;
+        if ($currentWorkspace) {
+            $projectParam = $request->route('project');
+            $boardParam = $request->route('board');
+            if ($projectParam) {
+                $project = is_object($projectParam)
+                    ? $projectParam
+                    : $currentWorkspace->projects->firstWhere('slug', $projectParam);
+                if ($project) {
+                    $currentProjectId = $project->id;
+                    if ($boardParam) {
+                        $board = is_object($boardParam)
+                            ? $boardParam
+                            : collect($project->boards ?? [])->firstWhere('slug', $boardParam);
+                        if ($board) {
+                            $currentBoardId = $board->id;
+                        }
+                    }
+                }
             }
         }
 
@@ -96,11 +125,14 @@ class HandleInertiaRequests extends Middleware
             ],
             'workspaces' => $workspaces,
             'currentWorkspace' => $currentWorkspace,
-            'itemTypes' => fn () => $user ? ItemType::orderBy('position')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
-            'priorities'  => fn () => $user ? ItemPriority::orderBy('position')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
+            'currentProjectId' => $currentProjectId,
+            'currentBoardId' => $currentBoardId,
+            'itemTypes' => fn () => $user ? ItemType::orderBy('id')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
+            'priorities'  => fn () => $user ? ItemPriority::orderBy('order')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
             'currentPageUuid' => $request->routeIs('pages.show') && $request->route('page')
                 ? (is_object($request->route('page')) ? $request->route('page')->uuid : $request->route('page'))
                 : null,
+            'unreadNotificationsCount' => fn () => $user ? $user->unreadNotifications()->count() : 0,
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
