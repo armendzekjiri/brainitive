@@ -14,6 +14,16 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.3.2',
+        title: 'Board Filters & Assignee Autocomplete',
+        tag: 'Enhancement',
+        date: '2026-02-27',
+        items: [
+            'Added a board-level Filter popover with search, status (column) and label filters.',
+            'Introduced an assignee autocomplete inside the Filter popover, so you can quickly filter by “Me”, “Unassigned”, or any project member.',
+        ]
+    },
+    {
         version: 'v1.3.1',
         title: 'Item Watchers & Assignment Notifications',
         tag: 'Enhancement',

@@ -1,6 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, router, useForm } from '@inertiajs/react';
 import { PageProps, Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User, Label as LabelType } from '@/types';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -1917,17 +1918,19 @@ export default function BoardsShow({
     const [currentView, setCurrentView] = useState<'kanban' | 'list' | 'gantt' | 'calendar'>('kanban');
     const [calendarDate, setCalendarDate] = useState(new Date());
     const [filterOpen, setFilterOpen] = useState(false);
-    const [assignedFilter, setAssignedFilter] = useState<'all' | 'me' | 'unassigned'>('all');
+    const [assigneeFilter, setAssigneeFilter] = useState<string>('any');
+    const [assigneePopoverOpen, setAssigneePopoverOpen] = useState(false);
+    const [assigneeSearch, setAssigneeSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<number[]>([]);
     const [labelFilter, setLabelFilter] = useState<number[]>([]);
     const currentUserId = auth.user?.id;
 
     const activeFiltersCount = useMemo(
         () =>
-            (assignedFilter !== 'all' ? 1 : 0) +
+            (assigneeFilter !== 'any' ? 1 : 0) +
             (statusFilter.length ? 1 : 0) +
             (labelFilter.length ? 1 : 0),
-        [assignedFilter, statusFilter.length, labelFilter.length],
+        [assigneeFilter, statusFilter.length, labelFilter.length],
     );
 
     const handleDragStart = (e: DragEvent, item: Item) => {
@@ -1978,10 +1981,13 @@ export default function BoardsShow({
                 if (!matchesSearch) return false;
 
                 // Assignee filter
-                if (assignedFilter === 'me' && currentUserId) {
+                if (assigneeFilter === 'me' && currentUserId) {
                     if (item.assigned_to !== currentUserId) return false;
-                } else if (assignedFilter === 'unassigned') {
+                } else if (assigneeFilter === 'unassigned') {
                     if (item.assigned_to) return false;
+                } else if (assigneeFilter.startsWith('user-')) {
+                    const id = Number(assigneeFilter.split('-')[1] || '');
+                    if (!id || item.assigned_to !== id) return false;
                 }
 
                 // Status filter (columns)
@@ -2101,11 +2107,13 @@ export default function BoardsShow({
                                         <button
                                             type="button"
                                             className="text-xs text-primary hover:underline"
-                                            onClick={() => {
-                                                setAssignedFilter('all');
-                                                setStatusFilter([]);
-                                                setLabelFilter([]);
-                                            }}
+                                                onClick={() => {
+                                                    setAssigneeFilter('any');
+                                                    setAssigneeSearch('');
+                                                    setAssigneePopoverOpen(false);
+                                                    setStatusFilter([]);
+                                                    setLabelFilter([]);
+                                                }}
                                         >
                                             Clear all
                                         </button>
@@ -2117,44 +2125,135 @@ export default function BoardsShow({
                                     <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                                         Assignee
                                     </p>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        <button
-                                            type="button"
-                                            onClick={() => setAssignedFilter('all')}
-                                            className={cn(
-                                                'px-2.5 py-1.5 rounded-full text-xs border transition-all',
-                                                assignedFilter === 'all'
-                                                    ? 'border-primary bg-primary/10 text-primary font-semibold'
-                                                    : 'border-transparent bg-muted/60 text-muted-foreground hover:bg-muted',
-                                            )}
-                                        >
-                                            All items
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setAssignedFilter('me')}
-                                            className={cn(
-                                                'px-2.5 py-1.5 rounded-full text-xs border transition-all',
-                                                assignedFilter === 'me'
-                                                    ? 'border-primary bg-primary/10 text-primary font-semibold'
-                                                    : 'border-transparent bg-muted/60 text-muted-foreground hover:bg-muted',
-                                            )}
-                                        >
-                                            My items
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setAssignedFilter('unassigned')}
-                                            className={cn(
-                                                'px-2.5 py-1.5 rounded-full text-xs border transition-all',
-                                                assignedFilter === 'unassigned'
-                                                    ? 'border-primary bg-primary/10 text-primary font-semibold'
-                                                    : 'border-transparent bg-muted/60 text-muted-foreground hover:bg-muted',
-                                            )}
-                                        >
-                                            Unassigned
-                                        </button>
-                                    </div>
+                                    <Popover
+                                        open={assigneePopoverOpen}
+                                        onOpenChange={(open) => {
+                                            setAssigneePopoverOpen(open);
+                                            if (!open) setAssigneeSearch('');
+                                        }}
+                                    >
+                                        <PopoverTrigger asChild>
+                                            <button
+                                                type="button"
+                                                className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md border text-xs bg-background hover:bg-muted transition-colors"
+                                            >
+                                                <span className="truncate max-w-[160px]">
+                                                    {assigneeFilter === 'any'
+                                                        ? 'Any user'
+                                                        : assigneeFilter === 'me'
+                                                        ? 'Me'
+                                                        : assigneeFilter === 'unassigned'
+                                                        ? 'Unassigned'
+                                                        : (() => {
+                                                              const id = Number(assigneeFilter.split('-')[1] || '');
+                                                              const u = projectUsers.find((usr) => usr.id === id);
+                                                              return u ? u.name : 'Any user';
+                                                          })()}
+                                                </span>
+                                                <ChevronDown className="size-3 text-muted-foreground" />
+                                            </button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-64 p-2 space-y-2" align="start">
+                                            <Input
+                                                placeholder="Search people…"
+                                                value={assigneeSearch}
+                                                onChange={(e) => setAssigneeSearch(e.target.value)}
+                                                className="h-8 text-xs"
+                                            />
+                                            <div className="max-h-44 overflow-y-auto space-y-1 pt-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setAssigneeFilter('any');
+                                                        setAssigneePopoverOpen(false);
+                                                    }}
+                                                    className={cn(
+                                                        'w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors',
+                                                        assigneeFilter === 'any'
+                                                            ? 'bg-primary/10 text-primary font-semibold'
+                                                            : 'hover:bg-muted text-muted-foreground',
+                                                    )}
+                                                >
+                                                    <span>Any user</span>
+                                                    {assigneeFilter === 'any' && <Check className="size-3" />}
+                                                </button>
+                                                {currentUserId && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setAssigneeFilter('me');
+                                                            setAssigneePopoverOpen(false);
+                                                        }}
+                                                        className={cn(
+                                                            'w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors',
+                                                            assigneeFilter === 'me'
+                                                                ? 'bg-primary/10 text-primary font-semibold'
+                                                                : 'hover:bg-muted text-muted-foreground',
+                                                        )}
+                                                    >
+                                                        <span>Me</span>
+                                                        {assigneeFilter === 'me' && <Check className="size-3" />}
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setAssigneeFilter('unassigned');
+                                                        setAssigneePopoverOpen(false);
+                                                    }}
+                                                    className={cn(
+                                                        'w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors',
+                                                        assigneeFilter === 'unassigned'
+                                                            ? 'bg-primary/10 text-primary font-semibold'
+                                                            : 'hover:bg-muted text-muted-foreground',
+                                                    )}
+                                                >
+                                                    <span>Unassigned</span>
+                                                    {assigneeFilter === 'unassigned' && <Check className="size-3" />}
+                                                </button>
+                                                {projectUsers
+                                                    .filter((u) =>
+                                                        !assigneeSearch
+                                                            ? true
+                                                            : u.name.toLowerCase().includes(assigneeSearch.toLowerCase()) ||
+                                                              u.email.toLowerCase().includes(assigneeSearch.toLowerCase()),
+                                                    )
+                                                    .map((user) => {
+                                                        const value = `user-${user.id}`;
+                                                        const active = assigneeFilter === value;
+                                                        return (
+                                                            <button
+                                                                key={user.id}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setAssigneeFilter(value);
+                                                                    setAssigneePopoverOpen(false);
+                                                                }}
+                                                                className={cn(
+                                                                    'w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors',
+                                                                    active
+                                                                        ? 'bg-primary/10 text-primary font-semibold'
+                                                                        : 'hover:bg-muted text-muted-foreground',
+                                                                )}
+                                                            >
+                                                                <div className="flex items-center gap-2">
+                                                                    <Avatar className="size-5">
+                                                                        {user.avatar_display && (
+                                                                            <AvatarImage src={user.avatar_display} alt={user.name} />
+                                                                        )}
+                                                                        <AvatarFallback className="text-[10px]">
+                                                                            {user.name.charAt(0).toUpperCase()}
+                                                                        </AvatarFallback>
+                                                                    </Avatar>
+                                                                    <span className="truncate max-w-[140px]">{user.name}</span>
+                                                                </div>
+                                                                {active && <Check className="size-3" />}
+                                                            </button>
+                                                        );
+                                                    })}
+                                            </div>
+                                        </PopoverContent>
+                                    </Popover>
                                 </div>
 
                                 {/* Status / Columns */}
