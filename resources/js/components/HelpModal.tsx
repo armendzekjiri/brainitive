@@ -14,6 +14,17 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.3.1',
+        title: 'Item Watchers & Assignment Notifications',
+        tag: 'Enhancement',
+        date: '2026-02-27',
+        items: [
+            'Implemented item watchers! Users can now watch specific items to get notified of updates via the property panel.',
+            'Items now automatically register the reporter and assignee to the watch list.',
+            'Added assignment notifications – you will now receive a notification when someone assigns you to an item.',
+        ]
+    },
+    {
         version: 'v1.3.0',
         title: 'Notifications System',
         tag: 'Feature',
@@ -22,17 +33,6 @@ const CHANGELOG = [
             'Introduced in-app notifications, including a notifications dropdown in the top bar and a full Notifications page.',
             'Store notifications in the database so users can see unread and historical events across sessions.',
             'Added basic notification actions such as marking notifications as read.',
-        ]
-    },
-    {
-        version: 'v1.2.9',
-        title: 'Item Watchers & Assignment Notifications',
-        tag: 'Enhancement',
-        date: '2026-02-27',
-        items: [
-            'Implemented item watchers! Users can now watch specific items to get notified of updates via the property panel.',
-            'Items now automatically register the reporter and assignee to the watch list.',
-            'Added assignment notifications – you will now receive a notification when someone assigns you to an item.',
         ]
     },
     {
