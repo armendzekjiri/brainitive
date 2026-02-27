@@ -153,8 +153,7 @@ class Item extends Model
     public function watchers(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'item_watchers')
-            ->withPivot('created_at')
-            ->withTimestamps();
+            ->withPivot('created_at');
     }
 
     /**

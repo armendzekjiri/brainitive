@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { ProjectIcon } from '@/components/ProjectIcon';
+import { cn } from '@/lib/utils';
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -69,9 +70,12 @@ import {
     Download,
     Eye,
     Reply,
+    Bell,
+    BellRing,
 } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
+import { usePage } from '@inertiajs/react';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -93,32 +97,32 @@ type PreviewType = 'pdf' | 'image' | 'video' | 'other';
 function getFileIcon(filename: string): { Icon: React.ComponentType<{ className?: string }>; colorClass: string } {
     const ext = filename?.split('.').pop()?.toLowerCase() ?? '';
     const map: Record<string, { Icon: React.ComponentType<{ className?: string }>; colorClass: string }> = {
-        pdf:  { Icon: FileText,        colorClass: 'text-red-600' },
-        doc:  { Icon: FileText,        colorClass: 'text-blue-600' },
-        docx: { Icon: FileText,        colorClass: 'text-blue-600' },
-        rtf:  { Icon: FileText,        colorClass: 'text-blue-500' },
-        txt:  { Icon: FileType,        colorClass: 'text-muted-foreground' },
-        md:   { Icon: FileType,        colorClass: 'text-muted-foreground' },
-        xls:  { Icon: FileSpreadsheet, colorClass: 'text-green-600' },
+        pdf: { Icon: FileText, colorClass: 'text-red-600' },
+        doc: { Icon: FileText, colorClass: 'text-blue-600' },
+        docx: { Icon: FileText, colorClass: 'text-blue-600' },
+        rtf: { Icon: FileText, colorClass: 'text-blue-500' },
+        txt: { Icon: FileType, colorClass: 'text-muted-foreground' },
+        md: { Icon: FileType, colorClass: 'text-muted-foreground' },
+        xls: { Icon: FileSpreadsheet, colorClass: 'text-green-600' },
         xlsx: { Icon: FileSpreadsheet, colorClass: 'text-green-600' },
-        csv:  { Icon: FileSpreadsheet, colorClass: 'text-green-500' },
-        ppt:  { Icon: FileText,        colorClass: 'text-orange-600' },
-        pptx: { Icon: FileText,        colorClass: 'text-orange-600' },
-        jpg:  { Icon: FileImage,       colorClass: 'text-purple-500' },
-        jpeg: { Icon: FileImage,       colorClass: 'text-purple-500' },
-        png:  { Icon: FileImage,       colorClass: 'text-sky-500' },
-        gif:  { Icon: FileImage,       colorClass: 'text-pink-500' },
-        webp: { Icon: FileImage,       colorClass: 'text-teal-500' },
-        svg:  { Icon: FileImage,       colorClass: 'text-amber-500' },
-        bmp:  { Icon: FileImage,       colorClass: 'text-muted-foreground' },
-        ico:  { Icon: FileImage,       colorClass: 'text-amber-500' },
-        heic: { Icon: FileImage,       colorClass: 'text-muted-foreground' },
-        avif: { Icon: FileImage,       colorClass: 'text-muted-foreground' },
-        zip:  { Icon: FileArchive,     colorClass: 'text-amber-600' },
-        rar:  { Icon: FileArchive,     colorClass: 'text-amber-600' },
-        '7z': { Icon: FileArchive,     colorClass: 'text-amber-600' },
-        json: { Icon: FileCode,        colorClass: 'text-amber-500' },
-        xml:  { Icon: FileCode,        colorClass: 'text-orange-500' },
+        csv: { Icon: FileSpreadsheet, colorClass: 'text-green-500' },
+        ppt: { Icon: FileText, colorClass: 'text-orange-600' },
+        pptx: { Icon: FileText, colorClass: 'text-orange-600' },
+        jpg: { Icon: FileImage, colorClass: 'text-purple-500' },
+        jpeg: { Icon: FileImage, colorClass: 'text-purple-500' },
+        png: { Icon: FileImage, colorClass: 'text-sky-500' },
+        gif: { Icon: FileImage, colorClass: 'text-pink-500' },
+        webp: { Icon: FileImage, colorClass: 'text-teal-500' },
+        svg: { Icon: FileImage, colorClass: 'text-amber-500' },
+        bmp: { Icon: FileImage, colorClass: 'text-muted-foreground' },
+        ico: { Icon: FileImage, colorClass: 'text-amber-500' },
+        heic: { Icon: FileImage, colorClass: 'text-muted-foreground' },
+        avif: { Icon: FileImage, colorClass: 'text-muted-foreground' },
+        zip: { Icon: FileArchive, colorClass: 'text-amber-600' },
+        rar: { Icon: FileArchive, colorClass: 'text-amber-600' },
+        '7z': { Icon: FileArchive, colorClass: 'text-amber-600' },
+        json: { Icon: FileCode, colorClass: 'text-amber-500' },
+        xml: { Icon: FileCode, colorClass: 'text-orange-500' },
     };
     return map[ext] ?? { Icon: File, colorClass: 'text-muted-foreground' };
 }
@@ -126,8 +130,8 @@ function getFileIcon(filename: string): { Icon: React.ComponentType<{ className?
 function getFilePreviewType(filename: string): PreviewType {
     const ext = filename?.split('.').pop()?.toLowerCase() ?? '';
     if (['pdf'].includes(ext)) return 'pdf';
-    if (['jpg','jpeg','png','gif','webp','bmp','svg','ico','heic','avif'].includes(ext)) return 'image';
-    if (['mp4','webm','ogg','mov','avi','mkv'].includes(ext)) return 'video';
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico', 'heic', 'avif'].includes(ext)) return 'image';
+    if (['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'].includes(ext)) return 'video';
     return 'other';
 }
 
@@ -436,7 +440,7 @@ export default function ItemShow({
         });
     };
 
-    const [linkDialogOpen, setLinkDialogOpen] = useState(false);    const [linkType, setLinkType] = useState<string>('relates_to');
+    const [linkDialogOpen, setLinkDialogOpen] = useState(false); const [linkType, setLinkType] = useState<string>('relates_to');
     const [targetItemId, setTargetItemId] = useState<string>('');
 
     const linkTypeOptions = [
@@ -448,6 +452,17 @@ export default function ItemShow({
         { value: 'clones', label: 'clones' },
         { value: 'is_cloned_by', label: 'is cloned by' },
     ];
+
+    // Watchers management
+    const currentUser = usePage<PageProps>().props.auth.user;
+    const isWatching = item.watchers?.some(w => w.id === currentUser.id) ?? false;
+
+    const toggleWatch = () => {
+        router.post(route('boards.items.watch', [workspace.slug, project.slug, board.slug, item.id]), {
+            user_id: currentUser.id,
+            watch: !isWatching,
+        }, { preserveScroll: true });
+    };
 
     const handleCreateLink = () => {
         if (!targetItemId) return;
@@ -728,7 +743,7 @@ export default function ItemShow({
                                             <RichLexicalEditor
                                                 key={`view-${editorKey}`}
                                                 content={savedDescription}
-                                                onChange={() => {}}
+                                                onChange={() => { }}
                                                 editable={false}
                                                 showToolbar={false}
                                                 minHeight="40px"
@@ -825,11 +840,11 @@ export default function ItemShow({
                                                     <span className="text-sm text-muted-foreground shrink-0">
                                                         {linkTypeOptions.find(o => o.value === (
                                                             link.link_type === 'blocks' ? 'is_blocked_by' :
-                                                            link.link_type === 'is_blocked_by' ? 'blocks' :
-                                                            link.link_type === 'duplicates' ? 'is_duplicated_by' :
-                                                            link.link_type === 'is_duplicated_by' ? 'duplicates' :
-                                                            link.link_type === 'clones' ? 'is_cloned_by' :
-                                                            link.link_type === 'is_cloned_by' ? 'clones' : link.link_type
+                                                                link.link_type === 'is_blocked_by' ? 'blocks' :
+                                                                    link.link_type === 'duplicates' ? 'is_duplicated_by' :
+                                                                        link.link_type === 'is_duplicated_by' ? 'duplicates' :
+                                                                            link.link_type === 'clones' ? 'is_cloned_by' :
+                                                                                link.link_type === 'is_cloned_by' ? 'clones' : link.link_type
                                                         ))?.label || link.link_type}
                                                     </span>
                                                     <Link href={route('boards.items.show', [workspace.slug, project.slug, link.source_item?.board?.slug, link.source_item_id])} className="text-sm text-primary hover:underline truncate">
@@ -994,11 +1009,11 @@ export default function ItemShow({
                                                     <span className="text-xs text-muted-foreground shrink-0">
                                                         {linkTypeOptions.find(o => o.value === (
                                                             link.link_type === 'blocks' ? 'is_blocked_by' :
-                                                            link.link_type === 'is_blocked_by' ? 'blocks' :
-                                                            link.link_type === 'duplicates' ? 'is_duplicated_by' :
-                                                            link.link_type === 'is_duplicated_by' ? 'duplicates' :
-                                                            link.link_type === 'clones' ? 'is_cloned_by' :
-                                                            link.link_type === 'is_cloned_by' ? 'clones' : link.link_type
+                                                                link.link_type === 'is_blocked_by' ? 'blocks' :
+                                                                    link.link_type === 'duplicates' ? 'is_duplicated_by' :
+                                                                        link.link_type === 'is_duplicated_by' ? 'duplicates' :
+                                                                            link.link_type === 'clones' ? 'is_cloned_by' :
+                                                                                link.link_type === 'is_cloned_by' ? 'clones' : link.link_type
                                                         ))?.label || link.link_type}
                                                     </span>
                                                     <Link href={route('boards.items.show', [workspace.slug, project.slug, link.source_item?.board?.slug, link.source_item_id])} className="text-sm text-primary hover:underline truncate">
@@ -1226,6 +1241,48 @@ export default function ItemShow({
                                 <div className="flex items-center min-h-[40px] py-1">
                                     <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Updated</span>
                                     <span className="flex-1 text-sm px-2">{new Date(item.updated_at).toLocaleDateString()}</span>
+                                </div>
+
+                                {/* Watchers */}
+                                <div className="flex items-start min-h-[40px] py-2 border-t mt-2">
+                                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground pt-1.5">Watchers</span>
+                                    <div className="flex-1 px-2 -ml-2 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex -space-x-1.5 overflow-hidden">
+                                                {(item.watchers || []).slice(0, 5).map(watcher => (
+                                                    <Avatar key={watcher.id} className="size-6 border-2 border-background" title={watcher.name}>
+                                                        <AvatarFallback className="text-[10px] bg-muted">{watcher.name.charAt(0)}</AvatarFallback>
+                                                    </Avatar>
+                                                ))}
+                                                {(item.watchers?.length || 0) > 5 && (
+                                                    <div className="size-6 rounded-full border-2 border-background bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground z-10 shrink-0">
+                                                        +{(item.watchers?.length || 0) - 5}
+                                                    </div>
+                                                )}
+                                                {(!item.watchers || item.watchers.length === 0) && (
+                                                    <span className="text-sm text-muted-foreground mt-0.5">None</span>
+                                                )}
+                                            </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className={cn("h-7 px-2.5 text-xs gap-1.5 ml-2 cursor-pointer", isWatching && "bg-primary/5 text-primary border-primary/20")}
+                                                onClick={toggleWatch}
+                                            >
+                                                {isWatching ? (
+                                                    <>
+                                                        <BellRing className="size-3.5" />
+                                                        Watching
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Bell className="size-3.5" />
+                                                        Watch
+                                                    </>
+                                                )}
+                                            </Button>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* ─── Labels row ─────────────────────────── */}

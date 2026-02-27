@@ -1916,6 +1916,19 @@ export default function BoardsShow({
     const [searchQuery, setSearchQuery] = useState('');
     const [currentView, setCurrentView] = useState<'kanban' | 'list' | 'gantt' | 'calendar'>('kanban');
     const [calendarDate, setCalendarDate] = useState(new Date());
+    const [filterOpen, setFilterOpen] = useState(false);
+    const [assignedFilter, setAssignedFilter] = useState<'all' | 'me' | 'unassigned'>('all');
+    const [statusFilter, setStatusFilter] = useState<number[]>([]);
+    const [labelFilter, setLabelFilter] = useState<number[]>([]);
+    const currentUserId = auth.user?.id;
+
+    const activeFiltersCount = useMemo(
+        () =>
+            (assignedFilter !== 'all' ? 1 : 0) +
+            (statusFilter.length ? 1 : 0) +
+            (labelFilter.length ? 1 : 0),
+        [assignedFilter, statusFilter.length, labelFilter.length],
+    );
 
     const handleDragStart = (e: DragEvent, item: Item) => {
         setDraggedItem(item);
@@ -1953,15 +1966,38 @@ export default function BoardsShow({
         setDragOverColumn(null);
     };
 
-    // Filter items based on search
+    // Filter items based on search + filter controls
     const filteredColumns = board.columns.map((col) => ({
         ...col,
-        items: col.items?.filter((item) =>
-            searchQuery
-                ? item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                  item.key.toLowerCase().includes(searchQuery.toLowerCase())
-                : true
-        ) || [],
+        items:
+            col.items?.filter((item) => {
+                const matchesSearch = searchQuery
+                    ? item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      item.key.toLowerCase().includes(searchQuery.toLowerCase())
+                    : true;
+                if (!matchesSearch) return false;
+
+                // Assignee filter
+                if (assignedFilter === 'me' && currentUserId) {
+                    if (item.assigned_to !== currentUserId) return false;
+                } else if (assignedFilter === 'unassigned') {
+                    if (item.assigned_to) return false;
+                }
+
+                // Status filter (columns)
+                if (statusFilter.length && !statusFilter.includes(col.id)) {
+                    return false;
+                }
+
+                // Label filter (must have at least one of selected labels)
+                if (labelFilter.length) {
+                    if (!item.labels || !item.labels.some((lbl) => labelFilter.includes(lbl.id))) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }) || [],
     }));
 
     // Root items (no parent) for parent-task selector
@@ -2049,10 +2085,166 @@ export default function BoardsShow({
                         </div>
 
                         {/* Filter */}
-                        <Button variant="outline" size="sm" className="gap-2 h-9">
-                            <Filter className="size-4" />
-                            Filter
-                        </Button>
+                        <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" size="sm" className="gap-2 h-9">
+                                    <Filter className="size-4" />
+                                    {activeFiltersCount ? `Filter (${activeFiltersCount})` : 'Filter'}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80 p-4 space-y-4" align="end">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                        Filters
+                                    </p>
+                                    {activeFiltersCount > 0 && (
+                                        <button
+                                            type="button"
+                                            className="text-xs text-primary hover:underline"
+                                            onClick={() => {
+                                                setAssignedFilter('all');
+                                                setStatusFilter([]);
+                                                setLabelFilter([]);
+                                            }}
+                                        >
+                                            Clear all
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Assignee */}
+                                <div className="space-y-2">
+                                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                        Assignee
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => setAssignedFilter('all')}
+                                            className={cn(
+                                                'px-2.5 py-1.5 rounded-full text-xs border transition-all',
+                                                assignedFilter === 'all'
+                                                    ? 'border-primary bg-primary/10 text-primary font-semibold'
+                                                    : 'border-transparent bg-muted/60 text-muted-foreground hover:bg-muted',
+                                            )}
+                                        >
+                                            All items
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAssignedFilter('me')}
+                                            className={cn(
+                                                'px-2.5 py-1.5 rounded-full text-xs border transition-all',
+                                                assignedFilter === 'me'
+                                                    ? 'border-primary bg-primary/10 text-primary font-semibold'
+                                                    : 'border-transparent bg-muted/60 text-muted-foreground hover:bg-muted',
+                                            )}
+                                        >
+                                            My items
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setAssignedFilter('unassigned')}
+                                            className={cn(
+                                                'px-2.5 py-1.5 rounded-full text-xs border transition-all',
+                                                assignedFilter === 'unassigned'
+                                                    ? 'border-primary bg-primary/10 text-primary font-semibold'
+                                                    : 'border-transparent bg-muted/60 text-muted-foreground hover:bg-muted',
+                                            )}
+                                        >
+                                            Unassigned
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Status / Columns */}
+                                {board.columns.length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                            Status
+                                        </p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {board.columns.map((col) => {
+                                                const active = statusFilter.includes(col.id);
+                                                return (
+                                                    <button
+                                                        key={col.id}
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setStatusFilter((prev) =>
+                                                                prev.includes(col.id)
+                                                                    ? prev.filter((id) => id !== col.id)
+                                                                    : [...prev, col.id],
+                                                            )
+                                                        }
+                                                        className={cn(
+                                                            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs border transition-all',
+                                                            active
+                                                                ? 'border-primary bg-primary/10 text-primary font-semibold'
+                                                                : 'border-transparent bg-muted/60 text-muted-foreground hover:bg-muted',
+                                                        )}
+                                                    >
+                                                        <span
+                                                            className="size-2 rounded-full"
+                                                            style={{ backgroundColor: col.color || '#94a3b8' }}
+                                                        />
+                                                        {col.name}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Labels */}
+                                {projectLabels.length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                            Labels
+                                        </p>
+                                        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+                                            {projectLabels.map((lbl) => {
+                                                const active = labelFilter.includes(lbl.id);
+                                                return (
+                                                    <button
+                                                        key={lbl.id}
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setLabelFilter((prev) =>
+                                                                prev.includes(lbl.id)
+                                                                    ? prev.filter((id) => id !== lbl.id)
+                                                                    : [...prev, lbl.id],
+                                                            )
+                                                        }
+                                                        className={cn(
+                                                            'flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] border transition-all',
+                                                            active
+                                                                ? 'font-semibold'
+                                                                : 'bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground',
+                                                        )}
+                                                        style={
+                                                            active
+                                                                ? {
+                                                                      backgroundColor: `${lbl.color}22`,
+                                                                      borderColor: lbl.color ?? undefined,
+                                                                      color: lbl.color ?? undefined,
+                                                                  }
+                                                                : { borderColor: `${lbl.color}66` }
+                                                        }
+                                                    >
+                                                        <span
+                                                            className="size-2 rounded-full shrink-0"
+                                                            style={{ backgroundColor: lbl.color ?? '#94a3b8' }}
+                                                        />
+                                                        {lbl.name}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </PopoverContent>
+                        </Popover>
 
                         {/* Board Settings */}
                         <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug])}>

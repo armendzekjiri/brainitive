@@ -13,8 +13,8 @@ interface NotificationData {
     item_key: string;
     item_title: string;
     item_url: string;
-    old_column: string;
-    new_column: string;
+    old_column?: string;
+    new_column?: string;
     actor_name: string;
     actor_avatar?: string;
 }
@@ -84,7 +84,7 @@ function NotificationRow({ notification, onMarkRead }: { notification: Notificat
                     <div className="min-w-0">
                         <p className="text-sm leading-relaxed">
                             <span className="font-semibold">{d.actor_name}</span>
-                            {' moved '}
+                            {d.type === 'item_assigned' ? ' assigned you to ' : ' moved '}
                             <a
                                 href={d.item_url}
                                 className="font-semibold text-primary hover:underline inline-flex items-center gap-0.5"
@@ -92,10 +92,14 @@ function NotificationRow({ notification, onMarkRead }: { notification: Notificat
                                 {d.item_key}
                                 <ExternalLink className="size-3 ml-0.5" />
                             </a>
-                            {' from '}
-                            <span className="text-muted-foreground">{d.old_column}</span>
-                            <span className="mx-1.5 text-muted-foreground">→</span>
-                            <span className="font-medium">{d.new_column}</span>
+                            {d.type === 'item_status_changed' && (
+                                <>
+                                    {' from '}
+                                    <span className="text-muted-foreground">{d.old_column}</span>
+                                    <span className="mx-1.5 text-muted-foreground">→</span>
+                                    <span className="font-medium">{d.new_column}</span>
+                                </>
+                            )}
                         </p>
                         <p className="text-sm text-muted-foreground mt-0.5 truncate">{d.item_title}</p>
                     </div>
