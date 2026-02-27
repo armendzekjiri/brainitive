@@ -761,6 +761,7 @@ function ItemEditModal({
     const [priorityId, setPriorityId] = useState(item?.priority_id?.toString() || '');
     const [parentId, setParentId] = useState(item?.parent_id?.toString() || '');
     const [storyPoints, setStoryPoints] = useState(item?.story_points?.toString() || '');
+    const [startDate, setStartDate] = useState(item?.start_date?.toString().split('T')[0] || '');
     const [dueDate, setDueDate] = useState(item?.due_date?.toString().split('T')[0] || '');
 
     // File preview
@@ -784,6 +785,7 @@ function ItemEditModal({
             setPriorityId(item.priority_id?.toString() || '');
             setParentId(item.parent_id?.toString() || '');
             setStoryPoints(item.story_points?.toString() || '');
+            setStartDate(item.start_date?.toString().split('T')[0] || '');
             setDueDate(item.due_date?.toString().split('T')[0] || '');
             const parsed = parseDescription(item.description);
             setEditorContent(parsed);
@@ -1375,6 +1377,19 @@ function ItemEditModal({
                                     </div>
                                 </div>
 
+                                {/* Start Date */}
+                                <div className="flex items-center min-h-[40px] py-1">
+                                    <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Start Date</span>
+                                    <div className="flex-1 px-2 -ml-2">
+                                        <Input
+                                            type="date"
+                                            value={startDate}
+                                            onChange={(e) => { setStartDate(e.target.value); saveProp({ start_date: e.target.value || null }); }}
+                                            className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
+                                        />
+                                    </div>
+                                </div>
+
                                 {/* Due Date */}
                                 <div className="flex items-center min-h-[40px] py-1">
                                     <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Due Date</span>
@@ -1636,12 +1651,10 @@ function GanttView({
 }) {
     const allItems = columns.flatMap(col => col.items.map(item => ({ ...item, columnName: col.name })));
 
-    // Calculate date range for the timeline (next 30 days)
+    // Calculate date range for the timeline (calendar year)
     const today = new Date();
-    const startDate = new Date(today);
-    startDate.setDate(startDate.getDate() - 7);
-    const endDate = new Date(today);
-    endDate.setDate(endDate.getDate() + 30);
+    const startDate = new Date(today.getFullYear(), 0, 1);
+    const endDate = new Date(today.getFullYear(), 11, 31);
 
     const days: Date[] = [];
     const current = new Date(startDate);
@@ -1650,21 +1663,37 @@ function GanttView({
         current.setDate(current.getDate() + 1);
     }
 
+    const DAY_WIDTH = 40; // pixels per day (matches w-10)
+
     const getItemPosition = (item: Item) => {
         if (!item.start_date && !item.due_date) return null;
 
         const itemStart = item.start_date ? new Date(item.start_date) : new Date(item.due_date!);
         const itemEnd = item.due_date ? new Date(item.due_date) : new Date(item.start_date!);
 
-        const dayWidth = 40; // pixels per day
         const startOffset = Math.floor((itemStart.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
         const duration = Math.max(1, Math.ceil((itemEnd.getTime() - itemStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
 
         return {
-            left: startOffset * dayWidth,
-            width: duration * dayWidth,
+            left: startOffset * DAY_WIDTH,
+            width: duration * DAY_WIDTH,
         };
     };
+
+    // Scroll horizontally so that "today" is centered when the view first opens
+    const scrollRef = useRef<HTMLDivElement | null>(null);
+    const didInitialScrollRef = useRef(false);
+
+    useEffect(() => {
+        if (didInitialScrollRef.current) return;
+        const container = scrollRef.current;
+        if (!container) return;
+        const todayIndex = days.findIndex((d) => d.toDateString() === today.toDateString());
+        if (todayIndex === -1) return;
+        const target = todayIndex * DAY_WIDTH - container.clientWidth / 2;
+        container.scrollLeft = Math.max(0, target);
+        didInitialScrollRef.current = true;
+    }, [days, today]);
 
     return (
         <div className="flex-1 overflow-auto bg-background">
@@ -1688,40 +1717,45 @@ function GanttView({
                 </div>
 
                 {/* Timeline grid */}
-                <div className="flex-1 overflow-x-auto">
-                    {/* Header with dates */}
-                    <div className="flex h-12 border-b sticky top-0 bg-background z-10">
-                        {days.map((day, i) => {
-                            const isToday = day.toDateString() === today.toDateString();
-                            const isWeekend = day.getDay() === 0 || day.getDay() === 6;
-                            return (
-                                <div
-                                    key={i}
-                                    className={`w-10 flex-shrink-0 border-r flex flex-col items-center justify-center text-xs ${
-                                        isToday ? 'bg-primary/10 text-primary font-bold' : isWeekend ? 'bg-muted/50 text-muted-foreground' : ''
-                                    }`}
-                                >
-                                    <span>{day.getDate()}</span>
-                                    <span className="text-[10px]">{day.toLocaleDateString('en', { weekday: 'short' }).charAt(0)}</span>
-                                </div>
-                            );
-                        })}
+                <div className="flex-1 overflow-x-auto" ref={scrollRef}>
+                    {/* Header with dates (hover to see month) */}
+                    <div className="sticky top-0 bg-background z-10">
+                        <div className="flex h-12 border-b">
+                            {days.map((day, i) => {
+                                const isToday = day.toDateString() === today.toDateString();
+                                const isWeekend = day.getDay() === 0 || day.getDay() === 6;
+                                return (
+                                    <div
+                                        key={i}
+                                        className={`w-10 flex-shrink-0 border-r flex flex-col items-center justify-center text-[11px] ${
+                                            isToday ? 'bg-primary/10 text-primary font-bold' : isWeekend ? 'bg-muted/50 text-muted-foreground' : ''
+                                        }`}
+                                        title={day.toLocaleDateString('en', { month: 'long', year: 'numeric' })}
+                                    >
+                                        <span>{day.getDate()}</span>
+                                        <span className="text-[10px]">
+                                            {day.toLocaleDateString('en', { weekday: 'short' }).charAt(0)}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
 
                     {/* Items rows */}
-                    {allItems.map((item) => {
+                    {allItems.map((item, rowIndex) => {
                         const position = getItemPosition(item);
                         return (
-                            <div key={item.id} className="h-10 border-b relative flex">
+                            <div key={item.id} className="h-10 relative flex">
                                 {days.map((day, i) => {
                                     const isWeekend = day.getDay() === 0 || day.getDay() === 6;
                                     const isToday = day.toDateString() === today.toDateString();
                                     return (
                                         <div
                                             key={i}
-                                            className={`w-10 flex-shrink-0 border-r ${
+                                            className={`w-10 flex-shrink-0 border-r border-b ${
                                                 isToday ? 'bg-primary/5' : isWeekend ? 'bg-muted/30' : ''
-                                            }`}
+                                            } ${rowIndex === 0 ? 'border-t' : ''}`}
                                         />
                                     );
                                 })}
@@ -1932,6 +1966,22 @@ export default function BoardsShow({
             (labelFilter.length ? 1 : 0),
         [assigneeFilter, statusFilter.length, labelFilter.length],
     );
+
+    // Persist board view preference per project so user sees same view next time
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const key = `board-view-${project.id}-${board.id}`;
+        const stored = window.localStorage.getItem(key) as 'kanban' | 'list' | 'gantt' | 'calendar' | null;
+        if (stored && ['kanban', 'list', 'gantt', 'calendar'].includes(stored)) {
+            setCurrentView(stored);
+        }
+    }, [project.id, board.id]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const key = `board-view-${project.id}-${board.id}`;
+        window.localStorage.setItem(key, currentView);
+    }, [currentView, project.id, board.id]);
 
     const handleDragStart = (e: DragEvent, item: Item) => {
         setDraggedItem(item);
