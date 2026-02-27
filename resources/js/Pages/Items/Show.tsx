@@ -365,6 +365,7 @@ export default function ItemShow({
     const [itemTypeId, setItemTypeId] = useState(item.item_type_id?.toString() || '');
     const [priorityId, setPriorityId] = useState(item.priority_id?.toString() || '');
     const [storyPoints, setStoryPoints] = useState(item.story_points?.toString() || '');
+    const [startDate, setStartDate] = useState(item.start_date || '');
     const [dueDate, setDueDate] = useState(item.due_date || '');
 
     // Generic patch helper
@@ -1203,6 +1204,19 @@ export default function ItemShow({
                                             onBlur={() => saveProp({ story_points: storyPoints || null })}
                                             className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
                                             placeholder="None"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Start Date */}
+                                <div className="flex items-center min-h-[40px] py-1 group">
+                                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Start Date</span>
+                                    <div className="flex-1 px-2 -ml-2">
+                                        <Input
+                                            type="date"
+                                            value={startDate}
+                                            onChange={(e) => { setStartDate(e.target.value); saveProp({ start_date: e.target.value || null }); }}
+                                            className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
                                         />
                                     </div>
                                 </div>

@@ -14,6 +14,16 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.3.3',
+        title: 'Item Start Dates & Timeline Improvements',
+        tag: 'Enhancement',
+        date: '2026-02-27',
+        items: [
+            'Added editable start dates to items in both the board item sidebar and the full item page to better support planning.',
+            'Updated the board Timeline view to show the full calendar year, auto-center on today, and render a consistent grid with clearer day boundaries and month tooltips.',
+        ]
+    },
+    {
         version: 'v1.3.2',
         title: 'Board Filters & Assignee Autocomplete',
         tag: 'Enhancement',
