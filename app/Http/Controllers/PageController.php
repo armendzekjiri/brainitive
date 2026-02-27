@@ -56,11 +56,16 @@ class PageController extends Controller
             return response()->json($page->load('children'));
         }
 
-        return redirect()->route('pages.show', [
-            $workspace->slug,
-            $project->slug,
-            $page->uuid,
-        ]);
+        $pageShowUrl = route('pages.show', [$workspace->slug, $project->slug, $page->uuid]);
+
+        // Add ?new=1 for new whiteboards so the client can redirect to the Excalidraw editor
+        // (we cannot redirect directly to pages.excalidraw here because it is a non-Inertia
+        // blade view and Inertia's form handler would try to render it inside the React app).
+        if (($validated['content_type'] ?? 'doc') === 'excalidraw') {
+            $pageShowUrl .= '?new=1';
+        }
+
+        return redirect($pageShowUrl);
     }
 
     /**

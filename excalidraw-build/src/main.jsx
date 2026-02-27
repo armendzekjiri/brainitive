@@ -32,6 +32,8 @@ window.BrainitiveExcalidraw = {
       <Excalidraw
         initialData={initialData}
         theme={options.theme || 'light'}
+        viewModeEnabled={options.viewModeEnabled ?? false}
+        zenModeEnabled={options.zenModeEnabled ?? false}
         excalidrawAPI={(api) => {
           excalidrawAPI = api;
         }}

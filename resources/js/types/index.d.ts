@@ -294,9 +294,11 @@ export type PageProps<
     // Shared layout data
     workspaces?: Workspace[];
     currentWorkspace?: Workspace & {
-        projects: (Project & { boards: Board[]; pages: Page[] })[];
+        projects: (Project & { boards: (Board & { columns?: BoardColumn[] })[]; pages: Page[] })[];
     };
     currentPageUuid?: string | null;
+    itemTypes?: ItemType[];
+    priorities?: ItemPriority[];
 };
 
 /** My Work page: assigned item summary */
