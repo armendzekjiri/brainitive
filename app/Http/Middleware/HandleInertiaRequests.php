@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\ItemPriority;
+use App\Models\ItemType;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -69,7 +71,13 @@ class HandleInertiaRequests extends Middleware
                     ->withCount('projects')
                     ->with(['projects' => function ($query) {
                         $query->with([
-                            'boards:id,project_id,name,slug,type',
+                            'boards' => function ($q) {
+                                $q->select('id', 'project_id', 'name', 'slug', 'type')
+                                  ->with(['columns' => function ($c) {
+                                      $c->select('id', 'board_id', 'name', 'color', 'position')
+                                        ->orderBy('position');
+                                  }]);
+                            },
                             'pages' => function ($q) {
                                 $q->with(['children' => self::pageTreeRecursive(7)])
                                     ->orderBy('type', 'desc')
@@ -88,6 +96,8 @@ class HandleInertiaRequests extends Middleware
             ],
             'workspaces' => $workspaces,
             'currentWorkspace' => $currentWorkspace,
+            'itemTypes' => fn () => $user ? ItemType::orderBy('position')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
+            'priorities'  => fn () => $user ? ItemPriority::orderBy('position')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
             'currentPageUuid' => $request->routeIs('pages.show') && $request->route('page')
                 ? (is_object($request->route('page')) ? $request->route('page')->uuid : $request->route('page'))
                 : null,

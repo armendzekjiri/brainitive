@@ -82,8 +82,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { flattenPagesForParentSelect } from '@/lib/pageTree';
+import { GlobalCreateModal } from '@/components/GlobalCreateModal';
 
 interface Props extends PropsWithChildren {
     title?: string;
@@ -1556,221 +1556,7 @@ function TopBar({ onCreateClick, onSearchClick }: { onCreateClick?: () => void; 
 }
 
 // Global Create Task Modal
-interface GlobalCreateTaskModalProps {
-    open: boolean;
-    onClose: () => void;
-    preSelectedProjectId?: number;
-    preSelectedBoardId?: number;
-    preSelectedColumnId?: number;
-}
-
-function GlobalCreateTaskModal({
-    open,
-    onClose,
-    preSelectedProjectId,
-    preSelectedBoardId,
-    preSelectedColumnId,
-}: GlobalCreateTaskModalProps) {
-    const { currentWorkspace } = usePage<PageProps>().props;
-    const [selectedProjectId, setSelectedProjectId] = useState<string>(preSelectedProjectId?.toString() || '');
-    const [selectedBoardId, setSelectedBoardId] = useState<string>(preSelectedBoardId?.toString() || '');
-    const [boards, setBoards] = useState<Board[]>([]);
-    const [columns, setColumns] = useState<BoardColumn[]>([]);
-
-    const { data, setData, post, processing, reset, errors } = useForm({
-        title: '',
-        description: '',
-        column_id: preSelectedColumnId?.toString() || '',
-        item_type_id: '',
-        priority_id: '',
-        assigned_to: '',
-    });
-
-    // Update state when pre-selected values change
-    useEffect(() => {
-        if (preSelectedProjectId) {
-            setSelectedProjectId(preSelectedProjectId.toString());
-        }
-        if (preSelectedBoardId) {
-            setSelectedBoardId(preSelectedBoardId.toString());
-        }
-        if (preSelectedColumnId) {
-            setData('column_id', preSelectedColumnId.toString());
-        }
-    }, [preSelectedProjectId, preSelectedBoardId, preSelectedColumnId]);
-
-    // Load boards when project changes
-    useEffect(() => {
-        if (selectedProjectId && currentWorkspace) {
-            const project = currentWorkspace.projects?.find(p => p.id.toString() === selectedProjectId);
-            if (project?.boards) {
-                setBoards(project.boards);
-                // Auto-select first board if none selected
-                if (!selectedBoardId && project.boards.length > 0) {
-                    setSelectedBoardId(project.boards[0].id.toString());
-                }
-            }
-        } else {
-            setBoards([]);
-            setSelectedBoardId('');
-        }
-    }, [selectedProjectId, currentWorkspace]);
-
-    // Load columns when board changes
-    useEffect(() => {
-        if (selectedBoardId) {
-            const board = boards.find(b => b.id.toString() === selectedBoardId);
-            if (board?.columns && board.columns.length > 0) {
-                setColumns(board.columns);
-                // Check if current column_id is valid for this board
-                const currentColumnValid = board.columns.some(c => c.id.toString() === data.column_id);
-                if (!currentColumnValid) {
-                    // Auto-select first column
-                    setData('column_id', board.columns[0].id.toString());
-                }
-            } else {
-                setColumns([]);
-                setData('column_id', '');
-            }
-        } else {
-            setColumns([]);
-            setData('column_id', '');
-        }
-    }, [selectedBoardId, boards]);
-
-    const handleSubmit = (e: FormEvent) => {
-        e.preventDefault();
-        if (!currentWorkspace || !selectedProjectId || !selectedBoardId) return;
-
-        const project = currentWorkspace.projects?.find(p => p.id.toString() === selectedProjectId);
-        const board = boards.find(b => b.id.toString() === selectedBoardId);
-
-        if (!project || !board) return;
-
-        post(route('boards.items.store', [currentWorkspace.slug, project.slug, board.slug]), {
-            onSuccess: () => {
-                reset();
-                onClose();
-            },
-        });
-    };
-
-    const handleClose = () => {
-        reset();
-        onClose();
-    };
-
-    if (!currentWorkspace) return null;
-
-    return (
-        <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-            <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
-                <DialogTitle>Create Task</DialogTitle>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Project Selection */}
-                    <div className="space-y-2">
-                        <Label>Project</Label>
-                        <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select project" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {currentWorkspace.projects?.map((project) => (
-                                    <SelectItem key={project.id} value={project.id.toString()} className="flex items-center gap-2">
-                                        <ProjectIcon project={project} size="xs" />
-                                        {project.name}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Board Selection */}
-                    {boards.length > 0 && (
-                        <div className="space-y-2">
-                            <Label>Board</Label>
-                            <Select value={selectedBoardId} onValueChange={setSelectedBoardId}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select board" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {boards.map((board) => (
-                                        <SelectItem key={board.id} value={board.id.toString()}>
-                                            {board.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
-
-                    {/* Column/Status Selection */}
-                    {columns.length > 0 && (
-                        <div className="space-y-2">
-                            <Label>Status</Label>
-                            <Select value={data.column_id} onValueChange={(v) => setData('column_id', v)}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select status" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {columns.map((col) => (
-                                        <SelectItem key={col.id} value={col.id.toString()}>
-                                            <div className="flex items-center gap-2">
-                                                <div
-                                                    className="w-2 h-2 rounded-full"
-                                                    style={{ backgroundColor: col.color || '#94a3b8' }}
-                                                />
-                                                {col.name}
-                                            </div>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
-
-                    {/* Title */}
-                    <div className="space-y-2">
-                        <Label htmlFor="task-title">Title</Label>
-                        <Input
-                            id="task-title"
-                            value={data.title}
-                            onChange={(e) => setData('title', e.target.value)}
-                            placeholder="What needs to be done?"
-                            autoFocus
-                            required
-                        />
-                        {errors.title && <p className="text-sm text-destructive">{errors.title}</p>}
-                    </div>
-
-                    {/* Description */}
-                    <div className="space-y-2">
-                        <Label htmlFor="task-description">Description (optional)</Label>
-                        <Textarea
-                            id="task-description"
-                            value={data.description}
-                            onChange={(e) => setData('description', e.target.value)}
-                            placeholder="Add a description..."
-                            rows={3}
-                        />
-                    </div>
-
-                    <div className="flex justify-end gap-3 pt-2">
-                        <Button type="button" variant="outline" onClick={handleClose}>
-                            Cancel
-                        </Button>
-                        <Button
-                            type="submit"
-                            disabled={processing || !selectedProjectId || !selectedBoardId || !data.column_id || !data.title}
-                        >
-                            {processing ? 'Creating...' : 'Create Task'}
-                        </Button>
-                    </div>
-                </form>
-            </DialogContent>
-        </Dialog>
-    );
-}
+// GlobalCreateModal is now in @/components/GlobalCreateModal
 
 export default function AppLayout({ children, title }: Props) {
     const { workspaces = [], currentWorkspace } = usePage<PageProps>().props;
@@ -1901,8 +1687,8 @@ export default function AppLayout({ children, title }: Props) {
                 </SidebarInset>
             </SidebarProvider>
 
-            {/* Global Create Task Modal */}
-            <GlobalCreateTaskModal
+            {/* Global Create Modal */}
+            <GlobalCreateModal
                 open={createTaskModalOpen}
                 onClose={closeCreateTaskModal}
                 preSelectedProjectId={preSelectedProjectId}

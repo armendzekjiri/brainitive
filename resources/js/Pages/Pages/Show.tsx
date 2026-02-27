@@ -104,6 +104,61 @@ function isExcalidrawPage(content: unknown): boolean {
     return c.type === 'excalidraw' || (Array.isArray(c.elements) && c.appState !== undefined);
 }
 
+// Embedded read-only Excalidraw canvas (view mode = can pan/zoom, cannot edit)
+function ExcalidrawViewMode({ pageUuid, content }: { pageUuid: string; content: unknown }) {
+    const containerId = `excalidraw-preview-${pageUuid}`;
+    const containerRef = useRef<HTMLDivElement>(null);
+    const initializedRef = useRef(false);
+
+    useEffect(() => {
+        if (initializedRef.current) return;
+        const c = (content ?? {}) as Record<string, unknown>;
+        const elements = (c.elements ?? []) as object[];
+        const appState = (c.appState ?? {}) as Record<string, unknown>;
+        const files = (c.files ?? {}) as Record<string, unknown>;
+
+        const init = () => {
+            const w = window as unknown as { BrainitiveExcalidraw?: { init: (id: string, opts: object) => void } };
+            if (!w.BrainitiveExcalidraw) return;
+            initializedRef.current = true;
+            w.BrainitiveExcalidraw.init(containerId, {
+                viewModeEnabled: true,
+                zenModeEnabled: true,
+                initialData: { elements, appState: { ...appState, viewModeEnabled: true }, files },
+            });
+        };
+
+        const w = window as unknown as { BrainitiveExcalidraw?: { init: (id: string, opts: object) => void } };
+        if (w.BrainitiveExcalidraw) {
+            init();
+        } else {
+            if (!document.getElementById('excalidraw-preview-css')) {
+                const link = document.createElement('link');
+                link.id = 'excalidraw-preview-css';
+                link.rel = 'stylesheet';
+                link.href = '/js/excalidraw-dist/excalidraw-bundle.css';
+                document.head.appendChild(link);
+            }
+            if (!document.getElementById('excalidraw-preview-js')) {
+                const script = document.createElement('script');
+                script.id = 'excalidraw-preview-js';
+                script.src = '/js/excalidraw-dist/excalidraw-bundle.iife.js';
+                script.onload = init;
+                document.head.appendChild(script);
+            } else {
+                // Script tag exists but may still be loading — poll briefly
+                const poll = setInterval(() => {
+                    if (w.BrainitiveExcalidraw) { clearInterval(poll); init(); }
+                }, 100);
+                setTimeout(() => clearInterval(poll), 10000);
+            }
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [containerId]);
+
+    return <div id={containerId} ref={containerRef} style={{ width: '100%', height: 500 }} />;
+}
+
 // Page Icon Picker — full emoji-mart + custom image upload
 function PageIconPicker({ value, onChange }: { value: string; onChange: (val: string) => void }) {
     const [open, setOpen] = useState(false);
@@ -585,6 +640,17 @@ function extractHtmlContent(content: Record<string, any> | null | undefined): st
 }
 
 export default function PageShow({ workspace, project, page, breadcrumbs }: Props) {
+    // New whiteboards: redirect straight to the Excalidraw editor.
+    // We arrive here (pages.show?new=1) because Inertia can't follow a redirect
+    // to a non-Inertia blade view directly from a form post.
+    useEffect(() => {
+        if (!isExcalidrawPage(page.content)) return;
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('new') === '1') {
+            window.location.href = route('pages.excalidraw', [workspace.slug, project.slug, page.uuid]);
+        }
+    }, [page.uuid]);
+
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [addSubpageOpen, setAddSubpageOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -910,30 +976,22 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
 
                     <Separator className="mb-2" />
 
-                    {/* Whiteboard page: show preview image/card, click to open editor */}
+                    {/* Whiteboard page: embedded view-mode canvas + open editor button */}
                     {page.type === 'page' && isExcalidrawPage(page.content) && (
                         <div className="mb-8">
-                            <a
-                                href={route('pages.excalidraw', [workspace.slug, project.slug, page.uuid])}
-                                className="block rounded-lg border border-border bg-muted/30 overflow-hidden transition-colors hover:bg-muted/50 hover:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
-                            >
-                                {(page.content as { previewImageUrl?: string })?.previewImageUrl ? (
-                                    <img
-                                        src={(page.content as { previewImageUrl: string }).previewImageUrl}
-                                        alt={`Whiteboard: ${formData.name || 'Untitled'}`}
-                                        className="w-full max-h-[480px] object-contain bg-white"
-                                    />
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
-                                        <span className="text-5xl mb-4">✏️</span>
-                                        <p className="text-lg font-medium text-foreground">Whiteboard</p>
-                                        <p className="text-sm text-muted-foreground mt-1">Click to open and edit</p>
-                                    </div>
-                                )}
-                                <div className="px-4 py-3 border-t border-border bg-muted/20 text-sm text-muted-foreground text-center">
-                                    Open whiteboard
+                            <div className="rounded-lg border border-border overflow-hidden bg-white dark:bg-card">
+                                <ExcalidrawViewMode pageUuid={page.uuid} content={page.content} />
+                                <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between gap-3">
+                                    <span className="text-sm text-muted-foreground">View mode · pan and zoom freely</span>
+                                    <a
+                                        href={route('pages.excalidraw', [workspace.slug, project.slug, page.uuid])}
+                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                                    >
+                                        <PencilRuler className="size-4" />
+                                        Open whiteboard
+                                    </a>
                                 </div>
-                            </a>
+                            </div>
                         </div>
                     )}
 
