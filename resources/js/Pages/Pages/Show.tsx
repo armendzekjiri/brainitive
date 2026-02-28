@@ -655,6 +655,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
     }, [page.uuid]);
 
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
     const [addSubpageOpen, setAddSubpageOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -803,10 +804,21 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
         });
     };
 
-    const handleDuplicate = () => {
-        router.post(route('pages.duplicate', [workspace.slug, project.slug, page.uuid]), {}, {
+    const handleDuplicate = (withSubpages: boolean = false) => {
+        router.post(route('pages.duplicate', [workspace.slug, project.slug, page.uuid]), {
+            with_subpages: withSubpages
+        }, {
             preserveScroll: true,
+            onSuccess: () => setDuplicateDialogOpen(false)
         });
+    };
+
+    const triggerDuplicate = () => {
+        if (page.children && page.children.length > 0) {
+            setDuplicateDialogOpen(true);
+        } else {
+            handleDuplicate(false);
+        }
     };
 
     const handleDelete = () => {
@@ -971,7 +983,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                                 Restore to Draft
                                             </DropdownMenuItem>
                                         )}
-                                        <DropdownMenuItem onClick={handleDuplicate}>
+                                        <DropdownMenuItem onClick={triggerDuplicate}>
                                             <Files className="size-4 mr-2" />
                                             Duplicate
                                         </DropdownMenuItem>
@@ -1192,6 +1204,27 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            {/* Duplicate Page Dialog */}
+            <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Duplicate Page</DialogTitle>
+                        <DialogDescription>
+                            You are about to duplicate the page <strong>{page.name}</strong>.
+                            This page has {page.children?.length} subpage(s).
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-3 mt-4">
+                        <Button onClick={() => handleDuplicate(false)} variant="outline">
+                            Duplicate Page Only
+                        </Button>
+                        <Button onClick={() => handleDuplicate(true)}>
+                            Duplicate with Subpages
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             {/* Add Subpage Dialog */}
             <AddSubpageDialog
