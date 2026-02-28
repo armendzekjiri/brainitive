@@ -228,6 +228,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/api/notifications/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unread-count');
     Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+    Route::post('/api/notifications/notify-mention', [NotificationController::class, 'notifyMention'])->name('notifications.notify-mention');
 });
 
 require __DIR__.'/auth.php';
