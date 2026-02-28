@@ -5,11 +5,8 @@ import {
     $getSelection,
     $isRangeSelection,
     $createTextNode,
-    KEY_ARROW_DOWN_COMMAND,
-    KEY_ARROW_UP_COMMAND,
-    KEY_ENTER_COMMAND,
-    KEY_ESCAPE_COMMAND,
-    KEY_TAB_COMMAND,
+    KEY_DOWN_COMMAND,
+    COMMAND_PRIORITY_LOW,
     TextNode,
     RangeSelection,
 } from 'lexical';
@@ -198,60 +195,51 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
     useEffect(() => {
         if (query === null || results.length === 0) return;
 
-        return mergeRegister(
-            editor.registerCommand(
-                KEY_ARROW_DOWN_COMMAND,
-                (event) => {
+        return editor.registerCommand(
+            KEY_DOWN_COMMAND,
+            (event: KeyboardEvent) => {
+                if (query === null || results.length === 0) return false;
+
+                if (event.key === 'ArrowDown') {
                     event.preventDefault();
                     setSelectedIndex((prev) => (prev + 1) % results.length);
                     return true;
-                },
-                1,
-            ),
-            editor.registerCommand(
-                KEY_ARROW_UP_COMMAND,
-                (event) => {
+                }
+
+                if (event.key === 'ArrowUp') {
                     event.preventDefault();
                     setSelectedIndex((prev) => (prev - 1 + results.length) % results.length);
                     return true;
-                },
-                1,
-            ),
-            editor.registerCommand(
-                KEY_ENTER_COMMAND,
-                (event) => {
-                    if (event !== null) {
-                        event.preventDefault();
-                        if (event.stopImmediatePropagation) {
-                            event.stopImmediatePropagation();
-                        } else if (event.stopPropagation) {
-                            event.stopPropagation();
-                        }
+                }
+
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    if (event.stopImmediatePropagation) {
+                        event.stopImmediatePropagation();
+                    } else if (event.stopPropagation) {
+                        event.stopPropagation();
                     }
                     insertMention(results[selectedIndex]);
                     return true;
-                },
-                1,
-            ),
-            editor.registerCommand(
-                KEY_TAB_COMMAND,
-                (event) => {
+                }
+
+                if (event.key === 'Tab') {
                     event.preventDefault();
                     insertMention(results[selectedIndex]);
                     return true;
-                },
-                1,
-            ),
-            editor.registerCommand(
-                KEY_ESCAPE_COMMAND,
-                () => {
+                }
+
+                if (event.key === 'Escape') {
+                    event.preventDefault();
                     setQuery(null);
                     setResults([]);
                     setMenuPosition(null);
                     return true;
-                },
-                1,
-            ),
+                }
+
+                return false;
+            },
+            COMMAND_PRIORITY_LOW
         );
     }, [editor, query, results, selectedIndex, insertMention]);
 
