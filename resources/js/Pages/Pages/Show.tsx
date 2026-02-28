@@ -686,7 +686,9 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
     };
 
     // Ref to hold latest HTML content for the explicit update
-    const currentHtmlRef = useRef<string | null>(null);
+    // Initialise with the current saved content so Update never sends an empty string
+    // even if onChange hasn't fired yet (e.g. user clicks Edit → Update immediately).
+    const currentHtmlRef = useRef<string | null>(extractHtmlContent(page.content as any));
 
     // Edit mode state - published pages start in view mode
     const [isEditing, setIsEditing] = useState(page.status !== 'published');
@@ -730,6 +732,11 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
 
     // Debounced content save - receives HTML string from RichLexicalEditor
     const handleUpdateContent = useCallback((html: string) => {
+        // Guard: don't process onChange calls that fire during the view→edit
+        // remount before InitialContentPlugin has finished populating the editor.
+        // Those spurious calls carry empty or partially-loaded HTML.
+        if (!isEditing) return;
+
         currentHtmlRef.current = html;  // track latest for explicit update
         setIsSaving(true);
 
@@ -760,7 +767,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                 },
             });
         }, 1000);
-    }, [workspace.slug, project.slug, page.uuid]);
+    }, [workspace.slug, project.slug, page.uuid, isEditing]);
 
     // Cleanup timeout on unmount
     useEffect(() => {
