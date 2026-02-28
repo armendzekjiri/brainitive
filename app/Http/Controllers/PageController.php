@@ -516,7 +516,23 @@ class PageController extends Controller
     {
         $this->authorize('create', Page::class);
 
-        $new_page = $page->replicate([
+        $validated = $request->validate([
+            'with_subpages' => 'boolean',
+        ]);
+        $withSubpages = $validated['with_subpages'] ?? false;
+
+        $new_page = $this->performPageDuplication($page, $request->user()->id, $withSubpages, true);
+
+        return redirect()->route('pages.show', [$workspace->slug, $project->slug, $new_page->uuid])
+            ->with('success', 'Page duplicated successfully.');
+    }
+
+    /**
+     * Recursively duplicate a page and optionally its children.
+     */
+    private function performPageDuplication(Page $page, int $userId, bool $withSubpages = false, bool $isRoot = false, ?int $newParentId = null): Page
+    {
+        $newPage = $page->replicate([
             'uuid',
             'slug',
             'status',
@@ -526,16 +542,26 @@ class PageController extends Controller
             'created_at',
             'updated_at',
             'position',
+            'parent_id',
         ]);
 
-        $new_page->name = 'Copy of ' . $page->name;
-        $new_page->status = 'draft';
-        $new_page->created_by = $request->user()->id;
-        $new_page->last_edited_by = $request->user()->id;
-        $new_page->position = 0; // The boot method will assign it to the end of the parent
-        $new_page->save();
+        if ($isRoot) {
+            $newPage->name = 'Copy of ' . $page->name;
+        }
 
-        return redirect()->route('pages.show', [$workspace->slug, $project->slug, $new_page->uuid])
-            ->with('success', 'Page duplicated successfully.');
+        $newPage->status = 'draft';
+        $newPage->created_by = $userId;
+        $newPage->last_edited_by = $userId;
+        $newPage->parent_id = $newParentId ?? $page->parent_id;
+        $newPage->position = 0; // Boot method assigns to end
+        $newPage->save();
+
+        if ($withSubpages) {
+            foreach ($page->children as $childPage) {
+                $this->performPageDuplication($childPage, $userId, true, false, $newPage->id);
+            }
+        }
+
+        return $newPage;
     }
 }
