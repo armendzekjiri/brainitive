@@ -62,6 +62,7 @@ import {
     Bell,
     BellRing,
     Users,
+    Files,
 } from 'lucide-react';
 import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallback, Suspense, lazy } from 'react';
 
@@ -802,6 +803,12 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
         });
     };
 
+    const handleDuplicate = () => {
+        router.post(route('pages.duplicate', [workspace.slug, project.slug, page.uuid]), {}, {
+            preserveScroll: true,
+        });
+    };
+
     const handleDelete = () => {
         router.delete(route('pages.destroy', [workspace.slug, project.slug, page.uuid]));
     };
@@ -964,6 +971,10 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                                 Restore to Draft
                                             </DropdownMenuItem>
                                         )}
+                                        <DropdownMenuItem onClick={handleDuplicate}>
+                                            <Files className="size-4 mr-2" />
+                                            Duplicate
+                                        </DropdownMenuItem>
                                         <DropdownMenuSeparator />
                                         <DropdownMenuItem
                                             className="text-destructive focus:text-destructive"

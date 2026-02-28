@@ -585,6 +585,71 @@ class BoardController extends Controller
     }
 
     /**
+     * Duplicate an item.
+     */
+    public function duplicateItem(Request $request, Workspace $workspace, Project $project, Board $board, Item $item)
+    {
+        $this->authorize('createItems', $board);
+
+        $validated = $request->validate([
+            'with_subitems' => 'boolean',
+        ]);
+
+        $withSubitems = $validated['with_subitems'] ?? false;
+
+        $this->performItemDuplication($item, $project, clone $item->parent_id, $request->user()->id, true, $withSubitems);
+
+        return back()->with('success', 'Item duplicated successfully.');
+    }
+
+    /**
+     * Recursive helper to duplicate an item and its subitems.
+     */
+    private function performItemDuplication(Item $originalItem, Project $project, ?int $parentId, int $userId, bool $isRootModifier, bool $withSubitems)
+    {
+        $newItem = $originalItem->replicate([
+            'uuid',
+            'key',
+            'created_by',
+            'reporter_id',
+            'assigned_to',
+            'completed_at',
+            'created_at',
+            'updated_at',
+        ]);
+
+        if ($isRootModifier) {
+            $newItem->title = 'Copy of ' . $originalItem->title;
+        }
+
+        $newItem->key = $project->getNextItemKey();
+        $newItem->created_by = $userId;
+        $newItem->reporter_id = $userId;
+        $newItem->parent_id = $parentId;
+        
+        // Find next position in column
+        $maxPosition = Item::where('column_id', $originalItem->column_id)->max('position') ?? 0;
+        $newItem->position = $maxPosition + 1;
+
+        $newItem->save();
+
+        // Sync labels
+        $labelIds = $originalItem->labels()->pluck('labels.id');
+        if ($labelIds->isNotEmpty()) {
+            $newItem->labels()->sync($labelIds);
+        }
+
+        if ($withSubitems) {
+            $originalItem->load('children');
+            foreach ($originalItem->children as $child) {
+                $this->performItemDuplication($child, $project, $newItem->id, $userId, false, true);
+            }
+        }
+
+        return $newItem;
+    }
+
+    /**
      * Delete an item.
      */
     public function destroyItem(Workspace $workspace, Project $project, Board $board, Item $item)
