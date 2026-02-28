@@ -37,6 +37,10 @@ Route::get('/cookies', function () {
     return Inertia::render('Cookies');
 })->name('cookies');
 
+Route::get('/refund', function () {
+    return Inertia::render('Refund');
+})->name('refund');
+
 // PWA / Web app manifest — installable app icon on mobile and desktop
 Route::get('/site.webmanifest', function () {
     $icon192 = file_exists(public_path('android-chrome-192x192.png'))

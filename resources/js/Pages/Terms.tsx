@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, Scale, FileText, UserCheck, ShieldAlert, FileCheck, Lock, AlertTriangle, Gavel, XCircle, RefreshCw, Mail } from 'lucide-react';
+import { ArrowLeft, Scale, FileText, UserCheck, ShieldAlert, FileCheck, Lock, AlertTriangle, Gavel, XCircle, RefreshCw, Mail, CreditCard, Users } from 'lucide-react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import { CookieConsent } from '@/components/CookieConsent';
 
@@ -8,67 +8,79 @@ const sections = [
         icon: Scale,
         num: '1',
         title: 'Agreement to terms',
-        content: 'By accessing or using Brainitive ("Service"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.',
+        content: 'By creating an account or using Brainitive ("Service", "we", "our", "us"), you agree to these Terms of Service ("Terms"). If you do not agree, do not access or use the Service. These Terms apply to all users, including workspace admins, editors, and viewers.',
     },
     {
         icon: FileText,
         num: '2',
         title: 'Description of service',
-        content: 'Brainitive provides workspaces, projects, Kanban boards, wiki-style pages, bookmarks, and related collaboration features. We may modify or discontinue features with reasonable notice where practicable.',
+        content: 'Brainitive is an all-in-one workspace platform providing: Kanban boards with drag-and-drop, priorities, labels, file attachments, and threaded comments; wiki-style pages with rich editors (tables, code, math, slash commands), Excalidraw whiteboards, and public publishing; workspace and project management with role-based access; and bookmark collections. We may add, modify, or remove features with reasonable prior notice.',
+    },
+    {
+        icon: CreditCard,
+        num: '3',
+        title: 'Plans and billing',
+        content: 'Brainitive offers the following plans: Free (€0/month – all features, 5 workspaces, 1 GB storage per workspace); Pro (€3.99/month – everything in Free, 20 workspaces, 2 GB per workspace / 40 GB total, priority support); Max (€9.99/month – everything in Pro, unlimited workspaces, 1 TB total storage, dedicated support); Custom/Enterprise (custom pricing – SLA, compliance, dedicated success manager, custom integrations). Paid plans are billed monthly in advance. Prices are exclusive of any applicable taxes. We reserve the right to adjust pricing with at least 30 days\' notice.',
     },
     {
         icon: UserCheck,
-        num: '3',
+        num: '4',
         title: 'Account and eligibility',
-        content: 'You must provide accurate registration information and keep your account secure. You are responsible for all activity under your account. You must be at least 13 years old (or the minimum age in your jurisdiction) to use the Service.',
+        content: 'You must provide accurate and complete registration information and keep it up to date. You must be at least 13 years old, or the minimum age required in your jurisdiction. You are responsible for maintaining the confidentiality of your login credentials and for all activity that occurs under your account. Notify us immediately at hello@brainitive.com if you suspect unauthorised access.',
+    },
+    {
+        icon: Users,
+        num: '5',
+        title: 'Workspaces and team access',
+        content: 'Workspace Admins control member access and roles (Admin, Editor, Viewer). Admins are responsible for ensuring that workspace members comply with these Terms. Brainitive is not responsible for the content, actions, or omissions of workspace members. When you invite someone to a workspace, you grant them access to the workspace\'s projects, boards, pages, and files according to their role.',
     },
     {
         icon: ShieldAlert,
-        num: '4',
+        num: '6',
         title: 'Acceptable use',
-        content: "You agree not to use the Service for any illegal purpose, to violate others' rights, to distribute malware, or to attempt to gain unauthorised access to our or others' systems or data. We may suspend or terminate accounts that violate these terms.",
+        content: 'You agree not to use the Service to: upload or transmit unlawful, harmful, infringing, or fraudulent content; distribute malware or conduct phishing attacks; attempt to gain unauthorised access to our systems or another user\'s account; scrape or harvest data without our written consent; or violate any applicable law or regulation. We may immediately suspend or terminate accounts that breach these rules.',
     },
     {
         icon: FileCheck,
-        num: '5',
+        num: '7',
         title: 'Your content',
-        content: 'You retain ownership of content you create. By using the Service, you grant us a licence to host, store, and display your content as necessary to provide and improve the Service. You are responsible for ensuring you have the rights to any content you upload.',
+        content: 'You retain full ownership of all content you create in Brainitive, including project data, board items, pages, and attachments. By using the Service, you grant us a limited, non-exclusive, royalty-free licence to host, store, process, and display your content solely to provide and improve the Service. You are responsible for ensuring that your content does not infringe third-party rights and that you have all necessary rights to upload it.',
     },
     {
         icon: Lock,
-        num: '6',
+        num: '8',
         title: 'Privacy',
-        content: 'Our collection and use of personal data is described in our Privacy Policy, which forms part of these terms.',
+        content: 'Our Privacy Policy, available at brainitive.com/privacy, describes how we collect, use, and protect your personal data. It forms part of these Terms. By using the Service you acknowledge and agree to our Privacy Policy.',
     },
     {
         icon: AlertTriangle,
-        num: '7',
+        num: '9',
         title: 'Disclaimers',
-        content: 'The Service is provided "as is" and "as available". We do not warrant that the Service will be uninterrupted or error-free. To the fullest extent permitted by law, we disclaim all warranties, express or implied.',
+        content: 'The Service is provided "as is" and "as available". While we target 99.9% uptime, we do not guarantee uninterrupted, error-free operation. To the fullest extent permitted by applicable law, we disclaim all warranties, express or implied, including merchantability, fitness for a particular purpose, and non-infringement.',
     },
     {
         icon: Gavel,
-        num: '8',
+        num: '10',
         title: 'Limitation of liability',
-        content: 'To the maximum extent permitted by law, we shall not be liable for any indirect, incidental, special, consequential, or punitive damages, or loss of data or profits, arising from your use of the Service.',
+        content: 'To the maximum extent permitted by applicable law, Brainitive shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including loss of profits, data, or goodwill, arising out of or in connection with your use of, or inability to use, the Service. Our total aggregate liability to you for any claims under these Terms will not exceed the greater of (a) the amount you paid us in the 12 months preceding the claim or (b) €50.',
     },
     {
         icon: XCircle,
-        num: '9',
-        title: 'Termination',
-        content: 'You may stop using the Service at any time. We may suspend or terminate your access if you breach these terms or for other operational or legal reasons, with notice where reasonable.',
+        num: '11',
+        title: 'Cancellation and termination',
+        content: 'You may cancel your subscription or delete your account at any time from your account settings. Cancellation takes effect at the end of the current billing period; you will retain access to paid features until then. We may suspend or terminate your access if you breach these Terms, with notice where reasonably practicable. Upon termination, your workspace data may be deleted after a 30-day grace period.',
     },
     {
         icon: RefreshCw,
-        num: '10',
+        num: '12',
         title: 'Changes to terms',
-        content: 'We may update these Terms from time to time. We will notify you of material changes by posting the updated terms and updating the "Last updated" date. Continued use after changes constitutes acceptance.',
+        content: 'We may update these Terms from time to time. We will notify you of material changes by email or in-app notice at least 14 days before they take effect. Your continued use of the Service after changes take effect constitutes acceptance of the updated Terms.',
     },
     {
         icon: Mail,
-        num: '11',
+        num: '13',
         title: 'Contact',
-        content: 'For questions about these Terms, please contact us through the contact details provided in the application or on our website.',
+        content: 'For questions about these Terms, contact us at legal@brainitive.com or at hello@brainitive.com.',
     },
 ];
 
@@ -101,7 +113,7 @@ export default function Terms() {
                         <div>
                             <h1 className="text-3xl font-bold text-[#485E72]">Terms of Service</h1>
                             <p className="text-sm text-[#485E72]/50 mt-1">
-                                Last updated: {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                Last updated: 28 February 2026
                             </p>
                         </div>
                     </div>
@@ -140,6 +152,9 @@ export default function Terms() {
                         </Link>
                         <Link href={route('cookies')} className="text-sm font-semibold text-[#0E83DC] hover:text-[#0b6fbf] transition-colors">
                             Cookie Policy
+                        </Link>
+                        <Link href={route('refund')} className="text-sm font-semibold text-[#0E83DC] hover:text-[#0b6fbf] transition-colors">
+                            Refund Policy
                         </Link>
                     </div>
                 </div>

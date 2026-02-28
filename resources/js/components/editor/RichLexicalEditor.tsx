@@ -804,13 +804,23 @@ function ToolbarPlugin({ showToolbar = true }: { showToolbar?: boolean }) {
 }
 
 // Plugin to set initial content
-function InitialContentPlugin({ content, editable }: { content: string | null; editable: boolean }) {
+function InitialContentPlugin({
+    content,
+    editable,
+    isInitializingRef,
+}: {
+    content: string | null;
+    editable: boolean;
+    isInitializingRef: React.MutableRefObject<boolean>;
+}) {
     const [editor] = useLexicalComposerContext();
     const [isFirstRender, setIsFirstRender] = useState(true);
 
     useEffect(() => {
         if (isFirstRender && content) {
             setIsFirstRender(false);
+            // Block onChange while we load content
+            isInitializingRef.current = true;
             editor.update(() => {
                 const root = $getRoot();
                 root.clear();
@@ -829,9 +839,13 @@ function InitialContentPlugin({ content, editable }: { content: string | null; e
                         root.append(node);
                     });
                 }
+            }, {
+                onUpdate: () => {
+                    isInitializingRef.current = false;
+                },
             });
         }
-    }, [editor, content, isFirstRender]);
+    }, [editor, content, isFirstRender, isInitializingRef]);
 
     useEffect(() => {
         editor.setEditable(editable);
@@ -841,17 +855,25 @@ function InitialContentPlugin({ content, editable }: { content: string | null; e
 }
 
 // Plugin to get HTML content on change
-function HtmlOnChangePlugin({ onChange }: { onChange: (html: string) => void }) {
+function HtmlOnChangePlugin({
+    onChange,
+    isInitializingRef,
+}: {
+    onChange: (html: string) => void;
+    isInitializingRef: React.MutableRefObject<boolean>;
+}) {
     const [editor] = useLexicalComposerContext();
 
     useEffect(() => {
-        return editor.registerUpdateListener(({ editorState }) => {
+        return editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves }) => {
+            if (isInitializingRef.current) return;
+            if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return;
             editorState.read(() => {
                 const html = $generateHtmlFromNodes(editor);
                 onChange(html);
             });
         });
-    }, [editor, onChange]);
+    }, [editor, onChange, isInitializingRef]);
 
     return null;
 }
@@ -879,6 +901,7 @@ export function RichLexicalEditor({
     className,
     projectId,
 }: RichLexicalEditorProps) {
+    const isInitializingRef = useRef(true);
     const initialConfig = {
         namespace: 'RichEditor',
         theme,
@@ -938,8 +961,8 @@ export function RichLexicalEditor({
                 <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
                 <SlashCommandsPlugin />
                 {projectId && editable && <MentionsPlugin projectId={projectId} />}
-                <InitialContentPlugin content={content} editable={editable} />
-                <HtmlOnChangePlugin onChange={onChange} />
+                <InitialContentPlugin content={content} editable={editable} isInitializingRef={isInitializingRef} />
+                <HtmlOnChangePlugin onChange={onChange} isInitializingRef={isInitializingRef} />
             </div>
         </LexicalComposer>
     );

@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, Shield, FileText, Eye, Database, Lock, UserCheck, Cookie, RefreshCw, Mail } from 'lucide-react';
+import { ArrowLeft, Shield, Database, Eye, FileText, Lock, UserCheck, Cookie, RefreshCw, Mail, Server } from 'lucide-react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import { CookieConsent } from '@/components/CookieConsent';
 
@@ -8,55 +8,61 @@ const sections = [
         icon: Shield,
         num: '1',
         title: 'Introduction',
-        content: 'Brainitive ("we", "our", or "us") respects your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our application and related services.',
+        content: 'Brainitive ("we", "our", or "us") provides an all-in-one workspace platform for project management, Kanban boards, wiki-style documentation, and team collaboration. This Privacy Policy explains how we collect, use, disclose, and protect your personal information when you use Brainitive at brainitive.com and its related services.',
     },
     {
         icon: Database,
         num: '2',
         title: 'Information we collect',
-        content: 'We may collect information you provide directly (e.g. account registration, profile data, content you create in workspaces, projects, boards, and pages), usage data (e.g. how you use the app), and technical data (e.g. IP address, browser type, device information). We use cookies and similar technologies as described in our cookie notice.',
+        content: 'We collect information you provide directly: name, email address, and password when registering; profile details you add; and all content you create inside Brainitive — workspace names, project and board data, page content, comments, uploaded files and attachments (up to the storage limit of your plan), and bookmark collections. We also collect usage data (features used, pages visited, session duration) and technical data (IP address, browser type, device info, and cookies).',
     },
     {
         icon: Eye,
         num: '3',
         title: 'How we use your information',
-        content: 'We use your information to provide, maintain, and improve our services, to authenticate you, to communicate with you, to enforce our terms, and to comply with legal obligations. We do not sell your personal data.',
+        content: 'We use your information to operate and deliver the Brainitive service (authenticating you, storing your workspaces, boards, and pages), to send transactional emails (account confirmations, in-app notifications), to improve and develop new features, to enforce our Terms of Service, and to comply with legal obligations. We do not sell your personal data to third parties.',
     },
     {
         icon: FileText,
         num: '4',
-        title: 'Data sharing and disclosure',
-        content: 'We may share data with service providers that assist in operating our application (e.g. hosting, analytics), when required by law, or to protect our rights and safety. We do not share your data with third parties for their marketing.',
+        title: 'Data sharing',
+        content: 'We share data only with infrastructure and service providers needed to run Brainitive (e.g. cloud hosting, file storage, transactional email). These providers are bound by data processing agreements and may not use your data for their own purposes. We may also disclose data when required by law or to protect the rights, safety, or property of Brainitive and its users. We do not share your data for third-party advertising.',
+    },
+    {
+        icon: Server,
+        num: '5',
+        title: 'Workspace and team data',
+        content: 'When you create or join a workspace, members of that workspace with appropriate roles (Admin, Editor, Viewer) can see the projects, boards, pages, and files shared within it. Workspace Admins can manage members and roles. Public pages you explicitly publish may be accessible to anyone with the link.',
     },
     {
         icon: Lock,
-        num: '5',
+        num: '6',
         title: 'Data retention and security',
-        content: 'We retain your data for as long as your account is active or as needed to provide services and comply with legal obligations. We implement appropriate technical and organisational measures to protect your data.',
+        content: 'Your account data and workspace content are retained for as long as your account remains active. If you delete your account, we will delete or anonymise your personal data within 30 days, except where retention is required by law. We use industry-standard encryption in transit (TLS) and apply appropriate access controls to protect your data.',
     },
     {
         icon: UserCheck,
-        num: '6',
+        num: '7',
         title: 'Your rights',
-        content: 'Depending on your location, you may have rights to access, correct, delete, or port your data, and to object to or restrict certain processing. You can manage your account and preferences in the app; for other requests, contact us.',
+        content: 'You may access, correct, or delete your personal data directly in your account settings. You may also request a copy of your data or object to certain processing by contacting us at privacy@brainitive.com. If you are in the EEA or UK, you have rights under GDPR, including the right to lodge a complaint with a supervisory authority.',
     },
     {
         icon: Cookie,
-        num: '7',
+        num: '8',
         title: 'Cookies',
-        content: 'We use necessary cookies for the app to function (e.g. session, preferences). You can manage your cookie preferences via the cookie settings on our website. For full details, see our Cookie Policy.',
+        content: 'Brainitive uses strictly necessary cookies (session management, authentication) and, with your consent, analytics cookies to understand how the app is used. You can manage your cookie preferences through the cookie settings banner. See our Cookie Policy for full details.',
     },
     {
         icon: RefreshCw,
-        num: '8',
-        title: 'Changes',
-        content: 'We may update this Privacy Policy from time to time. We will notify you of material changes by posting the updated policy and updating the "Last updated" date.',
+        num: '9',
+        title: 'Changes to this policy',
+        content: 'We may update this Privacy Policy from time to time. When we do, we will update the "Last updated" date below and, for material changes, notify you by email or an in-app notice at least 14 days before the change takes effect.',
     },
     {
         icon: Mail,
-        num: '9',
+        num: '10',
         title: 'Contact',
-        content: 'For questions about this Privacy Policy or our data practices, please contact us through the contact details provided in the application or on our website.',
+        content: 'For privacy questions or data requests, email us at privacy@brainitive.com. For general enquiries, reach us at hello@brainitive.com.',
     },
 ];
 
@@ -89,7 +95,7 @@ export default function Privacy() {
                         <div>
                             <h1 className="text-3xl font-bold text-[#485E72]">Privacy Policy</h1>
                             <p className="text-sm text-[#485E72]/50 mt-1">
-                                Last updated: {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                Last updated: 28 February 2026
                             </p>
                         </div>
                     </div>
@@ -128,6 +134,9 @@ export default function Privacy() {
                         </Link>
                         <Link href={route('cookies')} className="text-sm font-semibold text-[#0E83DC] hover:text-[#0b6fbf] transition-colors">
                             Cookie Policy
+                        </Link>
+                        <Link href={route('refund')} className="text-sm font-semibold text-[#0E83DC] hover:text-[#0b6fbf] transition-colors">
+                            Refund Policy
                         </Link>
                     </div>
                 </div>

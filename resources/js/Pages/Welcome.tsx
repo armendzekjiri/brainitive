@@ -251,11 +251,10 @@ export default function Welcome({
 
                 {/* ═══ Sticky Nav ═══ */}
                 <nav
-                    className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-                        scrolled
+                    className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled
                             ? 'bg-white/80 backdrop-blur-xl shadow-[0_1px_3px_rgba(72,94,114,0.08)] border-b border-[#C0C5C0]/40'
                             : 'bg-transparent'
-                    }`}
+                        }`}
                 >
                     <div className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
                         <Link
@@ -398,7 +397,7 @@ export default function Welcome({
                             All-in-one workspace platform
                         </div>
 
-                     
+
 
                         <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-[#485E72] animate-fade-in-up leading-[1.1]">
                             Your workspace for{' '}
@@ -663,11 +662,10 @@ export default function Welcome({
                                     delay={i * 80}
                                 >
                                     <div
-                                        className={`h-full rounded-2xl border p-6 flex flex-col transition-all duration-300 hover:-translate-y-1 ${
-                                            plan.highlighted
+                                        className={`h-full rounded-2xl border p-6 flex flex-col transition-all duration-300 hover:-translate-y-1 ${plan.highlighted
                                                 ? 'border-[#0E83DC]/40 bg-white ring-2 ring-[#0E83DC]/20 shadow-xl shadow-[#0E83DC]/10'
                                                 : 'border-[#C0C5C0]/30 bg-white/70 backdrop-blur-sm hover:bg-white hover:shadow-lg hover:shadow-[#485E72]/[0.06]'
-                                        }`}
+                                            }`}
                                     >
                                         {plan.highlighted && (
                                             <div className="inline-flex self-start items-center rounded-full bg-[#0E83DC]/10 px-3 py-1 text-xs font-bold text-[#0E83DC] mb-3">
@@ -720,11 +718,10 @@ export default function Welcome({
                                         ) : (
                                             <Link
                                                 href={plan.href}
-                                                className={`mt-6 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-all ${
-                                                    plan.highlighted
+                                                className={`mt-6 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-all ${plan.highlighted
                                                         ? 'bg-[#0E83DC] text-white shadow-lg shadow-[#0E83DC]/20 hover:bg-[#0b6fbf] hover:shadow-xl'
                                                         : 'bg-[#485E72] text-white hover:bg-[#3a4d5e]'
-                                                }`}
+                                                    }`}
                                             >
                                                 {plan.cta}
                                                 <ChevronRight className="h-4 w-4" />
@@ -807,6 +804,12 @@ export default function Welcome({
                                     className="text-[#485E72]/60 hover:text-[#0E83DC] transition-colors font-medium"
                                 >
                                     Cookie Policy
+                                </Link>
+                                <Link
+                                    href="/refund"
+                                    className="text-[#485E72]/60 hover:text-[#0E83DC] transition-colors font-medium"
+                                >
+                                    Refund Policy
                                 </Link>
                                 <button
                                     type="button"

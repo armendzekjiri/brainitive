@@ -93,7 +93,7 @@ export default function Cookies() {
                         <div>
                             <h1 className="text-3xl font-bold text-[#485E72]">Cookie Policy</h1>
                             <p className="text-sm text-[#485E72]/50 mt-1">
-                                Last updated: {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                Last updated: 28 February 2026
                             </p>
                         </div>
                     </div>
@@ -211,6 +211,9 @@ export default function Cookies() {
                         </Link>
                         <Link href={route('terms')} className="text-sm font-semibold text-[#0E83DC] hover:text-[#0b6fbf] transition-colors">
                             Terms of Service
+                        </Link>
+                        <Link href={route('refund')} className="text-sm font-semibold text-[#0E83DC] hover:text-[#0b6fbf] transition-colors">
+                            Refund Policy
                         </Link>
                     </div>
                 </div>
