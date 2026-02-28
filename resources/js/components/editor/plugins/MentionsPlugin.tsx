@@ -286,6 +286,7 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
 
     return createPortal(
         <div
+            data-lexical-menu="true"
             ref={containerRef}
             className="fixed z-[9999] bg-popover border border-border rounded-lg shadow-xl overflow-hidden"
             style={{ top: menuPosition.top, left: menuPosition.left, minWidth: 240, maxWidth: 320 }}

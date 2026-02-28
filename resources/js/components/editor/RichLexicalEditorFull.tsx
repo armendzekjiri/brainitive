@@ -840,6 +840,7 @@ function SlashCommandsPlugin() {
         <>
             {showMenu && (
                 <div
+                    data-lexical-menu="true"
                     ref={menuRef}
                     className="fixed z-50 w-80 bg-popover border rounded-lg shadow-lg overflow-hidden"
                     style={{
