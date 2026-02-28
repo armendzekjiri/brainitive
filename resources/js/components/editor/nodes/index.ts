@@ -27,3 +27,4 @@ export {
     $isCollapsibleTitleNode,
     $isCollapsibleContentNode,
 } from './CollapsibleNode';
+export { MentionNode, $createMentionNode, $isMentionNode } from './MentionNode';

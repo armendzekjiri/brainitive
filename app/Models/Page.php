@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
@@ -88,6 +89,13 @@ class Page extends Model
                 $page->position = $maxPosition + 1;
             }
         });
+
+        // Auto-watch: add creator to watchers after page is created
+        static::created(function (Page $page) {
+            if ($page->created_by) {
+                $page->watchers()->syncWithoutDetaching([$page->created_by]);
+            }
+        });
     }
 
     public function project(): BelongsTo
@@ -122,6 +130,31 @@ class Page extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
+     * Get all users watching this page.
+     */
+    public function watchers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'page_watchers')
+            ->withPivot('created_at');
+    }
+
+    /**
+     * Add a user to the watch list (idempotent).
+     */
+    public function addWatcher(User $user): void
+    {
+        $this->watchers()->syncWithoutDetaching([$user->id]);
+    }
+
+    /**
+     * Remove a user from the watch list.
+     */
+    public function removeWatcher(User $user): void
+    {
+        $this->watchers()->detach($user->id);
     }
 
     public function lastEditor(): BelongsTo
