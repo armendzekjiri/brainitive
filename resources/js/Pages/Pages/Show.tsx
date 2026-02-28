@@ -710,6 +710,12 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
 
         // Debounce save - wait 1 second after last change
         saveTimeoutRef.current = setTimeout(() => {
+            // Defer auto-save if a Lexical menu (like Mentions or Slash command) is currently open
+            if (document.querySelector('[data-lexical-menu="true"]')) {
+                handleUpdateContent(html);
+                return;
+            }
+
             router.put(route('pages.update', [workspace.slug, project.slug, page.uuid]), {
                 content: JSON.stringify({ type: 'lexical', html }),
             }, {
