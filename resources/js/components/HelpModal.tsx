@@ -14,6 +14,17 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.3.6',
+        title: 'Item and Page Duplication',
+        tag: 'Feature',
+        date: '2026-02-28',
+        items: [
+            'Added the ability to cleanly duplicate Pages along with their content via the page options dropdown.',
+            'Added the ability to duplicate Board Items. Duplicating an item with subtasks will now prompt you to either duplicate just the item, or the item and all of its subtasks.',
+            'Duplicating a page with subpages will similarly prompt you to duplicate the entire page tree or just the single page.',
+        ]
+    },
+    {
         version: 'v1.3.5',
         title: 'Editor Content Deletion Fix',
         tag: 'Patch',
