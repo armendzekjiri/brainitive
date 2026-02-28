@@ -6,6 +6,7 @@ import {
     $isRangeSelection,
     $createTextNode,
     KEY_DOWN_COMMAND,
+    COMMAND_PRIORITY_HIGH,
     COMMAND_PRIORITY_LOW,
     TextNode,
     RangeSelection,
@@ -91,7 +92,7 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
         (member: MemberResult) => {
             editor.update(() => {
                 const selection = $getSelection();
-                if (!$isRangeSelection(selection)) return;
+                if (!$isRangeSelection(selection) || !selection.isCollapsed()) return;
 
                 const anchor = selection.anchor;
                 const anchorNode = anchor.getNode();
@@ -124,7 +125,7 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
 
                 // Move cursor after the space
                 spaceNode.select(1, 1);
-            });
+            }, { tag: 'mention-insert', discrete: true });
 
             setQuery(null);
             setResults([]);

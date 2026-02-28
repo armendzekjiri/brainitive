@@ -2808,9 +2808,9 @@ function HtmlOnChangePlugin({ onChange }: { onChange: (html: string) => void }) 
                 return;
             }
 
-            // Trigger onChange on actual content changes, or when content was replaced by AI (tagged update)
-            const isAiReplace = typeof tags?.has === 'function' && tags.has('ai-replace');
-            if (!isAiReplace && dirtyElements.size === 0 && dirtyLeaves.size === 0) {
+            // Trigger onChange on actual content changes, or when content was replaced by AI/Mentions (tagged update)
+            const isForcedUpdate = typeof tags?.has === 'function' && (tags.has('ai-replace') || tags.has('mention-insert'));
+            if (!isForcedUpdate && dirtyElements.size === 0 && dirtyLeaves.size === 0) {
                 return;
             }
 
