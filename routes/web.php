@@ -197,6 +197,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('pages/{page}/excalidraw/save', [PageController::class, 'saveExcalidraw'])->name('pages.excalidraw.save');
             Route::post('pages/{page}/excalidraw-embed/save', [PageController::class, 'saveExcalidrawEmbed'])->name('pages.excalidraw.embed.save');
             Route::put('pages/{page}', [PageController::class, 'update'])->name('pages.update');
+            Route::put('pages/{page}/explicit-update', [PageController::class, 'explicitUpdate'])->name('pages.explicit-update');
+            Route::post('pages/{page}/watch', [PageController::class, 'toggleWatch'])->name('pages.watch');
             Route::post('pages/{page}/publish', [PageController::class, 'publish'])->name('pages.publish');
             Route::post('pages/{page}/unpublish', [PageController::class, 'unpublish'])->name('pages.unpublish');
             Route::post('pages/{page}/archive', [PageController::class, 'archive'])->name('pages.archive');

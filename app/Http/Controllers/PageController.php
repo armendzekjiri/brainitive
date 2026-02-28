@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\MentionNotification;
+use App\Notifications\PageUpdatedNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -77,7 +78,7 @@ class PageController extends Controller
     {
         $page->load(['parent', 'children' => function ($query) {
             $query->orderBy('type', 'desc')->orderBy('position');
-        }, 'creator', 'lastEditor']);
+        }, 'creator', 'lastEditor', 'watchers']);
 
         return Inertia::render('Pages/Show', [
             'workspace' => $workspace,
@@ -415,6 +416,48 @@ class PageController extends Controller
             ->get();
 
         return response()->json($pages);
+    }
+
+    /**
+     * Toggle watch status on a page.
+     */
+    public function toggleWatch(Request $request, Workspace $workspace, Project $project, Page $page)
+    {
+        $validated = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'watch'   => 'required|boolean',
+        ]);
+
+        $user = User::findOrFail($validated['user_id']);
+
+        if ($validated['watch']) {
+            $page->addWatcher($user);
+        } else {
+            $page->removeWatcher($user);
+        }
+
+        return back();
+    }
+
+    /**
+     * Explicit update — same as update() but also notifies watchers.
+     * Called when the user clicks the "Update" button (as opposed to autosave).
+     */
+    public function explicitUpdate(Request $request, Workspace $workspace, Project $project, Page $page)
+    {
+        // Reuse the same update logic
+        $this->update($request, $workspace, $project, $page);
+
+        // Notify watchers
+        $page->load('watchers');
+        $actorId = $request->user()->id;
+
+        foreach ($page->watchers as $watcher) {
+            if ($watcher->id === $actorId) continue;
+            $watcher->notify(new PageUpdatedNotification($page, $request->user()));
+        }
+
+        return back()->with('success', 'Page updated.');
     }
 
     /**

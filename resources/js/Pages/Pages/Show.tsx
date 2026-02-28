@@ -59,6 +59,9 @@ import {
     List as ListIcon,
     Maximize2,
     Minimize2,
+    Bell,
+    BellRing,
+    Users,
 } from 'lucide-react';
 import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallback, Suspense, lazy } from 'react';
 
@@ -76,6 +79,7 @@ function EmojiMartPicker(props: any) {
 import { RichLexicalEditor, TocHeading } from '@/components/editor/RichLexicalEditorFull';
 import { cn } from '@/lib/utils';
 import { flattenPagesForParentSelect } from '@/lib/pageTree';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
     Select,
     SelectContent,
@@ -93,6 +97,7 @@ interface Props extends PageProps {
         status: 'draft' | 'published' | 'archived';
         published_at?: string;
         lastEditor?: User;
+        watchers?: User[];
     };
     breadcrumbs: { id: number; name: string; slug: string; uuid: string; type: string }[];
 }
@@ -659,6 +664,30 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const contentPanelRef = useRef<HTMLDivElement>(null);
 
+    // Watchers
+    const currentUser = usePage<PageProps>().props.auth.user;
+    const isWatching = page.watchers?.some(w => w.id === currentUser.id) ?? false;
+
+    const toggleWatch = () => {
+        router.post(
+            route('pages.watch', [workspace.slug, project.slug, page.uuid]),
+            { user_id: currentUser.id, watch: !isWatching },
+            { preserveScroll: true }
+        );
+    };
+
+    // Explicit update — saves content AND notifies watchers
+    const handleExplicitUpdate = () => {
+        router.put(
+            route('pages.explicit-update', [workspace.slug, project.slug, page.uuid]),
+            { content: JSON.stringify({ type: 'lexical', html: currentHtmlRef.current ?? '' }) },
+            { preserveScroll: true, preserveState: true }
+        );
+    };
+
+    // Ref to hold latest HTML content for the explicit update
+    const currentHtmlRef = useRef<string | null>(null);
+
     // Edit mode state - published pages start in view mode
     const [isEditing, setIsEditing] = useState(page.status !== 'published');
 
@@ -701,6 +730,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
 
     // Debounced content save - receives HTML string from RichLexicalEditor
     const handleUpdateContent = useCallback((html: string) => {
+        currentHtmlRef.current = html;  // track latest for explicit update
         setIsSaving(true);
 
         // Clear any existing timeout
@@ -839,6 +869,22 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                 {/* Status Badge */}
                                 {getStatusBadge()}
 
+                                {/* Watch / Watching button */}
+                                {page.type === 'page' && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className={cn('h-8 px-2.5 text-xs gap-1.5 cursor-pointer', isWatching && 'bg-primary/5 text-primary border-primary/20')}
+                                        onClick={toggleWatch}
+                                    >
+                                        {isWatching ? (
+                                            <><BellRing className="size-3.5" />Watching</>
+                                        ) : (
+                                            <><Bell className="size-3.5" />Watch</>
+                                        )}
+                                    </Button>
+                                )}
+
                                 {/* Edit Button - show when in view mode and page is published */}
                                 {!isEditing && page.status === 'published' && page.type === 'page' && (
                                     <Button size="sm" variant="outline" onClick={() => setIsEditing(true)}>
@@ -862,7 +908,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                             <Eye className="size-4 mr-1.5" />
                                             Done
                                         </Button>
-                                        <Button size="sm" onClick={handlePublish}>
+                                        <Button size="sm" onClick={handleExplicitUpdate}>
                                             <Globe className="size-4 mr-1.5" />
                                             Update
                                         </Button>
@@ -951,7 +997,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                         <h1 className="text-4xl font-bold">{formData.name || 'Untitled'}</h1>
                                     )}
                                 </div>
-                                <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground">
+                                <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground flex-wrap">
                                     {page.creator && (
                                         <div className="flex items-center gap-1.5">
                                             <UserIcon className="size-4" />
@@ -972,6 +1018,24 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                         <div className="flex items-center gap-1.5">
                                             <Globe className="size-4" />
                                             <span>Published {new Date(page.published_at).toLocaleDateString()}</span>
+                                        </div>
+                                    )}
+                                    {/* Watcher avatars */}
+                                    {(page.watchers?.length ?? 0) > 0 && (
+                                        <div className="flex items-center gap-1.5">
+                                            <Users className="size-4" />
+                                            <div className="flex -space-x-1.5 overflow-hidden">
+                                                {(page.watchers ?? []).slice(0, 5).map(w => (
+                                                    <Avatar key={w.id} className="size-5 border-2 border-background" title={w.name}>
+                                                        <AvatarFallback className="text-[9px] bg-muted">{w.name.charAt(0)}</AvatarFallback>
+                                                    </Avatar>
+                                                ))}
+                                                {(page.watchers?.length ?? 0) > 5 && (
+                                                    <div className="size-5 rounded-full border-2 border-background bg-muted flex items-center justify-center text-[9px] font-medium text-muted-foreground">
+                                                        +{(page.watchers?.length ?? 0) - 5}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     )}
                                 </div>

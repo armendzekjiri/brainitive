@@ -22,6 +22,8 @@ interface NotificationData {
     context_type?: string;
     context_title?: string;
     context_url?: string;
+    page_name?: string;
+    page_url?: string;
     actor_name: string;
     actor_avatar?: string;
 }
@@ -200,7 +202,6 @@ export function NotificationsDropdown() {
                                             }
                                         </div>
 
-                                        {/* Content */}
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm leading-snug">
                                                 <span className="font-medium">{d.actor_name}</span>
@@ -215,7 +216,6 @@ export function NotificationsDropdown() {
                                                             rel="noreferrer"
                                                             onClick={(e) => {
                                                                 if (isUnread) markRead(n.id);
-                                                                // Allow click to navigate natively or in new tab
                                                             }}
                                                         >
                                                             {d.context_title}
@@ -223,7 +223,22 @@ export function NotificationsDropdown() {
                                                         </a>
                                                     </>
                                                 )}
-                                                {d.type !== 'mentioned' && (
+                                                {d.type === 'page_updated' && (
+                                                    <>
+                                                        {' updated page '}
+                                                        <a
+                                                            href={d.page_url}
+                                                            className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            onClick={() => { if (isUnread) markRead(n.id); }}
+                                                        >
+                                                            {d.page_name}
+                                                            <ExternalLink className="size-2.5" />
+                                                        </a>
+                                                    </>
+                                                )}
+                                                {d.type !== 'mentioned' && d.type !== 'page_updated' && (
                                                     <>
                                                         {d.type === 'item_assigned' ? ' assigned you to ' : ' moved '}
                                                         <a
@@ -249,7 +264,7 @@ export function NotificationsDropdown() {
                                                     </>
                                                 )}
                                             </p>
-                                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{d.item_title}</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{d.item_title ?? d.page_name}</p>
                                             <p className="text-[11px] text-muted-foreground/70 mt-1">{timeAgo(n.created_at)}</p>
                                         </div>
 

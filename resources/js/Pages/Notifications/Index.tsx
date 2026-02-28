@@ -18,6 +18,8 @@ interface NotificationData {
     context_type?: string;
     context_title?: string;
     context_url?: string;
+    page_name?: string;
+    page_url?: string;
     actor_name: string;
     actor_avatar?: string;
 }
@@ -100,7 +102,19 @@ function NotificationRow({ notification, onMarkRead }: { notification: Notificat
                                     </a>
                                 </>
                             )}
-                            {d.type !== 'mentioned' && (
+                            {d.type === 'page_updated' && (
+                                <>
+                                    {' updated page '}
+                                    <a
+                                        href={d.page_url}
+                                        className="font-semibold text-primary hover:underline inline-flex items-center gap-0.5"
+                                    >
+                                        {d.page_name}
+                                        <ExternalLink className="size-3 ml-0.5" />
+                                    </a>
+                                </>
+                            )}
+                            {d.type !== 'mentioned' && d.type !== 'page_updated' && (
                                 <>
                                     {d.type === 'item_assigned' ? ' assigned you to ' : ' moved '}
                                     <a
@@ -121,7 +135,7 @@ function NotificationRow({ notification, onMarkRead }: { notification: Notificat
                                 </>
                             )}
                         </p>
-                        <p className="text-sm text-muted-foreground mt-0.5 truncate">{d.item_title}</p>
+                        <p className="text-sm text-muted-foreground mt-0.5 truncate">{d.item_title ?? d.page_name}</p>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
