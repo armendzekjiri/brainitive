@@ -240,7 +240,7 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
 
                 return false;
             },
-            COMMAND_PRIORITY_LOW
+            COMMAND_PRIORITY_HIGH
         );
     }, [editor, query, results, selectedIndex, insertMention]);
 
