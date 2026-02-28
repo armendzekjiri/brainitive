@@ -340,6 +340,11 @@ class BoardController extends Controller
             }
         }
 
+        // Process mentions inside description on item creation
+        if (!empty($validated['description'])) {
+            $this->processMentions($validated['description'], $item, $request->user());
+        }
+
         return back()->with('success', 'Item created successfully.');
     }
 
@@ -785,16 +790,29 @@ class BoardController extends Controller
             return;
         }
 
-        \Log::info('processMentions content length: ' . strlen($content));
-        \Log::info('processMentions content snippet: ' . substr($content, 0, 500));
+        \Log::info('processMentions starting extraction', ['length' => strlen($content)]);
 
-        // Support both regular HTML quotes and JSON escaped quotes
-        preg_match_all('/data-mention-user-id(?:\\\\)?"(?:\\\\)?:"?(\d+)/', $content, $matches1);
-        preg_match_all('/data-mention-user-id(?:\\\\)?="(?:\\\\)?(\d+)(?:\\\\)?"/', $content, $matches2);
+        // 1. Regular HTML format: data-mention-user-id="123"
+        preg_match_all('/data-mention-user-id="(\d+)"/', $content, $htmlMatches);
         
-        $userIds = array_unique(array_merge($matches1[1] ?? [], $matches2[1] ?? []));
+        // 2. Lexical JSON / escaped format: "userId":123 or \"userId\":123 or "userId\":\"123"
+        preg_match_all('/"userId"(?:\\\\)?"?\s*:\s*(?:\\\\)?"?(\d+)/', $content, $jsonMatches);
+
+        // 3. Fallback escaped HTML: data-mention-user-id\":\"123\"
+        preg_match_all('/data-mention-user-id(?:\\\\)?"\s*:\s*(?:\\\\)?"?(\d+)/', $content, $escapedMatches);
         
-        \Log::info('processMentions extracted userIds: ' . json_encode($userIds));
+        $userIds = array_unique(array_merge(
+            $htmlMatches[1] ?? [], 
+            $jsonMatches[1] ?? [],
+            $escapedMatches[1] ?? []
+        ));
+        
+        \Log::info('processMentions extraction results', [
+            'html_count' => count($htmlMatches[1] ?? []),
+            'json_count' => count($jsonMatches[1] ?? []),
+            'escaped_count' => count($escapedMatches[1] ?? []),
+            'final_ids' => $userIds
+        ]);
 
         if (empty($userIds)) {
             return;

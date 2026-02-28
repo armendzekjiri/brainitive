@@ -286,8 +286,29 @@ class PageController extends Controller
         $page->update($validated);
 
         if ($page->type === 'page' && isset($validated['content'])) {
-            $contentStr = is_string($validated['content']) ? $validated['content'] : json_encode($validated['content']);
-            $this->processMentions($contentStr, $page, $request->user());
+            // Content is stored as an associative array like: ['type' => 'lexical', 'html' => '<p>...</p>']
+            // We need the raw HTML string for mention extraction, not the json_encode'd version
+            $contentForMentions = $validated['content'];
+            if (is_array($contentForMentions) && isset($contentForMentions['html'])) {
+                // Extract the raw HTML — this has clean data-mention-user-id="2" attributes
+                $mentionStr = $contentForMentions['html'];
+            } elseif (is_string($contentForMentions)) {
+                // If content is a JSON string, try to decode and extract html
+                $decoded = json_decode($contentForMentions, true);
+                $mentionStr = $decoded['html'] ?? $contentForMentions;
+            } else {
+                // Fallback: serialize the whole thing
+                $mentionStr = json_encode($contentForMentions);
+            }
+
+            \Log::info('PageController processMentions', [
+                'content_type' => gettype($validated['content']),
+                'mentionStr_length' => strlen($mentionStr),
+                'first_500' => substr($mentionStr, 0, 500),
+                'has_mention_attr' => str_contains($mentionStr, 'data-mention-user-id'),
+            ]);
+
+            $this->processMentions($mentionStr, $page, $request->user());
         }
 
         if ($request->wantsJson()) {
@@ -420,12 +441,30 @@ class PageController extends Controller
             return;
         }
 
-        // Extract user IDs from span[data-mention-user-id]
-        preg_match_all('/data-mention-user-id(?:\\\\)?"(?:\\\\)?:"?(\d+)/', $content, $matches1);
-        preg_match_all('/data-mention-user-id="(\d+)"/', $content, $matches2);
+        \Log::info('Page processMentions starting extraction', ['length' => strlen($content)]);
+
+        // 1. Lexical JSON / escaped format: "userId":123 or \"userId\":123 or "userId\":\"123"
+        preg_match_all('/"userId"(?:\\\\)?"?\s*:\s*(?:\\\\)?"?(\d+)/', $content, $jsonMatches);
         
-        $userIds = array_unique(array_merge($matches1[1] ?? [], $matches2[1] ?? []));
+        // 2. Regular HTML format: data-mention-user-id="123"
+        preg_match_all('/data-mention-user-id="(\d+)"/', $content, $htmlMatches);
+
+        // 3. Fallback escaped HTML: data-mention-user-id\":\"123\"
+        preg_match_all('/data-mention-user-id(?:\\\\)?"\s*:\s*(?:\\\\)?"?(\d+)/', $content, $escapedMatches);
         
+        $userIds = array_unique(array_merge(
+            $jsonMatches[1] ?? [],
+            $htmlMatches[1] ?? [], 
+            $escapedMatches[1] ?? []
+        ));
+        
+        \Log::info('Page processMentions extraction results', [
+            'json_count' => count($jsonMatches[1] ?? []),
+            'html_count' => count($htmlMatches[1] ?? []),
+            'escaped_count' => count($escapedMatches[1] ?? []),
+            'final_ids' => $userIds
+        ]);
+
         if (empty($userIds)) {
             return;
         }
@@ -442,7 +481,7 @@ class PageController extends Controller
             }
 
             $user = User::find($userId);
-            if ($user && $user->projects()->where('project_id', $project->id)->exists()) {
+            if ($user && $user->hasProjectAccess($project)) {
                 $user->notify(new MentionNotification(
                     contextType: 'page',
                     contextTitle: $page->name,
