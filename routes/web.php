@@ -179,6 +179,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('boards/{board:slug}/columns/{column}', [BoardController::class, 'updateColumn'])->name('boards.columns.update');
             Route::delete('boards/{board:slug}/columns/{column}', [BoardController::class, 'destroyColumn'])->name('boards.columns.destroy');
             Route::post('boards/{board:slug}/items', [BoardController::class, 'storeItem'])->name('boards.items.store');
+            Route::post('boards/{board:slug}/items/{item}/duplicate', [BoardController::class, 'duplicateItem'])->name('boards.items.duplicate');
             Route::get('boards/{board:slug}/items/{item}', [BoardController::class, 'showItem'])->name('boards.items.show');
             Route::patch('boards/{board:slug}/items/{item}/move', [BoardController::class, 'moveItem'])->name('boards.items.move');
             Route::patch('boards/{board:slug}/items/{item}', [BoardController::class, 'updateItem'])->name('boards.items.update');
@@ -194,6 +195,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
             // Pages (nested under projects)
             Route::post('pages', [PageController::class, 'store'])->name('pages.store');
+            Route::post('pages/{page}/duplicate', [PageController::class, 'duplicate'])->name('pages.duplicate');
             Route::get('pages/tree', [PageController::class, 'tree'])->name('pages.tree');
             Route::post('pages/reorder', [PageController::class, 'reorder'])->name('pages.reorder');
             Route::get('pages/{page}', [PageController::class, 'show'])->name('pages.show');

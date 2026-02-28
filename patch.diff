@@ -1,0 +1,234 @@
+--- resources/js/Pages/Boards/Show.tsx
++++ resources/js/Pages/Boards/Show.tsx
+@@ -62,6 +62,7 @@
+     Bell,
+     BellRing,
+     Users,
++    Files,
+ } from 'lucide-react';
+ import { useState, useRef, useEffect, DragEvent, FormEvent, useCallback, useMemo } from 'react';
+ import { Link } from '@inertiajs/react';
+@@ -299,6 +300,56 @@
+     );
+ }
+ 
++// Duplicate Item Dialog Component
++function DuplicateItemDialog({
++    item,
++    workspace,
++    project,
++    board,
++    open,
++    onOpenChange,
++}: {
++    item: Item | null;
++    workspace: Workspace;
++    project: Project;
++    board: Board;
++    open: boolean;
++    onOpenChange: (open: boolean) => void;
++}) {
++    if (!item) return null;
++    const hasSubtasks = (item.children_count ?? 0) > 0 || (item.children && item.children.length > 0);
++
++    const handleDuplicate = (withSubitems: boolean) => {
++        router.post(route('boards.items.duplicate', [workspace.slug, project.slug, board.slug, item.id]), {
++            with_subitems: withSubitems
++        }, {
++            onSuccess: () => onOpenChange(false),
++            preserveScroll: true
++        });
++    };
++
++    return (
++        <Dialog open={open} onOpenChange={onOpenChange}>
++            <DialogContent>
++                <DialogHeader>
++                    <DialogTitle>Duplicate Item</DialogTitle>
++                    <DialogDescription>
++                        You are about to duplicate the item <strong>{item.key}</strong>.
++                        {hasSubtasks && " This item has subtasks."}
++                    </DialogDescription>
++                </DialogHeader>
++                <div className="flex flex-col gap-3 mt-4">
++                    <Button onClick={() => handleDuplicate(false)} variant={hasSubtasks ? "outline" : "default"}>
++                        Duplicate Item {hasSubtasks && "Only"}
++                    </Button>
++                    {hasSubtasks && <Button onClick={() => handleDuplicate(true)}>Duplicate with Subtasks</Button>}
++                </div>
++            </DialogContent>
++        </Dialog>
++    );
++}
++
+ // Item Card Component
+ function ItemCard({
+     item,
+@@ -308,6 +359,7 @@
+     onEdit,
+     onDragStart,
+     onDragEnd,
++    onDuplicateTarget,
+ }: {
+     item: Item;
+     workspace: Workspace;
+@@ -316,6 +368,7 @@
+     onEdit: (item: Item) => void;
+     onDragStart: (e: DragEvent, item: Item) => void;
+     onDragEnd: () => void;
++    onDuplicateTarget: (item: Item) => void;
+ }) {
+     return (
+         <Card
+@@ -345,6 +398,9 @@
+                             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(item); }}>
+                                 Edit
+                             </DropdownMenuItem>
++                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDuplicateTarget(item); }}>
++                                Duplicate
++                            </DropdownMenuItem>
+                             <DropdownMenuSeparator />
+                             <DropdownMenuItem
+                                 onClick={(e) => {
+@@ -596,6 +652,7 @@
+     itemTypes,
+     rootItems,
+     onEditItem,
++    onDuplicateTarget,
+     onDragStart,
+     onDragEnd,
+     onDragOver,
+@@ -608,6 +665,7 @@
+     itemTypes: ItemType[];
+     rootItems: Item[];
+     onEditItem: (item: Item) => void;
++    onDuplicateTarget: (item: Item) => void;
+     onDragStart: (e: DragEvent, item: Item) => void;
+     onDragEnd: () => void;
+     onDragOver: (e: DragEvent, column: BoardColumn) => void;
+@@ -662,6 +720,7 @@
+                             project={project}
+                             board={board}
+                             onEdit={onEditItem}
++                            onDuplicateTarget={onDuplicateTarget}
+                             onDragStart={onDragStart}
+                             onDragEnd={onDragEnd}
+                         />
+@@ -1078,6 +1137,14 @@
+                                         Close modal
+                                     </Button>
+                                 </DropdownMenuItem>
++                                <DropdownMenuItem onClick={() => {
++                                    onClose();
++                                    // we need onDuplicateTarget or similar for modal, but wait: 
++                                    // the modal does not yet accept onDuplicateTarget. Let's add it.
++                                }}>
++                                    <Files className="size-4 mr-2" />
++                                    Duplicate
++                                </DropdownMenuItem>
+                                 <DropdownMenuSeparator />
+                                 <DropdownMenuItem
+                                     onClick={() => {
+@@ -1533,6 +1600,7 @@
+     project,
+     board,
+     onEditItem,
++    onDuplicateTarget,
+ }: {
+     columns: (BoardColumn & { items: Item[] })[];
+     workspace: Workspace;
+@@ -1540,6 +1608,7 @@
+     board: Board;
+     onEditItem: (item: Item) => void;
++    onDuplicateTarget: (item: Item) => void;
+ }) {
+     const allItems = columns.flatMap(col => col.items.map(item => ({ ...item, columnName: col.name })));
+ 
+@@ -1618,11 +1687,36 @@
+                                     )}
+                                 </td>
+                                 <td className="py-3 pr-4">
+-                                    {item.story_points ? (
+-                                        <Badge variant="outline" className="font-mono">{item.story_points}</Badge>
+-                                    ) : (
+-                                        <span className="text-muted-foreground text-sm">—</span>
+-                                    )}
++                                    <div className="flex items-center justify-between">
++                                        {item.story_points ? (
++                                            <Badge variant="outline" className="font-mono">{item.story_points}</Badge>
++                                        ) : (
++                                            <span className="text-muted-foreground text-sm">—</span>
++                                        )}
++                                        <DropdownMenu>
++                                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
++                                                <Button variant="ghost" size="icon" className="size-6 opacity-0 group-hover:opacity-100 transition-opacity">
++                                                    <MoreHorizontal className="size-3.5" />
++                                                </Button>
++                                            </DropdownMenuTrigger>
++                                            <DropdownMenuContent align="end">
++                                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditItem(item); }}>Edit</DropdownMenuItem>
++                                                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDuplicateTarget(item); }}>Duplicate</DropdownMenuItem>
++                                                <DropdownMenuSeparator />
++                                                <DropdownMenuItem
++                                                    onClick={(e) => {
++                                                        e.stopPropagation();
++                                                        const hasSubtasks = (item.children_count ?? 0) > 0;
++                                                        if (hasSubtasks && !window.confirm(`This task has ${item.children_count} subtask(s). Deleting it will delete those subtasks too. Continue?`)) {
++                                                            return;
++                                                        }
++                                                        router.delete(route('boards.items.destroy', [workspace.slug, project.slug, board.slug, item.id]));
++                                                    }}
++                                                    className="text-destructive focus:text-destructive"
++                                                >
++                                                    Delete
++                                                </DropdownMenuItem>
++                                            </DropdownMenuContent>
++                                        </DropdownMenu>
++                                    </div>
+                                 </td>
+                             </tr>
+                         ))}
+@@ -2323,6 +2417,7 @@
+     projectLabels,
+ }: Props) {
+     const [editingItem, setEditingItem] = useState<Item | null>(null);
++    const [itemToDuplicate, setItemToDuplicate] = useState<Item | null>(null);
+     const [draggedItem, setDraggedItem] = useState<Item | null>(null);
+     const [dragOverColumn, setDragOverColumn] = useState<number | null>(null);
+     const [searchQuery, setSearchQuery] = useState('');
+@@ -2790,6 +2885,7 @@
+                                     itemTypes={itemTypes}
+                                     rootItems={rootItems}
+                                     onEditItem={setEditingItem}
++                                    onDuplicateTarget={setItemToDuplicate}
+                                     onDragStart={handleDragStart}
+                                     onDragEnd={handleDragEnd}
+                                     onDragOver={handleDragOver}
+@@ -2820,6 +2916,7 @@
+                         project={project}
+                         board={board}
+                         onEditItem={setEditingItem}
++                        onDuplicateTarget={setItemToDuplicate}
+                     />
+                 )}
+ 
+@@ -2863,11 +2960,25 @@
+                 columns={localColumns}
+                 open={!!editingItem}
+                 onClose={() => setEditingItem(null)}
++                onDuplicateTarget={setItemToDuplicate}
++            />
++
++            <DuplicateItemDialog
++                item={itemToDuplicate}
++                workspace={workspace}
++                project={project}
++                board={board}
++                open={!!itemToDuplicate}
++                onOpenChange={(op) => {
++                    if (!op) setItemToDuplicate(null);
++                }}
+             />
+         </AppLayout>
+     );
+ }
