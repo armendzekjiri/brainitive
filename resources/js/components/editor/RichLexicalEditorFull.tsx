@@ -2869,6 +2869,10 @@ interface RichLexicalEditorProps {
     onHeadingsChange?: (headings: TocHeading[]) => void;
     stickyToolbar?: boolean;
     stickyTopOffset?: number;
+    // Mention notification context — passed to MentionsPlugin
+    mentionContextUrl?: string;
+    mentionContextTitle?: string;
+    mentionContextType?: 'page' | 'item' | 'comment';
 }
 
 export function RichLexicalEditor({
@@ -2888,6 +2892,9 @@ export function RichLexicalEditor({
     onHeadingsChange,
     stickyToolbar = false,
     stickyTopOffset = 52,
+    mentionContextUrl,
+    mentionContextTitle,
+    mentionContextType = 'page',
 }: RichLexicalEditorProps) {
     const [floatingAnchorElem, setFloatingAnchorElem] = useState<HTMLDivElement | null>(null);
 
@@ -2977,7 +2984,7 @@ export function RichLexicalEditor({
                     <SlashCommandsPlugin />
                     <CommandsPlugin />
                     <CodeHighlightPlugin />
-                    {projectId && editable && <MentionsPlugin projectId={projectId} />}
+                    {projectId && editable && <MentionsPlugin projectId={projectId} contextUrl={mentionContextUrl} contextTitle={mentionContextTitle} contextType={mentionContextType} />}
                     <InitialContentPlugin content={content} editable={editable} contentKey={contentKey} />
                     <HtmlOnChangePlugin onChange={onChange} />
                     {onHeadingsChange && <HeadingsExtractorPlugin onHeadingsChange={onHeadingsChange} />}

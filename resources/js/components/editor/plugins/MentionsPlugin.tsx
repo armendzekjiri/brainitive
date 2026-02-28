@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import axios from 'axios';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import {
     $getSelection,
@@ -24,6 +25,9 @@ interface MemberResult {
 
 interface MentionsPluginProps {
     projectId: number;
+    contextUrl?: string;   // URL of the page / item being edited
+    contextTitle?: string; // Title of the context (page name / item key)
+    contextType?: 'page' | 'item' | 'comment'; // defaults to 'page'
 }
 
 // Simple session cache to avoid re-fetching identical queries
@@ -34,7 +38,7 @@ function getCacheKey(projectId: number, query: string): string {
     return `${projectId}:${query.toLowerCase()}`;
 }
 
-export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
+export default function MentionsPlugin({ projectId, contextUrl, contextTitle, contextType = 'page' }: MentionsPluginProps) {
     const [editor] = useLexicalComposerContext();
     const [query, setQuery] = useState<string | null>(null); // null = closed
     const [results, setResults] = useState<MemberResult[]>([]);
@@ -127,12 +131,23 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
                 spaceNode.select(1, 1);
             }, { tag: 'mention-insert', discrete: true });
 
+            // Fire the mention notification immediately at the moment of selection.
+            // This is the single, correct time to notify — not on every autosave.
+            if (contextUrl && contextTitle) {
+                axios.post('/api/notifications/notify-mention', {
+                    user_id: member.id,
+                    context_type: contextType,
+                    context_title: contextTitle,
+                    context_url: contextUrl,
+                }).catch(() => { /* silent — notification is best-effort */ });
+            }
+
             setQuery(null);
             setResults([]);
             setMenuPosition(null);
             triggerOffsetRef.current = null;
         },
-        [editor],
+        [editor, contextUrl, contextTitle, contextType],
     );
 
     // Watch for text changes to detect @trigger

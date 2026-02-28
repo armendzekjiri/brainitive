@@ -732,6 +732,10 @@ export default function ItemShow({
                                             workspaceSlug={workspace.slug}
                                             itemTitle={titleValue}
                                             projectName={project.name}
+                                            projectId={project.id}
+                                            mentionContextType="item"
+                                            mentionContextTitle={item.key}
+                                            mentionContextUrl={route('boards.items.show', [workspace.slug, project.slug, board.slug, item.id])}
                                         />
                                         <div className="flex items-center gap-2 mt-3 justify-end">
                                             <Button variant="outline" size="sm" onClick={cancelDescription}>Discard</Button>
