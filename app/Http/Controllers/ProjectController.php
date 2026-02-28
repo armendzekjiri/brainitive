@@ -292,7 +292,7 @@ class ProjectController extends Controller
 
         $members = $project->users()
             ->select('users.id', 'users.name', 'users.email', 'users.avatar')
-            ->when($query, fn ($q) => $q->where('users.name', 'like', "%{$query}%"))
+            ->when($query, fn ($q) => $q->whereRaw('LOWER(users.name) LIKE ?', ['%' . strtolower($query) . '%']))
             ->withPivot('role')
             ->limit($limit)
             ->get()
