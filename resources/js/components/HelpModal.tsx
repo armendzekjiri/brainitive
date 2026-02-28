@@ -14,6 +14,18 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.3.5',
+        title: 'Editor Content Deletion Fix',
+        tag: 'Patch',
+        date: '2026-02-28',
+        items: [
+            'Fixed a race condition where clicking Edit → Save on an item description or Edit → Update on a page document without making any changes would wipe all content.',
+            'Replaced the fragile "skip first N updates" counter in the editor\'s onChange plugin with a shared initializing ref that is held until the Lexical tree is fully populated — guaranteeing onChange never fires mid-initialization.',
+            'Fixed Pages: Update button now correctly uses the saved content as a fallback when clicked before any edits are made.',
+            'Added an isEditing guard so the editor\'s auto-save cannot trigger during the view→edit remount.',
+        ]
+    },
+    {
         version: 'v1.3.4',
         title: 'Timeline Ordering & Navigation',
         tag: 'Enhancement',
