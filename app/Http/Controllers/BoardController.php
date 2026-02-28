@@ -227,6 +227,28 @@ class BoardController extends Controller
     }
 
     /**
+     * Reorder items within a board (used by timeline drag-and-drop).
+     */
+    public function reorderItems(Request $request, Workspace $workspace, Project $project, Board $board)
+    {
+        $this->authorize('update', $board);
+
+        $validated = $request->validate([
+            'items' => 'required|array',
+            'items.*.id' => 'required|integer|exists:items,id',
+            'items.*.position' => 'required|integer|min:0',
+        ]);
+
+        foreach ($validated['items'] as $itemData) {
+            Item::where('id', $itemData['id'])
+                ->where('board_id', $board->id)
+                ->update(['position' => $itemData['position']]);
+        }
+
+        return back()->with('success', 'Items reordered successfully.');
+    }
+
+    /**
      * Delete a column.
      */
     public function destroyColumn(Workspace $workspace, Project $project, Board $board, BoardColumn $column)
