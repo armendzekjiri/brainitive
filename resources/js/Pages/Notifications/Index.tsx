@@ -10,11 +10,14 @@ import { useState } from 'react';
 
 interface NotificationData {
     type: string;
-    item_key: string;
-    item_title: string;
-    item_url: string;
+    item_key?: string;
+    item_title?: string;
+    item_url?: string;
     old_column?: string;
     new_column?: string;
+    context_type?: string;
+    context_title?: string;
+    context_url?: string;
     actor_name: string;
     actor_avatar?: string;
 }
@@ -84,14 +87,31 @@ function NotificationRow({ notification, onMarkRead }: { notification: Notificat
                     <div className="min-w-0">
                         <p className="text-sm leading-relaxed">
                             <span className="font-semibold">{d.actor_name}</span>
-                            {d.type === 'item_assigned' ? ' assigned you to ' : ' moved '}
-                            <a
-                                href={d.item_url}
-                                className="font-semibold text-primary hover:underline inline-flex items-center gap-0.5"
-                            >
-                                {d.item_key}
-                                <ExternalLink className="size-3 ml-0.5" />
-                            </a>
+                            {d.type === 'mentioned' && (
+                                <>
+                                    {' mentioned you '}
+                                    {d.context_type === 'page' ? 'on page ' : 'in '}
+                                    <a
+                                        href={d.context_url!}
+                                        className="font-semibold text-primary hover:underline inline-flex items-center gap-0.5"
+                                    >
+                                        {d.context_title}
+                                        <ExternalLink className="size-3 ml-0.5" />
+                                    </a>
+                                </>
+                            )}
+                            {d.type !== 'mentioned' && (
+                                <>
+                                    {d.type === 'item_assigned' ? ' assigned you to ' : ' moved '}
+                                    <a
+                                        href={d.item_url}
+                                        className="font-semibold text-primary hover:underline inline-flex items-center gap-0.5"
+                                    >
+                                        {d.item_key}
+                                        <ExternalLink className="size-3 ml-0.5" />
+                                    </a>
+                                </>
+                            )}
                             {d.type === 'item_status_changed' && (
                                 <>
                                     {' from '}

@@ -281,6 +281,33 @@ class ProjectController extends Controller
     }
 
     /**
+     * Search project members by name (JSON, for @mention autocomplete).
+     */
+    public function searchMembers(Request $request, Workspace $workspace, Project $project): JsonResponse
+    {
+        $this->authorize('view', $project);
+
+        $query = $request->input('query', '');
+        $limit = min((int) $request->input('limit', 10), 30);
+
+        $members = $project->users()
+            ->select('users.id', 'users.name', 'users.email', 'users.avatar')
+            ->when($query, fn ($q) => $q->where('users.name', 'like', "%{$query}%"))
+            ->withPivot('role')
+            ->limit($limit)
+            ->get()
+            ->map(fn ($u) => [
+                'id'             => $u->id,
+                'name'           => $u->name,
+                'email'          => $u->email,
+                'avatar_display' => $u->avatar_display,
+                'role'           => $u->pivot->role,
+            ]);
+
+        return response()->json($members);
+    }
+
+    /**
      * Return project labels as JSON (used by global create modal).
      */
     public function labelsJson(Request $request, Workspace $workspace, Project $project): JsonResponse

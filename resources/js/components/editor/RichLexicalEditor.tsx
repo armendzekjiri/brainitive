@@ -63,6 +63,8 @@ import { HorizontalRuleNode, $createHorizontalRuleNode, INSERT_HORIZONTAL_RULE_C
 import { HorizontalRulePlugin } from '@lexical/react/LexicalHorizontalRulePlugin';
 import { TRANSFORMERS } from '@lexical/markdown';
 import { $setBlocksType } from '@lexical/selection';
+import { MentionNode } from './nodes/MentionNode';
+import MentionsPlugin from './plugins/MentionsPlugin';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -177,7 +179,7 @@ function SlashCommandsPlugin() {
     const [editor] = useLexicalComposerContext();
     const [showMenu, setShowMenu] = useState(false);
     const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
-    const [searchTerm, setSearchTerm] = useState('');    const [selectedIndex, setSelectedIndex] = useState(0);
+    const [searchTerm, setSearchTerm] = useState(''); const [selectedIndex, setSelectedIndex] = useState(0);
     const selectedIndexRef = useRef(0);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -863,6 +865,7 @@ interface RichLexicalEditorProps {
     minHeight?: string;
     maxHeight?: string;
     className?: string;
+    projectId?: number;
 }
 
 export function RichLexicalEditor({
@@ -874,6 +877,7 @@ export function RichLexicalEditor({
     minHeight = '200px',
     maxHeight,
     className,
+    projectId,
 }: RichLexicalEditorProps) {
     const initialConfig = {
         namespace: 'RichEditor',
@@ -894,6 +898,7 @@ export function RichLexicalEditor({
             TableCellNode,
             TableRowNode,
             HorizontalRuleNode,
+            MentionNode,
         ],
         editable,
     };
@@ -932,6 +937,7 @@ export function RichLexicalEditor({
                 <TabIndentationPlugin />
                 <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
                 <SlashCommandsPlugin />
+                {projectId && editable && <MentionsPlugin projectId={projectId} />}
                 <InitialContentPlugin content={content} editable={editable} />
                 <HtmlOnChangePlugin onChange={onChange} />
             </div>

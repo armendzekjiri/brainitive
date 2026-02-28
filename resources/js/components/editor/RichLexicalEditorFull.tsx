@@ -188,9 +188,11 @@ import {
     $createCollapsibleTitleNode,
     $createCollapsibleContentNode,
 } from './nodes';
+import { MentionNode } from './nodes/MentionNode';
 
 import TableActionMenuPlugin from './plugins/TableActionMenuPlugin';
 import TableCellResizerPlugin from './plugins/TableCellResizerPlugin';
+import MentionsPlugin from './plugins/MentionsPlugin';
 
 // Custom commands
 export const INSERT_IMAGE_COMMAND: LexicalCommand<{ src: string; altText: string }> = createCommand();
@@ -2393,203 +2395,203 @@ function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle, projectNa
                             }
                         }}>
                             <DialogContent
-                                                    overlayClassName="bg-black/10 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
-                                                    className="left-1/2 -translate-x-1/2 right-auto top-auto bottom-0 w-full max-w-6xl h-[55vh] max-h-[55vh] rounded-t-xl overflow-hidden p-0 shadow-2xl focus:outline-none focus-visible:outline-none focus-visible:ring-0 data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom flex flex-col"
-                                                    style={{ minWidth: 420, minHeight: 200 }}
-                                                >
-                                                    <div className="flex flex-col min-h-0 flex-1">
-                                                    <div className="flex items-center gap-2 border-b px-4 py-3 shrink-0">
-                                                        <Sparkles className="size-4 shrink-0 text-purple-500" />
-                                                        <input
-                                                            ref={aiInputRef}
-                                                            type="text"
-                                                            value={aiInstruction}
-                                                            onChange={(e) => setAiInstruction(e.target.value)}
-                                                            placeholder="Tell AI what to do..."
-                                                            className="flex-1 bg-transparent text-sm outline-none ring-0 border-0 shadow-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0"
-                                                            onKeyDown={(e) => {
-                                                                if (e.key === 'Enter' && aiInstruction.trim() && !aiGenerating) {
-                                                                    e.preventDefault();
-                                                                    handleAiGenerate(aiInstruction);
-                                                                }
-                                                            }}
-                                                            disabled={aiGenerating}
-                                                        />
-                                                        {!aiGenerating && aiInstruction.trim() && (
-                                                            <button
-                                                                type="button"
-                                                                className="text-purple-600 hover:text-purple-700 p-0.5"
-                                                                onClick={() => handleAiGenerate(aiInstruction)}
-                                                            >
-                                                                <ArrowRight className="size-4" />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                    {aiMode === 'selection' && aiSelectedText && (
-                                                        <div className="px-4 py-1.5 bg-purple-50 dark:bg-purple-950/20 border-b text-xs text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
-                                                            <TextSelect className="size-3 shrink-0" />
-                                                            <span className="truncate">Selected: &ldquo;{aiSelectedText.length > 50 ? aiSelectedText.slice(0, 50) + '…' : aiSelectedText}&rdquo;</span>
-                                                        </div>
-                                                    )}
-                                                    {aiError && (
-                                                        <div className="px-4 py-2 bg-destructive/10 text-destructive text-xs flex items-center gap-1.5 border-b">
-                                                            <X className="size-3 shrink-0" />
-                                                            {aiError}
-                                                        </div>
-                                                    )}
-                                                    {!aiGenerating && !aiResult && (
-                                                    <div className="py-1 flex-1 min-h-0 overflow-y-auto">
-                                                        <div className="px-4 py-1 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Actions</div>
-                                                        <button
-                                                            type="button"
-                                                            className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left transition-colors border-b border-border/50"
-                                                            onClick={() => {
-                                                                let contentHtml = '';
-                                                                editor.getEditorState().read(() => {
-                                                                    contentHtml = $generateHtmlFromNodes(editor);
-                                                                });
-                                                                const descriptionPlain = htmlToPlainText(contentHtml, 500);
-                                                                const lines: string[] = [];
-                                                                if (itemTitle?.trim()) lines.push(`Title: ${itemTitle.trim()}`);
-                                                                if (projectName?.trim()) lines.push(`Project: ${projectName.trim()}`);
-                                                                if (descriptionPlain) lines.push(`Description: ${descriptionPlain}`);
-                                                                const contextText = lines.join('\n\n') || 'No context provided.';
-                                                                handleAiGenerate('', contextText, true);
-                                                            }}
-                                                        >
-                                                            <Lightbulb className="size-4 text-amber-500 shrink-0" />
-                                                            Generate prompt
-                                                        </button>
-                                                        {[
-                                                            { label: 'Improve description', instruction: 'Rewrite to be clearer, more professional, and better structured. Improve the overall quality.', icon: Wand2 },
-                                                            { label: 'Summarize writing', instruction: 'Summarize this text into a concise version, keeping only the most important points.', icon: AlignEndHorizontal },
-                                                            { label: 'Improve writing', instruction: 'Improve the writing quality — better word choices, sentence flow, and readability.', icon: Pencil },
-                                                            { label: 'Fix spelling & grammar', instruction: 'Fix all spelling, grammar, and punctuation errors. Keep the same meaning and style.', icon: SpellCheck },
-                                                        ].map((preset) => {
-                                                            const Icon = preset.icon;
-                                                            return (
-                                                                <button
-                                                                    key={preset.label}
-                                                                    type="button"
-                                                                    className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left transition-colors"
-                                                                    onClick={() => handleAiGenerate(preset.instruction)}
-                                                                >
-                                                                    <Icon className="size-4 text-muted-foreground shrink-0" />
-                                                                    {preset.label}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                        {!showMorePresets ? (
-                                                            <button
-                                                                type="button"
-                                                                className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left transition-colors text-muted-foreground"
-                                                                onClick={() => setShowMorePresets(true)}
-                                                            >
-                                                                <MoreHorizontal className="size-4 shrink-0" />
-                                                                Show more
-                                                            </button>
-                                                        ) : (
-                                                            <>
-                                                                {[
-                                                                    { label: 'Make concise', instruction: 'Make this text more concise while preserving all key information.', icon: ChevronsDownUp },
-                                                                    { label: 'Make formal', instruction: 'Rewrite this in a formal, professional tone suitable for business communication.', icon: Briefcase },
-                                                                    { label: 'Simplify language', instruction: 'Simplify the language to make it easy to understand for anyone.', icon: SmilePlus },
-                                                                    { label: 'Translate to English', instruction: 'Translate this text to English.', icon: Languages },
-                                                                    { label: 'Translate to German', instruction: 'Translate this text to German.', icon: Languages },
-                                                                ].map((preset) => {
-                                                                    const Icon = preset.icon;
-                                                                    return (
-                                                                        <button
-                                                                            key={preset.label}
-                                                                            type="button"
-                                                                            className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left transition-colors"
-                                                                            onClick={() => handleAiGenerate(preset.instruction)}
-                                                                        >
-                                                                            <Icon className="size-4 text-muted-foreground shrink-0" />
-                                                                            {preset.label}
-                                                                        </button>
-                                                                    );
-                                                                })}
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                    )}
-                                                    {aiResult ? (
-                                                        <div className="flex flex-col flex-1 min-h-0 border-t">
-                                                            <div className="px-4 pt-3 pb-2 shrink-0">
-                                                                <div className="flex items-center gap-2 text-sm font-medium text-purple-700 dark:text-purple-300">
-                                                                    <Sparkles className="size-4" />
-                                                                    AI Suggestion
-                                                                </div>
-                                                            </div>
-                                                            <div
-                                                                className="px-4 py-3 prose prose-sm max-w-none text-sm flex-1 min-h-0 overflow-y-auto"
-                                                                dangerouslySetInnerHTML={{ __html: aiResult }}
-                                                            />
-                                                            <div className="flex gap-1.5 px-4 py-3 border-t bg-muted/30 shrink-0">
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white flex-1"
-                                                                    onClick={() => {
-                                                                        const newHtml = aiResult!;
-                                                                        editor.update(() => {
-                                                                            const root = $getRoot();
-                                                                            root.clear();
-                                                                            const parser = new DOMParser();
-                                                                            const dom = parser.parseFromString(newHtml, 'text/html');
-                                                                            const nodes = $generateNodesFromDOM(editor, dom);
-                                                                            if (nodes.length === 0) {
-                                                                                const paragraph = $createParagraphNode();
-                                                                                paragraph.append($createTextNode(newHtml));
-                                                                                root.append(paragraph);
-                                                                            } else {
-                                                                                nodes.forEach(node => root.append(node));
-                                                                            }
-                                                                        }, { tag: 'ai-replace' });
-                                                                        // Ensure parent state is updated so Save persists (Lexical listener may not fire in time)
-                                                                        onChangeFromContext?.(newHtml);
-                                                                        setTimeout(() => setShowAiPopover(false), 100);
-                                                                    }}
-                                                                >
-                                                                    <Check className="size-3" />
-                                                                    Replace
-                                                                </Button>
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    variant="outline"
-                                                                    className="h-7 text-xs gap-1"
-                                                                    onClick={() => { setAiResult(null); setAiError(null); }}
-                                                                >
-                                                                    <RotateCcw className="size-3" />
-                                                                    Retry
-                                                                </Button>
-                                                                <Button
-                                                                    type="button"
-                                                                    size="sm"
-                                                                    variant="ghost"
-                                                                    className="h-7 text-xs"
-                                                                    onClick={() => setShowAiPopover(false)}
-                                                                >
-                                                                    Discard
-                                                                </Button>
-                                                            </div>
-                                                        </div>
-                                                    ) : aiGenerating ? (
-                                                        <div className="flex flex-1 min-h-0 items-center justify-center gap-3 px-4 py-6">
-                                                            <Loader2 className="size-5 animate-spin text-purple-600" />
-                                                            <span className="text-sm text-muted-foreground">Generating with AI...</span>
-                                                        </div>
-                                                    ) : null}
-                                                    </div>
-                                                </DialogContent>
-                                            </Dialog>
-                                        </>
+                                overlayClassName="bg-black/10 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+                                className="left-1/2 -translate-x-1/2 right-auto top-auto bottom-0 w-full max-w-6xl h-[55vh] max-h-[55vh] rounded-t-xl overflow-hidden p-0 shadow-2xl focus:outline-none focus-visible:outline-none focus-visible:ring-0 data-[state=open]:slide-in-from-bottom data-[state=closed]:slide-out-to-bottom flex flex-col"
+                                style={{ minWidth: 420, minHeight: 200 }}
+                            >
+                                <div className="flex flex-col min-h-0 flex-1">
+                                    <div className="flex items-center gap-2 border-b px-4 py-3 shrink-0">
+                                        <Sparkles className="size-4 shrink-0 text-purple-500" />
+                                        <input
+                                            ref={aiInputRef}
+                                            type="text"
+                                            value={aiInstruction}
+                                            onChange={(e) => setAiInstruction(e.target.value)}
+                                            placeholder="Tell AI what to do..."
+                                            className="flex-1 bg-transparent text-sm outline-none ring-0 border-0 shadow-none placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0"
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && aiInstruction.trim() && !aiGenerating) {
+                                                    e.preventDefault();
+                                                    handleAiGenerate(aiInstruction);
+                                                }
+                                            }}
+                                            disabled={aiGenerating}
+                                        />
+                                        {!aiGenerating && aiInstruction.trim() && (
+                                            <button
+                                                type="button"
+                                                className="text-purple-600 hover:text-purple-700 p-0.5"
+                                                onClick={() => handleAiGenerate(aiInstruction)}
+                                            >
+                                                <ArrowRight className="size-4" />
+                                            </button>
+                                        )}
+                                    </div>
+                                    {aiMode === 'selection' && aiSelectedText && (
+                                        <div className="px-4 py-1.5 bg-purple-50 dark:bg-purple-950/20 border-b text-xs text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                                            <TextSelect className="size-3 shrink-0" />
+                                            <span className="truncate">Selected: &ldquo;{aiSelectedText.length > 50 ? aiSelectedText.slice(0, 50) + '…' : aiSelectedText}&rdquo;</span>
+                                        </div>
                                     )}
-                </div>
-                                </React.Fragment>
-                            );
+                                    {aiError && (
+                                        <div className="px-4 py-2 bg-destructive/10 text-destructive text-xs flex items-center gap-1.5 border-b">
+                                            <X className="size-3 shrink-0" />
+                                            {aiError}
+                                        </div>
+                                    )}
+                                    {!aiGenerating && !aiResult && (
+                                        <div className="py-1 flex-1 min-h-0 overflow-y-auto">
+                                            <div className="px-4 py-1 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Actions</div>
+                                            <button
+                                                type="button"
+                                                className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left transition-colors border-b border-border/50"
+                                                onClick={() => {
+                                                    let contentHtml = '';
+                                                    editor.getEditorState().read(() => {
+                                                        contentHtml = $generateHtmlFromNodes(editor);
+                                                    });
+                                                    const descriptionPlain = htmlToPlainText(contentHtml, 500);
+                                                    const lines: string[] = [];
+                                                    if (itemTitle?.trim()) lines.push(`Title: ${itemTitle.trim()}`);
+                                                    if (projectName?.trim()) lines.push(`Project: ${projectName.trim()}`);
+                                                    if (descriptionPlain) lines.push(`Description: ${descriptionPlain}`);
+                                                    const contextText = lines.join('\n\n') || 'No context provided.';
+                                                    handleAiGenerate('', contextText, true);
+                                                }}
+                                            >
+                                                <Lightbulb className="size-4 text-amber-500 shrink-0" />
+                                                Generate prompt
+                                            </button>
+                                            {[
+                                                { label: 'Improve description', instruction: 'Rewrite to be clearer, more professional, and better structured. Improve the overall quality.', icon: Wand2 },
+                                                { label: 'Summarize writing', instruction: 'Summarize this text into a concise version, keeping only the most important points.', icon: AlignEndHorizontal },
+                                                { label: 'Improve writing', instruction: 'Improve the writing quality — better word choices, sentence flow, and readability.', icon: Pencil },
+                                                { label: 'Fix spelling & grammar', instruction: 'Fix all spelling, grammar, and punctuation errors. Keep the same meaning and style.', icon: SpellCheck },
+                                            ].map((preset) => {
+                                                const Icon = preset.icon;
+                                                return (
+                                                    <button
+                                                        key={preset.label}
+                                                        type="button"
+                                                        className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left transition-colors"
+                                                        onClick={() => handleAiGenerate(preset.instruction)}
+                                                    >
+                                                        <Icon className="size-4 text-muted-foreground shrink-0" />
+                                                        {preset.label}
+                                                    </button>
+                                                );
+                                            })}
+                                            {!showMorePresets ? (
+                                                <button
+                                                    type="button"
+                                                    className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left transition-colors text-muted-foreground"
+                                                    onClick={() => setShowMorePresets(true)}
+                                                >
+                                                    <MoreHorizontal className="size-4 shrink-0" />
+                                                    Show more
+                                                </button>
+                                            ) : (
+                                                <>
+                                                    {[
+                                                        { label: 'Make concise', instruction: 'Make this text more concise while preserving all key information.', icon: ChevronsDownUp },
+                                                        { label: 'Make formal', instruction: 'Rewrite this in a formal, professional tone suitable for business communication.', icon: Briefcase },
+                                                        { label: 'Simplify language', instruction: 'Simplify the language to make it easy to understand for anyone.', icon: SmilePlus },
+                                                        { label: 'Translate to English', instruction: 'Translate this text to English.', icon: Languages },
+                                                        { label: 'Translate to German', instruction: 'Translate this text to German.', icon: Languages },
+                                                    ].map((preset) => {
+                                                        const Icon = preset.icon;
+                                                        return (
+                                                            <button
+                                                                key={preset.label}
+                                                                type="button"
+                                                                className="w-full flex items-center gap-3 px-4 py-2 text-sm hover:bg-muted text-left transition-colors"
+                                                                onClick={() => handleAiGenerate(preset.instruction)}
+                                                            >
+                                                                <Icon className="size-4 text-muted-foreground shrink-0" />
+                                                                {preset.label}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                    {aiResult ? (
+                                        <div className="flex flex-col flex-1 min-h-0 border-t">
+                                            <div className="px-4 pt-3 pb-2 shrink-0">
+                                                <div className="flex items-center gap-2 text-sm font-medium text-purple-700 dark:text-purple-300">
+                                                    <Sparkles className="size-4" />
+                                                    AI Suggestion
+                                                </div>
+                                            </div>
+                                            <div
+                                                className="px-4 py-3 prose prose-sm max-w-none text-sm flex-1 min-h-0 overflow-y-auto"
+                                                dangerouslySetInnerHTML={{ __html: aiResult }}
+                                            />
+                                            <div className="flex gap-1.5 px-4 py-3 border-t bg-muted/30 shrink-0">
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    className="h-7 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white flex-1"
+                                                    onClick={() => {
+                                                        const newHtml = aiResult!;
+                                                        editor.update(() => {
+                                                            const root = $getRoot();
+                                                            root.clear();
+                                                            const parser = new DOMParser();
+                                                            const dom = parser.parseFromString(newHtml, 'text/html');
+                                                            const nodes = $generateNodesFromDOM(editor, dom);
+                                                            if (nodes.length === 0) {
+                                                                const paragraph = $createParagraphNode();
+                                                                paragraph.append($createTextNode(newHtml));
+                                                                root.append(paragraph);
+                                                            } else {
+                                                                nodes.forEach(node => root.append(node));
+                                                            }
+                                                        }, { tag: 'ai-replace' });
+                                                        // Ensure parent state is updated so Save persists (Lexical listener may not fire in time)
+                                                        onChangeFromContext?.(newHtml);
+                                                        setTimeout(() => setShowAiPopover(false), 100);
+                                                    }}
+                                                >
+                                                    <Check className="size-3" />
+                                                    Replace
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-7 text-xs gap-1"
+                                                    onClick={() => { setAiResult(null); setAiError(null); }}
+                                                >
+                                                    <RotateCcw className="size-3" />
+                                                    Retry
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-7 text-xs"
+                                                    onClick={() => setShowAiPopover(false)}
+                                                >
+                                                    Discard
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ) : aiGenerating ? (
+                                        <div className="flex flex-1 min-h-0 items-center justify-center gap-3 px-4 py-6">
+                                            <Loader2 className="size-5 animate-spin text-purple-600" />
+                                            <span className="text-sm text-muted-foreground">Generating with AI...</span>
+                                        </div>
+                                    ) : null}
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+                    </>
+                )}
+            </div>
+        </React.Fragment>
+    );
 }
 
 function CodeActionMenuPlugin({ anchorElem }: { anchorElem: HTMLElement | null }) {
@@ -2670,7 +2672,7 @@ function CodeActionMenuPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
             setIsCopied(true);
             if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
             copyTimerRef.current = setTimeout(() => setIsCopied(false), 2000);
-        } catch {}
+        } catch { }
     };
 
     const handleLangChange = (newLang: string) => {
@@ -2862,6 +2864,7 @@ interface RichLexicalEditorProps {
     workspaceSlug?: string;
     itemTitle?: string;
     projectName?: string;
+    projectId?: number;
     onHeadingsChange?: (headings: TocHeading[]) => void;
     stickyToolbar?: boolean;
     stickyTopOffset?: number;
@@ -2880,6 +2883,7 @@ export function RichLexicalEditor({
     workspaceSlug,
     itemTitle,
     projectName,
+    projectId,
     onHeadingsChange,
     stickyToolbar = false,
     stickyTopOffset = 52,
@@ -2926,6 +2930,7 @@ export function RichLexicalEditor({
             CollapsibleContainerNode,
             CollapsibleTitleNode,
             CollapsibleContentNode,
+            MentionNode,
         ],
         editable,
     };
@@ -2933,58 +2938,59 @@ export function RichLexicalEditor({
     return (
         <LexicalComposer initialConfig={initialConfig}>
             <RichLexicalOnChangeContext.Provider value={onChange}>
-            <div className={cn("border rounded-lg overflow-hidden bg-white dark:bg-card", className)}>
-                <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} projectName={projectName} stickyToolbar={stickyToolbar} stickyTopOffset={stickyTopOffset} />
-                <div
-                    className={cn("relative", maxHeight && "overflow-y-auto")}
-                    style={maxHeight ? { maxHeight } : undefined}
-                    ref={onRef}
-                >
-                    <RichTextPlugin
-                        contentEditable={
-                            <ContentEditable
-                                className={cn(
-                                    "lexical-editor-content outline-none p-4 text-sm prose prose-sm max-w-none",
-                                    editable && "pl-16",
-                                    !editable && "cursor-default"
-                                )}
-                                style={{ minHeight, fontFamily: 'Inter, sans-serif' }}
-                                aria-placeholder={placeholder}
-                                placeholder={
-                                    <div className="absolute top-4 left-16 text-muted-foreground pointer-events-none text-sm">
-                                        {placeholder}
-                                    </div>
-                                }
-                            />
-                        }
-                        ErrorBoundary={LexicalErrorBoundary}
-                    />
+                <div className={cn("border rounded-lg overflow-hidden bg-white dark:bg-card", className)}>
+                    <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} projectName={projectName} stickyToolbar={stickyToolbar} stickyTopOffset={stickyTopOffset} />
+                    <div
+                        className={cn("relative", maxHeight && "overflow-y-auto")}
+                        style={maxHeight ? { maxHeight } : undefined}
+                        ref={onRef}
+                    >
+                        <RichTextPlugin
+                            contentEditable={
+                                <ContentEditable
+                                    className={cn(
+                                        "lexical-editor-content outline-none p-4 text-sm prose prose-sm max-w-none",
+                                        editable && "pl-16",
+                                        !editable && "cursor-default"
+                                    )}
+                                    style={{ minHeight, fontFamily: 'Inter, sans-serif' }}
+                                    aria-placeholder={placeholder}
+                                    placeholder={
+                                        <div className="absolute top-4 left-16 text-muted-foreground pointer-events-none text-sm">
+                                            {placeholder}
+                                        </div>
+                                    }
+                                />
+                            }
+                            ErrorBoundary={LexicalErrorBoundary}
+                        />
+                    </div>
+                    <HistoryPlugin />
+                    <ListPlugin />
+                    <CheckListPlugin />
+                    <LinkPlugin />
+                    <TablePlugin hasCellMerge hasCellBackgroundColor hasHorizontalScroll />
+                    <HorizontalRulePlugin />
+                    <TabIndentationPlugin />
+                    <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
+                    <SlashCommandsPlugin />
+                    <CommandsPlugin />
+                    <CodeHighlightPlugin />
+                    {projectId && editable && <MentionsPlugin projectId={projectId} />}
+                    <InitialContentPlugin content={content} editable={editable} contentKey={contentKey} />
+                    <HtmlOnChangePlugin onChange={onChange} />
+                    {onHeadingsChange && <HeadingsExtractorPlugin onHeadingsChange={onHeadingsChange} />}
+                    {floatingAnchorElem && (
+                        <CodeActionMenuPlugin anchorElem={floatingAnchorElem} />
+                    )}
+                    {floatingAnchorElem && editable && (
+                        <>
+                            <TableActionMenuPlugin anchorElem={floatingAnchorElem} />
+                            <TableCellResizerPlugin />
+                            <DraggableBlockPlugin anchorElem={floatingAnchorElem} />
+                        </>
+                    )}
                 </div>
-                <HistoryPlugin />
-                <ListPlugin />
-                <CheckListPlugin />
-                <LinkPlugin />
-                <TablePlugin hasCellMerge hasCellBackgroundColor hasHorizontalScroll />
-                <HorizontalRulePlugin />
-                <TabIndentationPlugin />
-                <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
-                <SlashCommandsPlugin />
-                <CommandsPlugin />
-                <CodeHighlightPlugin />
-                <InitialContentPlugin content={content} editable={editable} contentKey={contentKey} />
-                <HtmlOnChangePlugin onChange={onChange} />
-                {onHeadingsChange && <HeadingsExtractorPlugin onHeadingsChange={onHeadingsChange} />}
-                {floatingAnchorElem && (
-                    <CodeActionMenuPlugin anchorElem={floatingAnchorElem} />
-                )}
-                {floatingAnchorElem && editable && (
-                    <>
-                        <TableActionMenuPlugin anchorElem={floatingAnchorElem} />
-                        <TableCellResizerPlugin />
-                        <DraggableBlockPlugin anchorElem={floatingAnchorElem} />
-                    </>
-                )}
-            </div>
             </RichLexicalOnChangeContext.Provider>
         </LexicalComposer>
     );

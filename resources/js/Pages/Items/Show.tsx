@@ -184,6 +184,7 @@ interface CommentItemProps {
     handlePostComment: (parentId?: number) => void;
     cancelReply: () => void;
     replyEditorKey: number;
+    projectId: number;
 }
 
 function CommentItem({
@@ -196,6 +197,7 @@ function CommentItem({
     handlePostComment,
     cancelReply,
     replyEditorKey,
+    projectId,
 }: CommentItemProps) {
     const maxDepth = 5;
     const avatarSize = depth === 0 ? 'size-8' : 'size-6';
@@ -250,6 +252,7 @@ function CommentItem({
                                             minHeight="60px"
                                             maxHeight="240px"
                                             contentKey={`reply-${comment.id}-${replyEditorKey}`}
+                                            projectId={projectId}
                                         />
                                     </div>
                                     <div className="flex justify-end gap-2 mt-2">
@@ -280,6 +283,7 @@ function CommentItem({
                                     handlePostComment={handlePostComment}
                                     cancelReply={cancelReply}
                                     replyEditorKey={replyEditorKey}
+                                    projectId={projectId}
                                 />
                             ))}
                         </div>
@@ -1091,6 +1095,7 @@ export default function ItemShow({
                                                 handlePostComment={handlePostComment}
                                                 cancelReply={cancelReply}
                                                 replyEditorKey={replyEditorKey}
+                                                projectId={project.id}
                                             />
                                         ))}
                                     </div>

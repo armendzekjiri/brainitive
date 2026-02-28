@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\User;
 use App\Models\Workspace;
+use App\Notifications\MentionNotification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -283,6 +285,11 @@ class PageController extends Controller
 
         $page->update($validated);
 
+        if ($page->type === 'page' && isset($validated['content'])) {
+            $contentStr = is_string($validated['content']) ? $validated['content'] : json_encode($validated['content']);
+            $this->processMentions($contentStr, $page, $request->user());
+        }
+
         if ($request->wantsJson()) {
             return response()->json($page);
         }
@@ -402,5 +409,47 @@ class PageController extends Controller
             $current = $current->parent;
         }
         return false;
+    }
+
+    /**
+     * Extract mentions from HTML/JSON content and dispatch notifications.
+     */
+    private function processMentions(?string $content, Page $page, User $actor)
+    {
+        if (empty($content)) {
+            return;
+        }
+
+        // Extract user IDs from span[data-mention-user-id]
+        preg_match_all('/data-mention-user-id(?:\\\\)?"(?:\\\\)?:"?(\d+)/', $content, $matches1);
+        preg_match_all('/data-mention-user-id="(\d+)"/', $content, $matches2);
+        
+        $userIds = array_unique(array_merge($matches1[1] ?? [], $matches2[1] ?? []));
+        
+        if (empty($userIds)) {
+            return;
+        }
+        
+        $workspace = $page->project->workspace;
+        $project = $page->project;
+        
+        $pageUrl = route('pages.show', [$workspace->slug, $project->slug, $page->uuid]);
+
+        foreach ($userIds as $userId) {
+            // Don't notify the person who made the mention
+            if ((int) $userId === $actor->id) {
+                continue;
+            }
+
+            $user = User::find($userId);
+            if ($user && $user->projects()->where('project_id', $project->id)->exists()) {
+                $user->notify(new MentionNotification(
+                    contextType: 'page',
+                    contextTitle: $page->name,
+                    contextUrl: $pageUrl,
+                    actor: $actor
+                ));
+            }
+        }
     }
 }

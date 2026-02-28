@@ -571,6 +571,11 @@ class BoardController extends Controller
             }
         }
 
+        // Process mentions in description
+        if (isset($validated['description'])) {
+            $this->processMentions($validated['description'], $item, $request->user());
+        }
+
         return back()->with('success', 'Item updated successfully.');
     }
 
@@ -597,12 +602,14 @@ class BoardController extends Controller
             'body' => 'required|string',
             'parent_id' => 'nullable|exists:comments,id',
         ]);
-
-        $item->comments()->create([
+        $comment = $item->comments()->create([
             'user_id' => $request->user()->id,
             'body' => $validated['body'],
             'parent_id' => $validated['parent_id'] ?? null,
         ]);
+
+        // Process mentions in comment
+        $this->processMentions($validated['body'], $item, $request->user());
 
         return back()->with('success', 'Comment added successfully.');
     }
@@ -767,5 +774,47 @@ class BoardController extends Controller
         $attachment->delete();
 
         return back()->with('success', 'Attachment deleted successfully.');
+    }
+
+    /**
+     * Extract mentions from HTML content and dispatch notifications.
+     */
+    private function processMentions(?string $content, Item $item, User $actor)
+    {
+        if (empty($content)) {
+            return;
+        }
+
+        // Extract user IDs from span[data-mention-user-id]
+        preg_match_all('/data-mention-user-id="(\d+)"/', $content, $matches);
+        
+        if (empty($matches[1])) {
+            return;
+        }
+
+        $userIds = array_unique($matches[1]);
+        
+        $workspace = $item->board->project->workspace;
+        $project = $item->board->project;
+        $board = $item->board;
+        
+        $itemUrl = route('boards.items.show', [$workspace->slug, $project->slug, $board->slug, $item->id]);
+
+        foreach ($userIds as $userId) {
+            // Don't notify the person who made the mention
+            if ((int) $userId === $actor->id) {
+                continue;
+            }
+
+            $user = User::find($userId);
+            if ($user && $user->projects()->where('project_id', $project->id)->exists()) {
+                $user->notify(new MentionNotification(
+                    contextType: 'issue',
+                    contextTitle: $item->key . ' - ' . $item->title,
+                    contextUrl: $itemUrl,
+                    actor: $actor
+                ));
+            }
+        }
     }
 }
