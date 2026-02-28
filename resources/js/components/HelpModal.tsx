@@ -14,6 +14,18 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.3.4',
+        title: 'Timeline Ordering & Navigation',
+        tag: 'Enhancement',
+        date: '2026-02-28',
+        items: [
+            'Timeline items can now be drag-and-drop reordered in the sidebar — order is persisted to the database and shared across all users.',
+            'Parent items with subtasks now show a ▼/▶ collapse toggle to hide or reveal their children in both the sidebar and timeline rows.',
+            'Rewrote the timeline layout: single scrollbar, sticky date header (dates stay pinned when scrolling down), and sticky item sidebar (stays pinned when scrolling right).',
+            'Added out-of-view indicators (◀ KEY / KEY ▶) that appear at the visible timeline edges when an item\'s date bar is outside the current viewport. Click the indicator to smoothly scroll so the item\'s start date is centered.',
+        ]
+    },
+    {
         version: 'v1.3.3',
         title: 'Item Start Dates & Timeline Improvements',
         tag: 'Enhancement',

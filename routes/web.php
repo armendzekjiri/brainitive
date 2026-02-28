@@ -170,6 +170,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('boards/{board:slug}', [BoardController::class, 'destroy'])->name('boards.destroy');
             Route::post('boards/{board:slug}/columns', [BoardController::class, 'storeColumn'])->name('boards.columns.store');
             Route::post('boards/{board:slug}/columns/reorder', [BoardController::class, 'reorderColumns'])->name('boards.columns.reorder');
+            Route::post('boards/{board:slug}/items/reorder', [BoardController::class, 'reorderItems'])->name('boards.items.reorder');
             Route::put('boards/{board:slug}/columns/{column}', [BoardController::class, 'updateColumn'])->name('boards.columns.update');
             Route::delete('boards/{board:slug}/columns/{column}', [BoardController::class, 'destroyColumn'])->name('boards.columns.destroy');
             Route::post('boards/{board:slug}/items', [BoardController::class, 'storeItem'])->name('boards.items.store');
