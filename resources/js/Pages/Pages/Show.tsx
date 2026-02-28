@@ -153,7 +153,7 @@ function ExcalidrawViewMode({ pageUuid, content }: { pageUuid: string; content: 
                 setTimeout(() => clearInterval(poll), 10000);
             }
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [containerId]);
 
     return <div id={containerId} ref={containerRef} style={{ width: '100%', height: 500 }} />;
@@ -418,9 +418,8 @@ function AddSubpageDialog({
                                 setData('type', 'page');
                                 setData('content_type', 'doc');
                             }}
-                            className={`flex-1 min-w-[80px] flex items-center justify-center gap-2 p-3 rounded-lg border transition-colors ${
-                                itemType === 'page' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/50'
-                            }`}
+                            className={`flex-1 min-w-[80px] flex items-center justify-center gap-2 p-3 rounded-lg border transition-colors ${itemType === 'page' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/50'
+                                }`}
                         >
                             <FileText className="size-5" />
                             <span>Page</span>
@@ -432,9 +431,8 @@ function AddSubpageDialog({
                                 setData('type', 'page');
                                 setData('content_type', 'excalidraw');
                             }}
-                            className={`flex-1 min-w-[80px] flex items-center justify-center gap-2 p-3 rounded-lg border transition-colors ${
-                                itemType === 'excalidraw' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/50'
-                            }`}
+                            className={`flex-1 min-w-[80px] flex items-center justify-center gap-2 p-3 rounded-lg border transition-colors ${itemType === 'excalidraw' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/50'
+                                }`}
                         >
                             <svg className="size-5 text-brand-slate" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M12 19l7-7 3 3-7 7-3-3z" />
@@ -450,9 +448,8 @@ function AddSubpageDialog({
                                 setItemType('folder');
                                 setData('type', 'folder');
                             }}
-                            className={`flex-1 min-w-[80px] flex items-center justify-center gap-2 p-3 rounded-lg border transition-colors ${
-                                itemType === 'folder' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/50'
-                            }`}
+                            className={`flex-1 min-w-[80px] flex items-center justify-center gap-2 p-3 rounded-lg border transition-colors ${itemType === 'folder' ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/50'
+                                }`}
                         >
                             <Folder className="size-5" />
                             <span>Folder</span>
@@ -877,7 +874,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                     onClick={() => {
                                         const next = !isFullWidth;
                                         setIsFullWidth(next);
-                                        try { localStorage.setItem(`page-full-width-${page.uuid}`, String(next)); } catch {}
+                                        try { localStorage.setItem(`page-full-width-${page.uuid}`, String(next)); } catch { }
                                     }}
                                 >
                                     {isFullWidth ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
@@ -926,153 +923,154 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                 {/* Two-panel row: content | TOC — each scrolls independently */}
                 <div className="flex-1 overflow-hidden flex">
 
-                {/* Page content panel */}
-                <div ref={contentPanelRef} className="flex-1 overflow-y-auto bg-white">
-                <div className={cn(
-                    "mx-auto px-6 pt-6 pb-8",
-                    !isFullWidth && "max-w-6xl"
-                )}>
-                    {/* Icon and Title */}
-                    <div className="mb-8">
-                        <div className="flex items-center gap-3">
-                            {isEditing ? (
-                                <PageIconPicker value={formData.icon} onChange={handleUpdateIcon} />
-                            ) : (
-                                (formData.icon?.startsWith('data:') || formData.icon?.startsWith('http') || formData.icon?.startsWith('/'))
-                                    ? <img src={formData.icon} className="size-14 rounded-xl object-cover" alt="icon" />
-                                    : <span className="text-5xl">{formData.icon || '📄'}</span>
-                            )}
-                            {isEditing ? (
-                                <PageTitleEditor title={formData.name} onSave={handleUpdateName} />
-                            ) : (
-                                <h1 className="text-4xl font-bold">{formData.name || 'Untitled'}</h1>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground">
-                            {page.creator && (
-                                <div className="flex items-center gap-1.5">
-                                    <UserIcon className="size-4" />
-                                    <span>Created by {page.creator.name}</span>
+                    {/* Page content panel */}
+                    <div ref={contentPanelRef} className="flex-1 overflow-y-auto bg-white">
+                        <div className={cn(
+                            "mx-auto px-6 pt-6 pb-8",
+                            !isFullWidth && "max-w-6xl"
+                        )}>
+                            {/* Icon and Title */}
+                            <div className="mb-8">
+                                <div className="flex items-center gap-3">
+                                    {isEditing ? (
+                                        <PageIconPicker value={formData.icon} onChange={handleUpdateIcon} />
+                                    ) : (
+                                        (formData.icon?.startsWith('data:') || formData.icon?.startsWith('http') || formData.icon?.startsWith('/'))
+                                            ? <img src={formData.icon} className="size-14 rounded-xl object-cover" alt="icon" />
+                                            : <span className="text-5xl">{formData.icon || '📄'}</span>
+                                    )}
+                                    {isEditing ? (
+                                        <PageTitleEditor title={formData.name} onSave={handleUpdateName} />
+                                    ) : (
+                                        <h1 className="text-4xl font-bold">{formData.name || 'Untitled'}</h1>
+                                    )}
                                 </div>
-                            )}
-                            {page.lastEditor && (
-                                <div className="flex items-center gap-1.5">
-                                    <UserIcon className="size-4" />
-                                    <span>Last edited by {page.lastEditor.name}</span>
-                                </div>
-                            )}
-                            <div className="flex items-center gap-1.5">
-                                <Clock className="size-4" />
-                                <span>Updated {new Date(page.updated_at).toLocaleDateString()}</span>
-                            </div>
-                            {page.published_at && page.status === 'published' && (
-                                <div className="flex items-center gap-1.5">
-                                    <Globe className="size-4" />
-                                    <span>Published {new Date(page.published_at).toLocaleDateString()}</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    <Separator className="mb-2" />
-
-                    {/* Whiteboard page: embedded view-mode canvas + open editor button */}
-                    {page.type === 'page' && isExcalidrawPage(page.content) && (
-                        <div className="mb-8">
-                            <div className="rounded-lg border border-border overflow-hidden bg-white dark:bg-card">
-                                <ExcalidrawViewMode pageUuid={page.uuid} content={page.content} />
-                                <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between gap-3">
-                                    <span className="text-sm text-muted-foreground">View mode · pan and zoom freely</span>
-                                    <a
-                                        href={route('pages.excalidraw', [workspace.slug, project.slug, page.uuid])}
-                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-                                    >
-                                        <PencilRuler className="size-4" />
-                                        Open whiteboard
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Page Content - RichLexicalEditor (documents only; Excalidraw pages use preview above) */}
-                    {page.type === 'page' && !isExcalidrawPage(page.content) && (
-                        <RichLexicalEditor
-                            key={`${page.uuid}-${isEditing}`}
-                            content={extractHtmlContent(page.content as any)}
-                            onChange={handleUpdateContent}
-                            editable={isEditing}
-                            placeholder="Click here and start writing, or press / for commands..."
-                            showToolbar={isEditing}
-                            minHeight="400px"
-                            workspaceSlug={workspace.slug}
-                            contentKey={`page-${page.uuid}-${isEditing}`}
-                            onHeadingsChange={setHeadings}
-                            className="border-0 rounded-none shadow-none bg-transparent overflow-visible"
-                            stickyToolbar={isEditing}
-                            stickyTopOffset={0}
-                        />
-                    )}
-
-                    {/* Subpages (for folders or pages with children) */}
-                    {(page.type === 'folder' || (page.children && page.children.length > 0)) && (
-                        <div className="mt-8">
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className="text-lg font-semibold">
-                                    {page.type === 'folder' ? 'Contents' : 'Subpages'}
-                                </h2>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setAddSubpageOpen(true)}
-                                    className="gap-1.5"
-                                >
-                                    <Plus className="size-4" />
-                                    Add
-                                </Button>
-                            </div>
-
-                            {page.children && page.children.length > 0 ? (
-                                <div className="grid gap-2">
-                                    {page.children.map((child) => (
-                                        <ChildPageCard
-                                            key={child.id}
-                                            page={child}
-                                            workspace={workspace}
-                                            project={project}
-                                        />
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="text-center py-12 border rounded-lg border-dashed">
-                                    <div className="size-12 rounded-full bg-muted mx-auto mb-4 flex items-center justify-center">
-                                        <FileText className="size-6 text-muted-foreground" />
+                                <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground">
+                                    {page.creator && (
+                                        <div className="flex items-center gap-1.5">
+                                            <UserIcon className="size-4" />
+                                            <span>Created by {page.creator.name}</span>
+                                        </div>
+                                    )}
+                                    {page.lastEditor && (
+                                        <div className="flex items-center gap-1.5">
+                                            <UserIcon className="size-4" />
+                                            <span>Last edited by {page.lastEditor.name}</span>
+                                        </div>
+                                    )}
+                                    <div className="flex items-center gap-1.5">
+                                        <Clock className="size-4" />
+                                        <span>Updated {new Date(page.updated_at).toLocaleDateString()}</span>
                                     </div>
-                                    <h3 className="text-lg font-semibold mb-2">No subpages yet</h3>
-                                    <p className="text-muted-foreground mb-4">
-                                        Add pages or folders to organize your content.
-                                    </p>
-                                    <Button onClick={() => setAddSubpageOpen(true)} className="gap-1.5">
-                                        <Plus className="size-4" />
-                                        Add Subpage
-                                    </Button>
+                                    {page.published_at && page.status === 'published' && (
+                                        <div className="flex items-center gap-1.5">
+                                            <Globe className="size-4" />
+                                            <span>Published {new Date(page.published_at).toLocaleDateString()}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <Separator className="mb-2" />
+
+                            {/* Whiteboard page: embedded view-mode canvas + open editor button */}
+                            {page.type === 'page' && isExcalidrawPage(page.content) && (
+                                <div className="mb-8">
+                                    <div className="rounded-lg border border-border overflow-hidden bg-white dark:bg-card">
+                                        <ExcalidrawViewMode pageUuid={page.uuid} content={page.content} />
+                                        <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between gap-3">
+                                            <span className="text-sm text-muted-foreground">View mode · pan and zoom freely</span>
+                                            <a
+                                                href={route('pages.excalidraw', [workspace.slug, project.slug, page.uuid])}
+                                                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+                                            >
+                                                <PencilRuler className="size-4" />
+                                                Open whiteboard
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Page Content - RichLexicalEditor (documents only; Excalidraw pages use preview above) */}
+                            {page.type === 'page' && !isExcalidrawPage(page.content) && (
+                                <RichLexicalEditor
+                                    key={`${page.uuid}-${isEditing}`}
+                                    content={extractHtmlContent(page.content as any)}
+                                    onChange={handleUpdateContent}
+                                    editable={isEditing}
+                                    placeholder="Click here and start writing, or press / for commands..."
+                                    showToolbar={isEditing}
+                                    minHeight="400px"
+                                    workspaceSlug={workspace.slug}
+                                    contentKey={`page-${page.uuid}-${isEditing}`}
+                                    onHeadingsChange={setHeadings}
+                                    className="border-0 rounded-none shadow-none bg-transparent overflow-visible"
+                                    stickyToolbar={isEditing}
+                                    stickyTopOffset={0}
+                                    projectId={project.id}
+                                />
+                            )}
+
+                            {/* Subpages (for folders or pages with children) */}
+                            {(page.type === 'folder' || (page.children && page.children.length > 0)) && (
+                                <div className="mt-8">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h2 className="text-lg font-semibold">
+                                            {page.type === 'folder' ? 'Contents' : 'Subpages'}
+                                        </h2>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => setAddSubpageOpen(true)}
+                                            className="gap-1.5"
+                                        >
+                                            <Plus className="size-4" />
+                                            Add
+                                        </Button>
+                                    </div>
+
+                                    {page.children && page.children.length > 0 ? (
+                                        <div className="grid gap-2">
+                                            {page.children.map((child) => (
+                                                <ChildPageCard
+                                                    key={child.id}
+                                                    page={child}
+                                                    workspace={workspace}
+                                                    project={project}
+                                                />
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-12 border rounded-lg border-dashed">
+                                            <div className="size-12 rounded-full bg-muted mx-auto mb-4 flex items-center justify-center">
+                                                <FileText className="size-6 text-muted-foreground" />
+                                            </div>
+                                            <h3 className="text-lg font-semibold mb-2">No subpages yet</h3>
+                                            <p className="text-muted-foreground mb-4">
+                                                Add pages or folders to organize your content.
+                                            </p>
+                                            <Button onClick={() => setAddSubpageOpen(true)} className="gap-1.5">
+                                                <Plus className="size-4" />
+                                                Add Subpage
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
-                    )}
-                </div>
-                </div>
-
-                {/* TOC panel — own scroll, naturally aligned next to content */}
-                {page.type === 'page' && !isExcalidrawPage(page.content) && headings.length > 0 && (
-                    <div className="hidden xl:flex w-64 shrink-0 flex-col border-l bg-background overflow-y-auto overflow-x-hidden px-4 pt-6">
-                        <PageTableOfContents
-                            headings={headings}
-                            headerOffset={0}
-                            scrollRoot={contentPanelRef}
-                        />
                     </div>
-                )}
+
+                    {/* TOC panel — own scroll, naturally aligned next to content */}
+                    {page.type === 'page' && !isExcalidrawPage(page.content) && headings.length > 0 && (
+                        <div className="hidden xl:flex w-64 shrink-0 flex-col border-l bg-background overflow-y-auto overflow-x-hidden px-4 pt-6">
+                            <PageTableOfContents
+                                headings={headings}
+                                headerOffset={0}
+                                scrollRoot={contentPanelRef}
+                            />
+                        </div>
+                    )}
 
                 </div>{/* end panels row */}
             </div>

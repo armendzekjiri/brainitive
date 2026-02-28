@@ -14,11 +14,14 @@ import { PageProps } from '@/types';
 
 interface NotificationData {
     type: string;
-    item_key: string;
-    item_title: string;
-    item_url: string;
-    old_column: string;
-    new_column: string;
+    item_key?: string;
+    item_title?: string;
+    item_url?: string;
+    old_column?: string;
+    new_column?: string;
+    context_type?: string;
+    context_title?: string;
+    context_url?: string;
     actor_name: string;
     actor_avatar?: string;
 }
@@ -201,17 +204,42 @@ export function NotificationsDropdown() {
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm leading-snug">
                                                 <span className="font-medium">{d.actor_name}</span>
-                                                {d.type === 'item_assigned' ? ' assigned you to ' : ' moved '}
-                                                <a
-                                                    href={d.item_url}
-                                                    className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    onClick={() => { if (isUnread) markRead(n.id); }}
-                                                >
-                                                    {d.item_key}
-                                                    <ExternalLink className="size-2.5" />
-                                                </a>
+                                                {d.type === 'mentioned' && (
+                                                    <>
+                                                        {' mentioned you '}
+                                                        {d.context_type === 'page' ? 'on page ' : 'in '}
+                                                        <a
+                                                            href={d.context_url!}
+                                                            className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            onClick={(e) => {
+                                                                if (isUnread) markRead(n.id);
+                                                                // Allow click to navigate natively or in new tab
+                                                            }}
+                                                        >
+                                                            {d.context_title}
+                                                            <ExternalLink className="size-2.5" />
+                                                        </a>
+                                                    </>
+                                                )}
+                                                {d.type !== 'mentioned' && (
+                                                    <>
+                                                        {d.type === 'item_assigned' ? ' assigned you to ' : ' moved '}
+                                                        <a
+                                                            href={d.item_url}
+                                                            className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            onClick={(e) => {
+                                                                if (isUnread) markRead(n.id);
+                                                            }}
+                                                        >
+                                                            {d.item_key}
+                                                            <ExternalLink className="size-2.5" />
+                                                        </a>
+                                                    </>
+                                                )}
                                                 {d.type === 'item_status_changed' && (
                                                     <>
                                                         {' from '}
