@@ -25,6 +25,7 @@ class Project extends Model
         'icon',
         'color',
         'settings',
+        'next_item_number',
     ];
 
     protected $appends = ['icon_display'];
@@ -199,15 +200,9 @@ class Project extends Model
      */
     public function getNextItemKey(): string
     {
-        $lastItem = Item::whereHas('board', function ($query) {
-            $query->where('project_id', $this->id);
-        })->orderByDesc('id')->first();
+        $this->increment('next_item_number');
 
-        $nextNumber = $lastItem
-            ? ((int) substr($lastItem->key, strlen($this->key) + 1)) + 1
-            : 1;
-
-        return $this->key . '-' . $nextNumber;
+        return $this->key . '-' . $this->next_item_number;
     }
 
     /**
