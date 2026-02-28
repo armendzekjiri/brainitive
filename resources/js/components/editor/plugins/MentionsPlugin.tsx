@@ -206,7 +206,7 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
                     setSelectedIndex((prev) => (prev + 1) % results.length);
                     return true;
                 },
-                4,
+                1,
             ),
             editor.registerCommand(
                 KEY_ARROW_UP_COMMAND,
@@ -215,17 +215,23 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
                     setSelectedIndex((prev) => (prev - 1 + results.length) % results.length);
                     return true;
                 },
-                4,
+                1,
             ),
             editor.registerCommand(
                 KEY_ENTER_COMMAND,
                 (event) => {
-                    event?.preventDefault();
-                    event?.stopPropagation();
+                    if (event !== null) {
+                        event.preventDefault();
+                        if (event.stopImmediatePropagation) {
+                            event.stopImmediatePropagation();
+                        } else if (event.stopPropagation) {
+                            event.stopPropagation();
+                        }
+                    }
                     insertMention(results[selectedIndex]);
                     return true;
                 },
-                4,
+                1,
             ),
             editor.registerCommand(
                 KEY_TAB_COMMAND,
@@ -234,7 +240,7 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
                     insertMention(results[selectedIndex]);
                     return true;
                 },
-                4,
+                1,
             ),
             editor.registerCommand(
                 KEY_ESCAPE_COMMAND,
@@ -244,7 +250,7 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
                     setMenuPosition(null);
                     return true;
                 },
-                4,
+                1,
             ),
         );
     }, [editor, query, results, selectedIndex, insertMention]);

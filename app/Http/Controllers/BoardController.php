@@ -785,12 +785,17 @@ class BoardController extends Controller
             return;
         }
 
+        \Log::info('processMentions content length: ' . strlen($content));
+        \Log::info('processMentions content snippet: ' . substr($content, 0, 500));
+
         // Support both regular HTML quotes and JSON escaped quotes
         preg_match_all('/data-mention-user-id(?:\\\\)?"(?:\\\\)?:"?(\d+)/', $content, $matches1);
         preg_match_all('/data-mention-user-id(?:\\\\)?="(?:\\\\)?(\d+)(?:\\\\)?"/', $content, $matches2);
         
         $userIds = array_unique(array_merge($matches1[1] ?? [], $matches2[1] ?? []));
         
+        \Log::info('processMentions extracted userIds: ' . json_encode($userIds));
+
         if (empty($userIds)) {
             return;
         }
