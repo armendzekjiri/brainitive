@@ -2746,7 +2746,17 @@ function CodeHighlightPlugin() {
 }
 
 // Plugin to set initial content
-function InitialContentPlugin({ content, editable, contentKey }: { content: string | null; editable: boolean; contentKey?: string }) {
+function InitialContentPlugin({
+    content,
+    editable,
+    contentKey,
+    isInitializingRef,
+}: {
+    content: string | null;
+    editable: boolean;
+    contentKey?: string;
+    isInitializingRef: React.MutableRefObject<boolean>;
+}) {
     const [editor] = useLexicalComposerContext();
     const lastContentKeyRef = useRef<string | undefined>(undefined);
     const hasInitializedRef = useRef(false);
@@ -2758,6 +2768,9 @@ function InitialContentPlugin({ content, editable, contentKey }: { content: stri
         if (shouldUpdate) {
             hasInitializedRef.current = true;
             lastContentKeyRef.current = contentKey;
+
+            // Block onChange from firing while we load content into the editor
+            isInitializingRef.current = true;
 
             editor.update(() => {
                 const root = $getRoot();
@@ -2781,9 +2794,14 @@ function InitialContentPlugin({ content, editable, contentKey }: { content: stri
                     const paragraph = $createParagraphNode();
                     root.append(paragraph);
                 }
+            }, {
+                onUpdate: () => {
+                    // Content is now fully loaded into the tree — allow onChange to fire
+                    isInitializingRef.current = false;
+                },
             });
         }
-    }, [editor, content, contentKey]);
+    }, [editor, content, contentKey, isInitializingRef]);
 
     useEffect(() => {
         editor.setEditable(editable);
@@ -2793,18 +2811,19 @@ function InitialContentPlugin({ content, editable, contentKey }: { content: stri
 }
 
 // Plugin to get HTML content on change
-function HtmlOnChangePlugin({ onChange }: { onChange: (html: string) => void }) {
+function HtmlOnChangePlugin({
+    onChange,
+    isInitializingRef,
+}: {
+    onChange: (html: string) => void;
+    isInitializingRef: React.MutableRefObject<boolean>;
+}) {
     const [editor] = useLexicalComposerContext();
-    const skipCountRef = useRef(2); // Skip first 2 updates (initial + content load)
 
     useEffect(() => {
-        // Reset skip count when component mounts
-        skipCountRef.current = 2;
-
         return editor.registerUpdateListener(({ editorState, dirtyElements, dirtyLeaves, tags }) => {
-            // Skip initial updates to allow InitialContentPlugin to load content first
-            if (skipCountRef.current > 0) {
-                skipCountRef.current--;
+            // Don't fire while InitialContentPlugin is still loading content
+            if (isInitializingRef.current) {
                 return;
             }
 
@@ -2819,7 +2838,7 @@ function HtmlOnChangePlugin({ onChange }: { onChange: (html: string) => void }) 
                 onChange(html);
             });
         });
-    }, [editor, onChange]);
+    }, [editor, onChange, isInitializingRef]);
 
     return null;
 }
@@ -2897,6 +2916,9 @@ export function RichLexicalEditor({
     mentionContextType = 'page',
 }: RichLexicalEditorProps) {
     const [floatingAnchorElem, setFloatingAnchorElem] = useState<HTMLDivElement | null>(null);
+    // Shared ref: true while InitialContentPlugin is loading content — prevents HtmlOnChangePlugin
+    // from firing onChange with an empty/partially-loaded state (the race condition that deleted content).
+    const isInitializingRef = useRef(true);
 
     const onRef = (_floatingAnchorElem: HTMLDivElement) => {
         if (_floatingAnchorElem !== null) {
@@ -2985,8 +3007,8 @@ export function RichLexicalEditor({
                     <CommandsPlugin />
                     <CodeHighlightPlugin />
                     {projectId && editable && <MentionsPlugin projectId={projectId} contextUrl={mentionContextUrl} contextTitle={mentionContextTitle} contextType={mentionContextType} />}
-                    <InitialContentPlugin content={content} editable={editable} contentKey={contentKey} />
-                    <HtmlOnChangePlugin onChange={onChange} />
+                    <InitialContentPlugin content={content} editable={editable} contentKey={contentKey} isInitializingRef={isInitializingRef} />
+                    <HtmlOnChangePlugin onChange={onChange} isInitializingRef={isInitializingRef} />
                     {onHeadingsChange && <HeadingsExtractorPlugin onHeadingsChange={onHeadingsChange} />}
                     {floatingAnchorElem && (
                         <CodeActionMenuPlugin anchorElem={floatingAnchorElem} />
