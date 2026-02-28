@@ -785,15 +785,16 @@ class BoardController extends Controller
             return;
         }
 
-        // Extract user IDs from span[data-mention-user-id]
-        preg_match_all('/data-mention-user-id="(\d+)"/', $content, $matches);
+        // Support both regular HTML quotes and JSON escaped quotes
+        preg_match_all('/data-mention-user-id(?:\\\\)?"(?:\\\\)?:"?(\d+)/', $content, $matches1);
+        preg_match_all('/data-mention-user-id(?:\\\\)?="(?:\\\\)?(\d+)(?:\\\\)?"/', $content, $matches2);
         
-        if (empty($matches[1])) {
+        $userIds = array_unique(array_merge($matches1[1] ?? [], $matches2[1] ?? []));
+        
+        if (empty($userIds)) {
             return;
         }
 
-        $userIds = array_unique($matches[1]);
-        
         $workspace = $item->board->project->workspace;
         $project = $item->board->project;
         $board = $item->board;
@@ -807,7 +808,7 @@ class BoardController extends Controller
             }
 
             $user = User::find($userId);
-            if ($user && $user->projects()->where('project_id', $project->id)->exists()) {
+            if ($user && $user->hasProjectAccess($project)) {
                 $user->notify(new MentionNotification(
                     contextType: 'issue',
                     contextTitle: $item->key . ' - ' . $item->title,

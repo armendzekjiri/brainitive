@@ -10,7 +10,6 @@ import {
     KEY_ENTER_COMMAND,
     KEY_ESCAPE_COMMAND,
     KEY_TAB_COMMAND,
-    COMMAND_PRIORITY_HIGH,
     TextNode,
     RangeSelection,
 } from 'lexical';
@@ -207,7 +206,7 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
                     setSelectedIndex((prev) => (prev + 1) % results.length);
                     return true;
                 },
-                COMMAND_PRIORITY_HIGH,
+                4,
             ),
             editor.registerCommand(
                 KEY_ARROW_UP_COMMAND,
@@ -216,16 +215,17 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
                     setSelectedIndex((prev) => (prev - 1 + results.length) % results.length);
                     return true;
                 },
-                COMMAND_PRIORITY_HIGH,
+                4,
             ),
             editor.registerCommand(
                 KEY_ENTER_COMMAND,
                 (event) => {
                     event?.preventDefault();
+                    event?.stopPropagation();
                     insertMention(results[selectedIndex]);
                     return true;
                 },
-                COMMAND_PRIORITY_HIGH,
+                4,
             ),
             editor.registerCommand(
                 KEY_TAB_COMMAND,
@@ -234,7 +234,7 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
                     insertMention(results[selectedIndex]);
                     return true;
                 },
-                COMMAND_PRIORITY_HIGH,
+                4,
             ),
             editor.registerCommand(
                 KEY_ESCAPE_COMMAND,
@@ -244,7 +244,7 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
                     setMenuPosition(null);
                     return true;
                 },
-                COMMAND_PRIORITY_HIGH,
+                4,
             ),
         );
     }, [editor, query, results, selectedIndex, insertMention]);
