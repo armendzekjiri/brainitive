@@ -196,52 +196,55 @@ export default function MentionsPlugin({ projectId }: MentionsPluginProps) {
     useEffect(() => {
         if (query === null || results.length === 0) return;
 
-        return editor.registerCommand(
-            KEY_DOWN_COMMAND,
-            (event: KeyboardEvent) => {
-                if (query === null || results.length === 0) return false;
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                event.stopPropagation();
+                setSelectedIndex((prev) => (prev + 1) % results.length);
+                return;
+            }
 
-                if (event.key === 'ArrowDown') {
-                    event.preventDefault();
-                    setSelectedIndex((prev) => (prev + 1) % results.length);
-                    return true;
+            if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                event.stopPropagation();
+                setSelectedIndex((prev) => (prev - 1 + results.length) % results.length);
+                return;
+            }
+
+            if (event.key === 'Enter' || event.key === 'Tab') {
+                event.preventDefault();
+                event.stopPropagation();
+                if (event.stopImmediatePropagation) {
+                    event.stopImmediatePropagation();
                 }
 
-                if (event.key === 'ArrowUp') {
-                    event.preventDefault();
-                    setSelectedIndex((prev) => (prev - 1 + results.length) % results.length);
-                    return true;
-                }
+                // Need to use editor.update to dispatch the Lexical commands, 
+                // but the event itself is stopped natively
+                setTimeout(() => insertMention(results[selectedIndex]), 0);
+                return;
+            }
 
-                if (event.key === 'Enter') {
-                    event.preventDefault();
-                    if (event.stopImmediatePropagation) {
-                        event.stopImmediatePropagation();
-                    } else if (event.stopPropagation) {
-                        event.stopPropagation();
-                    }
-                    insertMention(results[selectedIndex]);
-                    return true;
-                }
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                setQuery(null);
+                setResults([]);
+                setMenuPosition(null);
+                return;
+            }
+        };
 
-                if (event.key === 'Tab') {
-                    event.preventDefault();
-                    insertMention(results[selectedIndex]);
-                    return true;
-                }
+        const rootElement = editor.getRootElement();
+        if (rootElement) {
+            // Use capture phase to ensure we intercept before Lexical's internal handlers
+            rootElement.addEventListener('keydown', handleKeyDown, true);
+        }
 
-                if (event.key === 'Escape') {
-                    event.preventDefault();
-                    setQuery(null);
-                    setResults([]);
-                    setMenuPosition(null);
-                    return true;
-                }
-
-                return false;
-            },
-            COMMAND_PRIORITY_HIGH
-        );
+        return () => {
+            if (rootElement) {
+                rootElement.removeEventListener('keydown', handleKeyDown, true);
+            }
+        };
     }, [editor, query, results, selectedIndex, insertMention]);
 
     // Click outside to close
