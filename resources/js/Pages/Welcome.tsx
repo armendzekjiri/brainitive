@@ -21,6 +21,8 @@ import {
     X,
     Bookmark,
     Layers,
+    LifeBuoy,
+    Bell,
     CreditCard,
     ShieldCheck,
     Scale,
@@ -156,6 +158,34 @@ export default function Welcome({
             description:
                 'Save and organize links, resources, and references. Share bookmark collections with your team.',
             color: '#0E83DC',
+        },
+        {
+            icon: Layers,
+            title: 'Snippets',
+            description:
+                'Reusable text and code snippets with labels and search. Quick-insert into pages and items.',
+            color: '#69A748',
+        },
+        {
+            icon: LifeBuoy,
+            title: 'Portal support',
+            description:
+                'Embeddable helpdesk and support portal. Let customers submit tickets and track replies from your site.',
+            color: '#485E72',
+        },
+        {
+            icon: Bell,
+            title: 'Notifications',
+            description:
+                'In-app notifications for assignments, replies, and updates. Stay in the loop without leaving the app.',
+            color: '#0E83DC',
+        },
+        {
+            icon: Sparkles,
+            title: 'AI assist',
+            description:
+                'Connect your preferred AI provider for content rewriting and suggestions in descriptions and docs.',
+            color: '#69A748',
         },
     ];
 
