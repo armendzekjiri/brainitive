@@ -317,12 +317,15 @@ class TicketController extends Controller
 
     /**
      * Public reply submission (from contact portal).
+     * Accepts JSON (body, access_token) or multipart (body, access_token, optional file[]).
      */
     public function storePublicReply(Request $request, Helpdesk $helpdesk, Ticket $ticket)
     {
         $validated = $request->validate([
             'body' => 'required|string',
             'access_token' => 'required|string',
+            'file' => 'nullable',
+            'file.*' => 'file|max:10240',
         ]);
 
         // Verify access token
@@ -336,6 +339,35 @@ class TicketController extends Controller
             'body' => $validated['body'],
             'is_internal_note' => false,
         ]);
+
+        $files = $request->file('file');
+        if (is_array($files)) {
+            foreach ($files as $file) {
+                $filename = uniqid() . '_' . $file->getClientOriginalName();
+                $path = $file->storeAs('ticket-attachments/' . $ticket->id, $filename, 'public');
+                $reply->attachments()->create([
+                    'ticket_id' => $ticket->id,
+                    'filename' => $filename,
+                    'original_filename' => $file->getClientOriginalName(),
+                    'path' => $path,
+                    'mime_type' => $file->getMimeType(),
+                    'size' => $file->getSize(),
+                    'uploaded_by_contact' => true,
+                ]);
+            }
+        } elseif ($files) {
+            $filename = uniqid() . '_' . $files->getClientOriginalName();
+            $path = $files->storeAs('ticket-attachments/' . $ticket->id, $filename, 'public');
+            $reply->attachments()->create([
+                'ticket_id' => $ticket->id,
+                'filename' => $filename,
+                'original_filename' => $files->getClientOriginalName(),
+                'path' => $path,
+                'mime_type' => $files->getMimeType(),
+                'size' => $files->getSize(),
+                'uploaded_by_contact' => true,
+            ]);
+        }
 
         // Notify agents watching the ticket
         $watchers = $ticket->watchers()->get();
@@ -541,7 +573,7 @@ class TicketController extends Controller
             'helpdesk:id,uuid',
             'replies' => function ($q) {
                 $q->where('is_internal_note', false)
-                  ->with(['contact:id,name,email'])
+                  ->with(['contact:id,name,email', 'attachments'])
                   ->orderBy('created_at', 'asc');
             },
             'attachments' => function ($q) {
@@ -550,9 +582,14 @@ class TicketController extends Controller
             },
         ]);
 
-        // Add URLs to attachments
+        // Add URLs to attachments (ticket-level and reply-level)
         foreach ($ticket->attachments as $attachment) {
             $attachment->url = asset('storage/' . $attachment->path);
+        }
+        foreach ($ticket->replies as $reply) {
+            foreach ($reply->attachments as $att) {
+                $att->url = asset('storage/' . $att->path);
+            }
         }
 
         return Inertia::render('Tickets/PublicShow', [

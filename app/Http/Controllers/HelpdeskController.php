@@ -279,7 +279,7 @@ class HelpdeskController extends Controller
 
         $validated = $request->validate([
             'label' => 'required|string|max:255',
-            'type' => 'required|string|in:text,rich_text,select,checkbox,file,number',
+            'type' => 'required|string|in:text,rich_text,select,checkbox,file,number,radio,date,checkboxes',
             'options' => 'nullable|array',
             'options.*' => 'string',
             'is_required' => 'boolean',
@@ -309,7 +309,7 @@ class HelpdeskController extends Controller
 
         $validated = $request->validate([
             'label' => 'required|string|max:255',
-            'type' => 'required|string|in:text,rich_text,select,checkbox,file,number',
+            'type' => 'required|string|in:text,rich_text,select,checkbox,file,number,radio,date,checkboxes',
             'options' => 'nullable|array',
             'options.*' => 'string',
             'is_required' => 'boolean',

@@ -43,9 +43,12 @@ class HelpdeskWidgetController extends Controller
             ];
         }
 
+        $attachmentsEnabled = empty($settings['default_field_attachments']['hidden']);
+
         return response()->json([
             'helpdesk_uuid' => $helpdesk->uuid,
             'default_editable' => $defaultEditable,
+            'attachments_enabled' => $attachmentsEnabled,
             'fields' => $helpdesk->fields->map(function ($f) {
                 $type = $f->type;
                 if (is_string($type)) {
@@ -85,12 +88,15 @@ class HelpdeskWidgetController extends Controller
      */
     public function embed(Request $request, Helpdesk $helpdesk)
     {
-        return response()->view('widgets.helpdesk-embed', [
+        $response = Inertia::render('Widgets/HelpdeskEmbed', [
             'helpdesk_uuid' => $helpdesk->uuid,
             'base_url' => $request->getSchemeAndHttpHost(),
             'ticket_uuid' => $request->query('ticket'),
             'token' => $request->query('token'),
-        ])->header('Content-Security-Policy', 'frame-ancestors *');
+        ])->toResponse($request);
+        $response->headers->set('Content-Security-Policy', 'frame-ancestors *');
+
+        return $response;
     }
 
     /**

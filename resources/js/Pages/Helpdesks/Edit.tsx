@@ -90,12 +90,15 @@ const OPTIONAL_SECTIONS = [
     { key: 'attachments', settingsKey: 'default_field_attachments', defaultLabel: 'Attachments' },
 ] as const;
 
-const fieldTypes: { value: HelpdeskField['type']; label: string }[] = [
+const fieldTypes: { value: HelpdeskField['type']; label: string; needsOptions?: boolean }[] = [
     { value: 'text', label: 'Text' },
     { value: 'rich_text', label: 'Rich text' },
     { value: 'number', label: 'Number' },
-    { value: 'select', label: 'Dropdown (select)' },
-    { value: 'checkbox', label: 'Checkbox' },
+    { value: 'date', label: 'Date' },
+    { value: 'select', label: 'Dropdown (select)', needsOptions: true },
+    { value: 'radio', label: 'Radio buttons (single choice)', needsOptions: true },
+    { value: 'checkboxes', label: 'Checkboxes (multiple choice)', needsOptions: true },
+    { value: 'checkbox', label: 'Single checkbox (yes/no)' },
     { value: 'file', label: 'File upload' },
 ];
 
@@ -494,7 +497,8 @@ function AddFieldDialog({ workspace, project, helpdesk }: { workspace: Workspace
     });
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
-        const options = data.type === 'select' && data.optionsText.trim()
+        const needsOptions = fieldTypes.find((t) => t.value === data.type)?.needsOptions;
+        const options = needsOptions && data.optionsText.trim()
             ? data.optionsText.split('\n').map((s) => s.trim()).filter(Boolean)
             : [];
         setProcessing(true);
@@ -548,17 +552,20 @@ function AddFieldDialog({ workspace, project, helpdesk }: { workspace: Workspace
                             ))}
                         </select>
                     </div>
-                    {data.type === 'select' && (
+                    {(fieldTypes.find((t) => t.value === data.type)?.needsOptions) && (
                         <div className="space-y-2">
                             <Label htmlFor="field-options">Options (one per line)</Label>
                             <Textarea
                                 id="field-options"
                                 value={data.optionsText}
                                 onChange={(e) => setData('optionsText', e.target.value)}
-                                placeholder="Option A\nOption B\nOption C"
-                                rows={3}
-                                className="font-mono text-sm"
+                                placeholder={'Option A\nOption B\nOption C'}
+                                rows={4}
+                                className="font-mono text-sm resize-y"
                             />
+                            <p className="text-xs text-muted-foreground">
+                                Enter each choice on a new line. Customers will pick one (select/radio) or several (checkboxes).
+                            </p>
                         </div>
                     )}
                     <div className="flex items-center gap-4">
@@ -606,7 +613,7 @@ function EditFieldDialog({
     open: boolean;
     onClose: () => void;
 }) {
-    const optionsText = (field?.options && field.options.length > 0) ? field.options.join('\n') : '';
+    const optionsText = (field?.options && Array.isArray(field.options) && field.options.length > 0) ? field.options.join('\n') : '';
     const { data, setData, errors } = useForm({
         label: field?.label ?? '',
         type: (field?.type ?? 'text') as HelpdeskField['type'],
@@ -618,7 +625,8 @@ function EditFieldDialog({
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
         if (!field) return;
-        const options = data.type === 'select' && data.optionsText.trim()
+        const needsOptions = fieldTypes.find((t) => t.value === data.type)?.needsOptions;
+        const options = needsOptions && data.optionsText.trim()
             ? data.optionsText.split('\n').map((s) => s.trim()).filter(Boolean)
             : [];
         setProcessing(true);
@@ -666,17 +674,20 @@ function EditFieldDialog({
                             ))}
                         </select>
                     </div>
-                    {data.type === 'select' && (
+                    {(fieldTypes.find((t) => t.value === data.type)?.needsOptions) && (
                         <div className="space-y-2">
                             <Label htmlFor="edit-field-options">Options (one per line)</Label>
                             <Textarea
                                 id="edit-field-options"
                                 value={data.optionsText}
                                 onChange={(e) => setData('optionsText', e.target.value)}
-                                placeholder="Option A\nOption B"
-                                rows={3}
-                                className="font-mono text-sm"
+                                placeholder={'Option A\nOption B\nOption C'}
+                                rows={4}
+                                className="font-mono text-sm resize-y"
                             />
+                            <p className="text-xs text-muted-foreground">
+                                Enter each choice on a new line.
+                            </p>
                         </div>
                     )}
                     <div className="flex items-center gap-4">

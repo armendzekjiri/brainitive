@@ -420,7 +420,7 @@ export interface HelpdeskField {
     helpdesk_id: number;
     name: string;
     label: string;
-    type: 'text' | 'rich_text' | 'select' | 'checkbox' | 'file' | 'number';
+    type: 'text' | 'rich_text' | 'select' | 'checkbox' | 'file' | 'number' | 'radio' | 'date' | 'checkboxes';
     options?: string[];
     is_required: boolean;
     position: number;

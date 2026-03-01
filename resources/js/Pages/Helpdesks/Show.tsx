@@ -223,19 +223,34 @@ function TicketCard({
                 {/* Subject */}
                 <p className="text-sm font-medium mb-3 line-clamp-2 leading-snug">{ticket.subject}</p>
 
+                {/* Message/description preview (content from embed or modal) */}
+                {ticket.description && (
+                    <div
+                        className="text-xs text-muted-foreground line-clamp-2 mb-3 break-words"
+                        title={ticket.description.replace(/<[^>]*>/g, '').trim().slice(0, 200)}
+                    >
+                        {ticket.description.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120)}
+                        {(ticket.description.replace(/<[^>]*>/g, '').trim().length > 120) ? '…' : ''}
+                    </div>
+                )}
+
                 {/* Custom Fields (visible on card) */}
                 {ticket.field_values && ticket.field_values.length > 0 && (
                     <div className="flex flex-wrap gap-1 mb-3">
                         {ticket.field_values.slice(0, 3).map((fv) => {
                             const field = fv.field;
                             if (!field?.is_visible_on_card) return null;
+                            const raw = fv.value ?? '';
+                            const preview = field.type === 'rich_text'
+                                ? raw.replace(/<[^>]*>/g, '').trim().slice(0, 20)
+                                : raw.substring(0, 20);
                             return (
                                 <Badge
                                     key={fv.id}
                                     variant="outline"
                                     className="text-[10px] px-1.5 py-0"
                                 >
-                                    {field.label}: {fv.value?.substring(0, 20) || '—'}
+                                    {field.label}: {preview || '—'}
                                 </Badge>
                             );
                         })}
@@ -717,25 +732,61 @@ function TicketEditModal({
                                 )}
                             </div>
 
-                            {/* Description (only when Message field is enabled in helpdesk settings) */}
-                            {!((helpdesk.settings as Record<string, unknown>)?.['default_field_description'] as { hidden?: boolean } | undefined)?.hidden && (
+                            {/* Description: customer message (read-only). Show when Message is enabled in settings OR ticket has content. */}
+                            {(!((helpdesk.settings as Record<string, unknown>)?.['default_field_description'] as { hidden?: boolean } | undefined)?.hidden || (ticket?.description ?? '').trim()) && (
                             <section className="pt-3 pb-4 border-t border-border/60">
-                                <h2 className="text-sm font-semibold mb-3">Description</h2>
-                                <RichLexicalEditor
-                                    content={description || null}
-                                    onChange={(html) => {
-                                        setDescription(html);
-                                        saveProp({ description: html });
-                                    }}
-                                    placeholder="Add a description…"
-                                    editable={true}
-                                    minHeight="160px"
-                                    maxHeight="460px"
-                                    contentKey={`ticket-${ticket.id}-description`}
-                                    workspaceSlug={workspace.slug}
-                                    itemTitle={subjectValue}
-                                    projectName={project.name}
-                                />
+                                <h2 className="text-sm font-semibold mb-3">Message from customer</h2>
+                                {description?.trim() ? (
+                                    <div
+                                        className={cn(
+                                            'rounded-lg border bg-muted/30 p-4 text-sm',
+                                            'prose prose-sm max-w-none dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-ol:my-2 [&_a]:text-primary'
+                                        )}
+                                        dangerouslySetInnerHTML={{ __html: description }}
+                                    />
+                                ) : (
+                                    <p className="text-sm text-muted-foreground italic">No message from customer.</p>
+                                )}
+                            </section>
+                            )}
+
+                            {/* Custom fields (form data from customer) */}
+                            {fields && fields.length > 0 && (
+                            <section className="pt-3 pb-4 border-t border-border/60">
+                                <h2 className="text-sm font-semibold mb-3">Form data</h2>
+                                <dl className="space-y-3">
+                                    {fields.map((field) => {
+                                        const fv = ticket?.field_values?.find((v) => v.helpdesk_field_id === field.id || v.field?.id === field.id);
+                                        let displayValue: string = (fv?.value ?? '').trim() || '—';
+                                        if (displayValue !== '—' && field.type === 'checkboxes') {
+                                            try {
+                                                const arr = JSON.parse(displayValue);
+                                                displayValue = Array.isArray(arr) ? arr.join(', ') : displayValue;
+                                            } catch {
+                                                // keep as-is
+                                            }
+                                        }
+                                        if (displayValue !== '—' && field.type === 'date' && /^\d{4}-\d{2}-\d{2}$/.test(displayValue)) {
+                                            displayValue = new Date(displayValue + 'T12:00:00').toLocaleDateString(undefined, { dateStyle: 'medium' });
+                                        }
+                                        if (displayValue !== '—' && field.type === 'checkbox') {
+                                            displayValue = displayValue === '1' || displayValue.toLowerCase() === 'yes' ? 'Yes' : 'No';
+                                        }
+                                        const isRichText = field.type === 'rich_text';
+                                        return (
+                                            <div key={field.id} className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+                                                <dt className="text-sm font-medium text-muted-foreground shrink-0 sm:w-32">{field.label}</dt>
+                                                <dd className={cn('text-sm text-foreground break-words', isRichText && 'prose prose-sm max-w-none [&_a]:text-primary')}>
+                                                    {isRichText && displayValue !== '—' ? (
+                                                        <span dangerouslySetInnerHTML={{ __html: displayValue }} />
+                                                    ) : (
+                                                        displayValue
+                                                    )}
+                                                </dd>
+                                            </div>
+                                        );
+                                    })}
+                                </dl>
                             </section>
                             )}
 

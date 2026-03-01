@@ -196,59 +196,74 @@ export default function Welcome({
             period: 'forever',
             description: 'All features, great for getting started.',
             features: [
-                'All product features',
-                '5 workspaces',
-                '1 GB attachments per workspace',
-                'Unlimited projects, boards, pages',
-                'Unlimited members per workspace',
+                '2 workspaces',
+                '10 projects across all workspaces',
+                '50 pages & subpages across all projects',
+                '5 whiteboards across all projects',
+                '5 snippets collections & unlimited snippets per workspace',
+                '5 bookmarks collections & unlimited items per workspace',
+                '3 users per workspace',
+                '1 GB attachments',
             ],
             cta: 'Get started free',
             href: route('register'),
             highlighted: false,
         },
         {
-            name: 'Pro',
+            name: 'PLUS',
             price: '3.99',
             period: '/month',
-            description: 'More workspaces and storage for growing teams.',
+            description: 'More capacity for growing teams.',
             features: [
-                'Everything in Free',
-                '20 workspaces',
-                '2 GB per workspace (40 GB total)',
-                'Priority support',
+                '5 workspaces',
+                '20 projects across all workspaces',
+                '100 pages & subpages across all projects',
+                '30 whiteboards across all projects',
+                '50 snippets collections & unlimited snippets per workspace',
+                '50 bookmarks collections & unlimited items per workspace',
+                '5 users per workspace (€1.99 each extra user)',
+                '5 GB attachments (€0.50 each additional GB)',
             ],
-            cta: 'Start Pro trial',
+            cta: 'Get PLUS',
             href: route('register'),
             highlighted: true,
         },
         {
-            name: 'Max',
-            price: '9.99',
+            name: 'PRO',
+            price: '5.99',
             period: '/month',
-            description: 'Unlimited workspaces, large storage.',
+            description: 'Even more for active teams.',
             features: [
-                'Everything in Pro',
-                'Unlimited workspaces',
-                '1 TB total attachments',
-                'Dedicated support',
+                '10 workspaces',
+                '50 projects across all workspaces',
+                '200 pages & subpages across all projects',
+                '60 whiteboards across all projects',
+                '100 snippets collections & unlimited snippets per workspace',
+                '100 bookmarks collections & unlimited items per workspace',
+                '10 users per workspace (€1.99 each extra user)',
+                '10 GB attachments (€0.50 each additional GB)',
             ],
-            cta: 'Go Max',
+            cta: 'Get PRO',
             href: route('register'),
             highlighted: false,
         },
         {
-            name: 'Custom',
-            price: null,
-            period: '',
-            description: 'Enterprise contracts and custom needs.',
+            name: 'MAX',
+            price: '9.99',
+            period: '/month',
+            description: 'Unlimited scale, more users & storage.',
             features: [
-                'Custom workspace & storage limits',
-                'SLA and compliance',
-                'Dedicated success manager',
-                'Custom integrations',
+                'Unlimited workspaces',
+                'Unlimited projects across all workspaces',
+                'Unlimited pages & subpages across all projects',
+                'Unlimited whiteboards across all projects',
+                'Unlimited snippets collections & unlimited snippets per workspace',
+                'Unlimited bookmarks collections & unlimited items per workspace',
+                '15 users per project (€2.99 each extra user) & unlimited workspace members',
+                '20 GB attachments (€0.50 each additional GB)',
             ],
-            cta: 'Contact us',
-            href: 'mailto:hello@brainitive.com?subject=Enterprise%20plan',
+            cta: 'Get MAX',
+            href: route('register'),
             highlighted: false,
         },
     ];
@@ -681,15 +696,62 @@ export default function Welcome({
                             </h2>
                             <p className="text-[#485E72]/60 max-w-xl mx-auto text-lg">
                                 Start free, upgrade when you need more workspaces or
-                                storage.
+                                storage. All prices in euros (EUR).
                             </p>
                         </RevealSection>
 
-                        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                            {plans.map((plan, i) => (
+                        {/* Free — horizontal full-width card on top */}
+                        {(() => {
+                            const freePlan = plans[0];
+                            return (
+                                <RevealSection delay={0}>
+                                    <Link
+                                        href={freePlan.href}
+                                        className="block w-full rounded-2xl border border-[#C0C5C0]/30 bg-white/70 backdrop-blur-sm p-6 sm:p-8 transition-all duration-300 hover:bg-white hover:shadow-lg hover:shadow-[#485E72]/[0.06] hover:-translate-y-0.5"
+                                    >
+                                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
+                                                <div>
+                                                    <h3 className="font-bold text-xl text-[#485E72]">
+                                                        {freePlan.name}
+                                                    </h3>
+                                                    <div className="mt-1 flex items-baseline gap-1">
+                                                        <span className="text-3xl font-bold text-[#485E72]">
+                                                            €{freePlan.price}
+                                                        </span>
+                                                        <span className="text-[#485E72]/50 text-sm">
+                                                            {freePlan.period}
+                                                        </span>
+                                                    </div>
+                                                    <p className="mt-1 text-sm text-[#485E72]/60">
+                                                        {freePlan.description}
+                                                    </p>
+                                                </div>
+                                                <ul className="flex flex-wrap gap-x-6 gap-y-2 sm:gap-y-1 text-sm text-[#485E72]/70">
+                                                    {freePlan.features.map((f) => (
+                                                        <li key={f} className="flex items-center gap-2">
+                                                            <Check className="h-4 w-4 shrink-0 text-[#69A748]" />
+                                                            <span>{f}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                            <span className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#485E72] px-5 py-3 text-sm font-bold text-white hover:bg-[#3a4d5e] transition-all shrink-0 self-start lg:self-center">
+                                                {freePlan.cta}
+                                                <ChevronRight className="h-4 w-4" />
+                                            </span>
+                                        </div>
+                                    </Link>
+                                </RevealSection>
+                            );
+                        })()}
+
+                        {/* 3 paid plans — middle row */}
+                        <div className="grid sm:grid-cols-3 gap-5 mt-6">
+                            {plans.slice(1, 4).map((plan, i) => (
                                 <RevealSection
-                                    key={plan.name}
-                                    delay={i * 80}
+                                    key={`${plan.name}-${plan.price}-${i}`}
+                                    delay={(i + 1) * 80}
                                 >
                                     <div
                                         className={`h-full rounded-2xl border p-6 flex flex-col transition-all duration-300 hover:-translate-y-1 ${plan.highlighted
@@ -706,20 +768,12 @@ export default function Welcome({
                                             {plan.name}
                                         </h3>
                                         <div className="mt-3 flex items-baseline gap-1">
-                                            {plan.price !== null ? (
-                                                <>
-                                                    <span className="text-3xl font-bold text-[#485E72]">
-                                                        ${plan.price}
-                                                    </span>
-                                                    <span className="text-[#485E72]/50 text-sm">
-                                                        {plan.period}
-                                                    </span>
-                                                </>
-                                            ) : (
-                                                <span className="text-2xl font-bold text-[#485E72]">
-                                                    Custom
-                                                </span>
-                                            )}
+                                            <span className="text-3xl font-bold text-[#485E72]">
+                                                €{plan.price}
+                                            </span>
+                                            <span className="text-[#485E72]/50 text-sm">
+                                                {plan.period}
+                                            </span>
                                         </div>
                                         <p className="mt-2 text-sm text-[#485E72]/60">
                                             {plan.description}
@@ -737,30 +791,43 @@ export default function Welcome({
                                                 </li>
                                             ))}
                                         </ul>
-                                        {plan.name === 'Custom' ? (
-                                            <a
-                                                href="mailto:hello@brainitive.com?subject=Enterprise%20plan"
-                                                className="mt-6 inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[#C0C5C0]/50 px-4 py-3 text-sm font-bold text-[#485E72] hover:border-[#0E83DC]/40 hover:text-[#0E83DC] transition-all"
-                                            >
-                                                Contact us
-                                                <ChevronRight className="h-4 w-4" />
-                                            </a>
-                                        ) : (
-                                            <Link
-                                                href={plan.href}
-                                                className={`mt-6 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-all ${plan.highlighted
-                                                        ? 'bg-[#0E83DC] text-white shadow-lg shadow-[#0E83DC]/20 hover:bg-[#0b6fbf] hover:shadow-xl'
-                                                        : 'bg-[#485E72] text-white hover:bg-[#3a4d5e]'
-                                                    }`}
-                                            >
-                                                {plan.cta}
-                                                <ChevronRight className="h-4 w-4" />
-                                            </Link>
-                                        )}
+                                        <Link
+                                            href={plan.href}
+                                            className={`mt-6 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-all ${plan.highlighted
+                                                    ? 'bg-[#0E83DC] text-white shadow-lg shadow-[#0E83DC]/20 hover:bg-[#0b6fbf] hover:shadow-xl'
+                                                    : 'bg-[#485E72] text-white hover:bg-[#3a4d5e]'
+                                                }`}
+                                        >
+                                            {plan.cta}
+                                            <ChevronRight className="h-4 w-4" />
+                                        </Link>
                                     </div>
                                 </RevealSection>
                             ))}
                         </div>
+
+                        {/* Custom for Enterprise — full width */}
+                        <RevealSection delay={320} className="mt-8">
+                            <a
+                                href="mailto:hello@brainitive.com?subject=Enterprise%20plan"
+                                className="block w-full rounded-2xl border-2 border-[#C0C5C0]/40 bg-white/70 backdrop-blur-sm p-6 sm:p-8 transition-all duration-300 hover:border-[#0E83DC]/30 hover:bg-white hover:shadow-lg hover:shadow-[#485E72]/[0.06] group"
+                            >
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                    <div>
+                                        <h3 className="font-bold text-xl text-[#485E72]">
+                                            Custom for Enterprise
+                                        </h3>
+                                        <p className="mt-1 text-sm text-[#485E72]/60">
+                                            Custom limits, SLA, dedicated success manager &amp; integrations. Contact us for a quote.
+                                        </p>
+                                    </div>
+                                    <span className="inline-flex items-center gap-2 rounded-xl border-2 border-[#C0C5C0]/50 px-5 py-2.5 text-sm font-bold text-[#485E72] group-hover:border-[#0E83DC]/40 group-hover:text-[#0E83DC] transition-all shrink-0">
+                                        Contact us
+                                        <ChevronRight className="h-4 w-4" />
+                                    </span>
+                                </div>
+                            </a>
+                        </RevealSection>
                     </div>
                 </section>
 

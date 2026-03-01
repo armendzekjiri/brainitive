@@ -6,9 +6,18 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
-import { MessageSquare, Send, User, Headphones, LifeBuoy, FileText } from 'lucide-react';
-import { useState, FormEvent } from 'react';
+import { MessageSquare, Send, User, Headphones, LifeBuoy, FileText, Circle, Paperclip, X } from 'lucide-react';
+import { useState, FormEvent, useRef } from 'react';
 import { cn } from '@/lib/utils';
+
+const MAX_REPLY_FILE_SIZE_MB = 10;
+const MAX_REPLY_FILE_SIZE_BYTES = MAX_REPLY_FILE_SIZE_MB * 1024 * 1024;
+
+function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 interface Props extends PageProps {
     ticket: Ticket & { helpdesk?: { id: number; uuid: string }; replies?: TicketReply[] };
@@ -31,11 +40,34 @@ function isReplyBodyEmpty(html: string): boolean {
 export default function TicketsPublicShow({ ticket, access_token, app_name, app_logo_url }: Props) {
     const [replyBody, setReplyBody] = useState('');
     const [replyEditorKey, setReplyEditorKey] = useState(0);
+    const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const replyFileInputRef = useRef<HTMLInputElement>(null);
 
     const replies = ticket.replies ?? [];
     const helpdeskUuid = ticket.helpdesk?.uuid;
+
+    const addReplyFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files?.length) return;
+        const next: File[] = [];
+        for (const file of Array.from(files)) {
+            if (file.size > MAX_REPLY_FILE_SIZE_BYTES) {
+                setError(`"${file.name}" is too large. Max ${MAX_REPLY_FILE_SIZE_MB} MB per file.`);
+                e.target.value = '';
+                return;
+            }
+            next.push(file);
+        }
+        setError(null);
+        setReplyAttachments((prev) => [...prev, ...next]);
+        e.target.value = '';
+    };
+
+    const removeReplyFile = (index: number) => {
+        setReplyAttachments((prev) => prev.filter((_, i) => i !== index));
+    };
 
     const handleSubmitReply = async (e: FormEvent) => {
         e.preventDefault();
@@ -44,25 +76,46 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
         setError(null);
         setSubmitting(true);
         try {
-            const res = await fetch(
-                `/widget/helpdesks/${helpdeskUuid}/tickets/${ticket.uuid}/replies`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Accept: 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                    body: JSON.stringify({
-                        body,
-                        access_token: access_token,
-                    }),
-                }
-            );
+            const hasFiles = replyAttachments.length > 0;
+            let res: Response;
+            if (hasFiles) {
+                const formData = new FormData();
+                formData.append('body', body);
+                formData.append('access_token', access_token);
+                replyAttachments.forEach((file) => formData.append('file[]', file));
+                res = await fetch(
+                    `/widget/helpdesks/${helpdeskUuid}/tickets/${ticket.uuid}/replies`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            Accept: 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: formData,
+                    }
+                );
+            } else {
+                res = await fetch(
+                    `/widget/helpdesks/${helpdeskUuid}/tickets/${ticket.uuid}/replies`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Accept: 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        body: JSON.stringify({
+                            body,
+                            access_token: access_token,
+                        }),
+                    }
+                );
+            }
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to send reply');
             setReplyBody('');
             setReplyEditorKey((k) => k + 1);
+            setReplyAttachments([]);
             router.reload();
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to send reply');
@@ -106,8 +159,24 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
                                 <Badge variant="outline" className="font-mono text-xs">
                                     {ticket.key}
                                 </Badge>
+                                {ticket.column && (
+                                    <Badge
+                                        variant="secondary"
+                                        className="gap-1 font-medium"
+                                        style={
+                                            ticket.column.color
+                                                ? { backgroundColor: `${ticket.column.color}20`, color: ticket.column.color, borderColor: ticket.column.color }
+                                                : undefined
+                                        }
+                                    >
+                                        <Circle className="size-2.5 fill-current" />
+                                        {ticket.column.name}
+                                    </Badge>
+                                )}
                             </div>
-                            <CardDescription>Support ticket</CardDescription>
+                            <CardDescription>
+                                Support ticket{ticket.column ? ` · ${ticket.column.name}` : ''}
+                            </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-6">
                             {ticket.description && (
@@ -175,6 +244,25 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
                                                                 __html: reply.body || '',
                                                             }}
                                                         />
+                                                        {reply.attachments && reply.attachments.length > 0 && (
+                                                            <ul className="mt-2 flex flex-wrap gap-2">
+                                                                {reply.attachments.map((att) => (
+                                                                    <li key={att.id}>
+                                                                        <a
+                                                                            href={att.url}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="inline-flex items-center gap-1.5 rounded border bg-muted/50 px-2 py-1 text-xs text-foreground hover:bg-muted"
+                                                                        >
+                                                                            <FileText className="size-3.5 shrink-0" />
+                                                                            <span className="truncate max-w-[160px]">
+                                                                                {att.original_filename}
+                                                                            </span>
+                                                                        </a>
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        )}
                                                     </div>
                                                 </li>
                                             );
@@ -207,6 +295,57 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
                                             maxHeight="240px"
                                             contentKey={`public-reply-${replyEditorKey}`}
                                         />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <input
+                                            ref={replyFileInputRef}
+                                            type="file"
+                                            className="hidden"
+                                            multiple
+                                            accept="*/*"
+                                            onChange={addReplyFiles}
+                                        />
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className="gap-1.5"
+                                                disabled={submitting}
+                                                onClick={() => replyFileInputRef.current?.click()}
+                                            >
+                                                <Paperclip className="size-4" />
+                                                Add attachment
+                                            </Button>
+                                            <span className="text-xs text-muted-foreground">
+                                                Max {MAX_REPLY_FILE_SIZE_MB} MB per file
+                                            </span>
+                                        </div>
+                                        {replyAttachments.length > 0 && (
+                                            <ul className="flex flex-wrap gap-2">
+                                                {replyAttachments.map((file, i) => (
+                                                    <li
+                                                        key={i}
+                                                        className="flex items-center gap-1.5 rounded-md border bg-muted/50 px-2 py-1 text-sm"
+                                                    >
+                                                        <span className="truncate max-w-[180px]" title={file.name}>
+                                                            {file.name}
+                                                        </span>
+                                                        <span className="text-muted-foreground text-xs">
+                                                            ({formatFileSize(file.size)})
+                                                        </span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeReplyFile(i)}
+                                                            className="rounded p-0.5 hover:bg-muted text-muted-foreground hover:text-foreground"
+                                                            aria-label="Remove file"
+                                                        >
+                                                            <X className="size-3.5" />
+                                                        </button>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
                                     </div>
                                     {error && (
                                         <p className="text-sm font-medium text-destructive">

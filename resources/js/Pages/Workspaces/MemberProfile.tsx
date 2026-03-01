@@ -3,6 +3,7 @@ import { Head, Link } from '@inertiajs/react';
 import { PageProps, Workspace, User, Item, Comment, Page as PageType, Project } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ProjectIcon } from '@/components/ProjectIcon';
 import {
     CheckCircle2,
     Circle,
@@ -48,7 +49,7 @@ interface Props extends PageProps {
     recentComments: RecentComment[];
     recentPages: RecentPage[];
     activityLogs: ActivityLog[];
-    projects: Pick<Project, 'id' | 'name' | 'slug' | 'key' | 'icon' | 'description'>[];
+    projects: (Pick<Project, 'id' | 'name' | 'slug' | 'key' | 'icon' | 'description'> & { icon_display?: string | null; color?: string | null })[];
 }
 
 function Avatar({ member, size = 'lg' }: { member: Props['member']; size?: 'sm' | 'lg' }) {
@@ -169,9 +170,7 @@ export default function MemberProfile({ workspace, member, memberRole, assignedI
                                         href={route('projects.show', [workspace.slug, p.slug])}
                                         className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent"
                                     >
-                                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-semibold text-primary">
-                                            {p.icon || p.key.substring(0, 2)}
-                                        </div>
+                                        <ProjectIcon project={p} size="md" className="size-9" />
                                         <div className="min-w-0 flex-1">
                                             <p className="truncate text-sm font-medium">{p.name}</p>
                                             <p className="truncate text-xs text-muted-foreground">{p.key}{p.description ? ` · ${p.description}` : ''}</p>
@@ -245,7 +244,10 @@ export default function MemberProfile({ workspace, member, memberRole, assignedI
                                         href={pageUrl}
                                         className="flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-accent"
                                     >
-                                        <span className="text-base">{page.icon || '📄'}</span>
+                                        {(page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
+                                            ? <img src={page.icon} className="size-6 shrink-0 rounded object-cover" alt="" />
+                                            : <span className="flex size-6 shrink-0 items-center justify-center text-base">{page.icon || '📄'}</span>
+                                        }
                                         <div className="min-w-0 flex-1">
                                             <p className="truncate text-sm font-medium">{page.name}</p>
                                             <p className="truncate text-xs text-muted-foreground">
