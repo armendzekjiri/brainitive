@@ -19,7 +19,7 @@ const emojiSizeClasses: Record<Size, string> = {
 };
 
 interface ProjectIconProps {
-    project: Pick<Project, 'icon_display' | 'icon' | 'key' | 'color'>;
+    project: Pick<Project, 'icon_display' | 'icon' | 'key'> & { color?: string | null };
     size?: Size;
     className?: string;
 }

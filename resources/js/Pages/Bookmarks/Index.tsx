@@ -346,7 +346,7 @@ export default function BookmarksIndex({ workspace, bookmarks }: Props) {
                                         <div className="flex gap-3 items-end">
                                             <EmojiMartIconPicker
                                                 value={data.icon}
-                                                onChange={(v) => setData('icon', v)}
+                                                onChange={(v: string) => setData('icon', v)}
                                                 onImageUpload={handleCreateBookmarkIconUpload}
                                             />
                                             <div className="flex-1 min-w-0 space-y-2">
@@ -603,8 +603,8 @@ export default function BookmarksIndex({ workspace, bookmarks }: Props) {
                             {editBookmark && (
                                 <EmojiMartIconPicker
                                     value={editForm.data.icon}
-                                    onChange={(v) => editForm.setData('icon', v)}
-                                    onImageUpload={async (file) => handleBookmarkIconUpload(file, editBookmark.slug)}
+                                    onChange={(v: string) => editForm.setData('icon', v)}
+                                    onImageUpload={async (file: File) => handleBookmarkIconUpload(file, editBookmark.slug)}
                                 />
                             )}
                             <div className="flex-1 min-w-0 space-y-2">

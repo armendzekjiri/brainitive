@@ -234,7 +234,7 @@ function ItemTypeForm({
                             ? `${typeof window !== 'undefined' ? window.location.origin : ''}/storage/${data.icon}`
                             : (data.icon || '')
                     }
-                    onChange={(v) => setData('icon', v)}
+                    onChange={(v: string) => setData('icon', v)}
                     placeholderEmoji="📋"
                     size="sm"
                     onImageUpload={async (file: File) => {
@@ -398,7 +398,7 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                         <div className="w-10 shrink-0">
                                             <EmojiMartIconPicker
                                                 value={data.icon}
-                                                onChange={(v) => setData('icon', v)}
+                                                onChange={(v: string) => setData('icon', v)}
                                                 placeholderEmoji="📁"
                                                 onImageUpload={handleProjectIconUpload}
                                                 size="sm"
