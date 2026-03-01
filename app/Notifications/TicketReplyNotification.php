@@ -1,0 +1,112 @@
+<?php
+
+namespace App\Notifications;
+
+use App\Models\Ticket;
+use App\Models\TicketReply;
+use App\Models\TicketContact;
+use App\Models\User;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Notification;
+
+class TicketReplyNotification extends Notification implements ShouldQueue
+{
+    use Queueable;
+
+    public function __construct(
+        public readonly Ticket $ticket,
+        public readonly TicketReply $reply,
+        public readonly User|TicketContact|null $author,
+    ) {}
+
+    /**
+     * Get the notification's delivery channels.
+     * Contact: email only (queued). Users: database + email.
+     */
+    public function via(object $notifiable): array
+    {
+        if ($notifiable instanceof TicketContact) {
+            return ['mail'];
+        }
+        return ['database', 'mail'];
+    }
+
+    /**
+     * Get the array representation for database (users only).
+     */
+    public function toDatabase(object $notifiable): array
+    {
+        $helpdesk = $this->ticket->helpdesk;
+        $project = $helpdesk->project;
+        $workspace = $project->workspace;
+
+        $url = route('tickets.show', [
+            $workspace->slug,
+            $project->slug,
+            $helpdesk->slug,
+            $this->ticket->id,
+        ]);
+
+        $actorName = $this->author instanceof User
+            ? $this->author->name
+            : ($this->author instanceof TicketContact
+                ? ($this->author->name ?: $this->author->email)
+                : 'Support');
+
+        return [
+            'type' => 'ticket_reply',
+            'ticket_key' => $this->ticket->key,
+            'ticket_subject' => $this->ticket->subject,
+            'ticket_url' => $url,
+            'actor_name' => $actorName,
+            'reply_preview' => \Illuminate\Support\Str::limit(strip_tags($this->reply->body), 100),
+        ];
+    }
+
+    /**
+     * Get the mail representation.
+     */
+    public function toMail(object $notifiable)
+    {
+        $helpdesk = $this->ticket->helpdesk;
+        $project = $helpdesk->project;
+        $workspace = $project->workspace;
+
+        if ($notifiable instanceof TicketContact) {
+            // Client: email with link to portal (generate token so link works)
+            $token = $notifiable->generateAccessToken();
+            $url = route('helpdesks.tickets.show-public', $this->ticket->uuid) . '?token=' . urlencode($token);
+            $subject = "Reply on ticket {$this->ticket->key}: {$this->ticket->subject}";
+            $line = 'Support has replied to your ticket.';
+
+            return (new \Illuminate\Notifications\Messages\MailMessage)
+                ->subject($subject)
+                ->line($line)
+                ->line('Ticket: ' . $this->ticket->subject)
+                ->line(\Illuminate\Support\Str::limit(strip_tags($this->reply->body), 200))
+                ->action('View ticket', $url);
+        }
+
+        // User (watcher): link to internal ticket view
+        $url = route('tickets.show', [
+            $workspace->slug,
+            $project->slug,
+            $helpdesk->slug,
+            $this->ticket->id,
+        ]);
+        $actorName = $this->author instanceof User
+            ? $this->author->name
+            : ($this->author instanceof TicketContact
+                ? ($this->author->name ?: $this->author->email)
+                : 'A user');
+        $subject = "Reply on ticket {$this->ticket->key}: {$this->ticket->subject}";
+        $line = "{$actorName} replied to this ticket.";
+
+        return (new \Illuminate\Notifications\Messages\MailMessage)
+            ->subject($subject)
+            ->line($line)
+            ->line(\Illuminate\Support\Str::limit(strip_tags($this->reply->body), 200))
+            ->action('View ticket', $url);
+    }
+}

@@ -78,6 +78,10 @@ class HandleInertiaRequests extends Middleware
                                         ->orderBy('position');
                                   }]);
                             },
+                            'helpdesks' => function ($q) {
+                                $q->select('id', 'project_id', 'name', 'slug', 'description', 'position')
+                                  ->orderBy('position');
+                            },
                             'pages' => function ($q) {
                                 $q->with(['children' => self::pageTreeRecursive(7)])
                                     ->orderBy('type', 'desc')

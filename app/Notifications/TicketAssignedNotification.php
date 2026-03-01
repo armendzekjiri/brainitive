@@ -1,0 +1,75 @@
+<?php
+
+namespace App\Notifications;
+
+use App\Models\Ticket;
+use App\Models\User;
+use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Notification;
+
+class TicketAssignedNotification extends Notification
+{
+    use Queueable;
+
+    public function __construct(
+        public readonly Ticket $ticket,
+        public readonly User $actor,
+    ) {}
+
+    /**
+     * Get the notification's delivery channels.
+     */
+    public function via(object $notifiable): array
+    {
+        return ['database', 'mail'];
+    }
+
+    /**
+     * Get the array representation of the notification (stored in DB).
+     */
+    public function toDatabase(object $notifiable): array
+    {
+        $helpdesk = $this->ticket->helpdesk;
+        $project = $helpdesk->project;
+        $workspace = $project->workspace;
+
+        $url = route('tickets.show', [
+            $workspace->slug,
+            $project->slug,
+            $helpdesk->slug,
+            $this->ticket->id,
+        ]);
+
+        return [
+            'type'         => 'ticket_assigned',
+            'ticket_key'   => $this->ticket->key,
+            'ticket_subject' => $this->ticket->subject,
+            'ticket_url'   => $url,
+            'actor_name'   => $this->actor->name,
+            'actor_avatar' => $this->actor->avatar_display,
+        ];
+    }
+
+    /**
+     * Get the mail representation of the notification.
+     */
+    public function toMail(object $notifiable)
+    {
+        $helpdesk = $this->ticket->helpdesk;
+        $project = $helpdesk->project;
+        $workspace = $project->workspace;
+
+        $url = route('tickets.show', [
+            $workspace->slug,
+            $project->slug,
+            $helpdesk->slug,
+            $this->ticket->id,
+        ]);
+
+        return (new \Illuminate\Notifications\Messages\MailMessage)
+            ->subject("Ticket {$this->ticket->key} assigned to you: {$this->ticket->subject}")
+            ->line("{$this->actor->name} assigned you to ticket {$this->ticket->key}.")
+            ->line($this->ticket->subject)
+            ->action('View Ticket', $url);
+    }
+}

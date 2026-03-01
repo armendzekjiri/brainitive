@@ -373,3 +373,123 @@ export interface Snippet {
     created_at: string;
     updated_at: string;
 }
+
+// ==================== HELPDESK TYPES ====================
+
+export interface Helpdesk {
+    id: number;
+    uuid: string;
+    project_id: number;
+    name: string;
+    slug: string;
+    description?: string;
+    settings?: {
+        brand_color?: string;
+        logo_url?: string;
+        welcome_message?: string;
+        button_text?: string;
+        button_position?: 'bottom-right' | 'bottom-left';
+    };
+    position: number;
+    created_by: number;
+    columns?: HelpdeskColumn[];
+    fields?: HelpdeskField[];
+    tickets?: Ticket[];
+    created_at: string;
+    updated_at: string;
+}
+
+export interface HelpdeskColumn {
+    id: number;
+    helpdesk_id: number;
+    name: string;
+    slug: string;
+    color?: string;
+    position: number;
+    wip_limit?: number;
+    is_done_column: boolean;
+    tickets?: Ticket[];
+    tickets_count?: number;
+}
+
+export interface HelpdeskField {
+    id: number;
+    helpdesk_id: number;
+    name: string;
+    label: string;
+    type: 'text' | 'rich_text' | 'select' | 'checkbox' | 'file' | 'number';
+    options?: string[];
+    is_required: boolean;
+    position: number;
+    is_visible_on_card: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface Ticket {
+    id: number;
+    uuid: string;
+    helpdesk_id: number;
+    column_id: number;
+    ticket_contact_id: number;
+    key: string;
+    subject: string;
+    description?: string;
+    assigned_to?: number;
+    priority_id?: number;
+    position: number;
+    completed_at?: string;
+    metadata?: Record<string, unknown>;
+    contact?: TicketContact;
+    assignee?: User;
+    priority?: ItemPriority;
+    column?: HelpdeskColumn;
+    field_values?: TicketFieldValue[];
+    replies?: TicketReply[];
+    attachments?: TicketAttachment[];
+    created_at: string;
+    updated_at: string;
+}
+
+export interface TicketContact {
+    id: number;
+    uuid: string;
+    email: string;
+    name?: string;
+}
+
+export interface TicketFieldValue {
+    id: number;
+    ticket_id: number;
+    helpdesk_field_id: number;
+    value?: string;
+    field?: HelpdeskField;
+}
+
+export interface TicketReply {
+    id: number;
+    ticket_id: number;
+    user_id?: number;
+    ticket_contact_id?: number;
+    body: string;
+    is_internal_note: boolean;
+    user?: User;
+    contact?: TicketContact;
+    attachments?: TicketAttachment[];
+    created_at: string;
+    updated_at: string;
+}
+
+export interface TicketAttachment {
+    id: number;
+    ticket_id: number;
+    ticket_reply_id?: number;
+    filename: string;
+    original_filename: string;
+    path: string;
+    mime_type?: string;
+    size: number;
+    uploaded_by_contact: boolean;
+    formatted_size?: string;
+    url?: string;
+}

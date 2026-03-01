@@ -14,6 +14,21 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.4.0',
+        title: 'Helpdesk & Support Portal',
+        tag: 'Major Release',
+        date: '2026-03-01',
+        items: [
+            'Full helpdesk module: boards with columns, tickets, custom fields (EAV), and ticket contacts for external support requests.',
+            'Public support widget (floating button + form) and iframe embed so customers can submit tickets from your site.',
+            'Public ticket portal page with branded header, footer (terms, privacy, cookies), and rich text description and replies.',
+            'Attachments on ticket creation (embed and widget) and configurable default fields: Email & Subject fixed; Name, Message, and Attachments editable or hideable in settings.',
+            'Email notifications: ticket created (with portal link) and ticket reply notifications to contacts and agents; reply notifications are queued.',
+            'Helpdesk settings: General, Columns, Fields (default + custom with drag-and-drop), and Embed tab with script and iframe snippets.',
+            'Rich text for custom fields in the embed (Quill) and for replies on the portal (Lexical); modernized embed UI with card layout, focus rings, and prose styling for description and replies.',
+        ]
+    },
+    {
         version: 'v1.3.6',
         title: 'Item and Page Duplication',
         tag: 'Feature',

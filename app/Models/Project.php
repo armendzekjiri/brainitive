@@ -26,6 +26,7 @@ class Project extends Model
         'color',
         'settings',
         'next_item_number',
+        'next_ticket_number',
     ];
 
     protected $appends = ['icon_display'];
@@ -121,6 +122,14 @@ class Project extends Model
     }
 
     /**
+     * Get all helpdesks in this project.
+     */
+    public function helpdesks(): HasMany
+    {
+        return $this->hasMany(Helpdesk::class)->orderBy('position');
+    }
+
+    /**
      * Get all pages in this project (root level).
      */
     public function pages(): HasMany
@@ -203,6 +212,16 @@ class Project extends Model
         $this->increment('next_item_number');
 
         return $this->key . '-' . $this->next_item_number;
+    }
+
+    /**
+     * Get the next ticket key for this project.
+     */
+    public function getNextTicketKey(): string
+    {
+        $key = $this->key . '-T' . $this->next_ticket_number;
+        $this->increment('next_ticket_number');
+        return $key;
     }
 
     /**

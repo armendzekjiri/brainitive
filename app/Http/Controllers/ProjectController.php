@@ -104,6 +104,9 @@ class ProjectController extends Controller
             'pages' => function ($query) {
                 $query->orderByRaw("CASE type WHEN 'folder' THEN 0 ELSE 1 END")->orderBy('position');
             },
+            'helpdesks' => function ($query) {
+                $query->orderBy('created_at', 'desc');
+            },
         ]);
 
         $project->pages->load(['children' => function ($query) {

@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { PageProps, Workspace, Project, Board, Page as PageType } from '@/types';
+import { PageProps, Workspace, Project, Board, Page as PageType, Helpdesk } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { LayoutGrid, Plus, Settings, ArrowRight, Kanban, FileText, Folder, ChevronRight, PencilRuler } from 'lucide-react';
+import { LayoutGrid, Plus, Settings, ArrowRight, Kanban, FileText, Folder, ChevronRight, PencilRuler, Headphones } from 'lucide-react';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { useState } from 'react';
 
@@ -17,22 +17,38 @@ type PageWithChildren = PageType & { children?: PageWithChildren[] };
 
 interface Props extends PageProps {
     workspace: Workspace;
-    project: Project & { boards: Board[]; pages?: PageWithChildren[] };
+    project: Project & { boards: Board[]; pages?: PageWithChildren[]; helpdesks?: Helpdesk[] };
 }
 
 export default function ProjectsShow({ auth, workspace, project }: Props) {
-    const [createDialogOpen, setCreateDialogOpen] = useState(false);
-    const { data, setData, post, processing, reset, errors } = useForm({
+    const [createBoardDialogOpen, setCreateBoardDialogOpen] = useState(false);
+    const [createHelpdeskDialogOpen, setCreateHelpdeskDialogOpen] = useState(false);
+
+    const boardForm = useForm({
+        name: '',
+        description: '',
+    });
+    const helpdeskForm = useForm({
         name: '',
         description: '',
     });
 
     const createBoard = (e: React.FormEvent) => {
         e.preventDefault();
-        post(route('boards.store', [workspace.slug, project.slug]), {
+        boardForm.post(route('boards.store', [workspace.slug, project.slug]), {
             onSuccess: () => {
-                setCreateDialogOpen(false);
-                reset();
+                setCreateBoardDialogOpen(false);
+                boardForm.reset();
+            },
+        });
+    };
+
+    const createHelpdesk = (e: React.FormEvent) => {
+        e.preventDefault();
+        helpdeskForm.post(route('helpdesks.store', [workspace.slug, project.slug]), {
+            onSuccess: () => {
+                setCreateHelpdeskDialogOpen(false);
+                helpdeskForm.reset();
             },
         });
     };
@@ -108,7 +124,7 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                    <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+                                    <Dialog open={createBoardDialogOpen} onOpenChange={setCreateBoardDialogOpen}>
                                         <DialogTrigger asChild>
                                             <Button size="lg" className="gap-2">
                                                 <Plus className="size-5" />
@@ -124,33 +140,33 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                                             </DialogHeader>
                                             <form onSubmit={createBoard} className="space-y-5 mt-4">
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="name" className="text-base">Board Name</Label>
+                                                    <Label htmlFor="board-name" className="text-base">Board Name</Label>
                                                     <Input
-                                                        id="name"
-                                                        value={data.name}
-                                                        onChange={(e) => setData('name', e.target.value)}
+                                                        id="board-name"
+                                                        value={boardForm.data.name}
+                                                        onChange={(e) => boardForm.setData('name', e.target.value)}
                                                         placeholder="e.g., Sprint Board, Backlog"
                                                         className="h-11"
                                                         required
                                                     />
-                                                    {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+                                                    {boardForm.errors.name && <p className="text-sm text-destructive">{boardForm.errors.name}</p>}
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <Label htmlFor="description" className="text-base">Description (optional)</Label>
+                                                    <Label htmlFor="board-description" className="text-base">Description (optional)</Label>
                                                     <Textarea
-                                                        id="description"
-                                                        value={data.description}
-                                                        onChange={(e) => setData('description', e.target.value)}
+                                                        id="board-description"
+                                                        value={boardForm.data.description}
+                                                        onChange={(e) => boardForm.setData('description', e.target.value)}
                                                         placeholder="What is this board for?"
                                                         className="min-h-[100px]"
                                                     />
                                                 </div>
                                                 <div className="flex justify-end gap-3 pt-2">
-                                                    <Button type="button" variant="outline" size="lg" onClick={() => setCreateDialogOpen(false)}>
+                                                    <Button type="button" variant="outline" size="lg" onClick={() => setCreateBoardDialogOpen(false)}>
                                                         Cancel
                                                     </Button>
-                                                    <Button type="submit" size="lg" disabled={processing}>
-                                                        {processing ? 'Creating...' : 'Create Board'}
+                                                    <Button type="submit" size="lg" disabled={boardForm.processing}>
+                                                        {boardForm.processing ? 'Creating...' : 'Create Board'}
                                                     </Button>
                                                 </div>
                                             </form>
@@ -166,9 +182,9 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                         </CardContent>
                     </Card>
 
-                    {/* Boards + Documents + Whiteboards */}
+                    {/* 2x2: Row1 = Boards | Helpdesks, Row2 = Documents & folders | Whiteboards */}
                     <div className="grid gap-6 lg:grid-cols-2">
-                        {/* Boards Section */}
+                        {/* Row 1 - Col 1: Boards */}
                         <Card>
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-2">
@@ -193,7 +209,7 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                                         <p className="text-xs text-muted-foreground text-center max-w-[240px] mb-5">
                                             Create a board to organize tasks with Kanban.
                                         </p>
-                                        <Button size="sm" className="gap-2" onClick={() => setCreateDialogOpen(true)}>
+                                        <Button size="sm" className="gap-2" onClick={() => setCreateBoardDialogOpen(true)}>
                                             <Plus className="size-4" />
                                             Create Board
                                         </Button>
@@ -231,7 +247,78 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                             </CardContent>
                         </Card>
 
-                        {/* Documents & folders Section (excludes whiteboards) */}
+                        {/* Row 1 - Col 2: Helpdesks */}
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
+                                            <Headphones className="size-5 text-primary" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-lg">Helpdesks</CardTitle>
+                                            <CardDescription>
+                                                Customer support ticket management
+                                            </CardDescription>
+                                        </div>
+                                    </div>
+                                    {(project.helpdesks?.length ?? 0) > 0 && (
+                                        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCreateHelpdeskDialogOpen(true)}>
+                                            <Plus className="size-4" />
+                                            New
+                                        </Button>
+                                    )}
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {(!project.helpdesks || project.helpdesks.length === 0) ? (
+                                    <div className="flex flex-col items-center justify-center py-12 rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                        <div className="size-14 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                                            <Headphones className="size-7 text-primary" />
+                                        </div>
+                                        <p className="text-sm font-medium text-foreground mb-1">No helpdesks yet</p>
+                                        <p className="text-xs text-muted-foreground text-center max-w-[240px] mb-5">
+                                            Create a helpdesk to manage customer support tickets.
+                                        </p>
+                                        <Button size="sm" className="gap-2" onClick={() => setCreateHelpdeskDialogOpen(true)}>
+                                            <Plus className="size-4" />
+                                            Create Helpdesk
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {project.helpdesks?.map((helpdesk) => (
+                                            <Link
+                                                key={helpdesk.id}
+                                                href={route('helpdesks.show', [workspace.slug, project.slug, helpdesk.slug])}
+                                            >
+                                                <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-muted/80 transition-colors group">
+                                                    <div className="size-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                                                        <Headphones className="size-5 text-primary" />
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                                                            {helpdesk.name}
+                                                        </p>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            <Badge variant="secondary" className="text-xs">
+                                                                Helpdesk
+                                                            </Badge>
+                                                            <span className="text-xs text-muted-foreground truncate">
+                                                                {helpdesk.description || 'No description'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                </div>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        {/* Row 2 - Col 1: Documents & folders */}
                         <Card>
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-2">
@@ -269,10 +356,9 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                                 )}
                             </CardContent>
                         </Card>
-                    </div>
 
-                    {/* Whiteboards - full width section */}
-                    <Card className="mt-2">
+                        {/* Row 2 - Col 2: Whiteboards */}
+                        <Card>
                             <CardHeader className="pb-3">
                                 <div className="flex items-center gap-2">
                                     <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -321,6 +407,51 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                                 )}
                             </CardContent>
                         </Card>
+                    </div>
+
+                    {/* Create Helpdesk modal (same as Add content flow) */}
+                    <Dialog open={createHelpdeskDialogOpen} onOpenChange={setCreateHelpdeskDialogOpen}>
+                        <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                                <DialogTitle className="text-xl">Create Helpdesk</DialogTitle>
+                                <DialogDescription className="text-base">
+                                    Create a helpdesk to manage customer support tickets.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <form onSubmit={createHelpdesk} className="space-y-5 mt-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="helpdesk-name" className="text-base">Helpdesk Name</Label>
+                                    <Input
+                                        id="helpdesk-name"
+                                        value={helpdeskForm.data.name}
+                                        onChange={(e) => helpdeskForm.setData('name', e.target.value)}
+                                        placeholder="e.g., Customer Support, Technical Help"
+                                        className="h-11"
+                                        required
+                                    />
+                                    {helpdeskForm.errors.name && <p className="text-sm text-destructive">{helpdeskForm.errors.name}</p>}
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="helpdesk-description" className="text-base">Description (optional)</Label>
+                                    <Textarea
+                                        id="helpdesk-description"
+                                        value={helpdeskForm.data.description}
+                                        onChange={(e) => helpdeskForm.setData('description', e.target.value)}
+                                        placeholder="Brief description of this helpdesk"
+                                        className="min-h-[100px]"
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-3 pt-2">
+                                    <Button type="button" variant="outline" size="lg" onClick={() => setCreateHelpdeskDialogOpen(false)}>
+                                        Cancel
+                                    </Button>
+                                    <Button type="submit" size="lg" disabled={helpdeskForm.processing}>
+                                        {helpdeskForm.processing ? 'Creating...' : 'Create Helpdesk'}
+                                    </Button>
+                                </div>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
                 </div>
             </div>
         </AppLayout>

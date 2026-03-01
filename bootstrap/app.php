@@ -16,7 +16,15 @@ return Application::configure(basePath: dirname(__DIR__))
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
         ]);
 
-        //
+        $middleware->alias([
+            'cors' => \App\Http\Middleware\AddCorsHeaders::class,
+        ]);
+
+        // Public helpdesk widget/portal (embedded on external sites) — no session, no CSRF
+        $middleware->validateCsrfTokens(except: [
+            'widget/*',
+            'portal/*',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

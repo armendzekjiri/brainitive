@@ -199,4 +199,29 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->hasMany(Comment::class);
     }
+
+    /**
+     * Get tickets assigned to this user.
+     */
+    public function assignedTickets(): HasMany
+    {
+        return $this->hasMany(Ticket::class, 'assigned_to');
+    }
+
+    /**
+     * Get ticket replies written by this user.
+     */
+    public function ticketReplies(): HasMany
+    {
+        return $this->hasMany(TicketReply::class);
+    }
+
+    /**
+     * Get tickets watched by this user.
+     */
+    public function watchedTickets(): BelongsToMany
+    {
+        return $this->belongsToMany(Ticket::class, 'ticket_watchers')
+            ->withPivot('created_at');
+    }
 }

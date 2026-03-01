@@ -2,7 +2,7 @@ import { Link, router, usePage, useForm } from '@inertiajs/react';
 import axios from 'axios';
 import { Toaster } from 'sonner';
 import React, { PropsWithChildren, useState, useRef, FormEvent, useEffect, useCallback, createContext, useContext } from 'react';
-import { PageProps, Workspace, Project, Board, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn } from '@/types';
+import { PageProps, Workspace, Project, Board, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn, Helpdesk } from '@/types';
 import { cn } from '@/lib/utils';
 import { SearchModal } from '@/components/SearchModal';
 import { CommandPalette, CmdIcon, PaletteCommand } from '@/components/CommandPalette';
@@ -52,6 +52,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import {
     ChevronRight,
@@ -77,6 +78,8 @@ import {
     PencilRuler,
     StickyNote,
     GripVertical,
+    Headphones,
+    LifeBuoy,
 } from 'lucide-react';
 import {
     Select,
@@ -255,9 +258,9 @@ function ProjectSwitcher({
     onSelect,
     workspace,
 }: {
-    projects: (Project & { boards: Board[]; pages?: PageType[] })[];
-    currentProject?: Project & { boards: Board[]; pages?: PageType[] };
-    onSelect: (project: Project & { boards: Board[]; pages?: PageType[] }) => void;
+    projects: (Project & { boards: Board[]; pages?: PageType[]; helpdesks?: Helpdesk[] })[];
+    currentProject?: Project & { boards: Board[]; pages?: PageType[]; helpdesks?: Helpdesk[] };
+    onSelect: (project: Project & { boards: Board[]; pages?: PageType[]; helpdesks?: Helpdesk[] }) => void;
     workspace: Workspace;
 }) {
     return (
@@ -435,16 +438,17 @@ function ProjectContent({
     onAddItem,
     currentPageUuid,
 }: {
-    project: Project & { boards: Board[]; pages?: PageType[] };
+    project: Project & { boards: Board[]; pages?: PageType[]; helpdesks?: Helpdesk[] };
     workspace: Workspace;
     onAddItem: (projectId: number, parentId?: number) => void;
     currentPageUuid?: string | null;
 }) {
-    const hasContent = (project.boards && project.boards.length > 0) || (project.pages && project.pages.length > 0);
+    const hasContent = (project.boards && project.boards.length > 0) || (project.pages && project.pages.length > 0) || (project.helpdesks && project.helpdesks.length > 0);
     const [boardsOpen, setBoardsOpen] = useExpandedState(`project-${project.id}-boards`, true);
     const [pagesOpen, setPagesOpen] = useExpandedState(`project-${project.id}-pages`, true);
     const [whiteboardsOpen, setWhiteboardsOpen] = useExpandedState(`project-${project.id}-whiteboards`, true);
     const [foldersOpen, setFoldersOpen] = useExpandedState(`project-${project.id}-folders`, true);
+    const [helpdesksOpen, setHelpdesksOpen] = useExpandedState(`project-${project.id}-helpdesks`, true);
 
     if (!hasContent) {
         return (
@@ -480,7 +484,7 @@ function ProjectContent({
                         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Boards</span>
                     </button>
                     {boardsOpen && project.boards.map((board) => (
-                        <SidebarMenuItem key={board.id}>
+                        <SidebarMenuItem key={board.id} className="pl-5">
                             <Link
                                 href={route('boards.show', [workspace.slug, project.slug, board.slug])}
                                 className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
@@ -493,10 +497,35 @@ function ProjectContent({
                 </>
             )}
 
+            {/* Helpdesk */}
+            {project.helpdesks && project.helpdesks.length > 0 && (
+                <>
+                    {(project.boards?.length ?? 0) > 0 && <div className="border-t border-border/50 my-1.5" />}
+                    <button
+                        onClick={() => setHelpdesksOpen(!helpdesksOpen)}
+                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
+                    >
+                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${helpdesksOpen ? 'rotate-90' : ''}`} />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Helpdesk</span>
+                    </button>
+                    {helpdesksOpen && project.helpdesks.map((helpdesk) => (
+                        <SidebarMenuItem key={helpdesk.id} className="pl-5">
+                            <Link
+                                href={route('helpdesks.show', [workspace.slug, project.slug, helpdesk.slug])}
+                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                            >
+                                <LifeBuoy className="size-4 shrink-0" />
+                                <span className="min-w-0 truncate">{helpdesk.name}</span>
+                            </Link>
+                        </SidebarMenuItem>
+                    ))}
+                </>
+            )}
+
             {/* Pages */}
             {rootDocs.length > 0 && (
                 <>
-                    {project.boards?.length > 0 && <div className="border-t border-border/50 my-1.5" />}
+                    {((project.boards?.length ?? 0) > 0 || (project.helpdesks?.length ?? 0) > 0) && <div className="border-t border-border/50 my-1.5" />}
                     <button
                         onClick={() => setPagesOpen(!pagesOpen)}
                         className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
@@ -589,7 +618,7 @@ interface CreateItemModalProps {
 }
 
 function CreateItemModal({ open, onClose, workspace, project, parentId, parentType = 'project' }: CreateItemModalProps) {
-    const [itemType, setItemType] = useState<'page' | 'board' | 'folder' | 'excalidraw' | null>(null);
+    const [itemType, setItemType] = useState<'page' | 'board' | 'folder' | 'excalidraw' | 'helpdesk' | null>(null);
 
     const pageForm = useForm({
         name: '',
@@ -608,6 +637,11 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
     const boardForm = useForm({
         name: '',
         type: 'kanban',
+    });
+
+    const helpdeskForm = useForm({
+        name: '',
+        description: '',
     });
 
     const handleCreatePage = (e: FormEvent) => {
@@ -632,10 +666,22 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
         });
     };
 
+    const handleCreateHelpdesk = (e: FormEvent) => {
+        e.preventDefault();
+        helpdeskForm.post(route('helpdesks.store', [workspace.slug, project.slug]), {
+            onSuccess: () => {
+                helpdeskForm.reset();
+                setItemType(null);
+                onClose();
+            },
+        });
+    };
+
     const handleClose = () => {
         setItemType(null);
         pageForm.reset();
         boardForm.reset();
+        helpdeskForm.reset();
         onClose();
     };
 
@@ -644,14 +690,16 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>
-                        {itemType === null ? 'Create New' : itemType === 'board' ? 'Create Board' : itemType === 'folder' ? 'Create Folder' : itemType === 'excalidraw' ? 'Create Whiteboard' : 'Create Page'}
+                        {itemType === null ? 'Create New' : itemType === 'board' ? 'Create Board' : itemType === 'folder' ? 'Create Folder' : itemType === 'excalidraw' ? 'Create Whiteboard' : itemType === 'helpdesk' ? 'Create Helpdesk' : 'Create Page'}
                     </DialogTitle>
                     <DialogDescription>
                         {itemType === null
                             ? `Add a new item to ${parentType === 'folder' ? 'this folder' : project.name}`
                             : itemType === 'excalidraw'
                                 ? 'Create a whiteboard to draw and save diagrams.'
-                                : `Enter a name for your new ${itemType}`}
+                                : itemType === 'helpdesk'
+                                    ? 'Create a helpdesk to manage customer support tickets.'
+                                    : `Enter a name for your new ${itemType}`}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -712,6 +760,18 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                             </div>
                             <span className="text-sm font-medium">Folder</span>
                         </button>
+                        {parentType === 'project' && (
+                            <button
+                                type="button"
+                                onClick={() => setItemType('helpdesk')}
+                                className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors"
+                            >
+                                <div className="size-12 rounded-lg bg-green-100 text-green-600 flex items-center justify-center">
+                                    <Headphones className="size-6" />
+                                </div>
+                                <span className="text-sm font-medium">Helpdesk</span>
+                            </button>
+                        )}
                     </div>
                 ) : itemType === 'board' ? (
                     <form onSubmit={handleCreateBoard} className="space-y-4 py-2">
@@ -732,6 +792,39 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                             </Button>
                             <Button type="submit" disabled={boardForm.processing}>
                                 {boardForm.processing ? 'Creating...' : 'Create Board'}
+                            </Button>
+                        </div>
+                    </form>
+                ) : itemType === 'helpdesk' ? (
+                    <form onSubmit={handleCreateHelpdesk} className="space-y-4 py-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="helpdesk-name">Helpdesk Name</Label>
+                            <Input
+                                id="helpdesk-name"
+                                value={helpdeskForm.data.name}
+                                onChange={(e) => helpdeskForm.setData('name', e.target.value)}
+                                placeholder="e.g., Customer Support, Technical Help"
+                                autoFocus
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="helpdesk-description">Description (optional)</Label>
+                            <Textarea
+                                id="helpdesk-description"
+                                value={helpdeskForm.data.description}
+                                onChange={(e) => helpdeskForm.setData('description', e.target.value)}
+                                placeholder="Brief description of this helpdesk"
+                                rows={3}
+                                className="min-h-[80px]"
+                            />
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                            <Button type="button" variant="outline" onClick={() => setItemType(null)}>
+                                Back
+                            </Button>
+                            <Button type="submit" disabled={helpdeskForm.processing}>
+                                {helpdeskForm.processing ? 'Creating...' : 'Create Helpdesk'}
                             </Button>
                         </div>
                     </form>
@@ -1008,7 +1101,7 @@ function InlineProjectGroups({
     onAddItem,
     currentPageUuid,
 }: {
-    project: Project & { boards: Board[]; pages?: PageType[] };
+    project: Project & { boards: Board[]; pages?: PageType[]; helpdesks?: Helpdesk[] };
     workspace: Workspace;
     rootDocs: PageType[];
     rootWhiteboards: PageType[];
@@ -1019,11 +1112,11 @@ function InlineProjectGroups({
     const [pagesOpen, setPagesOpen] = useExpandedState(`inline-project-${project.id}-pages`, true);
     const [whiteboardsOpen, setWhiteboardsOpen] = useExpandedState(`inline-project-${project.id}-whiteboards`, true);
     const [foldersOpen, setFoldersOpen] = useExpandedState(`inline-project-${project.id}-folders`, true);
-    const hasBoardsBefore = (project.boards?.length ?? 0) > 0;
+    const hasBoardsOrHelpdesksBefore = (project.boards?.length ?? 0) > 0 || (project.helpdesks?.length ?? 0) > 0;
 
     return (
         <>
-            {hasBoardsBefore && <div className="border-t border-border/50 my-1.5" />}
+            {hasBoardsOrHelpdesksBefore && <div className="border-t border-border/50 my-1.5" />}
             {rootDocs.length > 0 && (
                 <>
                     <button
@@ -1098,7 +1191,7 @@ function ProjectItem({
     onAddItem,
     currentPageUuid,
 }: {
-    project: Project & { boards: Board[]; pages?: PageType[] };
+    project: Project & { boards: Board[]; pages?: PageType[]; helpdesks?: Helpdesk[] };
     workspace: Workspace;
     isActive: boolean;
     onAddItem: (projectId: number, parentId?: number) => void;
@@ -1111,7 +1204,7 @@ function ProjectItem({
         if (isProjectActive) setIsOpen(true);
     }, [isProjectActive]);
 
-    const hasContent = (project.boards && project.boards.length > 0) || (project.pages && project.pages.length > 0);
+    const hasContent = (project.boards && project.boards.length > 0) || (project.pages && project.pages.length > 0) || (project.helpdesks && project.helpdesks.length > 0);
 
     return (
         <Collapsible open={isOpen} onOpenChange={setIsOpen} className="group/collapsible">
@@ -1153,6 +1246,18 @@ function ProjectItem({
                                 </Link>
                             ))}
 
+                            {/* Helpdesks */}
+                            {project.helpdesks?.map((helpdesk) => (
+                                <Link
+                                    key={helpdesk.id}
+                                    href={route('helpdesks.show', [workspace.slug, project.slug, helpdesk.slug])}
+                                    className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                                >
+                                    <LifeBuoy className="size-4 shrink-0" />
+                                    <span className="min-w-0 truncate">{helpdesk.name}</span>
+                                </Link>
+                            ))}
+
                             {/* Pages, Whiteboards, Folders - collapsible with drag */}
                             {project.pages && project.pages.length > 0 && (() => {
                                 const rootDocs = project.pages.filter((p) => p.type === 'page' && !p.is_whiteboard);
@@ -1187,7 +1292,7 @@ function AppSidebar({
     onOpenHelp,
 }: {
     workspaces: Workspace[];
-    currentWorkspace?: Workspace & { projects: (Project & { boards: Board[]; pages?: PageType[] })[] };
+    currentWorkspace?: Workspace & { projects: (Project & { boards: Board[]; pages?: PageType[]; helpdesks?: Helpdesk[] })[] };
     onOpenSearch?: () => void;
     onOpenHelp?: () => void;
 }) {
@@ -1241,7 +1346,7 @@ function AppSidebar({
         }
     }, [currentPageUuid, projects.length]);
 
-    const handleSelectProject = (project: Project & { boards: Board[]; pages?: PageType[] }) => {
+    const handleSelectProject = (project: Project & { boards: Board[]; pages?: PageType[]; helpdesks?: Helpdesk[] }) => {
         setActiveProjectId(project.id);
         if (currentWorkspace) {
             localStorage.setItem(`sidebar-active-project-${currentWorkspace.id}`, String(project.id));
