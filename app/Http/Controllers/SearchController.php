@@ -5,40 +5,107 @@ namespace App\Http\Controllers;
 use App\Models\Bookmark;
 use App\Models\Item;
 use App\Models\Page;
+use App\Models\Project;
+use App\Models\SnippetCollection;
+use App\Models\Workspace;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class SearchController extends Controller
 {
     /**
-     * Full-text search across bookmarks, board items, and documents (pages).
+     * Full-text search across workspaces, projects, snippets, bookmarks, board items, and documents (pages).
      * Scoped to the authenticated user's workspaces.
      */
     public function __invoke(Request $request)
     {
         $q = trim((string) $request->input('q', ''));
+        $empty = [
+            'workspaces' => [],
+            'projects' => [],
+            'snippets' => [],
+            'bookmarks' => [],
+            'items' => [],
+            'pages' => [],
+        ];
+
         if (strlen($q) < 2) {
-            return response()->json([
-                'bookmarks' => [],
-                'items' => [],
-                'pages' => [],
-            ]);
+            return response()->json($empty);
         }
 
         $user = $request->user();
         $workspaceIds = $user->workspaces()->pluck('workspaces.id')->toArray();
         if ($user->isInstanceAdmin()) {
-            $workspaceIds = \App\Models\Workspace::pluck('id')->toArray();
+            $workspaceIds = Workspace::pluck('id')->toArray();
         }
         if (empty($workspaceIds)) {
-            return response()->json([
-                'bookmarks' => [],
-                'items' => [],
-                'pages' => [],
-            ]);
+            return response()->json($empty);
         }
 
-        $term = '%' . preg_replace('/\s+/', '%', $q) . '%';
+        $term = '%'.preg_replace('/\s+/', '%', $q).'%';
+
+        // Workspaces (name, description)
+        $workspaces = Workspace::query()
+            ->whereIn('id', $workspaceIds)
+            ->where(function ($query) use ($term) {
+                $query->where('name', 'like', $term)
+                    ->orWhere('description', 'like', $term);
+            })
+            ->limit(5)
+            ->get(['id', 'name', 'slug', 'description'])
+            ->map(fn ($ws) => [
+                'id' => $ws->id,
+                'type' => 'workspace',
+                'title' => $ws->name,
+                'subtitle' => $ws->description ? Str::limit($ws->description, 60) : 'Workspace',
+                'url' => route('workspaces.show', $ws->slug),
+                'workspace' => $ws->name,
+            ]);
+
+        // Projects (name, description, key)
+        $projects = Project::query()
+            ->whereIn('workspace_id', $workspaceIds)
+            ->where(function ($query) use ($term) {
+                $query->where('name', 'like', $term)
+                    ->orWhere('description', 'like', $term)
+                    ->orWhere('key', 'like', $term);
+            })
+            ->limit(8)
+            ->get(['id', 'workspace_id', 'name', 'slug', 'key', 'description'])
+            ->map(function ($p) {
+                $ws = Workspace::find($p->workspace_id);
+
+                return [
+                    'id' => $p->id,
+                    'type' => 'project',
+                    'title' => $p->name,
+                    'subtitle' => $p->key.($p->description ? ' · '.Str::limit($p->description, 50) : ''),
+                    'url' => $ws ? route('projects.show', [$ws->slug, $p->slug]) : '#',
+                    'workspace' => $ws?->name,
+                ];
+            });
+
+        // Snippet collections (name, description)
+        $snippets = SnippetCollection::query()
+            ->whereIn('workspace_id', $workspaceIds)
+            ->where(function ($query) use ($term) {
+                $query->where('name', 'like', $term)
+                    ->orWhere('description', 'like', $term);
+            })
+            ->limit(8)
+            ->get(['id', 'workspace_id', 'name', 'slug', 'description'])
+            ->map(function ($sc) {
+                $ws = Workspace::find($sc->workspace_id);
+
+                return [
+                    'id' => $sc->id,
+                    'type' => 'snippet',
+                    'title' => $sc->name,
+                    'subtitle' => $sc->description ? Str::limit($sc->description, 60) : $ws?->name.' · Snippets',
+                    'url' => $ws ? route('snippets.show', [$ws->slug, $sc->slug]) : '#',
+                    'workspace' => $ws?->name,
+                ];
+            });
 
         // Bookmarks (name, description) in user's workspaces
         $bookmarks = Bookmark::query()
@@ -50,12 +117,13 @@ class SearchController extends Controller
             ->limit(8)
             ->get(['id', 'workspace_id', 'name', 'slug', 'description'])
             ->map(function ($b) {
-                $ws = \App\Models\Workspace::find($b->workspace_id);
+                $ws = Workspace::find($b->workspace_id);
+
                 return [
                     'id' => $b->id,
                     'type' => 'bookmark',
                     'title' => $b->name,
-                    'subtitle' => $b->description ? \Illuminate\Support\Str::limit($b->description, 60) : $ws?->name,
+                    'subtitle' => $b->description ? Str::limit($b->description, 60) : $ws?->name,
                     'url' => $ws ? route('bookmarks.show', [$ws->slug, $b->slug]) : '#',
                     'workspace' => $ws?->name,
                 ];
@@ -75,14 +143,15 @@ class SearchController extends Controller
             ->limit(10)
             ->get()
             ->map(function ($row) {
-                $ws = \App\Models\Workspace::find($row->workspace_id);
+                $ws = Workspace::find($row->workspace_id);
                 $url = $ws ? route('boards.show', [$ws->slug, $row->project_slug, $row->board_slug]) : '#';
+
                 return [
                     'id' => $row->id,
                     'type' => 'item',
                     'title' => $row->title ?: $row->key,
-                    'subtitle' => $row->key . ($row->description ? ' · ' . \Illuminate\Support\Str::limit(strip_tags($row->description), 50) : ''),
-                    'url' => $url . '#item-' . $row->id,
+                    'subtitle' => $row->key.($row->description ? ' · '.Str::limit(strip_tags($row->description), 50) : ''),
+                    'url' => $url.'#item-'.$row->id,
                     'workspace' => $ws?->name,
                 ];
             });
@@ -99,19 +168,23 @@ class SearchController extends Controller
             ->limit(10)
             ->get()
             ->map(function ($row) {
-                $ws = \App\Models\Workspace::find($row->workspace_id);
+                $ws = Workspace::find($row->workspace_id);
                 $url = $ws ? route('pages.show', [$ws->slug, $row->project_slug, $row->uuid]) : '#';
+
                 return [
                     'id' => $row->id,
                     'type' => 'page',
                     'title' => $row->name,
-                    'subtitle' => $ws?->name . ' · Document',
+                    'subtitle' => $ws?->name.' · Document',
                     'url' => $url,
                     'workspace' => $ws?->name,
                 ];
             });
 
         return response()->json([
+            'workspaces' => $workspaces,
+            'projects' => $projects,
+            'snippets' => $snippets,
             'bookmarks' => $bookmarks,
             'items' => $items,
             'pages' => $pages,

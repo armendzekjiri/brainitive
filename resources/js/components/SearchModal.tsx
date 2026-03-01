@@ -8,11 +8,11 @@ import {
     CommandList,
 } from '@/components/ui/command';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Bookmark as BookmarkIcon, FileText, LayoutGrid, Loader2, Search as SearchIcon, X } from 'lucide-react';
+import { Bookmark as BookmarkIcon, Building2, Code, FileText, FolderOpen, LayoutGrid, Loader2, Search as SearchIcon, X } from 'lucide-react';
 
 export interface SearchResult {
     id: number;
-    type: 'bookmark' | 'item' | 'page';
+    type: 'workspace' | 'project' | 'snippet' | 'bookmark' | 'item' | 'page';
     title: string;
     subtitle: string | null;
     url: string;
@@ -20,6 +20,9 @@ export interface SearchResult {
 }
 
 export interface SearchResponse {
+    workspaces: SearchResult[];
+    projects: SearchResult[];
+    snippets: SearchResult[];
     bookmarks: SearchResult[];
     items: SearchResult[];
     pages: SearchResult[];
@@ -35,7 +38,13 @@ const DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 2;
 
 function ResultIcon({ type }: { type: SearchResult['type'] }) {
-    const styles = {
+    const styles: Record<SearchResult['type'], string> = {
+        workspace:
+            'bg-gradient-to-br from-primary/20 to-primary/10 text-primary ring-1 ring-primary/20',
+        project:
+            'bg-gradient-to-br from-amber-500/20 to-amber-500/10 text-amber-600 ring-1 ring-amber-500/20',
+        snippet:
+            'bg-gradient-to-br from-violet-500/20 to-violet-500/10 text-violet-600 ring-1 ring-violet-500/20',
         bookmark:
             'bg-gradient-to-br from-brand-green/20 to-brand-green/10 text-brand-green ring-1 ring-brand-green/20',
         item:
@@ -43,7 +52,15 @@ function ResultIcon({ type }: { type: SearchResult['type'] }) {
         page:
             'bg-gradient-to-br from-primary/20 to-primary/10 text-primary ring-1 ring-primary/20',
     };
-    const Icon = type === 'bookmark' ? BookmarkIcon : type === 'item' ? LayoutGrid : FileText;
+    const iconMap: Record<SearchResult['type'], typeof BookmarkIcon> = {
+        workspace: Building2,
+        project: FolderOpen,
+        snippet: Code,
+        bookmark: BookmarkIcon,
+        item: LayoutGrid,
+        page: FileText,
+    };
+    const Icon = iconMap[type];
     return (
         <div
             className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${styles[type]}`}
@@ -66,11 +83,11 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 export function SearchModal({ open, onOpenChange, initialQuery = '' }: SearchModalProps) {
     const [query, setQuery] = useState(initialQuery);
     const [loading, setLoading] = useState(false);
-    const [results, setResults] = useState<SearchResponse>({ bookmarks: [], items: [], pages: [] });
+    const [results, setResults] = useState<SearchResponse>({ workspaces: [], projects: [], snippets: [], bookmarks: [], items: [], pages: [] });
 
     const performSearch = useCallback(async (q: string) => {
         if (q.length < MIN_QUERY_LENGTH) {
-            setResults({ bookmarks: [], items: [], pages: [] });
+            setResults({ workspaces: [], projects: [], snippets: [], bookmarks: [], items: [], pages: [] });
             return;
         }
         setLoading(true);
@@ -81,7 +98,7 @@ export function SearchModal({ open, onOpenChange, initialQuery = '' }: SearchMod
             const data: SearchResponse = await res.json();
             setResults(data);
         } catch {
-            setResults({ bookmarks: [], items: [], pages: [] });
+            setResults({ workspaces: [], projects: [], snippets: [], bookmarks: [], items: [], pages: [] });
         } finally {
             setLoading(false);
         }
@@ -104,6 +121,7 @@ export function SearchModal({ open, onOpenChange, initialQuery = '' }: SearchMod
     };
 
     const hasResults =
+        results.workspaces.length > 0 || results.projects.length > 0 || results.snippets.length > 0 ||
         results.bookmarks.length > 0 || results.items.length > 0 || results.pages.length > 0;
     const showEmpty = !loading && query.length >= MIN_QUERY_LENGTH && !hasResults;
     const showHint = query.length < MIN_QUERY_LENGTH && !loading;
@@ -127,7 +145,7 @@ export function SearchModal({ open, onOpenChange, initialQuery = '' }: SearchMod
                             <SearchIcon className="size-4" strokeWidth={2} />
                         </div>
                         <CommandPrimitive.Input
-                            placeholder="Search bookmarks, boards, documents..."
+                            placeholder="Search workspaces, projects, snippets, boards..."
                             value={query}
                             onValueChange={setQuery}
                             className="h-11 flex-1 border-0 bg-transparent text-base placeholder:text-muted-foreground focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
@@ -175,6 +193,84 @@ export function SearchModal({ open, onOpenChange, initialQuery = '' }: SearchMod
 
                         {!loading && hasResults && (
                             <>
+                                {results.workspaces.length > 0 && (
+                                    <CommandGroup
+                                        className="[&_[cmdk-group-heading]]:hidden"
+                                        heading="Workspaces"
+                                    >
+                                        <SectionHeading>Workspaces</SectionHeading>
+                                        {results.workspaces.map((ws) => (
+                                            <CommandItem
+                                                key={`workspace-${ws.id}`}
+                                                value={`workspace-${ws.id}`}
+                                                onSelect={() => handleSelect(ws.url)}
+                                                className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition-colors data-[selected=true]:bg-accent"
+                                            >
+                                                <ResultIcon type="workspace" />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate font-medium">{ws.title}</p>
+                                                    {ws.subtitle && (
+                                                        <p className="truncate text-xs text-muted-foreground">
+                                                            {ws.subtitle}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </CommandItem>
+                                        ))}
+                                    </CommandGroup>
+                                )}
+                                {results.projects.length > 0 && (
+                                    <CommandGroup
+                                        className="[&_[cmdk-group-heading]]:hidden"
+                                        heading="Projects"
+                                    >
+                                        <SectionHeading>Projects</SectionHeading>
+                                        {results.projects.map((proj) => (
+                                            <CommandItem
+                                                key={`project-${proj.id}`}
+                                                value={`project-${proj.id}`}
+                                                onSelect={() => handleSelect(proj.url)}
+                                                className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition-colors data-[selected=true]:bg-accent"
+                                            >
+                                                <ResultIcon type="project" />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate font-medium">{proj.title}</p>
+                                                    {proj.subtitle && (
+                                                        <p className="truncate text-xs text-muted-foreground">
+                                                            {proj.subtitle}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </CommandItem>
+                                        ))}
+                                    </CommandGroup>
+                                )}
+                                {results.snippets.length > 0 && (
+                                    <CommandGroup
+                                        className="[&_[cmdk-group-heading]]:hidden"
+                                        heading="Snippets"
+                                    >
+                                        <SectionHeading>Snippets</SectionHeading>
+                                        {results.snippets.map((sn) => (
+                                            <CommandItem
+                                                key={`snippet-${sn.id}`}
+                                                value={`snippet-${sn.id}`}
+                                                onSelect={() => handleSelect(sn.url)}
+                                                className="group flex cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 transition-colors data-[selected=true]:bg-accent"
+                                            >
+                                                <ResultIcon type="snippet" />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate font-medium">{sn.title}</p>
+                                                    {sn.subtitle && (
+                                                        <p className="truncate text-xs text-muted-foreground">
+                                                            {sn.subtitle}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </CommandItem>
+                                        ))}
+                                    </CommandGroup>
+                                )}
                                 {results.bookmarks.length > 0 && (
                                     <CommandGroup
                                         className="[&_[cmdk-group-heading]]:hidden"
