@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, router, useForm } from '@inertiajs/react';
-import { PageProps, Workspace, Project, Helpdesk, HelpdeskColumn, Ticket, ItemPriority, User, HelpdeskField } from '@/types';
+import { PageProps, Workspace, Project, Helpdesk, HelpdeskColumn, Ticket, TicketReply, ItemPriority, User, HelpdeskField } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';

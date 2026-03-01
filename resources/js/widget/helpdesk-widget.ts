@@ -121,6 +121,10 @@
         helpdesk_uuid: string;
         fields: Array<{ id: number; name: string; label: string; type: string; options?: string[]; is_required: boolean }>;
         branding: { brand_color: string; welcome_message: string; button_text: string; button_position: string };
+        default_editable?: {
+            contact_name?: { label: string; is_required: boolean };
+            description?: { label: string; is_required: boolean };
+        };
     };
 
     type TicketData = {
@@ -208,7 +212,7 @@
                     for (let i = 0; i < attInput.files.length; i++) {
                         const fd = new FormData();
                         fd.append('file', attInput.files[i]);
-                        fd.append('access_token', currentToken);
+                        fd.append('access_token', currentToken ?? '');
                         const upRes = await fetch(
                             baseUrl + '/widget/helpdesks/' + helpdeskId + '/tickets/' + currentTicketUuid + '/attachments',
                             { method: 'POST', headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }, body: fd }

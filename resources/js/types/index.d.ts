@@ -389,6 +389,9 @@ export interface Helpdesk {
         welcome_message?: string;
         button_text?: string;
         button_position?: 'bottom-right' | 'bottom-left';
+        default_field_contact_name?: { label?: string; is_required?: boolean; hidden?: boolean };
+        default_field_description?: { label?: string; is_required?: boolean; hidden?: boolean };
+        default_field_attachments?: { hidden?: boolean };
     };
     position: number;
     created_by: number;
