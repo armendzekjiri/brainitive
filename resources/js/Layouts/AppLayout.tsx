@@ -1596,6 +1596,20 @@ export default function AppLayout({ children, title }: Props) {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
+    useEffect(() => {
+        const handleMentionClick = (e: MouseEvent) => {
+            const target = (e.target as HTMLElement).closest('[data-mention-user-id]') as HTMLElement | null;
+            if (!target) return;
+            const userId = target.getAttribute('data-mention-user-id');
+            if (!userId || !currentWorkspace) return;
+            e.preventDefault();
+            e.stopPropagation();
+            router.visit(route('workspaces.members.profile', [currentWorkspace.slug, userId]));
+        };
+        document.addEventListener('click', handleMentionClick);
+        return () => document.removeEventListener('click', handleMentionClick);
+    }, [currentWorkspace]);
+
     const openCreateTaskModal = useCallback((projectId?: number, boardId?: number, columnId?: number, type?: GlobalCreateType) => {
         setPreSelectedProjectId(projectId ?? currentProjectId ?? undefined);
         setPreSelectedBoardId(boardId ?? currentBoardId ?? undefined);

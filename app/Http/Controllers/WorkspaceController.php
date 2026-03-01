@@ -124,6 +124,80 @@ class WorkspaceController extends Controller
     }
 
     /**
+     * Display a workspace member's profile page.
+     */
+    public function memberProfile(Request $request, Workspace $workspace, User $user): Response
+    {
+        $this->authorize('view', $workspace);
+
+        if (! $workspace->hasUser($user)) {
+            abort(404);
+        }
+
+        $workspaceProjectIds = $workspace->projects()->pluck('id')->toArray();
+
+        $role = $user->workspaceRole($workspace);
+
+        $assignedItems = \App\Models\Item::query()
+            ->where('assigned_to', $user->id)
+            ->whereHas('board', fn ($q) => $q->whereIn('project_id', $workspaceProjectIds))
+            ->with([
+                'board:id,name,slug,project_id',
+                'board.project:id,name,slug,workspace_id',
+                'column:id,name,is_done_column',
+                'priority:id,name,slug,icon,color',
+            ])
+            ->latest('updated_at')
+            ->limit(20)
+            ->get(['id', 'uuid', 'key', 'title', 'board_id', 'column_id', 'priority_id', 'assigned_to', 'due_date', 'completed_at', 'updated_at']);
+
+        $recentComments = \App\Models\Comment::query()
+            ->where('user_id', $user->id)
+            ->whereHas('item', fn ($q) => $q->whereHas('board', fn ($q2) => $q2->whereIn('project_id', $workspaceProjectIds)))
+            ->with([
+                'item:id,key,title,board_id',
+                'item.board:id,name,slug,project_id',
+                'item.board.project:id,name,slug,workspace_id',
+            ])
+            ->latest()
+            ->limit(10)
+            ->get(['id', 'item_id', 'user_id', 'body', 'created_at']);
+
+        $recentPages = \App\Models\Page::query()
+            ->where('last_edited_by', $user->id)
+            ->whereIn('project_id', $workspaceProjectIds)
+            ->with(['project:id,name,slug,workspace_id'])
+            ->latest('updated_at')
+            ->limit(10)
+            ->get(['id', 'uuid', 'name', 'icon', 'project_id', 'status', 'updated_at']);
+
+        $activityLogs = \App\Models\ActivityLog::query()
+            ->where('user_id', $user->id)
+            ->latest()
+            ->limit(20)
+            ->get(['id', 'loggable_type', 'loggable_id', 'action', 'changes', 'metadata', 'created_at']);
+
+        $projects = \App\Models\Project::query()
+            ->whereIn('id', $workspaceProjectIds)
+            ->where(function ($q) use ($user) {
+                $q->where('created_by', $user->id)
+                    ->orWhereHas('users', fn ($q2) => $q2->where('user_id', $user->id));
+            })
+            ->get(['id', 'name', 'slug', 'key', 'icon', 'description']);
+
+        return Inertia::render('Workspaces/MemberProfile', [
+            'workspace' => $workspace,
+            'member' => $user->only(['id', 'name', 'email', 'avatar', 'avatar_display', 'bio', 'phone', 'created_at']),
+            'memberRole' => $role,
+            'assignedItems' => $assignedItems,
+            'recentComments' => $recentComments,
+            'recentPages' => $recentPages,
+            'activityLogs' => $activityLogs,
+            'projects' => $projects,
+        ]);
+    }
+
+    /**
      * Build the props array for the Workspaces/Edit page (shared by edit() and inviteMember when returning confirm step).
      */
     private function editPageProps(Request $request, Workspace $workspace): array
