@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Board;
+use App\Models\ItemType;
 use App\Models\Label;
 use App\Models\Project;
 use App\Models\User;
@@ -63,7 +64,7 @@ class ProjectController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'key' => 'required|string|max:10|alpha|unique:projects,key',
-            'description' => 'nullable|string|max:1000',
+            'description' => 'nullable|string|max:50000',
         ]);
 
         $project = $workspace->projects()->create([
@@ -96,11 +97,12 @@ class ProjectController extends Controller
     {
         $this->authorize('view', $project);
 
+        $project->loadCount('users');
         $project->load([
             'boards' => function ($query) {
                 $query->orderBy('position');
             },
-            'creator:id,name',
+            'creator:id,name,avatar',
             'pages' => function ($query) {
                 $query->orderByRaw("CASE type WHEN 'folder' THEN 0 ELSE 1 END")->orderBy('position');
             },
@@ -129,12 +131,14 @@ class ProjectController extends Controller
         $project->load(['labels', 'users' => fn ($q) => $q->select('users.id', 'name', 'email', 'avatar')->withPivot('role')]);
 
         $workspaceUsers = $workspace->users()->get(['users.id', 'name', 'email', 'avatar']);
+        $projectItemTypes = ItemType::forProjectSettings($project)->orderBy('id')->get(['id', 'project_id', 'name', 'slug', 'icon', 'color', 'description', 'is_default', 'is_active']);
 
         return Inertia::render('Projects/Edit', [
             'workspace' => $workspace,
             'project' => $project,
             'workspaceUsers' => $workspaceUsers,
             'canManageMembers' => $request->user()->can('manageMembers', $project),
+            'projectItemTypes' => $projectItemTypes,
         ]);
     }
 
@@ -147,7 +151,7 @@ class ProjectController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'description' => 'nullable|string|max:1000',
+            'description' => 'nullable|string|max:50000',
             'key' => [
                 'nullable',
                 'string',
@@ -210,6 +214,28 @@ class ProjectController extends Controller
         $project->update(['icon' => $path]);
 
         return response()->json(['icon_display' => $project->fresh()->icon_display]);
+    }
+
+    /**
+     * Upload an icon for an item type (emoji or custom image). Returns storage path to save on the item type.
+     */
+    public function uploadItemTypeIcon(Request $request, Workspace $workspace, Project $project): JsonResponse
+    {
+        $this->authorize('update', $project);
+
+        if ($project->workspace_id !== $workspace->id) {
+            abort(404);
+        }
+
+        $request->validate([
+            'icon' => 'required|file|image|mimes:png,jpeg,jpg|max:2048',
+        ]);
+
+        $file = $request->file('icon');
+        $ext = strtolower($file->getClientOriginalExtension()) === 'jpeg' ? 'jpg' : $file->getClientOriginalExtension();
+        $path = $file->storeAs('project-item-type-icons/'.$project->id, Str::uuid().'.'.$ext, 'public');
+
+        return response()->json(['icon' => $path, 'icon_display' => asset('storage/'.$path)]);
     }
 
     /**
@@ -380,5 +406,89 @@ class ProjectController extends Controller
         $label->delete();
 
         return back()->with('success', 'Label deleted successfully.');
+    }
+
+    /**
+     * Store a new item type for the project.
+     */
+    public function storeItemType(Request $request, Workspace $workspace, Project $project)
+    {
+        $this->authorize('update', $project);
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:100',
+            'slug' => 'nullable|string|max:100',
+            'color' => 'nullable|string|max:20',
+            'icon' => 'nullable|string|max:100',
+            'description' => 'nullable|string|max:500',
+        ]);
+
+        $validated['project_id'] = $project->id;
+        if (empty($validated['slug'])) {
+            $validated['slug'] = Str::slug($validated['name']);
+        }
+
+        $type = $project->itemTypes()->create($validated);
+
+        if ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+            return response()->json($type->only(['id', 'project_id', 'name', 'slug', 'icon', 'color', 'description', 'is_default', 'is_active']), 201);
+        }
+
+        return back()->with('success', 'Item type created.');
+    }
+
+    /**
+     * Update an existing item type (project-owned or global default types).
+     */
+    public function updateItemType(Request $request, Workspace $workspace, Project $project, ItemType $itemType)
+    {
+        $this->authorize('update', $project);
+
+        $isGlobal = $itemType->project_id === null;
+        $isProjectOwned = $itemType->project_id === $project->id;
+        if (! $isGlobal && ! $isProjectOwned) {
+            abort(404, 'Item type not found for this project.');
+        }
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:100',
+            'slug' => 'nullable|string|max:100',
+            'color' => 'nullable|string|max:20',
+            'icon' => 'nullable|string|max:100',
+            'description' => 'nullable|string|max:500',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        if (array_key_exists('slug', $validated) && $validated['slug'] === '') {
+            $validated['slug'] = Str::slug($validated['name']);
+        }
+
+        if (! $isGlobal) {
+            unset($validated['is_active']);
+        }
+
+        $itemType->update($validated);
+
+        return back()->with('success', 'Item type updated.');
+    }
+
+    /**
+     * Delete an item type (project-owned only). Fails if items use this type.
+     */
+    public function destroyItemType(Workspace $workspace, Project $project, ItemType $itemType)
+    {
+        $this->authorize('update', $project);
+
+        if ($itemType->project_id !== $project->id) {
+            abort(404, 'Cannot delete default item types.');
+        }
+
+        if ($itemType->items()->exists()) {
+            return back()->with('error', 'Cannot delete this type because some items use it. Reassign or remove those items first.');
+        }
+
+        $itemType->delete();
+
+        return back()->with('success', 'Item type deleted.');
     }
 }

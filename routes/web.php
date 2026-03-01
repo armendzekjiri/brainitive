@@ -172,6 +172,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('labels', [ProjectController::class, 'storeLabel'])->name('projects.labels.store');
             Route::put('labels/{label}', [ProjectController::class, 'updateLabel'])->name('projects.labels.update');
             Route::delete('labels/{label}', [ProjectController::class, 'destroyLabel'])->name('projects.labels.destroy');
+            // Item types (project-level configuration)
+            Route::post('item-types', [ProjectController::class, 'storeItemType'])->name('projects.item-types.store');
+            Route::post('item-types/upload-icon', [ProjectController::class, 'uploadItemTypeIcon'])->name('projects.item-types.upload-icon');
+            Route::put('item-types/{itemType}', [ProjectController::class, 'updateItemType'])->name('projects.item-types.update');
+            Route::delete('item-types/{itemType}', [ProjectController::class, 'destroyItemType'])->name('projects.item-types.destroy');
         });
 
         // Project members (assign workspace users to project with role)

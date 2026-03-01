@@ -14,6 +14,20 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.4.1',
+        title: 'Project & Item Type Improvements',
+        tag: 'Enhancement',
+        date: '2026-03-01',
+        items: [
+            'Project settings: same emoji + custom image icon picker as bookmarks; icon and name aligned on one line with consistent sizing.',
+            'Project description: rich text editor (Lexical) with full toolbar (headings, lists, links, tables, images, slash commands) and optional @mentions; stored as HTML and shown in a dedicated Description section on the project page with prose styling.',
+            'Project page: header shows project name only; new stats row (owner with avatar, project key, created date, boards count, members count); Description card below with formatted rich HTML.',
+            'Item types: default (global) types can be edited and disabled; disabled types are hidden from boards but remain in settings with an Enable button; new is_active flag and forProject scope.',
+            'Item type icon: icon picker (emoji + custom image upload) in project settings when creating/editing item types; upload endpoint returns storage path; ItemType model has icon_display for frontend.',
+            'Shared ItemTypeIcon component: shows custom image (URL), emoji, or Lucide icon by name/slug on board cards, item modal, item page, project settings list, and global create modal; default types (task, bug, story, epic, subtask) render proper icons instead of text.',
+        ]
+    },
+    {
         version: 'v1.4.0',
         title: 'Helpdesk & Support Portal',
         tag: 'Major Release',

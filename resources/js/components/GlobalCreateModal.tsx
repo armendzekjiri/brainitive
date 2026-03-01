@@ -8,6 +8,7 @@ import {
 } from '@/types';
 import { flattenPagesForParentSelect, FlattenedPageOption } from '@/lib/pageTree';
 import { ProjectIcon } from '@/components/ProjectIcon';
+import { ItemTypeIcon } from '@/components/ItemTypeIcon';
 import {
     Dialog,
     DialogContent,
@@ -38,11 +39,6 @@ import {
     ChevronRight,
     ChevronUp,
     Equal,
-    CheckSquare,
-    Bug,
-    Bookmark,
-    Layers,
-    Square,
     Tag,
     X,
     Check,
@@ -62,18 +58,6 @@ function PriorityIcon({ slug, className }: { slug?: string; className?: string }
         case 'low':     return <ChevronDown className={cn(cls, 'text-blue-400')} />;
         case 'lowest':  return <ChevronDown className={cn(cls, 'text-slate-400')} />;
         default:        return <Equal className={cn(cls, 'text-muted-foreground')} />;
-    }
-}
-
-function ItemTypeIcon({ slug, className }: { slug?: string; className?: string }) {
-    const cls = cn('size-3.5 shrink-0', className);
-    switch (slug) {
-        case 'bug':     return <Bug className={cn(cls, 'text-red-500')} />;
-        case 'story':   return <Bookmark className={cn(cls, 'text-green-500')} />;
-        case 'epic':    return <Layers className={cn(cls, 'text-slate-500')} />;
-        case 'subtask': return <Square className={cn(cls, 'text-primary/60')} />;
-        case 'task':
-        default:        return <CheckSquare className={cn(cls, 'text-primary')} />;
     }
 }
 
@@ -412,7 +396,7 @@ export function GlobalCreateModal({
                                                                 : 'border-transparent bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
                                                         )}
                                                     >
-                                                        <ItemTypeIcon slug={t.slug} />
+                                                        <ItemTypeIcon type={t} className="size-3.5" />
                                                         {t.name}
                                                     </button>
                                                 );

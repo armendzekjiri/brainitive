@@ -1,15 +1,16 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 import { ProjectIcon } from '@/components/ProjectIcon';
-import { PageProps, Workspace, Project, Label as LabelType, User } from '@/types';
+import { PageProps, Workspace, Project, Label as LabelType, User, ItemType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { IconPicker } from '@/components/IconPicker';
+import { EmojiMartIconPicker } from '@/components/EmojiMartIconPicker';
+import { ItemTypeIcon } from '@/components/ItemTypeIcon';
 import {
     Select,
     SelectContent,
@@ -36,7 +37,8 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag, Users } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag, Users, ListTodo, Power, PowerOff } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -46,11 +48,14 @@ interface ProjectMember extends User {
     pivot: { role: ProjectMemberRole };
 }
 
+type ProjectItemType = ItemType & { project_id?: number | null; description?: string | null; is_default?: boolean; is_active?: boolean };
+
 interface Props extends PageProps {
     workspace: Workspace;
     project: Project & { labels?: LabelType[]; users?: ProjectMember[] };
     workspaceUsers: User[];
     canManageMembers: boolean;
+    projectItemTypes?: ProjectItemType[];
 }
 
 // Predefined colors for labels and project
@@ -156,9 +161,124 @@ const PROJECT_ROLES: { value: ProjectMemberRole; label: string }[] = [
     { value: 'viewer', label: 'Viewer' },
 ];
 
-export default function ProjectsEdit({ auth, workspace, project, workspaceUsers, canManageMembers }: Props) {
+function ItemTypeForm({
+    mode,
+    itemType,
+    workspace,
+    project,
+    onClose,
+}: {
+    mode: 'create' | 'edit';
+    itemType?: ProjectItemType;
+    workspace: Workspace;
+    project: Project;
+    onClose: () => void;
+}) {
+    const { data, setData, post, put, processing, reset, errors } = useForm({
+        name: itemType?.name || '',
+        color: itemType?.color || LABEL_COLORS[0],
+        icon: itemType?.icon || '',
+        description: itemType?.description || '',
+    });
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (mode === 'create') {
+            post(route('projects.item-types.store', [workspace.slug, project.slug]), {
+                onSuccess: () => {
+                    reset();
+                    onClose();
+                },
+            });
+        } else if (itemType) {
+            put(route('projects.item-types.update', [workspace.slug, project.slug, itemType.id]), {
+                onSuccess: () => onClose(),
+            });
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+                <Label htmlFor="itype-name">Type name</Label>
+                <Input
+                    id="itype-name"
+                    value={data.name}
+                    onChange={(e) => setData('name', e.target.value)}
+                    placeholder="e.g. Task, Bug, Story"
+                    required
+                />
+                {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+            </div>
+            <div className="space-y-2">
+                <Label>Color</Label>
+                <div className="flex flex-wrap gap-2">
+                    {LABEL_COLORS.map((color) => (
+                        <button
+                            key={color}
+                            type="button"
+                            className={`w-8 h-8 rounded-full transition-all ${
+                                data.color === color ? 'ring-2 ring-offset-2 ring-primary scale-110' : 'hover:scale-105'
+                            }`}
+                            style={{ backgroundColor: color }}
+                            onClick={() => setData('color', color)}
+                        />
+                    ))}
+                </div>
+            </div>
+            <div className="space-y-2">
+                <Label>Icon (optional)</Label>
+                <EmojiMartIconPicker
+                    value={
+                        data.icon?.includes('/') && !data.icon.startsWith('http') && !data.icon.startsWith('/')
+                            ? `${typeof window !== 'undefined' ? window.location.origin : ''}/storage/${data.icon}`
+                            : (data.icon || '')
+                    }
+                    onChange={(v) => setData('icon', v)}
+                    placeholderEmoji="📋"
+                    size="sm"
+                    onImageUpload={async (file: File) => {
+                        const formData = new FormData();
+                        const token = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
+                        if (token) formData.append('_token', token);
+                        formData.append('icon', file);
+                        const res = await fetch(route('projects.item-types.upload-icon', [workspace.slug, project.slug]), {
+                            method: 'POST',
+                            body: formData,
+                            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                        });
+                        const json = await res.json().catch(() => ({}));
+                        if (!res.ok) throw new Error(json.message ?? 'Icon upload failed');
+                        return json.icon;
+                    }}
+                />
+            </div>
+            <div className="space-y-2">
+                <Label htmlFor="itype-desc">Description (optional)</Label>
+                <Input
+                    id="itype-desc"
+                    value={data.description}
+                    onChange={(e) => setData('description', e.target.value)}
+                    placeholder="Short description"
+                />
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={onClose}>
+                    Cancel
+                </Button>
+                <Button type="submit" disabled={processing}>
+                    {processing ? 'Saving...' : mode === 'create' ? 'Create type' : 'Save changes'}
+                </Button>
+            </div>
+        </form>
+    );
+}
+
+export default function ProjectsEdit({ auth, workspace, project, workspaceUsers, canManageMembers, projectItemTypes = [] }: Props) {
     const [createLabelOpen, setCreateLabelOpen] = useState(false);
     const [editingLabel, setEditingLabel] = useState<LabelType | null>(null);
+    const [createItemTypeOpen, setCreateItemTypeOpen] = useState(false);
+    const [editingItemType, setEditingItemType] = useState<ProjectItemType | null>(null);
     const [addMemberUserId, setAddMemberUserId] = useState<string>('');
     const [addMemberRole, setAddMemberRole] = useState<ProjectMemberRole>('viewer');
 
@@ -251,7 +371,16 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                 </div>
 
                 {/* Content */}
-                <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
+                <div className="max-w-4xl mx-auto px-6 py-8">
+                    <Tabs defaultValue="general" className="space-y-6">
+                        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+                            <TabsTrigger value="general">General</TabsTrigger>
+                            <TabsTrigger value="labels">Labels</TabsTrigger>
+                            <TabsTrigger value="item-types">Item types</TabsTrigger>
+                            <TabsTrigger value="members">Members</TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent value="general" className="space-y-8">
                     {/* General Settings */}
                     <Card>
                         <CardHeader>
@@ -260,25 +389,32 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                         </CardHeader>
                         <CardContent>
                             <form onSubmit={handleSaveProject} className="space-y-5">
-                                <div className="flex gap-4 items-end flex-wrap">
-                                    <IconPicker
-                                        label="Icon"
-                                        value={data.icon}
-                                        onChange={(v) => setData('icon', v)}
-                                        placeholderEmoji="📁"
-                                        onImageUpload={handleProjectIconUpload}
-                                        className="shrink-0"
-                                    />
-                                    <div className="flex-1 min-w-[200px] space-y-2">
-                                        <Label htmlFor="name">Project Name</Label>
-                                        <Input
-                                            id="name"
-                                            value={data.name}
-                                            onChange={(e) => setData('name', e.target.value)}
-                                            placeholder="Project name"
-                                            required
-                                        />
-                                        {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+                                <div className="space-y-2">
+                                    <div className="flex items-baseline gap-4">
+                                        <Label className="w-10 shrink-0">Icon</Label>
+                                        <Label htmlFor="name">Project name</Label>
+                                    </div>
+                                    <div className="flex items-center gap-4 flex-nowrap">
+                                        <div className="w-10 shrink-0">
+                                            <EmojiMartIconPicker
+                                                value={data.icon}
+                                                onChange={(v) => setData('icon', v)}
+                                                placeholderEmoji="📁"
+                                                onImageUpload={handleProjectIconUpload}
+                                                size="sm"
+                                            />
+                                        </div>
+                                        <div className="flex-1 min-w-0 space-y-2">
+                                            <Input
+                                                id="name"
+                                                value={data.name}
+                                                onChange={(e) => setData('name', e.target.value)}
+                                                placeholder="Project name"
+                                                required
+                                                className="h-10"
+                                            />
+                                            {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="space-y-2 max-w-xs">
@@ -315,13 +451,26 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                     {errors.color && <p className="text-sm text-destructive">{errors.color}</p>}
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="description">Description</Label>
-                                    <Textarea
-                                        id="description"
-                                        value={data.description}
-                                        onChange={(e) => setData('description', e.target.value)}
-                                        placeholder="What is this project about?"
-                                        className="min-h-[100px]"
+                                    <Label htmlFor="project-description">Description</Label>
+                                    <RichLexicalEditor
+                                        content={
+                                            (() => {
+                                                const d = data.description || '';
+                                                if (!d) return '';
+                                                if (d.trim().startsWith('<')) return d;
+                                                const escaped = d.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                                return `<p>${escaped}</p>`;
+                                            })()
+                                        }
+                                        onChange={(html) => setData('description', html)}
+                                        editable={true}
+                                        showToolbar={true}
+                                        placeholder="What is this project about? Type / for commands..."
+                                        minHeight="200px"
+                                        contentKey={`project-description-${project.id}`}
+                                        workspaceSlug={workspace.slug}
+                                        projectId={project.id}
+                                        projectName={project.name}
                                     />
                                     {errors.description && (
                                         <p className="text-sm text-destructive">{errors.description}</p>
@@ -330,7 +479,9 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                             </form>
                         </CardContent>
                     </Card>
+                        </TabsContent>
 
+                        <TabsContent value="labels" className="space-y-8">
                     {/* Labels */}
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0">
@@ -427,7 +578,7 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                                         <AlertDialogHeader>
                                                             <AlertDialogTitle>Delete Label</AlertDialogTitle>
                                                             <AlertDialogDescription>
-                                                                Are you sure you want to delete the "{label.name}" label?
+                                                                Are you sure you want to delete the {`"${label.name}"`} label?
                                                                 This will remove it from all items.
                                                             </AlertDialogDescription>
                                                         </AlertDialogHeader>
@@ -455,7 +606,207 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                             )}
                         </CardContent>
                     </Card>
+                        </TabsContent>
 
+                        <TabsContent value="item-types" className="space-y-8">
+                    {/* Item types */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                            <div className="space-y-1">
+                                <CardTitle className="flex items-center gap-2">
+                                    <ListTodo className="size-5" />
+                                    Item types
+                                </CardTitle>
+                                <CardDescription>
+                                    Types for board items (e.g. Task, Bug, Story). Default types are shared; add project-specific types below.
+                                </CardDescription>
+                            </div>
+                            <Dialog open={createItemTypeOpen} onOpenChange={setCreateItemTypeOpen}>
+                                <DialogTrigger asChild>
+                                    <Button variant="outline" size="sm" className="gap-2">
+                                        <Plus className="size-4" />
+                                        Add type
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Create item type</DialogTitle>
+                                        <DialogDescription>
+                                            Add a new type for items in this project. It will appear in the type dropdown on boards.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <ItemTypeForm
+                                        mode="create"
+                                        workspace={workspace}
+                                        project={project}
+                                        onClose={() => setCreateItemTypeOpen(false)}
+                                    />
+                                </DialogContent>
+                            </Dialog>
+                        </CardHeader>
+                        <CardContent>
+                            {projectItemTypes.length > 0 ? (
+                                <div className="space-y-2">
+                                    {projectItemTypes.map((type) => {
+                                        const isGlobal = type.project_id == null;
+                                        const isDisabled = isGlobal && type.is_active === false;
+                                        return (
+                                            <div
+                                                key={type.id}
+                                                className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${isDisabled ? 'bg-muted/10 opacity-75' : 'bg-muted/20 hover:bg-muted/40'}`}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div
+                                                        className="size-8 rounded-md shrink-0"
+                                                        style={{ backgroundColor: type.color || '#94a3b8' }}
+                                                    />
+                                                    <ItemTypeIcon type={type} className="size-5" />
+                                                    <div>
+                                                        <p className="font-medium">{type.name}</p>
+                                                        <p className="text-xs text-muted-foreground font-mono">{type.slug}</p>
+                                                    </div>
+                                                    {isGlobal && (
+                                                        <Badge variant="secondary" className="text-[10px]">
+                                                            {isDisabled ? 'Disabled' : 'Default'}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-1">
+                                                    <Dialog
+                                                        open={editingItemType?.id === type.id}
+                                                        onOpenChange={(open) => !open && setEditingItemType(null)}
+                                                    >
+                                                        <DialogTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="size-8"
+                                                                onClick={() => setEditingItemType(type)}
+                                                                title="Edit"
+                                                            >
+                                                                <Pencil className="size-4" />
+                                                            </Button>
+                                                        </DialogTrigger>
+                                                        <DialogContent>
+                                                            <DialogHeader>
+                                                                <DialogTitle>Edit item type</DialogTitle>
+                                                                <DialogDescription>
+                                                                    {isGlobal ? 'Update the default type. Changes apply to all projects.' : 'Update the type name, color, or icon.'}
+                                                                </DialogDescription>
+                                                            </DialogHeader>
+                                                            {editingItemType && (
+                                                                <ItemTypeForm
+                                                                    mode="edit"
+                                                                    itemType={editingItemType}
+                                                                    workspace={workspace}
+                                                                    project={project}
+                                                                    onClose={() => setEditingItemType(null)}
+                                                                />
+                                                            )}
+                                                        </DialogContent>
+                                                    </Dialog>
+                                                    {isGlobal ? (
+                                                        isDisabled ? (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="size-8 text-green-600 hover:text-green-700"
+                                                                title="Enable"
+                                                                onClick={() =>
+                                                                    router.put(
+                                                                        route('projects.item-types.update', [workspace.slug, project.slug, type.id]),
+                                                                        {
+                                                                            name: type.name,
+                                                                            slug: type.slug,
+                                                                            color: type.color ?? '',
+                                                                            icon: type.icon ?? '',
+                                                                            description: type.description ?? '',
+                                                                            is_active: true,
+                                                                        }
+                                                                    )
+                                                                }
+                                                            >
+                                                                <Power className="size-4" />
+                                                            </Button>
+                                                        ) : (
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="size-8 text-amber-600 hover:text-amber-700"
+                                                                title="Disable (hide from boards)"
+                                                                onClick={() =>
+                                                                    router.put(
+                                                                        route('projects.item-types.update', [workspace.slug, project.slug, type.id]),
+                                                                        {
+                                                                            name: type.name,
+                                                                            slug: type.slug,
+                                                                            color: type.color ?? '',
+                                                                            icon: type.icon ?? '',
+                                                                            description: type.description ?? '',
+                                                                            is_active: false,
+                                                                        }
+                                                                    )
+                                                                }
+                                                            >
+                                                                <PowerOff className="size-4" />
+                                                            </Button>
+                                                        )
+                                                    ) : (
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="size-8 text-destructive hover:text-destructive"
+                                                                    title="Delete"
+                                                                >
+                                                                    <Trash2 className="size-4" />
+                                                                </Button>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader>
+                                                                    <AlertDialogTitle>Delete item type</AlertDialogTitle>
+                                                                    <AlertDialogDescription>
+                                                                        Delete &quot;{type.name}&quot;? This cannot be undone. You can only delete types that are not used by any items.
+                                                                    </AlertDialogDescription>
+                                                                </AlertDialogHeader>
+                                                                <AlertDialogFooter>
+                                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                    <AlertDialogAction
+                                                                        onClick={() =>
+                                                                            router.delete(
+                                                                                route('projects.item-types.destroy', [
+                                                                                    workspace.slug,
+                                                                                    project.slug,
+                                                                                    type.id,
+                                                                                ])
+                                                                            )
+                                                                        }
+                                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                                    >
+                                                                        Delete
+                                                                    </AlertDialogAction>
+                                                                </AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 text-muted-foreground">
+                                    <ListTodo className="size-12 mx-auto mb-3 opacity-50" />
+                                    <p className="text-sm">No item types</p>
+                                    <p className="text-xs">Add a type or use the default types (Task, Bug, Story, etc.)</p>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                        </TabsContent>
+
+                        <TabsContent value="members" className="space-y-8">
                     {/* Members */}
                     <Card>
                         <CardHeader>
@@ -567,7 +918,10 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                             )}
                         </CardContent>
                     </Card>
+                        </TabsContent>
+                    </Tabs>
 
+                    <div className="mt-8 space-y-8">
                     {/* Danger Zone */}
                     <Card className="border-destructive/50">
                         <CardHeader>
@@ -593,7 +947,7 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                             <AlertDialogTitle>Delete Project</AlertDialogTitle>
                                             <AlertDialogDescription>
                                                 This action cannot be undone. This will permanently delete the
-                                                project "{project.name}" and all its boards, items, and data.
+                                                project {`"${project.name}"`} and all its boards, items, and data.
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
@@ -614,6 +968,7 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                             </div>
                         </CardContent>
                     </Card>
+                </div>
                 </div>
             </div>
         </AppLayout>

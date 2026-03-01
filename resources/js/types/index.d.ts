@@ -189,7 +189,8 @@ export interface ItemType {
     id: number;
     name: string;
     slug: string;
-    icon?: string;
+    icon?: string | null;
+    icon_display?: string | null;
     color?: string;
 }
 

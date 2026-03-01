@@ -76,6 +76,7 @@ import {
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { usePage } from '@inertiajs/react';
+import { ItemTypeIcon } from '@/components/ItemTypeIcon';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -151,24 +152,6 @@ function PriorityIcon({ slug, className }: { slug?: string; className?: string }
             return <ChevronDown className={`${baseClass} text-brand-gray`} />;
         default:
             return <Equal className={`${baseClass} text-muted-foreground`} />;
-    }
-}
-
-// Item type icon component
-function ItemTypeIcon({ slug, className }: { slug?: string; className?: string }) {
-    const baseClass = `size-4 ${className || ''}`;
-    switch (slug) {
-        case 'bug':
-            return <Bug className={`${baseClass} text-red-500`} />;
-        case 'story':
-            return <Bookmark className={`${baseClass} text-brand-green`} />;
-        case 'epic':
-            return <Layers className={`${baseClass} text-brand-slate`} />;
-        case 'subtask':
-            return <Square className={`${baseClass} text-primary/60`} />;
-        case 'task':
-        default:
-            return <CheckSquare className={`${baseClass} text-primary`} />;
     }
 }
 
@@ -650,7 +633,7 @@ export default function ItemShow({
                                     <BreadcrumbSeparator />
                                     <BreadcrumbItem>
                                         <BreadcrumbPage className="flex items-center gap-2">
-                                            <ItemTypeIcon slug={item.item_type?.slug} />
+                                            <ItemTypeIcon type={item.item_type} />
                                             {item.key}
                                         </BreadcrumbPage>
                                     </BreadcrumbItem>
@@ -671,7 +654,7 @@ export default function ItemShow({
                             {/* ─── Title ─────────────────────────────────── */}
                             <div className="mb-0">
                                 <div className="flex items-center gap-2 mb-2">
-                                    <ItemTypeIcon slug={item.item_type?.slug} className="size-4" />
+                                    <ItemTypeIcon type={item.item_type} className="size-4" />
                                     <span className="font-mono text-xs font-semibold text-primary tracking-wider">{item.key}</span>
                                     {item.column && (
                                         <Badge variant="secondary" className="text-xs">
@@ -1175,7 +1158,7 @@ export default function ItemShow({
                                             <SelectContent>
                                                 {itemTypes.map((type) => (
                                                     <SelectItem key={type.id} value={type.id.toString()}>
-                                                        <div className="flex items-center gap-2"><ItemTypeIcon slug={type.slug} />{type.name}</div>
+                                                        <div className="flex items-center gap-2"><ItemTypeIcon type={type} />{type.name}</div>
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>

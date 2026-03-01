@@ -94,7 +94,10 @@ class BoardController extends Controller
             }
         }
 
-        $itemTypes = ItemType::forProject($project)->get();
+        $itemTypes = ItemType::forProject($project)->orderBy('id')->get();
+        if ($itemTypes->isEmpty()) {
+            $itemTypes = ItemType::orderBy('id')->get();
+        }
         $priorities = ItemPriority::forProject($project)->orderBy('order')->get();
         $projectUsers = $project->workspace->users()->get(['users.id', 'name', 'email', 'avatar']);
         $projectLabels = $project->labels()->orderBy('name')->get();
@@ -103,7 +106,7 @@ class BoardController extends Controller
             'workspace' => $workspace,
             'project' => $project,
             'board' => $board,
-            'itemTypes' => $itemTypes,
+            'boardItemTypes' => $itemTypes,
             'priorities' => $priorities,
             'projectUsers' => $projectUsers,
             'projectLabels' => $projectLabels,

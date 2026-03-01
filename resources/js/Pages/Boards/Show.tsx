@@ -89,12 +89,14 @@ import { useState, useRef, useEffect, DragEvent, FormEvent, useCallback, useMemo
 import { Link } from '@inertiajs/react';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { Comment, Attachment } from '@/types';
+import { ItemTypeIcon } from '@/components/ItemTypeIcon';
 
 interface Props extends PageProps {
     workspace: Workspace;
     project: Project;
     board: Board & { columns: (BoardColumn & { items: Item[] })[] };
-    itemTypes: ItemType[];
+    /** Item types for this board (from controller; avoids conflict with shared itemTypes). */
+    boardItemTypes?: ItemType[];
     priorities: ItemPriority[];
     projectUsers: User[];
     projectLabels: LabelType[];
@@ -158,24 +160,6 @@ function PriorityIcon({ slug, className }: { slug?: string; className?: string }
             return <ChevronDown className={`${baseClass} text-brand-gray`} />;
         default:
             return <Equal className={`${baseClass} text-muted-foreground`} />;
-    }
-}
-
-// Item type icon component
-function ItemTypeIcon({ slug, className }: { slug?: string; className?: string }) {
-    const baseClass = `size-4 ${className || ''}`;
-    switch (slug) {
-        case 'bug':
-            return <Bug className={`${baseClass} text-red-500`} />;
-        case 'story':
-            return <Bookmark className={`${baseClass} text-brand-green`} />;
-        case 'epic':
-            return <Layers className={`${baseClass} text-brand-slate`} />;
-        case 'subtask':
-            return <Square className={`${baseClass} text-primary/60`} />;
-        case 'task':
-        default:
-            return <CheckSquare className={`${baseClass} text-primary`} />;
     }
 }
 
@@ -330,7 +314,7 @@ function ItemCard({
                 {/* Item Key and Labels */}
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                        <ItemTypeIcon slug={item.item_type?.slug} />
+                        <ItemTypeIcon type={item.item_type} />
                         <span className="text-xs font-medium text-primary">{item.key}</span>
                     </div>
                     <DropdownMenu>
@@ -538,7 +522,7 @@ function CreateItemInline({
                                 {itemTypes.map((type) => (
                                     <SelectItem key={type.id} value={String(type.id)}>
                                         <div className="flex items-center gap-2">
-                                            <ItemTypeIcon slug={type.slug} />
+                                            <ItemTypeIcon type={type} />
                                             {type.name}
                                         </div>
                                     </SelectItem>
@@ -988,7 +972,7 @@ function ItemEditModal({
                     {/* ── Header ─────────────────────────────────────────── */}
                     <div className="flex items-center justify-between px-6 py-3 border-b bg-background shrink-0">
                         <div className="flex items-center gap-3">
-                            <ItemTypeIcon slug={item.item_type?.slug} className="size-4" />
+                            <ItemTypeIcon type={item.item_type} className="size-4" />
                             <span className="font-mono text-xs font-semibold text-primary tracking-wider">{item.key}</span>
                             {item.column && (
                                 <Badge variant="secondary" className="text-xs">
@@ -1306,7 +1290,7 @@ function ItemEditModal({
                                                 <SelectContent>
                                                     {itemTypes.map((type) => (
                                                         <SelectItem key={type.id} value={type.id.toString()}>
-                                                            <div className="flex items-center gap-2"><ItemTypeIcon slug={type.slug} />{type.name}</div>
+                                                            <div className="flex items-center gap-2"><ItemTypeIcon type={type} />{type.name}</div>
                                                         </SelectItem>
                                                     ))}
                                                 </SelectContent>
@@ -1561,7 +1545,7 @@ function ListView({
                             >
                                 <td className="py-3 pl-4">
                                     <div className="flex items-center gap-2">
-                                        <ItemTypeIcon slug={item.item_type?.slug} className="size-4" />
+                                        <ItemTypeIcon type={item.item_type} className="size-4" />
                                         <span className="font-mono text-sm text-primary font-medium">{item.key}</span>
                                     </div>
                                 </td>
@@ -2024,7 +2008,7 @@ function GanttView({
                                     <span className="flex-shrink-0 w-4" />
                                 )}
                                 {item.depth > 0 && <span className="text-muted-foreground text-xs">↳</span>}
-                                <ItemTypeIcon slug={item.item_type?.slug} className="size-4" />
+                                <ItemTypeIcon type={item.item_type} className="size-4" />
                                 <span className="font-mono text-xs text-primary">{item.key}</span>
                                 <span className="text-sm truncate flex-1">{item.title}</span>
                             </div>
@@ -2318,11 +2302,12 @@ export default function BoardsShow({
     workspace,
     project,
     board,
-    itemTypes,
+    boardItemTypes = [],
     priorities,
     projectUsers,
     projectLabels,
 }: Props) {
+    const itemTypes = boardItemTypes;
     const [editingItem, setEditingItem] = useState<Item | null>(null);
     const [draggedItem, setDraggedItem] = useState<Item | null>(null);
     const [dragOverColumn, setDragOverColumn] = useState<number | null>(null);
