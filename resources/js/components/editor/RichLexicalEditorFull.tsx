@@ -2390,7 +2390,7 @@ function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle, projectNa
                             <Sparkles className="size-4" />
                             <span className="hidden sm:inline">AI</span>
                         </Button>
-                        <Dialog open={showAiPopover} onOpenChange={(open) => {
+                        <Dialog open={showAiPopover} onOpenChange={(open: boolean) => {
                             if (!aiGenerating) {
                                 setShowAiPopover(open);
                             }
