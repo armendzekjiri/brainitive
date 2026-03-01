@@ -107,6 +107,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Workspace-scoped routes
     Route::prefix('workspaces/{workspace}')->group(function () {
         Route::get('users', [WorkspaceController::class, 'users'])->name('workspaces.users.index');
+        Route::get('members/{user}', [WorkspaceController::class, 'memberProfile'])->name('workspaces.members.profile');
 
         // AI settings & generation
         Route::get('ai/settings', [AiController::class, 'getSettings'])->name('ai.settings');

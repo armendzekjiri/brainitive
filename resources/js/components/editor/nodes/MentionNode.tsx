@@ -82,17 +82,18 @@ export class MentionNode extends TextNode {
         element.className = 'mention';
         element.textContent = `@${this.__displayName}`;
         element.style.cssText =
-            'background: hsl(var(--primary) / 0.1); color: hsl(var(--primary)); border-radius: 4px; padding: 1px 4px; font-weight: 500; cursor: default;';
+            'background: hsl(var(--primary) / 0.1); color: hsl(var(--primary)); border-radius: 4px; padding: 1px 4px; font-weight: 500; cursor: pointer; text-decoration: none;';
         return { element };
     }
 
     createDOM(config: EditorConfig): HTMLElement {
         const el = super.createDOM(config);
         el.style.cssText =
-            'background: hsl(var(--primary) / 0.1); color: hsl(var(--primary)); border-radius: 4px; padding: 1px 4px; font-weight: 500; cursor: default;';
+            'background: hsl(var(--primary) / 0.1); color: hsl(var(--primary)); border-radius: 4px; padding: 1px 4px; font-weight: 500; cursor: pointer; text-decoration: none;';
         el.setAttribute('data-mention-user-id', String(this.__userId));
         el.setAttribute('data-mention-name', this.__displayName);
         el.setAttribute('aria-label', `Mention: ${this.__displayName}`);
+        el.setAttribute('role', 'link');
         return el;
     }
 
