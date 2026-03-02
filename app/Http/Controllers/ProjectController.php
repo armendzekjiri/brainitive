@@ -62,8 +62,21 @@ class ProjectController extends Controller
         $this->authorize('createProjects', $workspace);
 
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'key' => 'required|string|max:10|alpha|unique:projects,key',
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('projects', 'name')
+                    ->where(fn ($q) => $q->where('workspace_id', $workspace->id)),
+            ],
+            'key' => [
+                'required',
+                'string',
+                'max:10',
+                'alpha',
+                Rule::unique('projects', 'key')
+                    ->where(fn ($q) => $q->where('workspace_id', $workspace->id)),
+            ],
             'description' => 'nullable|string|max:50000',
         ]);
 

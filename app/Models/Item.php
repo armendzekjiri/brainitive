@@ -16,6 +16,7 @@ class Item extends Model
 
     protected $fillable = [
         'board_id',
+        'project_id',
         'column_id',
         'parent_id',
         'item_type_id',

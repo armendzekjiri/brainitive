@@ -317,6 +317,7 @@ class BoardController extends Controller
         $item = $board->items()->create([
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
+            'project_id' => $project->id,
             'column_id' => $validated['column_id'],
             'parent_id' => $validated['parent_id'] ?? null,
             'item_type_id' => $itemTypeId,
@@ -626,6 +627,7 @@ class BoardController extends Controller
         }
 
         $newItem->key = $project->getNextItemKey();
+        $newItem->project_id = $project->id;
         $newItem->created_by = $userId;
         $newItem->reporter_id = $userId;
         $newItem->parent_id = $parentId;
@@ -792,6 +794,7 @@ class BoardController extends Controller
         // Update item to new board and column
         $item->update([
             'board_id' => $targetBoard->id,
+            'project_id' => $targetBoard->project_id,
             'column_id' => $targetColumn->id,
             'position' => 0,
         ]);

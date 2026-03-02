@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -56,13 +57,20 @@ class WorkspaceController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('workspaces', 'name')
+                    ->where(fn ($q) => $q
+                        ->where('owner_id', $request->user()->id)
+                        ->whereNull('deleted_at')),
+            ],
             'description' => 'nullable|string|max:1000',
         ]);
 
         $workspace = Workspace::create([
             'name' => $validated['name'],
-            'slug' => Str::slug($validated['name']),
             'description' => $validated['description'] ?? null,
             'owner_id' => $request->user()->id,
         ]);
@@ -272,7 +280,16 @@ class WorkspaceController extends Controller
         $this->authorize('update', $workspace);
 
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('workspaces', 'name')
+                    ->where(fn ($q) => $q
+                        ->where('owner_id', $workspace->owner_id)
+                        ->whereNull('deleted_at'))
+                    ->ignore($workspace->id),
+            ],
             'description' => 'nullable|string|max:1000',
             'website' => 'nullable|url|max:255',
             'industry' => 'nullable|string|max:100',

@@ -69,7 +69,17 @@ class Workspace extends Model
 
         static::creating(function (Workspace $workspace) {
             if (empty($workspace->slug)) {
-                $workspace->slug = Str::slug($workspace->name);
+                $baseSlug = Str::slug($workspace->name) ?: 'workspace';
+                $slug = $baseSlug;
+                $counter = 2;
+
+                // Ensure slug is globally unique so route model binding remains unambiguous
+                while (static::withTrashed()->where('slug', $slug)->exists()) {
+                    $slug = $baseSlug.'-'.$counter;
+                    $counter++;
+                }
+
+                $workspace->slug = $slug;
             }
             if (empty($workspace->uuid)) {
                 $workspace->uuid = (string) Str::uuid();
