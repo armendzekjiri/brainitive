@@ -29,6 +29,9 @@
         @viteReactRefresh
         @vite(['resources/js/app.tsx', "resources/js/Pages/{$page['component']}.tsx"])
         @inertiaHead
+
+        <!-- Analytics (Nova Brain Hub) -->
+        <script defer src="https://stats.novabrainhub.de/script.js" data-website-id="e6d93341-8b10-4d6a-8629-b9599635909e"></script>
     </head>
     <body class="font-sans antialiased">
         @inertia
