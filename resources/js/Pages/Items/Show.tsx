@@ -33,6 +33,11 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import {
+    Sheet,
+    SheetContent,
+    SheetTrigger,
+} from '@/components/ui/sheet';
+import {
     Popover,
     PopoverContent,
     PopoverTrigger,
@@ -72,6 +77,8 @@ import {
     Reply,
     Bell,
     BellRing,
+    PanelRight,
+    SlidersHorizontal,
 } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
@@ -597,6 +604,349 @@ export default function ItemShow({
     }, [savedDescription, saveProp]);
 
     const [filePreview, setFilePreview] = useState<{ url: string; title: string; previewType: PreviewType } | null>(null);
+    const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
+
+    // Details panel content - shared between desktop sidebar and mobile sheet
+    const DetailsPanel = ({ className = '' }: { className?: string }) => (
+        <div className={className}>
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</h2>
+            <div className="space-y-0 divide-y divide-border/50">
+                {/* Status */}
+                <div className="flex items-center min-h-[40px] py-1 group">
+                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Status</span>
+                    <div className="flex-1">
+                        <Select value={columnId} onValueChange={handleMoveToColumn}>
+                            <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
+                                <SelectValue placeholder="None" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {columns.map((col) => (
+                                    <SelectItem key={col.id} value={col.id.toString()}>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color || '#94a3b8' }} />
+                                            {col.name}
+                                        </div>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                {/* Assignee */}
+                <div className="flex items-center min-h-[40px] py-1 group">
+                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Assignee</span>
+                    <div className="flex-1">
+                        <Select value={assignedTo || 'unassigned'} onValueChange={(v) => { const val = v === 'unassigned' ? '' : v; setAssignedTo(val); saveProp({ assigned_to: val || null }); }}>
+                            <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
+                                <SelectValue placeholder="Unassigned" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="unassigned">Unassigned</SelectItem>
+                                {projectUsers.map((user) => (
+                                    <SelectItem key={user.id} value={user.id.toString()}>
+                                        <div className="flex items-center gap-2">
+                                            <Avatar className="size-5"><AvatarFallback className="text-[10px]">{user.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
+                                            {user.name}
+                                        </div>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                {/* Type */}
+                <div className="flex items-center min-h-[40px] py-1 group">
+                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Type</span>
+                    <div className="flex-1">
+                        <Select value={itemTypeId} onValueChange={(v) => { setItemTypeId(v); saveProp({ item_type_id: v }); }}>
+                            <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
+                                <SelectValue placeholder="None" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {itemTypes.map((type) => (
+                                    <SelectItem key={type.id} value={type.id.toString()}>
+                                        <div className="flex items-center gap-2"><ItemTypeIcon type={type} />{type.name}</div>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                {/* Priority */}
+                <div className="flex items-center min-h-[40px] py-1 group">
+                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Priority</span>
+                    <div className="flex-1">
+                        <Select value={priorityId} onValueChange={(v) => { setPriorityId(v); saveProp({ priority_id: v }); }}>
+                            <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
+                                <SelectValue placeholder="None" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {priorities.map((priority) => (
+                                    <SelectItem key={priority.id} value={priority.id.toString()}>
+                                        <div className="flex items-center gap-2"><PriorityIcon slug={priority.slug} />{priority.name}</div>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                {/* Story Points */}
+                <div className="flex items-center min-h-[40px] py-1 group">
+                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Story Points</span>
+                    <div className="flex-1 px-2 -ml-2">
+                        <Input
+                            type="number" min="0"
+                            value={storyPoints}
+                            onChange={(e) => setStoryPoints(e.target.value)}
+                            onBlur={() => saveProp({ story_points: storyPoints || null })}
+                            className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
+                            placeholder="None"
+                        />
+                    </div>
+                </div>
+                {/* Start Date */}
+                <div className="flex items-center min-h-[40px] py-1 group">
+                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Start Date</span>
+                    <div className="flex-1 px-2 -ml-2">
+                        <Input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => { setStartDate(e.target.value); saveProp({ start_date: e.target.value || null }); }}
+                            className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
+                        />
+                    </div>
+                </div>
+                {/* Due Date */}
+                <div className="flex items-center min-h-[40px] py-1 group">
+                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Due Date</span>
+                    <div className="flex-1 px-2 -ml-2">
+                        <Input
+                            type="date"
+                            value={dueDate}
+                            onChange={(e) => { setDueDate(e.target.value); saveProp({ due_date: e.target.value || null }); }}
+                            className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
+                        />
+                    </div>
+                </div>
+                {/* Reporter */}
+                {item.reporter && (
+                    <div className="flex items-center min-h-[40px] py-1">
+                        <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Reporter</span>
+                        <div className="flex-1 flex items-center gap-2 px-2">
+                            <Avatar className="size-5 shrink-0"><AvatarFallback className="text-[10px]">{item.reporter.name.charAt(0)}</AvatarFallback></Avatar>
+                            <span className="text-sm truncate">{item.reporter.name}</span>
+                        </div>
+                    </div>
+                )}
+                {/* Labels */}
+                <div className="flex items-start min-h-[40px] py-2 group">
+                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground pt-1">Labels</span>
+                    <div className="flex-1 flex flex-wrap gap-1">
+                        <Popover open={labelsOpen} onOpenChange={setLabelsOpen}>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-6 text-xs border-dashed border-1 w-full justify-start px-2 -ml-2">
+                                    <Plus className="size-3 mr-1" />
+                                    Add label
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="p-2 w-[200px]" align="start">
+                                <div className="space-y-2">
+                                    <Input
+                                        placeholder="Search labels..."
+                                        value={labelSearch}
+                                        onChange={(e) => setLabelSearch(e.target.value)}
+                                        className="h-8"
+                                    />
+                                    <div className="max-h-[150px] overflow-y-auto space-y-1">
+                                        {projectLabels.filter(l => l.name.toLowerCase().includes(labelSearch.toLowerCase())).map((label) => (
+                                            <div
+                                                key={label.id}
+                                                className="flex items-center gap-2 px-2 py-1 rounded hover:bg-muted cursor-pointer"
+                                                onClick={() => {
+                                                    if (selectedLabels.includes(label.id)) {
+                                                        setSelectedLabels(selectedLabels.filter(id => id !== label.id));
+                                                    } else {
+                                                        setSelectedLabels([...selectedLabels, label.id]);
+                                                    }
+                                                }}
+                                            >
+                                                <div className={`w-4 h-4 rounded border ${selectedLabels.includes(label.id) ? 'bg-primary border-primary' : 'border-muted-foreground'}`} style={{ backgroundColor: selectedLabels.includes(label.id) ? label.color : 'transparent' }}>
+                                                    {selectedLabels.includes(label.id) && <Check className="size-3 text-primary-foreground" />}
+                                                </div>
+                                                <span className="text-sm">{label.name}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {labelSearch && !projectLabels.some(l => l.name.toLowerCase() === labelSearch.toLowerCase()) && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full mt-2"
+                                            onClick={() => {
+                                                // Create new label logic would go here
+                                                setLabelSearch('');
+                                            }}
+                                        >
+                                            <Plus className="size-3 mr-1" />
+                                            Create "{labelSearch}"
+                                        </Button>
+                                    )}
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                        {selectedLabels.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                                {selectedLabels.map(labelId => {
+                                    const label = projectLabels.find(l => l.id === labelId);
+                                    if (!label) return null;
+                                    return (
+                                        <Badge
+                                            key={label.id}
+                                            className="text-[10px] px-1.5 py-0 h-5"
+                                            style={{ backgroundColor: label.color + '20', color: label.color, borderColor: label.color }}
+                                        >
+                                            {label.name}
+                                            <button
+                                                className="ml-1 hover:opacity-70"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setSelectedLabels(selectedLabels.filter(id => id !== label.id));
+                                                    saveProp({ labels: selectedLabels.filter(id => id !== label.id) });
+                                                }}
+                                            >
+                                                <X className="size-2.5" />
+                                            </button>
+                                        </Badge>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+                {/* Watchers */}
+                <div className="flex items-start min-h-[40px] py-2 group">
+                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground pt-1">Watchers</span>
+                    <div className="flex-1 flex flex-wrap gap-1">
+                        {item.watchers && item.watchers.length > 0 && (
+                            <div className="flex -space-x-1.5 overflow-hidden">
+                                {item.watchers.slice(0, 5).map((watcher: any) => (
+                                    <Avatar key={watcher.id} className="size-5 border-2 border-background">
+                                        <AvatarFallback className="text-[10px]">{watcher.name?.charAt(0) || '?'}</AvatarFallback>
+                                    </Avatar>
+                                ))}
+                                {item.watchers.length > 5 && (
+                                    <div className="size-5 rounded-full bg-muted flex items-center justify-center text-[10px] border-2 border-background">
+                                        +{item.watchers.length - 5}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="ghost" size="icon" className="size-5 rounded-full hover:bg-muted">
+                                    <Plus className="size-3" />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="p-2 w-[200px]" align="start">
+                                <div className="space-y-1">
+                                    <p className="text-xs font-medium mb-2">Add watcher</p>
+                                    {projectUsers.map((user) => (
+                                        <div
+                                            key={user.id}
+                                            className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-sm"
+                                            onClick={() => {
+                                                // Toggle watcher logic
+                                            }}
+                                        >
+                                            <Avatar className="size-5"><AvatarFallback className="text-[10px]">{user.name.charAt(0)}</AvatarFallback></Avatar>
+                                            {user.name}
+                                        </div>
+                                    ))}
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                </div>
+                {/* Due soon indicator */}
+                {dueDate && !(item.column as any)?.is_completed && new Date(dueDate) <= new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) && (
+                    <div className="flex items-center py-2">
+                        <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Due soon</span>
+                        <div className="flex-1">
+                            <span className="text-xs text-orange-600 dark:text-orange-400 font-medium">Due within 3 days</span>
+                        </div>
+                    </div>
+                )}
+                {/* Created/Updated */}
+                <div className="flex items-center py-2">
+                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Created</span>
+                    <div className="flex-1 text-xs text-muted-foreground">
+                        {item.created_at ? new Date(item.created_at).toLocaleDateString() : '-'}
+                    </div>
+                </div>
+                <div className="flex items-center py-2">
+                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Updated</span>
+                    <div className="flex-1 text-xs text-muted-foreground">
+                        {item.updated_at ? new Date(item.updated_at).toLocaleDateString() : '-'}
+                    </div>
+                </div>
+                {/* Actions */}
+                <div className="flex items-center pt-3">
+                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Actions</span>
+                    <div className="flex-1 flex gap-2">
+                        <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="outline" size="sm" className="text-xs h-7">
+                                    <MoveRight className="size-3 mr-1" />
+                                    Move
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Move Issue</DialogTitle>
+                                    <DialogDescription>Move this issue to another board.</DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-4 pt-4">
+                                    <div className="space-y-2">
+                                        <Label>Target Board</Label>
+                                        <Select value={targetBoardId} onValueChange={setTargetBoardId}>
+                                            <SelectTrigger><SelectValue placeholder="Select a board..." /></SelectTrigger>
+                                            <SelectContent>
+                                                {projectBoards.filter(b => b.id !== board.id).map((b) => (
+                                                    <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    {targetBoardId && (
+                                        <div className="space-y-2">
+                                            <Label>Target Column</Label>
+                                            <Select value={targetColumnId} onValueChange={setTargetColumnId}>
+                                                <SelectTrigger><SelectValue placeholder="Select a column..." /></SelectTrigger>
+                                                <SelectContent>
+                                                    {projectBoards.find(b => b.id.toString() === targetBoardId)?.columns.map((col) => (
+                                                        <SelectItem key={col.id} value={col.id.toString()}>
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color || '#94a3b8' }} />
+                                                                {col.name}
+                                                            </div>
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )}
+                                    <div className="flex justify-end gap-2">
+                                        <Button variant="outline" onClick={() => setMoveDialogOpen(false)}>Cancel</Button>
+                                        <Button onClick={handleMoveToBoard} disabled={!targetBoardId}>Move Issue</Button>
+                                    </div>
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 
     return (
         <AppLayout>
@@ -639,6 +989,22 @@ export default function ItemShow({
                                     </BreadcrumbItem>
                                 </BreadcrumbList>
                             </Breadcrumb>
+                        </div>
+
+                        {/* Mobile: button to open details sheet */}
+                        <div className="lg:hidden">
+                            <Sheet open={detailsSheetOpen} onOpenChange={setDetailsSheetOpen}>
+                                <SheetTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="size-8">
+                                        <SlidersHorizontal className="size-4" />
+                                    </Button>
+                                </SheetTrigger>
+                                <SheetContent side="right" className="w-[300px] sm:w-[360px] p-0">
+                                    <div className="px-6 py-5 h-full overflow-y-auto">
+                                        <DetailsPanel />
+                                    </div>
+                                </SheetContent>
+                            </Sheet>
                         </div>
 
                     </div>
@@ -1093,342 +1459,9 @@ export default function ItemShow({
                     </div>{/* /main column */}
 
                     {/* ── Sidebar (scrollable, independent) ───────────── */}
-                    <div className="w-[360px] shrink-0 overflow-y-auto border-l bg-background">
+                    <div className="hidden lg:block w-[360px] shrink-0 overflow-y-auto border-l bg-background">
                         <div className="px-6 py-5">
-
-                            {/* ─── Details section ──────────────────────────── */}
-                            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</h2>
-
-                            <div className="space-y-0 divide-y divide-border/50">
-                                {/* Each row: label left 40%, control right 60% */}
-
-                                {/* Status */}
-                                <div className="flex items-center min-h-[40px] py-1 group">
-                                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Status</span>
-                                    <div className="flex-1">
-                                        <Select value={columnId} onValueChange={handleMoveToColumn}>
-                                            <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                                                <SelectValue placeholder="None" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {columns.map((col) => (
-                                                    <SelectItem key={col.id} value={col.id.toString()}>
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color || '#94a3b8' }} />
-                                                            {col.name}
-                                                        </div>
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-
-                                {/* Assignee */}
-                                <div className="flex items-center min-h-[40px] py-1 group">
-                                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Assignee</span>
-                                    <div className="flex-1">
-                                        <Select value={assignedTo || 'unassigned'} onValueChange={(v) => { const val = v === 'unassigned' ? '' : v; setAssignedTo(val); saveProp({ assigned_to: val || null }); }}>
-                                            <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                                                <SelectValue placeholder="Unassigned" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="unassigned">Unassigned</SelectItem>
-                                                {projectUsers.map((user) => (
-                                                    <SelectItem key={user.id} value={user.id.toString()}>
-                                                        <div className="flex items-center gap-2">
-                                                            <Avatar className="size-5"><AvatarFallback className="text-[10px]">{user.name.charAt(0).toUpperCase()}</AvatarFallback></Avatar>
-                                                            {user.name}
-                                                        </div>
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-
-                                {/* Type */}
-                                <div className="flex items-center min-h-[40px] py-1 group">
-                                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Type</span>
-                                    <div className="flex-1">
-                                        <Select value={itemTypeId} onValueChange={(v) => { setItemTypeId(v); saveProp({ item_type_id: v }); }}>
-                                            <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                                                <SelectValue placeholder="None" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {itemTypes.map((type) => (
-                                                    <SelectItem key={type.id} value={type.id.toString()}>
-                                                        <div className="flex items-center gap-2"><ItemTypeIcon type={type} />{type.name}</div>
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-
-                                {/* Priority */}
-                                <div className="flex items-center min-h-[40px] py-1 group">
-                                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Priority</span>
-                                    <div className="flex-1">
-                                        <Select value={priorityId} onValueChange={(v) => { setPriorityId(v); saveProp({ priority_id: v }); }}>
-                                            <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                                                <SelectValue placeholder="None" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {priorities.map((priority) => (
-                                                    <SelectItem key={priority.id} value={priority.id.toString()}>
-                                                        <div className="flex items-center gap-2"><PriorityIcon slug={priority.slug} />{priority.name}</div>
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                </div>
-
-                                {/* Story Points */}
-                                <div className="flex items-center min-h-[40px] py-1 group">
-                                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Story Points</span>
-                                    <div className="flex-1 px-2 -ml-2">
-                                        <Input
-                                            type="number" min="0"
-                                            value={storyPoints}
-                                            onChange={(e) => setStoryPoints(e.target.value)}
-                                            onBlur={() => saveProp({ story_points: storyPoints || null })}
-                                            className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
-                                            placeholder="None"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Start Date */}
-                                <div className="flex items-center min-h-[40px] py-1 group">
-                                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Start Date</span>
-                                    <div className="flex-1 px-2 -ml-2">
-                                        <Input
-                                            type="date"
-                                            value={startDate}
-                                            onChange={(e) => { setStartDate(e.target.value); saveProp({ start_date: e.target.value || null }); }}
-                                            className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Due Date */}
-                                <div className="flex items-center min-h-[40px] py-1 group">
-                                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Due Date</span>
-                                    <div className="flex-1 px-2 -ml-2">
-                                        <Input
-                                            type="date"
-                                            value={dueDate}
-                                            onChange={(e) => { setDueDate(e.target.value); saveProp({ due_date: e.target.value || null }); }}
-                                            className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Reporter */}
-                                {item.reporter && (
-                                    <div className="flex items-center min-h-[40px] py-1">
-                                        <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Reporter</span>
-                                        <div className="flex-1 flex items-center gap-2 px-2">
-                                            <Avatar className="size-5 shrink-0"><AvatarFallback className="text-[10px]">{item.reporter.name.charAt(0)}</AvatarFallback></Avatar>
-                                            <span className="text-sm truncate">{item.reporter.name}</span>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Created */}
-                                <div className="flex items-center min-h-[40px] py-1">
-                                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Created</span>
-                                    <span className="flex-1 text-sm px-2">{new Date(item.created_at).toLocaleDateString()}</span>
-                                </div>
-
-                                {/* Updated */}
-                                <div className="flex items-center min-h-[40px] py-1">
-                                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground">Updated</span>
-                                    <span className="flex-1 text-sm px-2">{new Date(item.updated_at).toLocaleDateString()}</span>
-                                </div>
-
-                                {/* Watchers */}
-                                <div className="flex items-start min-h-[40px] py-2 border-t mt-2">
-                                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground pt-1.5">Watchers</span>
-                                    <div className="flex-1 px-2 -ml-2 space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex -space-x-1.5 overflow-hidden">
-                                                {(item.watchers || []).slice(0, 5).map(watcher => (
-                                                    <Avatar key={watcher.id} className="size-6 border-2 border-background" title={watcher.name}>
-                                                        <AvatarFallback className="text-[10px] bg-muted">{watcher.name.charAt(0)}</AvatarFallback>
-                                                    </Avatar>
-                                                ))}
-                                                {(item.watchers?.length || 0) > 5 && (
-                                                    <div className="size-6 rounded-full border-2 border-background bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground z-10 shrink-0">
-                                                        +{(item.watchers?.length || 0) - 5}
-                                                    </div>
-                                                )}
-                                                {(!item.watchers || item.watchers.length === 0) && (
-                                                    <span className="text-sm text-muted-foreground mt-0.5">None</span>
-                                                )}
-                                            </div>
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                className={cn("h-7 px-2.5 text-xs gap-1.5 ml-2 cursor-pointer", isWatching && "bg-primary/5 text-primary border-primary/20")}
-                                                onClick={toggleWatch}
-                                            >
-                                                {isWatching ? (
-                                                    <>
-                                                        <BellRing className="size-3.5" />
-                                                        Watching
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Bell className="size-3.5" />
-                                                        Watch
-                                                    </>
-                                                )}
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* ─── Labels row ─────────────────────────── */}
-                                <div className="flex items-start min-h-[40px] py-1 group">
-                                    <span className="w-[38%] shrink-0 text-xs text-muted-foreground pt-2">Labels</span>
-                                    <div className="flex-1">
-                                        <Popover open={labelsOpen} onOpenChange={(o) => { setLabelsOpen(o); if (!o) setLabelSearch(''); }}>
-                                            <PopoverTrigger asChild>
-                                                <button className="w-full text-left rounded-md px-2 py-1 -ml-2 hover:bg-muted/80 transition-colors min-h-[32px] flex flex-wrap gap-1 items-center">
-                                                    {selectedLabels.length === 0 ? (
-                                                        <span className="text-sm text-muted-foreground">None</span>
-                                                    ) : (
-                                                        selectedLabels.map((id) => {
-                                                            const lbl = projectLabels.find(l => l.id === id);
-                                                            if (!lbl) return null;
-                                                            return (
-                                                                <span
-                                                                    key={id}
-                                                                    className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full"
-                                                                    style={{ backgroundColor: lbl.color + '22', color: lbl.color, border: `1px solid ${lbl.color}55` }}
-                                                                >
-                                                                    {lbl.name}
-                                                                </span>
-                                                            );
-                                                        })
-                                                    )}
-                                                </button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="p-0 w-56" align="start">
-                                                <div className="p-2 border-b">
-                                                    <Input
-                                                        autoFocus
-                                                        placeholder="Search labels…"
-                                                        value={labelSearch}
-                                                        onChange={(e) => setLabelSearch(e.target.value)}
-                                                        className="h-7 text-xs border-0 shadow-none focus-visible:ring-0 px-1"
-                                                    />
-                                                </div>
-                                                <div className="max-h-52 overflow-y-auto p-1">
-                                                    {projectLabels
-                                                        .filter(l => l.name.toLowerCase().includes(labelSearch.toLowerCase()))
-                                                        .map((label) => {
-                                                            const active = selectedLabels.includes(label.id);
-                                                            return (
-                                                                <button
-                                                                    key={label.id}
-                                                                    onClick={() => toggleLabel(label.id)}
-                                                                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm hover:bg-muted/60 transition-colors text-left"
-                                                                >
-                                                                    <span
-                                                                        className="size-3 rounded-full shrink-0 border"
-                                                                        style={{ backgroundColor: label.color, borderColor: label.color }}
-                                                                    />
-                                                                    <span className="flex-1 truncate text-xs">{label.name}</span>
-                                                                    {active && <Check className="size-3 shrink-0 text-primary" />}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                    {projectLabels.filter(l => l.name.toLowerCase().includes(labelSearch.toLowerCase())).length === 0 && (
-                                                        <p className="text-xs text-muted-foreground px-2 py-3 text-center">No labels found</p>
-                                                    )}
-                                                </div>
-                                                <div className="p-2 border-t">
-                                                    <div className="flex gap-1.5">
-                                                        <Input
-                                                            placeholder="New label name…"
-                                                            value={newLabelName}
-                                                            onChange={(e) => setNewLabelName(e.target.value)}
-                                                            className="h-7 text-xs flex-1"
-                                                            onKeyDown={(e) => {
-                                                                if (e.key === 'Enter' && newLabelName.trim()) {
-                                                                    e.preventDefault();
-                                                                    handleCreateLabel();
-                                                                }
-                                                            }}
-                                                        />
-                                                        <Button
-                                                            size="sm"
-                                                            className="h-7 px-2"
-                                                            onClick={handleCreateLabel}
-                                                            disabled={!newLabelName.trim()}
-                                                        >
-                                                            <Plus className="size-3" />
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            </PopoverContent>
-                                        </Popover>
-                                    </div>
-                                </div>
-                            </div>{/* /divide-y */}
-
-                            {/* ─── Move board ───────────────────────────────── */}
-                            <div className="mt-5 pt-4 border-t border-border/60">
-                                <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
-                                    <DialogTrigger asChild>
-                                        <Button variant="outline" className="w-full gap-2 h-9 text-sm">
-                                            <MoveRight className="size-4" />
-                                            Move to Another Board
-                                        </Button>
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                        <DialogHeader>
-                                            <DialogTitle>Move Issue</DialogTitle>
-                                            <DialogDescription>Move this issue to a different board within the project.</DialogDescription>
-                                        </DialogHeader>
-                                        <div className="space-y-4 pt-4">
-                                            <div className="space-y-2">
-                                                <Label>Target Board</Label>
-                                                <Select value={targetBoardId} onValueChange={(v) => { setTargetBoardId(v); setTargetColumnId(''); }}>
-                                                    <SelectTrigger><SelectValue placeholder="Select a board…" /></SelectTrigger>
-                                                    <SelectContent>
-                                                        {projectBoards.filter(b => b.id !== board.id).map((b) => (
-                                                            <SelectItem key={b.id} value={b.id.toString()}>{b.name}</SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            {targetBoardId && targetBoardColumns.length > 0 && (
-                                                <div className="space-y-2">
-                                                    <Label>Target Column</Label>
-                                                    <Select value={targetColumnId} onValueChange={setTargetColumnId}>
-                                                        <SelectTrigger><SelectValue placeholder="First column (default)" /></SelectTrigger>
-                                                        <SelectContent>
-                                                            {targetBoardColumns.map((col) => (
-                                                                <SelectItem key={col.id} value={col.id.toString()}>{col.name}</SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            )}
-                                            <div className="flex justify-end gap-2">
-                                                <Button variant="outline" onClick={() => setMoveDialogOpen(false)}>Cancel</Button>
-                                                <Button onClick={handleMoveToBoard} disabled={!targetBoardId}>Move Issue</Button>
-                                            </div>
-                                        </div>
-                                    </DialogContent>
-                                </Dialog>
-                            </div>
-
+                            <DetailsPanel />
                         </div>{/* /sidebar inner */}
                     </div>{/* /sidebar */}
                 </div>{/* /two-panel body */}

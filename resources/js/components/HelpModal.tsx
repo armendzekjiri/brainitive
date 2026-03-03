@@ -14,6 +14,19 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.4.2',
+        title: 'Mobile Responsive Improvements',
+        tag: 'Enhancement',
+        date: '2026-03-03',
+        items: [
+            'Board page: responsive header with icon-only view tabs on mobile, narrower columns (240px vs 280px), and full-width search.',
+            'Item modal: details sidebar now slides in as a drawer on mobile (tap sliders icon), fixed sidebar on desktop.',
+            'Item page: details sidebar converted to slide-in drawer on mobile for better mobile experience.',
+            'Helpdesk (support) board: same responsive treatment with slide-in drawer for ticket details on mobile.',
+            'Help modal: optimized for mobile with smaller padding, icon-only tabs, and stacked layout on small screens.',
+        ]
+    },
+    {
         version: 'v1.4.1',
         title: 'Project & Item Type Improvements',
         tag: 'Enhancement',
@@ -399,33 +412,33 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
                 <DialogTitle className="sr-only">Brainitive Help & Changelog</DialogTitle>
 
                 {/* Header with Custom Tabs */}
-                <div className="flex items-center justify-between px-4 pt-4 pb-0 gap-2">
+                <div className="flex items-center justify-between px-3 sm:px-4 pt-3 sm:pt-4 pb-0 gap-2">
                     <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
                         <button
                             type="button"
                             onClick={() => setActiveTab('welcome')}
                             className={cn(
-                                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150',
+                                'flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150',
                                 activeTab === 'welcome'
                                     ? 'bg-background text-foreground shadow-sm'
                                     : 'text-muted-foreground hover:text-foreground'
                             )}
                         >
                             <BrainCircuit className={cn("size-4", activeTab === 'welcome' ? 'text-primary' : '')} />
-                            Welcome
+                            <span className="hidden sm:inline">Welcome</span>
                         </button>
                         <button
                             type="button"
                             onClick={() => setActiveTab('changelog')}
                             className={cn(
-                                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150',
+                                'flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150',
                                 activeTab === 'changelog'
                                     ? 'bg-background text-foreground shadow-sm'
                                     : 'text-muted-foreground hover:text-foreground'
                             )}
                         >
                             <History className={cn("size-4", activeTab === 'changelog' ? 'text-primary' : '')} />
-                            Changelog
+                            <span className="hidden sm:inline">Changelog</span>
                         </button>
                     </div>
                     <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={() => onOpenChange(false)}>
@@ -435,7 +448,7 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
 
                 {/* Main Content Area */}
                 <div className="flex flex-col">
-                    <div className="px-5 py-6 h-[80vh] overflow-y-auto">
+                    <div className="px-3 sm:px-5 py-4 sm:py-6 h-[70vh] sm:h-[80vh] overflow-y-auto">
 
                         {/* Welcome Tab */}
                         {activeTab === 'welcome' && (
@@ -451,7 +464,7 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
                                     </p>
                                 </div>
 
-                                <div className="grid sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                     <div className="flex items-start gap-4 p-4 rounded-xl border bg-card/50 shadow-sm hover:shadow-md transition-shadow">
                                         <div className="p-2.5 bg-blue-500/10 rounded-lg text-blue-500 shrink-0">
                                             <LayoutGrid className="size-5" />
@@ -509,13 +522,13 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
                                                 )}>
                                                     {IconComponent ? <IconComponent className="size-4" /> : <div className="size-2 rounded-full bg-muted-foreground/30" />}
                                                 </div>
-                                                <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-4 rounded-xl border bg-card/50 shadow-sm">
-                                                    <div className="flex items-center justify-between mb-1">
-                                                        <h3 className={cn("font-bold", isLatest ? "text-primary" : "text-foreground")}>
+                                                <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] p-3 sm:p-4 rounded-xl border bg-card/50 shadow-sm">
+                                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0 mb-1">
+                                                        <h3 className={cn("font-bold text-sm sm:text-base", isLatest ? "text-primary" : "text-foreground")}>
                                                             {log.version} • {log.title}
                                                         </h3>
                                                         <span className={cn(
-                                                            "text-xs px-2 py-0.5 rounded-full font-medium ml-2",
+                                                            "text-xs px-2 py-0.5 rounded-full font-medium self-start",
                                                             isLatest ? "bg-muted text-muted-foreground" : "text-muted-foreground"
                                                         )}>
                                                             {log.tag}
@@ -524,7 +537,7 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
                                                     <span className="text-xs font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded inline-block mb-1">
                                                         {log.date}
                                                     </span>
-                                                    <ul className="text-sm text-muted-foreground space-y-1.5 list-disc list-inside mt-2">
+                                                    <ul className="text-xs sm:text-sm text-muted-foreground space-y-1 list-disc list-inside mt-2">
                                                         {log.items.map((item, i) => (
                                                             <li key={i}>{item}</li>
                                                         ))}

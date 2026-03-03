@@ -19,6 +19,11 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import {
+    Sheet,
+    SheetContent,
+    SheetTrigger,
+} from '@/components/ui/sheet';
+import {
     Popover,
     PopoverContent,
     PopoverTrigger,
@@ -84,6 +89,7 @@ import {
     Pencil,
     Eye,
     Link2,
+    SlidersHorizontal,
 } from 'lucide-react';
 import { useState, useRef, useEffect, DragEvent, FormEvent, useCallback, useMemo } from 'react';
 import { Link } from '@inertiajs/react';
@@ -605,7 +611,7 @@ function BoardColumnComponent({
 
     return (
         <div
-            className={`flex-shrink-0 w-[280px] flex flex-col max-h-full rounded-xl transition-colors ${isDragOver ? 'ring-2 ring-primary/40' : ''
+            className={`flex-shrink-0 w-[240px] sm:w-[280px] flex flex-col max-h-full rounded-xl transition-colors ${isDragOver ? 'ring-2 ring-primary/40' : ''
                 } bg-muted dark:bg-muted/60`}
             onDragOver={(e) => onDragOver(e, column)}
             onDrop={(e) => onDrop(e, column)}
@@ -750,6 +756,7 @@ function ItemEditModal({
     const [storyPoints, setStoryPoints] = useState(item?.story_points?.toString() || '');
     const [startDate, setStartDate] = useState(item?.start_date?.toString().split('T')[0] || '');
     const [dueDate, setDueDate] = useState(item?.due_date?.toString().split('T')[0] || '');
+    const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
 
     // File preview
     const [filePreview, setFilePreview] = useState<{ url: string; title: string; previewType: PreviewType } | null>(null);
@@ -970,7 +977,7 @@ function ItemEditModal({
                     <DialogTitle className="sr-only">Edit {item.key}: {item.title}</DialogTitle>
 
                     {/* ── Header ─────────────────────────────────────────── */}
-                    <div className="flex items-center justify-between px-6 py-3 border-b bg-background shrink-0">
+                    <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b bg-background shrink-0">
                         <div className="flex items-center gap-3">
                             <ItemTypeIcon type={item.item_type} className="size-4" />
                             <span className="font-mono text-xs font-semibold text-primary tracking-wider">{item.key}</span>
@@ -982,6 +989,194 @@ function ItemEditModal({
                             )}
                         </div>
                         <div className="flex items-center gap-1">
+                            <Sheet open={detailsSheetOpen} onOpenChange={setDetailsSheetOpen}>
+                                <SheetTrigger asChild>
+                                    <Button variant="ghost" size="icon" className="size-8 lg:hidden">
+                                        <SlidersHorizontal className="size-4" />
+                                    </Button>
+                                </SheetTrigger>
+                                <SheetContent side="right" className="w-[300px] sm:w-[360px] p-0">
+                                    <div className="px-5 py-5 h-full overflow-y-auto">
+                                        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</h2>
+                                        <div className="space-y-0 divide-y divide-border/50">
+                                            {/* Status */}
+                                            <div className="flex items-center min-h-[40px] py-1">
+                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Status</span>
+                                                <div className="flex-1">
+                                                    <Select value={columnId} onValueChange={handleMoveToColumn}>
+                                                        <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
+                                                            <SelectValue placeholder="None" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {columns.map((col) => (
+                                                                <SelectItem key={col.id} value={col.id.toString()}>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color || '#94a3b8' }} />
+                                                                        {col.name}
+                                                                    </div>
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                            {/* Assignee */}
+                                            <div className="flex items-center min-h-[40px] py-1">
+                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Assignee</span>
+                                                <div className="flex-1">
+                                                    <Select value={assignedTo || 'unassigned'} onValueChange={(v) => { const val = v === 'unassigned' ? '' : v; setAssignedTo(val); saveProp({ assigned_to: val || null }); }}>
+                                                        <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
+                                                            <SelectValue placeholder="Unassigned" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                                                            {projectUsers.map((user) => (
+                                                                <SelectItem key={user.id} value={user.id.toString()}>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Avatar className="size-5">
+                                                                            {user.avatar_display && <AvatarImage src={user.avatar_display} alt={user.name} />}
+                                                                            <AvatarFallback className="text-[10px]">{user.name.charAt(0).toUpperCase()}</AvatarFallback>
+                                                                        </Avatar>
+                                                                        {user.name}
+                                                                    </div>
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                            {/* Type */}
+                                            <div className="flex items-center min-h-[40px] py-1">
+                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Type</span>
+                                                <div className="flex-1">
+                                                    <Select value={itemTypeId} onValueChange={(v) => { setItemTypeId(v); saveProp({ item_type_id: v }); }}>
+                                                        <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
+                                                            <SelectValue placeholder="None" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {itemTypes.map((type) => (
+                                                                <SelectItem key={type.id} value={type.id.toString()}>
+                                                                    <div className="flex items-center gap-2"><ItemTypeIcon type={type} />{type.name}</div>
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                            {/* Priority */}
+                                            <div className="flex items-center min-h-[40px] py-1">
+                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Priority</span>
+                                                <div className="flex-1">
+                                                    <Select value={priorityId} onValueChange={(v) => { setPriorityId(v); saveProp({ priority_id: v }); }}>
+                                                        <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
+                                                            <SelectValue placeholder="None" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {priorities.map((priority) => (
+                                                                <SelectItem key={priority.id} value={priority.id.toString()}>
+                                                                    <div className="flex items-center gap-2"><PriorityIcon slug={priority.slug} />{priority.name}</div>
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                            </div>
+                                            {/* Story Points */}
+                                            <div className="flex items-center min-h-[40px] py-1">
+                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Points</span>
+                                                <div className="flex-1 px-2 -ml-2">
+                                                    <Input type="number" min="0" value={storyPoints} onChange={(e) => setStoryPoints(e.target.value)} onBlur={() => saveProp({ story_points: storyPoints || null })} className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md" placeholder="None" />
+                                                </div>
+                                            </div>
+                                            {/* Start Date */}
+                                            <div className="flex items-center min-h-[40px] py-1">
+                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Start Date</span>
+                                                <div className="flex-1 px-2 -ml-2">
+                                                    <Input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); saveProp({ start_date: e.target.value || null }); }} className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md" />
+                                                </div>
+                                            </div>
+                                            {/* Due Date */}
+                                            <div className="flex items-center min-h-[40px] py-1">
+                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Due Date</span>
+                                                <div className="flex-1 px-2 -ml-2">
+                                                    <Input type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); saveProp({ due_date: e.target.value || null }); }} className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md" />
+                                                </div>
+                                            </div>
+                                            {/* Reporter */}
+                                            {item.reporter && (
+                                                <div className="flex items-center min-h-[40px] py-1">
+                                                    <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Reporter</span>
+                                                    <div className="flex-1 flex items-center gap-2 px-2">
+                                                        <Avatar className="size-5 shrink-0"><AvatarFallback className="text-[10px]">{item.reporter.name.charAt(0)}</AvatarFallback></Avatar>
+                                                        <span className="text-sm truncate">{item.reporter.name}</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {/* Created */}
+                                            <div className="flex items-center min-h-[40px] py-1">
+                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Created</span>
+                                                <span className="flex-1 text-sm px-2">{new Date(item.created_at).toLocaleDateString()}</span>
+                                            </div>
+                                            {/* Updated */}
+                                            <div className="flex items-center min-h-[40px] py-1">
+                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Updated</span>
+                                                <span className="flex-1 text-sm px-2">{new Date(item.updated_at).toLocaleDateString()}</span>
+                                            </div>
+                                            {/* Labels */}
+                                            <div className="flex items-start min-h-[40px] py-1">
+                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground pt-2">Labels</span>
+                                                <div className="flex-1">
+                                                    <Popover open={labelPopoverOpen} onOpenChange={(o) => { setLabelPopoverOpen(o); if (!o) setLabelSearch(''); }}>
+                                                        <PopoverTrigger asChild>
+                                                            <button className="w-full text-left rounded-md px-2 py-1 -ml-2 hover:bg-muted/80 transition-colors min-h-[32px] flex flex-wrap gap-1 items-center">
+                                                                {selectedLabels.length === 0 ? (
+                                                                    <span className="text-sm text-muted-foreground">None</span>
+                                                                ) : (
+                                                                    selectedLabels.map((id) => {
+                                                                        const lbl = projectLabels.find(l => l.id === id);
+                                                                        if (!lbl) return null;
+                                                                        return (
+                                                                            <span key={id} className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full" style={{ backgroundColor: lbl.color + '22', color: lbl.color, border: `1px solid ${lbl.color}55` }}>
+                                                                                {lbl.name}
+                                                                            </span>
+                                                                        );
+                                                                    })
+                                                                )}
+                                                            </button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent className="p-0 w-56" align="start">
+                                                            <div className="p-2 border-b">
+                                                                <Input autoFocus placeholder="Search labels…" value={labelSearch} onChange={(e) => setLabelSearch(e.target.value)} className="h-7 text-xs border-0 shadow-none focus-visible:ring-0 px-1" />
+                                                            </div>
+                                                            <div className="max-h-52 overflow-y-auto p-1">
+                                                                {filteredLabels.map((label) => {
+                                                                    const active = selectedLabels.includes(label.id);
+                                                                    return (
+                                                                        <button key={label.id} onClick={() => toggleLabel(label.id)} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm hover:bg-muted/60 transition-colors text-left">
+                                                                            <span className="size-3 rounded-full shrink-0 border" style={{ backgroundColor: label.color, borderColor: label.color }} />
+                                                                            <span className="flex-1 truncate text-xs">{label.name}</span>
+                                                                            {active && <Check className="size-3 shrink-0 text-primary" />}
+                                                                        </button>
+                                                                    );
+                                                                })}
+                                                                {filteredLabels.length === 0 && <p className="text-xs text-muted-foreground px-2 py-3 text-center">No labels found</p>}
+                                                            </div>
+                                                            <div className="p-2 border-t">
+                                                                <div className="flex gap-1.5">
+                                                                    <Input placeholder="New label name…" value={newLabelName} onChange={(e) => setNewLabelName(e.target.value)} className="h-7 text-xs flex-1" onKeyDown={(e) => { if (e.key === 'Enter' && newLabelName.trim()) { e.preventDefault(); handleCreateLabel(); } }} />
+                                                                    <Button size="sm" className="h-7 px-2" onClick={handleCreateLabel} disabled={!newLabelName.trim()}>
+                                                                        <Plus className="size-3" />
+                                                                    </Button>
+                                                                </div>
+                                                            </div>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </SheetContent>
+                            </Sheet>
                             <Link href={route('boards.items.show', [workspace.slug, project.slug, board.slug, item.id])} className="inline-flex">
                                 <Button variant="ghost" size="sm" className="gap-1.5 text-muted-foreground hover:text-foreground h-8 text-xs">
                                     <Maximize2 className="size-3.5" />
@@ -1226,7 +1421,7 @@ function ItemEditModal({
                         </div>{/* /main column */}
 
                         {/* ── Sidebar ──────────────────────────────────────── */}
-                        <div className="w-[300px] shrink-0 overflow-y-auto border-l bg-background">
+                        <div className="hidden lg:block w-[300px] shrink-0 overflow-y-auto border-l bg-background">
                             <div className="px-5 py-5">
                                 <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</h2>
 
@@ -2431,7 +2626,7 @@ export default function BoardsShow({
 
             <div className="flex flex-col h-full overflow-hidden">
                 {/* Board Header */}
-                <div className="flex items-center justify-between px-6 py-3 border-b bg-background/95 backdrop-blur">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-3 sm:px-6 py-3 border-b bg-background/95 backdrop-blur">
                     <div className="flex items-center gap-4">
                         <div className="flex items-center gap-3">
                             <ProjectIcon project={project} size="md" className="shadow-sm" />
@@ -2442,7 +2637,7 @@ export default function BoardsShow({
                         </div>
 
                         {/* View Tabs */}
-                        <div className="flex items-center gap-1 ml-4 p-1 bg-muted rounded-lg">
+                        <div className="hidden sm:flex items-center gap-1 ml-4 p-1 bg-muted rounded-lg">
                             <button
                                 onClick={() => setCurrentView('kanban')}
                                 className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${currentView === 'kanban'
@@ -2486,16 +2681,56 @@ export default function BoardsShow({
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    {/* Mobile view selector */}
+                    <div className="sm:hidden flex items-center gap-1 p-1 bg-muted rounded-lg w-full overflow-x-auto">
+                        <button
+                            onClick={() => setCurrentView('kanban')}
+                            className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${currentView === 'kanban'
+                                ? 'bg-background text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                        >
+                            <Kanban className="size-4" />
+                        </button>
+                        <button
+                            onClick={() => setCurrentView('list')}
+                            className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${currentView === 'list'
+                                ? 'bg-background text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                        >
+                            <List className="size-4" />
+                        </button>
+                        <button
+                            onClick={() => setCurrentView('gantt')}
+                            className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${currentView === 'gantt'
+                                ? 'bg-background text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                        >
+                            <GanttChart className="size-4" />
+                        </button>
+                        <button
+                            onClick={() => setCurrentView('calendar')}
+                            className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${currentView === 'calendar'
+                                ? 'bg-background text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground'
+                                }`}
+                        >
+                            <Calendar className="size-4" />
+                        </button>
+                    </div>
+
+                    <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
                         {/* Search */}
-                        <div className="relative">
+                        <div className="relative flex-1 sm:flex-none">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                             <Input
                                 type="search"
-                                placeholder="Search board"
+                                placeholder="Search"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9 h-9 w-64 bg-muted/50 border-0"
+                                className="pl-9 h-9 sm:w-64 bg-muted/50 border-0"
                             />
                         </div>
 
@@ -2766,7 +3001,7 @@ export default function BoardsShow({
                 {/* View Content */}
                 {currentView === 'kanban' && (
                     <div className="flex-1 overflow-x-auto overflow-y-hidden bg-muted/50 dark:bg-muted/30">
-                        <div className="flex gap-4 p-6 h-full">
+                        <div className="flex gap-2 sm:gap-4 p-2 sm:p-6 h-full">
                             {filteredColumns.map((column) => (
                                 <BoardColumnComponent
                                     key={column.id}
@@ -2786,14 +3021,14 @@ export default function BoardsShow({
                             ))}
 
                             {/* Add Column Button */}
-                            <div className="flex-shrink-0 w-[280px]">
+                            <div className="flex-shrink-0 w-[240px] sm:w-[280px]">
                                 <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug])}>
                                     <Button
                                         variant="ghost"
                                         className="w-full h-12 border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 text-muted-foreground gap-2"
                                     >
                                         <Plus className="size-4" />
-                                        Add Column
+                                        <span className="hidden sm:inline">Add Column</span>
                                     </Button>
                                 </Link>
                             </div>

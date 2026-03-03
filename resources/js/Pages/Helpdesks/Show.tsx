@@ -19,6 +19,11 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import {
+    Sheet,
+    SheetContent,
+    SheetTrigger,
+} from '@/components/ui/sheet';
+import {
     Popover,
     PopoverContent,
     PopoverTrigger,
@@ -80,6 +85,7 @@ import {
     Pencil,
     MailPlus,
     UserPlus,
+    SlidersHorizontal,
 } from 'lucide-react';
 import { useState, useRef, useEffect, DragEvent, FormEvent, useCallback, useMemo } from 'react';
 import { Link } from '@inertiajs/react';
@@ -458,7 +464,7 @@ function HelpdeskColumnComponent({
 
     return (
         <div
-            className={`flex-shrink-0 w-[280px] flex flex-col max-h-full rounded-xl transition-colors ${isDragOver ? 'ring-2 ring-primary/40' : ''
+            className={`flex-shrink-0 w-[240px] sm:w-[280px] flex flex-col max-h-full rounded-xl transition-colors ${isDragOver ? 'ring-2 ring-primary/40' : ''
                 } bg-muted dark:bg-muted/60`}
             onDragOver={(e) => onDragOver(e, column)}
             onDrop={(e) => onDrop(e, column)}
@@ -567,6 +573,7 @@ function TicketEditModal({
     const [assignedTo, setAssignedTo] = useState(ticket?.assigned_to?.toString() || '');
     const [priorityId, setPriorityId] = useState(ticket?.priority_id?.toString() || '');
     const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+    const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
 
     // Update when ticket changes
     useEffect(() => {
@@ -673,7 +680,7 @@ function TicketEditModal({
                 <DialogTitle className="sr-only">Edit {ticket.key}: {ticket.subject}</DialogTitle>
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-3 border-b bg-background shrink-0">
+                <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b bg-background shrink-0">
                     <div className="flex items-center gap-3">
                         <span className="font-mono text-xs font-semibold text-primary tracking-wider">{ticket.key}</span>
                         {ticket.column && (
@@ -684,6 +691,133 @@ function TicketEditModal({
                         )}
                     </div>
                     <div className="flex items-center gap-1">
+                        <Sheet open={detailsSheetOpen} onOpenChange={setDetailsSheetOpen}>
+                            <SheetTrigger asChild>
+                                <Button variant="ghost" size="icon" className="size-8 lg:hidden">
+                                    <SlidersHorizontal className="size-4" />
+                                </Button>
+                            </SheetTrigger>
+                            <SheetContent side="right" className="w-[300px] sm:w-[360px] p-0">
+                                <div className="px-5 py-5 h-full overflow-y-auto">
+                                    <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</h2>
+                                    <div className="space-y-0 divide-y divide-border/50">
+                                        {/* Status */}
+                                        <div className="flex items-center min-h-[40px] py-1">
+                                            <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Status</span>
+                                            <div className="flex-1">
+                                                <Select value={columnId} onValueChange={handleMoveToColumn}>
+                                                    <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
+                                                        <SelectValue placeholder="None" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {columns.map((col) => (
+                                                            <SelectItem key={col.id} value={col.id.toString()}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color || '#94a3b8' }} />
+                                                                    {col.name}
+                                                                </div>
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                        {/* Assignee */}
+                                        <div className="flex items-center min-h-[40px] py-1">
+                                            <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Assignee</span>
+                                            <div className="flex-1">
+                                                <Select value={assignedTo || 'unassigned'} onValueChange={(v) => { const val = v === 'unassigned' ? '' : v; setAssignedTo(val); saveProp({ assigned_to: val || null }); }}>
+                                                    <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
+                                                        <SelectValue placeholder="Unassigned" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="unassigned">Unassigned</SelectItem>
+                                                        {projectUsers.map((user) => (
+                                                            <SelectItem key={user.id} value={user.id.toString()}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <Avatar className="size-5">
+                                                                        {user.avatar_display && <AvatarImage src={user.avatar_display} alt={user.name} />}
+                                                                        <AvatarFallback className="text-[10px]">{user.name.charAt(0).toUpperCase()}</AvatarFallback>
+                                                                    </Avatar>
+                                                                    {user.name}
+                                                                </div>
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                        {/* Priority */}
+                                        <div className="flex items-center min-h-[40px] py-1">
+                                            <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Priority</span>
+                                            <div className="flex-1">
+                                                <Select value={priorityId} onValueChange={(v) => { setPriorityId(v); saveProp({ priority_id: v }); }}>
+                                                    <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
+                                                        <SelectValue placeholder="None" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {priorities.map((priority) => (
+                                                            <SelectItem key={priority.id} value={priority.id.toString()}>
+                                                                <div className="flex items-center gap-2"><PriorityIcon slug={priority.slug} />{priority.name}</div>
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+                                        {/* Contact */}
+                                        {ticket.contact && (
+                                            <div className="flex items-center min-h-[40px] py-1">
+                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Contact</span>
+                                                <div className="flex-1 flex items-center gap-2 px-2">
+                                                    <Avatar className="size-5 shrink-0">
+                                                        <AvatarFallback className="text-[10px]">
+                                                            {ticket.contact.name?.charAt(0) || ticket.contact.email.charAt(0)}
+                                                        </AvatarFallback>
+                                                    </Avatar>
+                                                    <div>
+                                                        <p className="text-sm truncate">{ticket.contact.name || ticket.contact.email}</p>
+                                                        {ticket.contact.name && (
+                                                            <p className="text-xs text-muted-foreground truncate">{ticket.contact.email}</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {/* Created */}
+                                        <div className="flex items-center min-h-[40px] py-1">
+                                            <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Created</span>
+                                            <span className="flex-1 text-sm px-2">{new Date(ticket.created_at).toLocaleDateString()}</span>
+                                        </div>
+                                        {/* Updated */}
+                                        <div className="flex items-center min-h-[40px] py-1">
+                                            <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Updated</span>
+                                            <span className="flex-1 text-sm px-2">{new Date(ticket.updated_at).toLocaleDateString()}</span>
+                                        </div>
+                                        {/* Custom Fields */}
+                                        {fields.map((field) => (
+                                            <div key={field.id} className="flex items-center min-h-[40px] py-1">
+                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">{field.label}</span>
+                                                <div className="flex-1 px-2 -ml-2">
+                                                    <Input
+                                                        value={fieldValues[field.name] || ''}
+                                                        onChange={(e) => {
+                                                            const newValues = { ...fieldValues, [field.name]: e.target.value };
+                                                            setFieldValues(newValues);
+                                                        }}
+                                                        onBlur={() => {
+                                                            // Save field value via API
+                                                        }}
+                                                        className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
+                                                        placeholder={field.is_required ? 'Required' : 'Optional'}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </SheetContent>
+                        </Sheet>
                         <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" onClick={onClose}>
                             <X className="size-4" />
                         </Button>
@@ -695,7 +829,7 @@ function TicketEditModal({
 
                     {/* Main column */}
                     <div className="flex-1 overflow-y-auto min-w-0">
-                        <div className="px-8 py-6 space-y-0">
+                        <div className="px-4 sm:px-8 py-6 space-y-0">
 
                             {/* Subject */}
                             <div className="mb-0">
@@ -942,7 +1076,7 @@ function TicketEditModal({
                     </div>
 
                     {/* Sidebar */}
-                    <div className="w-[300px] shrink-0 overflow-y-auto border-l bg-background">
+                    <div className="hidden lg:block w-[300px] shrink-0 overflow-y-auto border-l bg-background">
                         <div className="px-5 py-5">
                             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</h2>
 
@@ -1367,14 +1501,14 @@ export default function HelpdesksShow({
                             ))}
 
                             {/* Add Column Button */}
-                            <div className="flex-shrink-0 w-[280px]">
+                            <div className="flex-shrink-0 w-[240px] sm:w-[280px]">
                                 <Link href={route('helpdesks.edit', [workspace.slug, project.slug, helpdesk.slug])}>
                                     <Button
                                         variant="ghost"
                                         className="w-full h-12 border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 text-muted-foreground gap-2"
                                     >
                                         <Plus className="size-4" />
-                                        Add Column
+                                        <span className="hidden sm:inline">Add Column</span>
                                     </Button>
                                 </Link>
                             </div>
