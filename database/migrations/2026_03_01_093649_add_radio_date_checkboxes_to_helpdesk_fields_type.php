@@ -23,10 +23,7 @@ return new class extends Migration
             return;
         }
 
-        // SQLite: enum is stored as string with check; drop and recreate if needed.
-        if ($driver === 'sqlite') {
-            DB::statement('ALTER TABLE helpdesk_fields DROP CONSTRAINT IF EXISTS helpdesk_fields_type_check');
-        }
+        // SQLite: doesn't support DROP CONSTRAINT; check constraints are not enforced at runtime, so nothing needed.
     }
 
     /**

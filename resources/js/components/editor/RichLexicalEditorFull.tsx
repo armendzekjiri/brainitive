@@ -44,6 +44,8 @@ import {
     LexicalCommand,
     RangeSelection,
     $getNearestNodeFromDOMNode,
+    PASTE_COMMAND,
+    $insertNodes,
 } from 'lexical';
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
 import {
@@ -75,6 +77,7 @@ import {
 import { HorizontalRuleNode, INSERT_HORIZONTAL_RULE_COMMAND } from '@lexical/react/LexicalHorizontalRuleNode';
 import { HorizontalRulePlugin } from '@lexical/react/LexicalHorizontalRulePlugin';
 import { TRANSFORMERS } from '@lexical/markdown';
+import { marked } from 'marked';
 import { $setBlocksType, $patchStyleText, $getSelectionStyleValueForProperty } from '@lexical/selection';
 import { $getNearestNodeOfType } from '@lexical/utils';
 import { cn } from '@/lib/utils';
@@ -2746,6 +2749,78 @@ function CodeHighlightPlugin() {
 }
 
 // Plugin to set initial content
+function looksLikeMarkdown(text: string): boolean {
+    const lines = text.split('\n');
+    const blockPatterns = [
+        /^#{1,6}\s+\S/,          // headings: # H1, ## H2 ...
+        /^[-*+]\s+\S/,            // unordered list: - item
+        /^\d+\.\s+\S/,            // ordered list: 1. item
+        /^>\s+\S/,                 // blockquote: > text
+        /^```/,                    // fenced code block
+        /^---+\s*$/,               // horizontal rule
+        /^[-*]\s*\[[ x]?\]/,      // task list: - [ ] or - [x]
+    ];
+    const inlinePatterns = [
+        /\*\*[^*\n]+\*\*/,        // bold: **text**
+        /`[^`\n]+`/,              // inline code: `code`
+        /\[.+\]\(.+\)/,           // link: [text](url)
+        /_{2}[^_\n]+_{2}/,        // bold: __text__
+    ];
+
+    const hasBlock = lines.some(line =>
+        blockPatterns.some(p => p.test(line.trim()))
+    );
+    const inlineMatchCount = inlinePatterns.filter(p => p.test(text)).length;
+
+    return hasBlock || inlineMatchCount >= 2;
+}
+
+function MarkdownPastePlugin(): null {
+    const [editor] = useLexicalComposerContext();
+
+    useEffect(() => {
+        return editor.registerCommand<ClipboardEvent | InputEvent | KeyboardEvent>(
+            PASTE_COMMAND,
+            (event) => {
+                if (!(event instanceof ClipboardEvent)) return false;
+
+                const clipboardData = event.clipboardData;
+                if (!clipboardData) return false;
+
+                const text = clipboardData.getData('text/plain');
+                const html = clipboardData.getData('text/html');
+
+                // If HTML is already present in clipboard (rich copy), let Lexical handle it natively
+                if (!text || html) return false;
+
+                if (!looksLikeMarkdown(text)) return false;
+
+                event.preventDefault();
+
+                const htmlContent = marked.parse(text) as string;
+
+                editor.update(() => {
+                    const selection = $getSelection();
+                    if (!$isRangeSelection(selection)) return;
+
+                    const parser = new DOMParser();
+                    const dom = parser.parseFromString(htmlContent, 'text/html');
+                    const nodes = $generateNodesFromDOM(editor, dom);
+
+                    if (nodes.length > 0) {
+                        $insertNodes(nodes);
+                    }
+                });
+
+                return true;
+            },
+            COMMAND_PRIORITY_HIGH
+        );
+    }, [editor]);
+
+    return null;
+}
+
 function InitialContentPlugin({
     content,
     editable,
@@ -3003,6 +3078,7 @@ export function RichLexicalEditor({
                     <HorizontalRulePlugin />
                     <TabIndentationPlugin />
                     <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
+                    <MarkdownPastePlugin />
                     <SlashCommandsPlugin />
                     <CommandsPlugin />
                     <CodeHighlightPlugin />
