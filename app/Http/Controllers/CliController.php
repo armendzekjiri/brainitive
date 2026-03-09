@@ -27,8 +27,15 @@ class CliController extends Controller
         }
 
         $user = Auth::user();
-        // Revoke any previous CLI tokens so there is only ever one active
-        $user->tokens()->where('name', 'brainitive-cli')->delete();
+
+        // Revoke any previous CLI tokens so there is only ever one active.
+        // Wrapped in try/catch in case the personal_access_tokens table has not
+        // been migrated yet on this environment.
+        try {
+            $user->tokens()->where('name', 'brainitive-cli')->delete();
+        } catch (\Exception) {
+            // Table missing — will be created after `php artisan migrate`
+        }
 
         $token = $user->createToken('brainitive-cli')->plainTextToken;
 
