@@ -1,0 +1,225 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Project;
+use App\Models\TaskList;
+use App\Models\TaskListItem;
+use App\Models\Workspace;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Inertia\Inertia;
+
+class TaskListController extends Controller
+{
+    // ─── List CRUD ────────────────────────────────────────────────────────────
+
+    public function store(Request $request, Workspace $workspace, Project $project)
+    {
+        $this->authorize('create', [TaskList::class, $project]);
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string|max:1000',
+        ]);
+
+        $slug = $this->uniqueSlug($project, Str::slug($validated['name']));
+
+        $position = $project->taskLists()->max('position') + 1;
+
+        $taskList = $project->taskLists()->create([
+            'name' => $validated['name'],
+            'slug' => $slug,
+            'description' => $validated['description'] ?? null,
+            'position' => $position,
+            'created_by' => $request->user()->id,
+        ]);
+
+        // Auto-watch creator
+        $taskList->watchers()->syncWithoutDetaching([$request->user()->id]);
+
+        return redirect()->route('task-lists.show', [$workspace->slug, $project->slug, $taskList->slug])
+            ->with('success', 'List created successfully.');
+    }
+
+    public function show(Request $request, Workspace $workspace, Project $project, TaskList $taskList)
+    {
+        $this->authorize('view', $taskList);
+
+        $taskList->load([
+            'items' => function ($q) {
+                $q->with(['assignee:id,name,email,avatar', 'creator:id,name'])
+                    ->orderBy('status')   // todo first
+                    ->orderBy('position');
+            },
+            'watchers:id,name,email',
+            'creator:id,name',
+        ]);
+
+        // Project members for assignee picker
+        $members = $project->workspace->users()
+            ->select('users.id', 'users.name', 'users.email', 'users.avatar')
+            ->get();
+
+        return Inertia::render('Lists/Show', [
+            'workspace' => $workspace,
+            'project' => $project,
+            'taskList' => $taskList,
+            'members' => $members,
+        ]);
+    }
+
+    public function update(Request $request, Workspace $workspace, Project $project, TaskList $taskList)
+    {
+        $this->authorize('update', $taskList);
+
+        $validated = $request->validate([
+            'name' => 'sometimes|required|string|max:255',
+            'description' => 'nullable|string|max:1000',
+        ]);
+
+        if (isset($validated['name'])) {
+            $validated['slug'] = $this->uniqueSlug($project, Str::slug($validated['name']), $taskList->id);
+        }
+
+        $taskList->update($validated);
+
+        return back()->with('success', 'List updated.');
+    }
+
+    public function destroy(Request $request, Workspace $workspace, Project $project, TaskList $taskList)
+    {
+        $this->authorize('delete', $taskList);
+
+        $taskList->delete();
+
+        return redirect()->route('projects.show', [$workspace->slug, $project->slug])
+            ->with('success', 'List deleted.');
+    }
+
+    public function toggleWatch(Request $request, Workspace $workspace, Project $project, TaskList $taskList)
+    {
+        $this->authorize('view', $taskList);
+
+        $user = $request->user();
+        $watching = $request->boolean('watch', true);
+
+        if ($watching) {
+            $taskList->watchers()->syncWithoutDetaching([$user->id]);
+        } else {
+            $taskList->watchers()->detach($user->id);
+        }
+
+        return back();
+    }
+
+    // ─── Item CRUD ────────────────────────────────────────────────────────────
+
+    public function storeItem(Request $request, Workspace $workspace, Project $project, TaskList $taskList)
+    {
+        $this->authorize('manageItems', $taskList);
+
+        $validated = $request->validate([
+            'title' => 'required|string|max:500',
+            'description' => 'nullable|array',
+            'assignee_id' => 'nullable|integer|exists:users,id',
+            'due_date' => 'nullable|date',
+            'recurrence' => 'nullable|in:daily,weekly,monthly,yearly',
+        ]);
+
+        $position = $taskList->items()->max('position') + 1;
+
+        $item = $taskList->items()->create([
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? null,
+            'status' => 'todo',
+            'assignee_id' => $validated['assignee_id'] ?? null,
+            'due_date' => $validated['due_date'] ?? null,
+            'recurrence' => $validated['recurrence'] ?? null,
+            'position' => $position,
+            'created_by' => $request->user()->id,
+        ]);
+
+        return back()->with(['newItem' => $item->load('assignee:id,name,email,avatar')]);
+    }
+
+    public function updateItem(Request $request, Workspace $workspace, Project $project, TaskList $taskList, TaskListItem $item)
+    {
+        $this->authorize('manageItems', $taskList);
+
+        $validated = $request->validate([
+            'title' => 'sometimes|required|string|max:500',
+            'description' => 'nullable|array',
+            'status' => 'sometimes|in:todo,done',
+            'assignee_id' => 'nullable|integer|exists:users,id',
+            'due_date' => 'nullable|date',
+            'recurrence' => 'nullable|in:daily,weekly,monthly,yearly',
+        ]);
+
+        $isCompleting = isset($validated['status'])
+            && $validated['status'] === 'done'
+            && $item->status !== 'done';
+
+        // Recurring: when completing a recurring item, reset to todo with next due date
+        if ($isCompleting && $item->recurrence) {
+            $nextDate = $item->nextDueDate();
+
+            $item->update(array_merge($validated, [
+                'status' => 'todo',
+                'due_date' => $nextDate ? $nextDate->format('Y-m-d') : $item->getRawOriginal('due_date'),
+            ]));
+
+            return back();
+        }
+
+        $item->update($validated);
+
+        return back();
+    }
+
+    public function destroyItem(Request $request, Workspace $workspace, Project $project, TaskList $taskList, TaskListItem $item)
+    {
+        $this->authorize('manageItems', $taskList);
+
+        $item->delete();
+
+        return back();
+    }
+
+    public function reorderItems(Request $request, Workspace $workspace, Project $project, TaskList $taskList)
+    {
+        $this->authorize('manageItems', $taskList);
+
+        $validated = $request->validate([
+            'items' => 'required|array',
+            'items.*.id' => 'required|integer',
+            'items.*.position' => 'required|integer',
+        ]);
+
+        foreach ($validated['items'] as $data) {
+            $taskList->items()->where('id', $data['id'])->update(['position' => $data['position']]);
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+
+    private function uniqueSlug(Project $project, string $base, ?int $excludeId = null): string
+    {
+        $slug = $base ?: 'list';
+        $original = $slug;
+        $counter = 1;
+
+        while (
+            $project->taskLists()
+                ->where('slug', $slug)
+                ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
+                ->exists()
+        ) {
+            $slug = $original.'-'.$counter++;
+        }
+
+        return $slug;
+    }
+}

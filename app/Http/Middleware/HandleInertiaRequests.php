@@ -78,6 +78,10 @@ class HandleInertiaRequests extends Middleware
                                         ->orderBy('position');
                                   }]);
                             },
+                            'taskLists' => function ($q) {
+                                $q->select('id', 'project_id', 'name', 'slug', 'position')
+                                  ->orderBy('position');
+                            },
                             'helpdesks' => function ($q) {
                                 $q->select('id', 'project_id', 'name', 'slug', 'description', 'position')
                                   ->orderBy('position');

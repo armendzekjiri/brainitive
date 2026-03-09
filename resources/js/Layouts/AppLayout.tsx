@@ -2,7 +2,7 @@ import { Link, router, usePage, useForm } from '@inertiajs/react';
 import axios from 'axios';
 import { Toaster } from 'sonner';
 import React, { PropsWithChildren, useState, useRef, FormEvent, useEffect, useCallback, createContext, useContext } from 'react';
-import { PageProps, Workspace, Project, Board, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn, Helpdesk } from '@/types';
+import { PageProps, Workspace, Project, Board, TaskList, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn, Helpdesk } from '@/types';
 import { cn } from '@/lib/utils';
 import { SearchModal } from '@/components/SearchModal';
 import { CommandPalette, CmdIcon, PaletteCommand } from '@/components/CommandPalette';
@@ -72,6 +72,7 @@ import {
     FileText,
     Folder,
     Kanban,
+    List,
     ListTodo,
     Bookmark as BookmarkIcon,
     Code2,
@@ -438,13 +439,14 @@ function ProjectContent({
     onAddItem,
     currentPageUuid,
 }: {
-    project: Project & { boards: Board[]; pages?: PageType[]; helpdesks?: Helpdesk[] };
+    project: Project & { boards: Board[]; task_lists?: TaskList[]; pages?: PageType[]; helpdesks?: Helpdesk[] };
     workspace: Workspace;
     onAddItem: (projectId: number, parentId?: number) => void;
     currentPageUuid?: string | null;
 }) {
-    const hasContent = (project.boards && project.boards.length > 0) || (project.pages && project.pages.length > 0) || (project.helpdesks && project.helpdesks.length > 0);
+    const hasContent = (project.boards && project.boards.length > 0) || (project.task_lists && project.task_lists.length > 0) || (project.pages && project.pages.length > 0) || (project.helpdesks && project.helpdesks.length > 0);
     const [boardsOpen, setBoardsOpen] = useExpandedState(`project-${project.id}-boards`, true);
+    const [listsOpen, setListsOpen] = useExpandedState(`project-${project.id}-lists`, true);
     const [pagesOpen, setPagesOpen] = useExpandedState(`project-${project.id}-pages`, true);
     const [whiteboardsOpen, setWhiteboardsOpen] = useExpandedState(`project-${project.id}-whiteboards`, true);
     const [foldersOpen, setFoldersOpen] = useExpandedState(`project-${project.id}-folders`, true);
@@ -497,10 +499,35 @@ function ProjectContent({
                 </>
             )}
 
+            {/* Lists */}
+            {project.task_lists && project.task_lists.length > 0 && (
+                <>
+                    {(project.boards?.length ?? 0) > 0 && <div className="border-t border-border/50 my-1.5" />}
+                    <button
+                        onClick={() => setListsOpen(!listsOpen)}
+                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
+                    >
+                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${listsOpen ? 'rotate-90' : ''}`} />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Lists</span>
+                    </button>
+                    {listsOpen && project.task_lists.map((tl) => (
+                        <SidebarMenuItem key={tl.id} className="pl-5">
+                            <Link
+                                href={route('task-lists.show', [workspace.slug, project.slug, tl.slug])}
+                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                            >
+                                <List className="size-4 shrink-0" />
+                                <span className="min-w-0 truncate">{tl.name}</span>
+                            </Link>
+                        </SidebarMenuItem>
+                    ))}
+                </>
+            )}
+
             {/* Helpdesk */}
             {project.helpdesks && project.helpdesks.length > 0 && (
                 <>
-                    {(project.boards?.length ?? 0) > 0 && <div className="border-t border-border/50 my-1.5" />}
+                    {((project.boards?.length ?? 0) > 0 || (project.task_lists?.length ?? 0) > 0) && <div className="border-t border-border/50 my-1.5" />}
                     <button
                         onClick={() => setHelpdesksOpen(!helpdesksOpen)}
                         className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
@@ -618,7 +645,7 @@ interface CreateItemModalProps {
 }
 
 function CreateItemModal({ open, onClose, workspace, project, parentId, parentType = 'project' }: CreateItemModalProps) {
-    const [itemType, setItemType] = useState<'page' | 'board' | 'folder' | 'excalidraw' | 'helpdesk' | null>(null);
+    const [itemType, setItemType] = useState<'page' | 'board' | 'folder' | 'excalidraw' | 'helpdesk' | 'list' | null>(null);
 
     const pageForm = useForm({
         name: '',
@@ -643,6 +670,22 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
         name: '',
         description: '',
     });
+
+    const listForm = useForm({
+        name: '',
+        description: '',
+    });
+
+    const handleCreateList = (e: FormEvent) => {
+        e.preventDefault();
+        listForm.post(route('task-lists.store', [workspace.slug, project.slug]), {
+            onSuccess: () => {
+                listForm.reset();
+                setItemType(null);
+                onClose();
+            },
+        });
+    };
 
     const handleCreatePage = (e: FormEvent) => {
         e.preventDefault();
@@ -682,6 +725,7 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
         pageForm.reset();
         boardForm.reset();
         helpdeskForm.reset();
+        listForm.reset();
         onClose();
     };
 
@@ -690,7 +734,7 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>
-                        {itemType === null ? 'Create New' : itemType === 'board' ? 'Create Board' : itemType === 'folder' ? 'Create Folder' : itemType === 'excalidraw' ? 'Create Whiteboard' : itemType === 'helpdesk' ? 'Create Helpdesk' : 'Create Page'}
+                        {itemType === null ? 'Create New' : itemType === 'board' ? 'Create Board' : itemType === 'folder' ? 'Create Folder' : itemType === 'excalidraw' ? 'Create Whiteboard' : itemType === 'helpdesk' ? 'Create Helpdesk' : itemType === 'list' ? 'Create List' : 'Create Page'}
                     </DialogTitle>
                     <DialogDescription>
                         {itemType === null
@@ -699,7 +743,9 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                                 ? 'Create a whiteboard to draw and save diagrams.'
                                 : itemType === 'helpdesk'
                                     ? 'Create a helpdesk to manage customer support tickets.'
-                                    : `Enter a name for your new ${itemType}`}
+                                    : itemType === 'list'
+                                        ? 'Create a task list to track to-dos with due dates and assignees.'
+                                        : `Enter a name for your new ${itemType}`}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -772,6 +818,18 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                                 <span className="text-sm font-medium">Helpdesk</span>
                             </button>
                         )}
+                        {parentType === 'project' && (
+                            <button
+                                type="button"
+                                onClick={() => setItemType('list')}
+                                className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors"
+                            >
+                                <div className="size-12 rounded-lg bg-[#0E83DC]/10 text-[#0E83DC] flex items-center justify-center">
+                                    <List className="size-6" />
+                                </div>
+                                <span className="text-sm font-medium">List</span>
+                            </button>
+                        )}
                     </div>
                 ) : itemType === 'board' ? (
                     <form onSubmit={handleCreateBoard} className="space-y-4 py-2">
@@ -825,6 +883,39 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                             </Button>
                             <Button type="submit" disabled={helpdeskForm.processing}>
                                 {helpdeskForm.processing ? 'Creating...' : 'Create Helpdesk'}
+                            </Button>
+                        </div>
+                    </form>
+                ) : itemType === 'list' ? (
+                    <form onSubmit={handleCreateList} className="space-y-4 py-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="list-name">List Name</Label>
+                            <Input
+                                id="list-name"
+                                value={listForm.data.name}
+                                onChange={(e) => listForm.setData('name', e.target.value)}
+                                placeholder="e.g., Weekly Tasks, Sprint Backlog"
+                                autoFocus
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="list-description">Description <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                            <Textarea
+                                id="list-description"
+                                value={listForm.data.description}
+                                onChange={(e) => listForm.setData('description', e.target.value)}
+                                placeholder="What is this list for?"
+                                rows={2}
+                                className="resize-none"
+                            />
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                            <Button type="button" variant="outline" onClick={() => setItemType(null)}>
+                                Back
+                            </Button>
+                            <Button type="submit" disabled={listForm.processing}>
+                                {listForm.processing ? 'Creating...' : 'Create List'}
                             </Button>
                         </div>
                     </form>
