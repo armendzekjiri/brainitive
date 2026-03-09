@@ -16,6 +16,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -63,7 +64,11 @@ import {
     BellRing,
     Users,
     Files,
+    FileDown,
+    FileCode,
+    Printer,
 } from 'lucide-react';
+import TurndownService from 'turndown';
 import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallback, Suspense, lazy } from 'react';
 
 // Lazy-load emoji-mart to prevent customElements.define() firing at module load time
@@ -642,6 +647,38 @@ function extractHtmlContent(content: Record<string, any> | null | undefined): st
     return null;
 }
 
+function downloadBlob(filename: string, content: string, mimeType: string) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+const EXPORT_HTML_STYLES = `
+  body{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:860px;margin:0 auto;padding:48px 32px;color:#1a1a1a;line-height:1.7}
+  h1{font-size:2.25rem;font-weight:700;margin:2rem 0 .5rem}
+  h2{font-size:1.5rem;font-weight:600;margin:1.75rem 0 .4rem}
+  h3{font-size:1.25rem;font-weight:600;margin:1.5rem 0 .3rem}
+  h4,h5,h6{font-weight:600;margin:1.25rem 0 .25rem}
+  p{margin:.75rem 0}
+  ul,ol{padding-left:1.5rem;margin:.75rem 0}
+  li{margin:.25rem 0}
+  code{background:#f3f4f6;padding:.15em .4em;border-radius:4px;font-size:.875em;font-family:'JetBrains Mono','Fira Code',monospace}
+  pre{background:#1e1e2e;color:#cdd6f4;padding:1rem 1.25rem;border-radius:8px;overflow-x:auto;font-size:.875rem;line-height:1.6}
+  pre code{background:none;padding:0;color:inherit}
+  blockquote{border-left:4px solid #0E83DC;margin:1rem 0;padding:.5rem 1rem;background:#f0f7ff;color:#374151;font-style:italic}
+  table{border-collapse:collapse;width:100%;margin:1rem 0}
+  th,td{border:1px solid #e5e7eb;padding:.5rem .75rem;text-align:left}
+  th{background:#f9fafb;font-weight:600}
+  a{color:#0E83DC;text-decoration:underline}
+  hr{border:none;border-top:1px solid #e5e7eb;margin:2rem 0}
+  img{max-width:100%;border-radius:6px}
+  @media print{@page{margin:20mm 25mm}body{max-width:none;padding:0}}
+`;
+
 export default function PageShow({ workspace, project, page, breadcrumbs }: Props) {
     // New whiteboards: redirect straight to the Excalidraw editor.
     // We arrive here (pages.show?new=1) because Inertia can't follow a redirect
@@ -700,6 +737,43 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
         name: page.name,
         icon: page.icon || '📄',
     });
+
+    const getExportHtml = useCallback(() =>
+        currentHtmlRef.current ?? extractHtmlContent(page.content as any) ?? '',
+    [page.content]);
+
+    const handleExportHtml = useCallback(() => {
+        const html = getExportHtml();
+        const title = formData.name || 'Untitled';
+        const safe = title.replace(/[<>"'&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '&': '&amp;' }[c]!));
+        const full = `<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<title>${safe}</title>\n<style>${EXPORT_HTML_STYLES}</style>\n</head>\n<body>\n<h1>${safe}</h1>\n${html}\n</body>\n</html>`;
+        downloadBlob(`${title}.html`, full, 'text/html');
+    }, [formData.name, getExportHtml]);
+
+    const handleExportMarkdown = useCallback(() => {
+        const html = getExportHtml();
+        const title = formData.name || 'Untitled';
+        const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
+        td.addRule('strikethrough', {
+            filter: ['del', 's'],
+            replacement: (content) => `~~${content}~~`,
+        });
+        const md = `# ${title}\n\n${td.turndown(html)}`;
+        downloadBlob(`${title}.md`, md, 'text/markdown');
+    }, [formData.name, getExportHtml]);
+
+    const handleExportPdf = useCallback(() => {
+        const html = getExportHtml();
+        const title = formData.name || 'Untitled';
+        const safe = title.replace(/[<>"'&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '&': '&amp;' }[c]!));
+        const win = window.open('', '_blank');
+        if (!win) return;
+        win.document.write(
+            `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>${safe}</title><style>${EXPORT_HTML_STYLES}</style></head>` +
+            `<body><h1>${safe}</h1>${html}<script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script></body></html>`
+        );
+        win.document.close();
+    }, [formData.name, getExportHtml]);
 
 
     // Update formData and editing state when page prop changes
@@ -964,7 +1038,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                             <MoreHorizontal className="size-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="w-48">
+                                    <DropdownMenuContent align="end" className="w-52">
                                         {page.status === 'published' && (
                                             <DropdownMenuItem onClick={handleUnpublish}>
                                                 <FileEdit className="size-4 mr-2" />
@@ -986,6 +1060,20 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                         <DropdownMenuItem onClick={triggerDuplicate}>
                                             <Files className="size-4 mr-2" />
                                             Duplicate
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuLabel className="text-xs text-muted-foreground font-normal px-2 py-1">Export</DropdownMenuLabel>
+                                        <DropdownMenuItem onClick={handleExportMarkdown}>
+                                            <FileDown className="size-4 mr-2" />
+                                            Export as Markdown
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={handleExportHtml}>
+                                            <FileCode className="size-4 mr-2" />
+                                            Export as HTML
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={handleExportPdf}>
+                                            <Printer className="size-4 mr-2" />
+                                            Export as PDF
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
                                         <DropdownMenuItem
