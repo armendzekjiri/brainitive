@@ -24,3 +24,4 @@ Homestead.yaml
 Thumbs.db
 public/js/build/*
 /public/js/build
+public/js/build/manifest.json
