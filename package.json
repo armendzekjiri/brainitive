@@ -107,6 +107,7 @@
         "@tiptap/react": "^3.18.0",
         "@tiptap/starter-kit": "^3.18.0",
         "@tiptap/suggestion": "^3.18.0",
+        "@types/turndown": "^5.0.6",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
@@ -124,6 +125,7 @@
         "tailwind-merge": "^3.4.0",
         "tailwindcss-animate": "^1.0.7",
         "tippy.js": "^6.3.7",
+        "turndown": "^7.2.2",
         "zod": "^4.3.6"
     }
 }
