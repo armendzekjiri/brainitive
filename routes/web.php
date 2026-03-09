@@ -215,6 +215,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('boards/{board:slug}/items/{item}/attachments', [BoardController::class, 'storeAttachment'])->name('boards.items.attachments.store');
             Route::delete('boards/{board:slug}/items/{item}/attachments/{attachment}', [BoardController::class, 'destroyAttachment'])->name('boards.items.attachments.destroy');
 
+            // Task Lists (nested under projects)
+            Route::post('task-lists', [App\Http\Controllers\TaskListController::class, 'store'])->name('task-lists.store');
+            Route::get('task-lists/{taskList:slug}', [App\Http\Controllers\TaskListController::class, 'show'])->name('task-lists.show');
+            Route::put('task-lists/{taskList:slug}', [App\Http\Controllers\TaskListController::class, 'update'])->name('task-lists.update');
+            Route::delete('task-lists/{taskList:slug}', [App\Http\Controllers\TaskListController::class, 'destroy'])->name('task-lists.destroy');
+            Route::post('task-lists/{taskList:slug}/watch', [App\Http\Controllers\TaskListController::class, 'toggleWatch'])->name('task-lists.watch');
+            Route::post('task-lists/{taskList:slug}/items', [App\Http\Controllers\TaskListController::class, 'storeItem'])->name('task-lists.items.store');
+            Route::post('task-lists/{taskList:slug}/items/reorder', [App\Http\Controllers\TaskListController::class, 'reorderItems'])->name('task-lists.items.reorder');
+            Route::patch('task-lists/{taskList:slug}/items/{item}', [App\Http\Controllers\TaskListController::class, 'updateItem'])->name('task-lists.items.update');
+            Route::delete('task-lists/{taskList:slug}/items/{item}', [App\Http\Controllers\TaskListController::class, 'destroyItem'])->name('task-lists.items.destroy');
+
             // Helpdesks (nested under projects)
             Route::post('helpdesks', [App\Http\Controllers\HelpdeskController::class, 'store'])->name('helpdesks.store');
             Route::get('helpdesks/{helpdesk:slug}', [App\Http\Controllers\HelpdeskController::class, 'show'])->name('helpdesks.show');

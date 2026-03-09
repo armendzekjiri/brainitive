@@ -91,6 +91,42 @@ export interface Board {
     updated_at: string;
 }
 
+export interface TaskList {
+    id: number;
+    uuid: string;
+    project_id: number;
+    name: string;
+    slug: string;
+    description?: string;
+    position: number;
+    created_by?: number;
+    creator?: User;
+    items?: TaskListItem[];
+    watchers?: User[];
+    created_at: string;
+    updated_at: string;
+    /** Alias: Laravel serializes the taskLists relationship as task_lists */
+    task_lists?: TaskList[];
+}
+
+export interface TaskListItem {
+    id: number;
+    uuid: string;
+    task_list_id: number;
+    title: string;
+    description?: Record<string, any> | null;
+    status: 'todo' | 'done';
+    assignee_id?: number | null;
+    assignee?: User | null;
+    due_date?: string | null;
+    recurrence?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null;
+    position: number;
+    created_by?: number;
+    creator?: User;
+    created_at: string;
+    updated_at: string;
+}
+
 export interface Bookmark {
     id: number;
     uuid: string;
@@ -296,7 +332,12 @@ export type PageProps<
     // Shared layout data
     workspaces?: Workspace[];
     currentWorkspace?: Workspace & {
-        projects: (Project & { boards: (Board & { columns?: BoardColumn[] })[]; pages: Page[] })[];
+        projects: (Project & {
+            boards: (Board & { columns?: BoardColumn[] })[];
+            task_lists: TaskList[];
+            pages: Page[];
+            helpdesks?: Helpdesk[];
+        })[];
     };
     /** When inside a project-scoped route (project, board, pages), the current project id for GlobalCreateModal pre-selection */
     currentProjectId?: number | null;

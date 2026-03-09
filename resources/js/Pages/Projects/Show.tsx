@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { PageProps, Workspace, Project, Board, Page as PageType, Helpdesk } from '@/types';
+import { PageProps, Workspace, Project, Board, TaskList, Page as PageType, Helpdesk } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { LayoutGrid, Plus, Settings, ArrowRight, Kanban, FileText, Folder, ChevronRight, PencilRuler, Headphones, User, Calendar, Key, Users } from 'lucide-react';
+import { LayoutGrid, Plus, Settings, ArrowRight, Kanban, FileText, Folder, ChevronRight, PencilRuler, Headphones, User, Calendar, Key, Users, List } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { useState } from 'react';
@@ -20,6 +20,7 @@ interface Props extends PageProps {
     workspace: Workspace;
     project: Project & {
         boards: Board[];
+        task_lists?: TaskList[];
         pages?: PageWithChildren[];
         helpdesks?: Helpdesk[];
         creator?: { id: number; name: string; avatar?: string | null; avatar_display?: string | null };
@@ -30,12 +31,17 @@ interface Props extends PageProps {
 export default function ProjectsShow({ auth, workspace, project }: Props) {
     const [createBoardDialogOpen, setCreateBoardDialogOpen] = useState(false);
     const [createHelpdeskDialogOpen, setCreateHelpdeskDialogOpen] = useState(false);
+    const [createListDialogOpen, setCreateListDialogOpen] = useState(false);
 
     const boardForm = useForm({
         name: '',
         description: '',
     });
     const helpdeskForm = useForm({
+        name: '',
+        description: '',
+    });
+    const listForm = useForm({
         name: '',
         description: '',
     });
@@ -56,6 +62,16 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
             onSuccess: () => {
                 setCreateHelpdeskDialogOpen(false);
                 helpdeskForm.reset();
+            },
+        });
+    };
+
+    const createList = (e: React.FormEvent) => {
+        e.preventDefault();
+        listForm.post(route('task-lists.store', [workspace.slug, project.slug]), {
+            onSuccess: () => {
+                setCreateListDialogOpen(false);
+                listForm.reset();
             },
         });
     };
@@ -242,7 +258,7 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                         </CardContent>
                     </Card>
 
-                    {/* 2x2: Row1 = Boards | Helpdesks, Row2 = Documents & folders | Whiteboards */}
+                    {/* Grid: Boards | Lists | Helpdesks | Documents | Whiteboards */}
                     <div className="grid gap-6 lg:grid-cols-2">
                         {/* Row 1 - Col 1: Boards */}
                         <Card>
@@ -297,6 +313,63 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                                                                 {board.description || 'No description'}
                                                             </span>
                                                         </div>
+                                                    </div>
+                                                    <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                </div>
+                                            </Link>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+
+                        {/* Lists */}
+                        <Card>
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <div className="size-9 rounded-lg bg-[#0E83DC]/10 flex items-center justify-center">
+                                            <List className="size-5 text-[#0E83DC]" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-lg">Lists</CardTitle>
+                                            <CardDescription>Task lists with due dates &amp; assignees</CardDescription>
+                                        </div>
+                                    </div>
+                                    {(project.task_lists?.length ?? 0) > 0 && (
+                                        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCreateListDialogOpen(true)}>
+                                            <Plus className="size-4" /> New
+                                        </Button>
+                                    )}
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                {(!project.task_lists || project.task_lists.length === 0) ? (
+                                    <div className="flex flex-col items-center justify-center py-12 rounded-xl border-2 border-dashed border-muted-foreground/25">
+                                        <div className="size-14 rounded-full bg-[#0E83DC]/10 flex items-center justify-center mb-4">
+                                            <List className="size-7 text-[#0E83DC]" />
+                                        </div>
+                                        <p className="text-sm font-medium text-foreground mb-1">No lists yet</p>
+                                        <p className="text-xs text-muted-foreground text-center max-w-[240px] mb-5">
+                                            Create a list to track tasks with assignees, due dates and recurring schedules.
+                                        </p>
+                                        <Button size="sm" className="gap-2" onClick={() => setCreateListDialogOpen(true)}>
+                                            <Plus className="size-4" /> Create List
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {project.task_lists.map((tl) => (
+                                            <Link key={tl.id} href={route('task-lists.show', [workspace.slug, project.slug, tl.slug])}>
+                                                <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-muted/80 transition-colors group">
+                                                    <div className="size-11 rounded-xl bg-[#0E83DC]/10 flex items-center justify-center shrink-0">
+                                                        <List className="size-5 text-[#0E83DC]" />
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">{tl.name}</p>
+                                                        {tl.description && (
+                                                            <p className="text-xs text-muted-foreground truncate mt-0.5">{tl.description}</p>
+                                                        )}
                                                     </div>
                                                     <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                                                 </div>
@@ -507,6 +580,51 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
                                     </Button>
                                     <Button type="submit" size="lg" disabled={helpdeskForm.processing}>
                                         {helpdeskForm.processing ? 'Creating...' : 'Create Helpdesk'}
+                                    </Button>
+                                </div>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
+
+                    {/* Create List dialog */}
+                    <Dialog open={createListDialogOpen} onOpenChange={setCreateListDialogOpen}>
+                        <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                                <DialogTitle className="text-xl">Create List</DialogTitle>
+                                <DialogDescription className="text-base">
+                                    Create a task list with assignees, due dates and recurring items.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <form onSubmit={createList} className="space-y-5 mt-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="list-name" className="text-base">List Name</Label>
+                                    <Input
+                                        id="list-name"
+                                        value={listForm.data.name}
+                                        onChange={(e) => listForm.setData('name', e.target.value)}
+                                        placeholder="e.g., Weekly Tasks, Sprint Backlog"
+                                        className="h-11"
+                                        required
+                                        autoFocus
+                                    />
+                                    {listForm.errors.name && <p className="text-sm text-destructive">{listForm.errors.name}</p>}
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="list-description" className="text-base">Description <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                                    <Textarea
+                                        id="list-description"
+                                        value={listForm.data.description}
+                                        onChange={(e) => listForm.setData('description', e.target.value)}
+                                        placeholder="What is this list for?"
+                                        className="min-h-[80px] resize-none"
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-3 pt-2">
+                                    <Button type="button" variant="outline" size="lg" onClick={() => setCreateListDialogOpen(false)}>
+                                        Cancel
+                                    </Button>
+                                    <Button type="submit" size="lg" disabled={listForm.processing}>
+                                        {listForm.processing ? 'Creating...' : 'Create List'}
                                     </Button>
                                 </div>
                             </form>

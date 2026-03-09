@@ -115,6 +115,9 @@ class ProjectController extends Controller
             'boards' => function ($query) {
                 $query->orderBy('position');
             },
+            'taskLists' => function ($query) {
+                $query->orderBy('position');
+            },
             'creator:id,name,avatar',
             'pages' => function ($query) {
                 $query->orderByRaw("CASE type WHEN 'folder' THEN 0 ELSE 1 END")->orderBy('position');

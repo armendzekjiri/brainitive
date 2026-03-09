@@ -114,6 +114,14 @@ class Project extends Model
     }
 
     /**
+     * Get all task lists in this project.
+     */
+    public function taskLists(): HasMany
+    {
+        return $this->hasMany(TaskList::class)->orderBy('position');
+    }
+
+    /**
      * Get all boards in this project.
      */
     public function boards(): HasMany

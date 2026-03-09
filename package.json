@@ -111,6 +111,7 @@
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
+        "date-fns": "^4.1.0",
         "editorjs-alert": "^1.1.4",
         "editorjs-drag-drop": "^1.1.16",
         "editorjs-undo": "^2.0.28",
