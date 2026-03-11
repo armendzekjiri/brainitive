@@ -1168,7 +1168,7 @@ function InsertGIFModal({ open, onClose, onInsert }: { open: boolean; onClose: (
                             placeholder="https://media.giphy.com/media/.../giphy.gif"
                         />
                     </div>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-muted-foreground">
                         Paste a URL to an animated GIF from Giphy, Tenor, or any direct GIF link.
                     </p>
                 </div>

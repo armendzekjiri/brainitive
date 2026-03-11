@@ -137,7 +137,7 @@ function ItemRow({
 
     return (
         <div className={cn(
-            'group border rounded-lg bg-white transition-all',
+            'group border rounded-lg bg-card transition-all',
             isDone && !isBouncing ? 'opacity-60' : '',
             isBouncing ? 'ring-2 ring-green-400' : '',
         )}>
@@ -378,7 +378,7 @@ function AddItemForm({
     }
 
     return (
-        <form onSubmit={handleSubmit} className="border rounded-lg bg-white p-3 space-y-3">
+        <form onSubmit={handleSubmit} className="border rounded-lg bg-card p-3 space-y-3">
             <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -595,11 +595,11 @@ export default function TaskListShow({ workspace, project, taskList: initialList
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto bg-[#F4F6F8] p-6">
+                <div className="flex-1 overflow-y-auto bg-muted/30 dark:bg-background p-6">
                     <div className="max-w-3xl mx-auto space-y-4">
                         {/* Filter tabs + stats */}
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1 bg-white rounded-lg border p-0.5">
+                            <div className="flex items-center gap-1 bg-card rounded-lg border p-0.5">
                                 {(['all', 'todo', 'done'] as const).map((f) => (
                                     <button
                                         key={f}

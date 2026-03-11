@@ -47,10 +47,10 @@ export default function InvitationsShow({
                     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0E83DC]/10">
                         <Mail className="size-7 text-[#0E83DC]" />
                     </div>
-                    <h1 className="text-xl font-semibold text-[#485E72]">
+                    <h1 className="text-xl font-semibold text-foreground">
                         You're invited
                     </h1>
-                    <p className="mt-2 text-sm text-[#485E72]/80">
+                    <p className="mt-2 text-sm text-muted-foreground">
                         <strong>{inviter.name}</strong> has invited you to join{' '}
                         <strong>{workspace.name}</strong>
                     </p>
@@ -80,8 +80,8 @@ export default function InvitationsShow({
                         </PrimaryButton>
                     </form>
                 ) : (
-                    <div className="space-y-3 rounded-xl border border-[#C0C5C0]/30 bg-[#F4F6F8]/50 p-4">
-                        <p className="text-center text-sm text-[#485E72]">
+                    <div className="space-y-3 rounded-xl border border-border bg-muted/30 p-4">
+                        <p className="text-center text-sm text-foreground">
                             Sign up or log in with <strong>{invitation.email}</strong> to accept this invitation.
                         </p>
                         <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
@@ -94,7 +94,7 @@ export default function InvitationsShow({
                             </Link>
                             <Link
                                 href={route('login')}
-                                className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-[#C0C5C0]/60 bg-white/60 px-4 py-2.5 text-sm font-semibold text-[#485E72] backdrop-blur-sm transition hover:bg-white hover:border-[#485E72]/30"
+                                className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-border bg-background/60 px-4 py-2.5 text-sm font-semibold text-foreground backdrop-blur-sm transition hover:bg-card hover:border-border/70"
                             >
                                 <LogIn className="size-4" />
                                 Log in

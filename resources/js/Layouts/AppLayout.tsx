@@ -81,7 +81,10 @@ import {
     GripVertical,
     Headphones,
     LifeBuoy,
+    Moon,
+    Sun,
 } from 'lucide-react';
+import { useTheme } from '@/hooks/useTheme';
 import {
     Select,
     SelectContent,
@@ -1695,6 +1698,7 @@ function AppSidebar({
 }
 
 function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: () => void; onSearchClick?: () => void; onOpenHelp?: () => void }) {
+    const { theme, toggleTheme } = useTheme();
     const { currentWorkspace } = usePage<PageProps>().props;
 
     return (
@@ -1745,6 +1749,16 @@ function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: 
             {/* Right side actions */}
             <div className="flex items-center gap-2">
                 <NotificationsDropdown />
+                {/* Theme toggle */}
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-9"
+                    onClick={toggleTheme}
+                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                    {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+                </Button>
                 <Button variant="ghost" size="icon" className="size-9" onClick={() => onOpenHelp?.()}>
                     <HelpCircle className="size-5" />
                 </Button>

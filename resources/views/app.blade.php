@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="light">
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -23,6 +23,16 @@
 
         <!-- Preload LCP image (logo) so it is discoverable immediately -->
         <link rel="preload" href="{{ asset('images/logo.png') }}" as="image">
+
+        <!-- Prevent flash of wrong theme: apply stored preference before first paint -->
+        <script>
+            (function() {
+                try {
+                    var t = localStorage.getItem('brainitive-theme');
+                    if (t === 'dark') { document.documentElement.classList.add('dark'); document.documentElement.classList.remove('light'); }
+                } catch(e) {}
+            })();
+        </script>
 
         <!-- Scripts -->
         @routes

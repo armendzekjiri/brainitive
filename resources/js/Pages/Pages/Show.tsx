@@ -1094,7 +1094,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                 <div className="flex-1 overflow-hidden flex">
 
                     {/* Page content panel */}
-                    <div ref={contentPanelRef} className="flex-1 overflow-y-auto bg-white">
+                    <div ref={contentPanelRef} className="flex-1 overflow-y-auto bg-background">
                         <div className={cn(
                             "mx-auto px-6 pt-6 pb-8",
                             !isFullWidth && "max-w-6xl"

@@ -129,9 +129,9 @@ function ExcalidrawFullEditor({
     if (!isOpen) return null;
 
     return createPortal(
-        <div className="fixed inset-0 z-[9999] flex flex-col bg-white">
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-background">
             {/* Toolbar — mirrors the blade page whiteboard */}
-            <div className="flex items-center justify-between px-4 py-2 border-b bg-white shrink-0" style={{ height: '52px' }}>
+            <div className="flex items-center justify-between px-4 py-2 border-b bg-background shrink-0" style={{ height: '52px' }}>
                 <div className="flex items-center gap-2">
                     <svg className="w-5 h-5 text-purple-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M12 19l7-7 3 3-7 7-3-3z" />
@@ -145,7 +145,7 @@ function ExcalidrawFullEditor({
                     <button
                         type="button"
                         onClick={onDiscard}
-                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white hover:bg-gray-50 transition-colors"
+                        className="px-3 py-1.5 text-sm border border-border rounded-md bg-background hover:bg-muted transition-colors text-foreground"
                     >
                         Discard
                     </button>
@@ -163,10 +163,10 @@ function ExcalidrawFullEditor({
             {/* Drawing canvas */}
             <div className="flex-1 relative overflow-hidden">
                 <Suspense fallback={
-                    <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+                    <div className="absolute inset-0 flex items-center justify-center bg-muted">
                         <div className="text-center">
-                            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                            <p className="text-sm text-gray-500">Loading Excalidraw…</p>
+                            <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                            <p className="text-sm text-muted-foreground">Loading Excalidraw…</p>
                         </div>
                     </div>
                 }>
@@ -280,7 +280,7 @@ function ExcalidrawComponent({
             <div ref={containerRef} className="relative my-4" draggable="false">
                 {/* Thumbnail */}
                 <div
-                    className={`relative rounded-lg overflow-hidden border bg-white cursor-pointer hover:border-purple-400 transition-colors group ${isSelected ? 'ring-2 ring-purple-500 ring-offset-2' : ''}`}
+                    className={`relative rounded-lg overflow-hidden border bg-card dark:bg-card cursor-pointer hover:border-purple-400 transition-colors group ${isSelected ? 'ring-2 ring-purple-500 ring-offset-2' : ''}`}
                     style={{ minHeight: '180px' }}
                     onClick={() => setIsEditing(true)}
                 >
@@ -289,12 +289,12 @@ function ExcalidrawComponent({
                             <img
                                 src={previewDataUrl}
                                 alt="Excalidraw drawing preview"
-                                className="w-full object-contain bg-white block"
+                                className="w-full object-contain bg-background dark:bg-card block"
                                 style={{ maxHeight: '400px' }}
                             />
                             {/* Edit overlay on hover */}
                             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/10">
-                                <span className="px-3 py-1.5 bg-white rounded-md shadow text-sm font-medium text-gray-800 flex items-center gap-1.5">
+                                <span className="px-3 py-1.5 bg-card rounded-md shadow text-sm font-medium text-foreground flex items-center gap-1.5">
                                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />

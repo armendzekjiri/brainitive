@@ -42,7 +42,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
             <table className="w-full border-collapse" style={{ lineHeight: '1.6' }}>
                 <tbody>
                     {lines.map((line, i) => (
-                        <tr key={i} className="hover:bg-white/5">
+                        <tr key={i} className="hover:bg-muted/30">
                             <td
                                 className="select-none text-right pr-3 pl-4 w-px whitespace-nowrap border-r border-white/10 align-top"
                                 style={{ color: '#636e7b', fontSize: '0.75rem', paddingTop: '2px', paddingBottom: '2px' }}
