@@ -56,7 +56,7 @@ function PriorityIcon({ slug, className }: { slug?: string; className?: string }
         case 'high':    return <ChevronUp className={cn(cls, 'text-orange-500')} />;
         case 'medium':  return <Equal className={cn(cls, 'text-yellow-500')} />;
         case 'low':     return <ChevronDown className={cn(cls, 'text-blue-400')} />;
-        case 'lowest':  return <ChevronDown className={cn(cls, 'text-slate-400')} />;
+        case 'lowest':  return <ChevronDown className={cn(cls, 'text-muted-foreground')} />;
         default:        return <Equal className={cn(cls, 'text-muted-foreground')} />;
     }
 }

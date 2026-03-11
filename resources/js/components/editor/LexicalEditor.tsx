@@ -61,7 +61,7 @@ const theme = {
             listitem: 'list-none',
         },
     },
-    quote: 'border-l-4 border-gray-300 pl-4 italic text-muted-foreground my-2',
+    quote: 'border-l-4 border-border pl-4 italic text-muted-foreground my-2',
     code: 'bg-muted px-1 py-0.5 rounded font-mono text-sm',
     codeHighlight: {
         atrule: 'text-purple-500',

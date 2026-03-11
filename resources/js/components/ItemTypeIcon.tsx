@@ -44,7 +44,7 @@ function slugToLucideIcon(slug: string | undefined, baseClass: string) {
         case 'story':
             return <BookOpen className={cn(baseClass, 'text-green-600')} />;
         case 'epic':
-            return <Layers className={cn(baseClass, 'text-slate-500')} />;
+            return <Layers className={cn(baseClass, 'text-muted-foreground')} />;
         case 'subtask':
             return <Square className={cn(baseClass, 'text-primary/60')} />;
         case 'task':

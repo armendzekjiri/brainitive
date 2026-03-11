@@ -1,0 +1,1 @@
+import{c}from"./createLucideIcon-BzEQVrdT.js";const a=[["path",{d:"M21 12a9 9 0 1 1-6.219-8.56",key:"13zald"}]],r=c("loader-circle",a);const e=[["path",{d:"m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551",key:"1miecu"}]],i=c("paperclip",e);export{r as L,i as P};

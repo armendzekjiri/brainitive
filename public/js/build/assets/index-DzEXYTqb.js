@@ -1,0 +1,1 @@
+import{r as e}from"./app-DQXDBWaA.js";var a=globalThis?.document?e.useLayoutEffect:()=>{};function f(t){const u=e.useRef(t);return e.useEffect(()=>{u.current=t}),e.useMemo(()=>(...r)=>u.current?.(...r),[])}export{a,f as u};
