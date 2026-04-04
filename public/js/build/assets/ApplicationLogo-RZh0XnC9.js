@@ -1,1 +1,0 @@
-import{j as p}from"./app-CswKOSCF.js";function n({className:o="",alt:i="Logo",width:r=140,height:t=36,priority:s=!1,...g}){return p.jsx("img",{src:"/images/logo.png",alt:i,width:r,height:t,...s?{fetchpriority:"high"}:{},className:o,...g})}export{n as A};
