@@ -86,6 +86,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { ThemeMenu } from '@/components/ThemeMenu';
+import { WelcomeModal } from '@/components/Onboarding/WelcomeModal';
 import {
     Select,
     SelectContent,
@@ -1992,6 +1993,7 @@ export default function AppLayout({ children, title }: Props) {
             )}
             <HelpModal open={helpModalOpen} onOpenChange={setHelpModalOpen} />
             <GlobalStickyNotes />
+            <WelcomeModal />
             <Toaster richColors position="bottom-right" closeButton />
         </GlobalCreateModalContext.Provider>
     );

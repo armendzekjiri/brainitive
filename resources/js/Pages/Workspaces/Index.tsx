@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Users, FolderKanban, ArrowRight, User as UserIcon } from 'lucide-react';
+import { SetupChecklist } from '@/components/Onboarding/SetupChecklist';
 
 interface Props extends PageProps {
     workspaces: Workspace[];
@@ -34,6 +35,7 @@ export default function WorkspacesIndex({ auth, workspaces, isInstanceAdmin }: P
             <Head title="Workspaces" />
 
             <div className="p-8 max-w-6xl mx-auto">
+                <SetupChecklist />
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 mb-10">
                     <div>
