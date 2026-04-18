@@ -85,6 +85,7 @@ import {
     Sun,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
+import { ThemeMenu } from '@/components/ThemeMenu';
 import {
     Select,
     SelectContent,
@@ -1667,6 +1668,8 @@ function AppSidebar({
                                 <span className="text-sm">Help & support</span>
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
+                            <ThemeMenu />
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem asChild className="cursor-pointer text-destructive focus:text-destructive">
                                 <Link href={route('logout')} method="post" as="button" className="flex items-center gap-3 p-2 w-full">
                                     <LogOut className="size-4" />
@@ -1698,7 +1701,7 @@ function AppSidebar({
 }
 
 function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: () => void; onSearchClick?: () => void; onOpenHelp?: () => void }) {
-    const { theme, toggleTheme } = useTheme();
+    const { resolvedTheme, toggleTheme } = useTheme();
     const { currentWorkspace } = usePage<PageProps>().props;
 
     return (
@@ -1749,15 +1752,16 @@ function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: 
             {/* Right side actions */}
             <div className="flex items-center gap-2">
                 <NotificationsDropdown />
-                {/* Theme toggle */}
+                {/* Theme quick toggle (full picker is in user menu) */}
                 <Button
                     variant="ghost"
                     size="icon"
                     className="size-9"
                     onClick={toggleTheme}
-                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    aria-label={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    title={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                 >
-                    {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
+                    {resolvedTheme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
                 </Button>
                 <Button variant="ghost" size="icon" className="size-9" onClick={() => onOpenHelp?.()}>
                     <HelpCircle className="size-5" />

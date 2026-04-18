@@ -24,12 +24,25 @@
         <!-- Preload LCP image (logo) so it is discoverable immediately -->
         <link rel="preload" href="{{ asset('images/logo.png') }}" as="image">
 
-        <!-- Prevent flash of wrong theme: apply stored preference before first paint -->
+        <!-- Prevent flash of wrong theme: apply stored preference (or system pref) before first paint -->
         <script>
             (function() {
                 try {
-                    var t = localStorage.getItem('brainitive-theme');
-                    if (t === 'dark') { document.documentElement.classList.add('dark'); document.documentElement.classList.remove('light'); }
+                    var stored = localStorage.getItem('brainitive-theme');
+                    var theme = (stored === 'light' || stored === 'dark' || stored === 'system') ? stored : 'system';
+                    var resolved = theme;
+                    if (theme === 'system') {
+                        resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                    }
+                    var root = document.documentElement;
+                    if (resolved === 'dark') {
+                        root.classList.add('dark');
+                        root.classList.remove('light');
+                    } else {
+                        root.classList.add('light');
+                        root.classList.remove('dark');
+                    }
+                    root.style.colorScheme = resolved;
                 } catch(e) {}
             })();
         </script>
