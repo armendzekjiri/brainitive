@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\ItemPriority;
 use App\Models\ItemType;
+use App\Models\Page;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -26,10 +27,49 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
+     * Compute onboarding props (welcome state + setup checklist progress).
+     *
+     * @return array<string, mixed>
+     */
+    private function onboardingProps(\App\Models\User $user): array
+    {
+        $state = $user->onboarding_state ?? [];
+        $workspaces = $user->workspaces()->pluck('workspaces.id');
+
+        $hasProject = $workspaces->isNotEmpty()
+            ? \App\Models\Project::whereIn('workspace_id', $workspaces)->exists()
+            : false;
+        $hasBoard = $workspaces->isNotEmpty()
+            ? \App\Models\Board::whereHas('project', fn ($q) => $q->whereIn('workspace_id', $workspaces))->exists()
+            : false;
+        $hasPage = $workspaces->isNotEmpty()
+            ? Page::whereHas('project', fn ($q) => $q->whereIn('workspace_id', $workspaces))->exists()
+            : false;
+        $hasTeammate = $workspaces->isNotEmpty()
+            ? \DB::table('workspace_user')
+                ->whereIn('workspace_id', $workspaces)
+                ->where('user_id', '!=', $user->id)
+                ->exists()
+            : false;
+
+        return [
+            'welcome_seen' => (bool) ($state['welcome_seen'] ?? false),
+            'checklist_dismissed' => (bool) ($state['checklist_dismissed'] ?? false),
+            'focus' => $state['focus'] ?? null,
+            'checklist' => [
+                'has_workspace' => $workspaces->isNotEmpty(),
+                'has_project' => $hasProject,
+                'has_board' => $hasBoard,
+                'has_page' => $hasPage,
+                'has_teammate' => $hasTeammate,
+            ],
+        ];
+    }
+
+    /**
      * Recursively load page children for sidebar tree (avoids N+1, supports Folder -> folder -> document etc.).
      *
      * @param  int  $depth  Remaining nesting levels (e.g. 7 allows 8 levels: root + 7 nested).
-     * @return \Closure
      */
     private static function pageTreeRecursive(int $depth = 7): \Closure
     {
@@ -73,18 +113,18 @@ class HandleInertiaRequests extends Middleware
                         $query->with([
                             'boards' => function ($q) {
                                 $q->select('id', 'project_id', 'name', 'slug', 'type')
-                                  ->with(['columns' => function ($c) {
-                                      $c->select('id', 'board_id', 'name', 'color', 'position')
-                                        ->orderBy('position');
-                                  }]);
+                                    ->with(['columns' => function ($c) {
+                                        $c->select('id', 'board_id', 'name', 'color', 'position')
+                                            ->orderBy('position');
+                                    }]);
                             },
                             'taskLists' => function ($q) {
                                 $q->select('id', 'project_id', 'name', 'slug', 'position')
-                                  ->orderBy('position');
+                                    ->orderBy('position');
                             },
                             'helpdesks' => function ($q) {
                                 $q->select('id', 'project_id', 'name', 'slug', 'description', 'position')
-                                  ->orderBy('position');
+                                    ->orderBy('position');
                             },
                             'pages' => function ($q) {
                                 $q->with(['children' => self::pageTreeRecursive(7)])
@@ -136,11 +176,12 @@ class HandleInertiaRequests extends Middleware
             'currentProjectId' => $currentProjectId,
             'currentBoardId' => $currentBoardId,
             'itemTypes' => fn () => $user ? ItemType::orderBy('id')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
-            'priorities'  => fn () => $user ? ItemPriority::orderBy('order')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
+            'priorities' => fn () => $user ? ItemPriority::orderBy('order')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
             'currentPageUuid' => $request->routeIs('pages.show') && $request->route('page')
                 ? (is_object($request->route('page')) ? $request->route('page')->uuid : $request->route('page'))
                 : null,
             'unreadNotificationsCount' => fn () => $user ? $user->unreadNotifications()->count() : 0,
+            'onboarding' => fn () => $user ? $this->onboardingProps($user) : null,
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),

@@ -348,7 +348,24 @@ export type PageProps<
     priorities?: ItemPriority[];
     /** Unread notification count shared by HandleInertiaRequests middleware */
     unreadNotificationsCount?: number;
+    /** Onboarding state + computed setup checklist progress (shared by HandleInertiaRequests) */
+    onboarding?: OnboardingState | null;
 };
+
+export type OnboardingFocus = 'project_mgmt' | 'docs' | 'support' | 'all';
+
+export interface OnboardingState {
+    welcome_seen: boolean;
+    checklist_dismissed: boolean;
+    focus: OnboardingFocus | null;
+    checklist: {
+        has_workspace: boolean;
+        has_project: boolean;
+        has_board: boolean;
+        has_page: boolean;
+        has_teammate: boolean;
+    };
+}
 
 /** My Work page: assigned item summary */
 export interface MyWorkItem {

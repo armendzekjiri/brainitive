@@ -33,6 +33,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'avatar',
         'bio',
         'phone',
+        'onboarding_state',
     ];
 
     protected $appends = ['avatar_display'];
@@ -57,6 +58,7 @@ class User extends Authenticatable implements MustVerifyEmail
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'onboarding_state' => 'array',
         ];
     }
 

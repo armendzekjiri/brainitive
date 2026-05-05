@@ -276,6 +276,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    // Onboarding state (welcome modal + setup checklist)
+    Route::post('/api/onboarding/welcome-seen', [App\Http\Controllers\OnboardingController::class, 'markWelcomeSeen'])->name('onboarding.welcome-seen');
+    Route::post('/api/onboarding/checklist-dismissed', [App\Http\Controllers\OnboardingController::class, 'dismissChecklist'])->name('onboarding.checklist-dismissed');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
