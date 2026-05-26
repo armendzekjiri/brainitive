@@ -1862,7 +1862,21 @@ function htmlToPlainText(html: string, maxLength = 500): string {
     return maxLength && text.length > maxLength ? text.slice(0, maxLength) + '…' : text;
 }
 
-function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle, projectName, stickyToolbar = false, stickyTopOffset = 52 }: { showToolbar?: boolean; workspaceSlug?: string; itemTitle?: string; projectName?: string; stickyToolbar?: boolean; stickyTopOffset?: number }) {
+function ToolbarPlugin({
+    showToolbar = true,
+    workspaceSlug,
+    itemTitle,
+    projectName,
+    stickyToolbar = false,
+    stickyTopOffset = 52,
+}: {
+    showToolbar?: boolean;
+    workspaceSlug?: string;
+    itemTitle?: string;
+    projectName?: string;
+    stickyToolbar?: boolean;
+    stickyTopOffset?: number;
+}) {
     const [editor] = useLexicalComposerContext();
     const onChangeFromContext = useContext(RichLexicalOnChangeContext);
     const [isBold, setIsBold] = useState(false);
@@ -2054,7 +2068,7 @@ function ToolbarPlugin({ showToolbar = true, workspaceSlug, itemTitle, projectNa
             <div
                 className={cn(
                     "flex items-center gap-0.5 px-1.5 py-1 border-b bg-muted/30 flex-wrap min-h-[40px]",
-                    stickyToolbar && "sticky z-[9] bg-background/95 backdrop-blur shadow-sm"
+                    stickyToolbar && "sticky z-[9] bg-background/95 backdrop-blur shadow-sm",
                 )}
                 style={stickyToolbar ? { top: stickyTopOffset } : undefined}
             >
@@ -2963,6 +2977,7 @@ interface RichLexicalEditorProps {
     onHeadingsChange?: (headings: TocHeading[]) => void;
     stickyToolbar?: boolean;
     stickyTopOffset?: number;
+    documentMode?: boolean;
     // Mention notification context — passed to MentionsPlugin
     mentionContextUrl?: string;
     mentionContextTitle?: string;
@@ -2986,6 +3001,7 @@ export function RichLexicalEditor({
     onHeadingsChange,
     stickyToolbar = false,
     stickyTopOffset = 52,
+    documentMode = false,
     mentionContextUrl,
     mentionContextTitle,
     mentionContextType = 'page',
@@ -3043,7 +3059,7 @@ export function RichLexicalEditor({
     return (
         <LexicalComposer initialConfig={initialConfig}>
             <RichLexicalOnChangeContext.Provider value={onChange}>
-                <div className={cn("border rounded-lg overflow-hidden bg-white dark:bg-card", className)}>
+                <div className={cn("border rounded-lg overflow-hidden bg-white dark:bg-card", documentMode && "bg-transparent dark:bg-transparent", className)}>
                     <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} projectName={projectName} stickyToolbar={stickyToolbar} stickyTopOffset={stickyTopOffset} />
                     <div
                         className={cn("relative", maxHeight && "overflow-y-auto")}
@@ -3056,12 +3072,27 @@ export function RichLexicalEditor({
                                     className={cn(
                                         "lexical-editor-content outline-none p-4 text-sm prose prose-sm max-w-none",
                                         editable && "pl-16",
-                                        !editable && "cursor-default"
+                                        !editable && "cursor-default",
+                                        documentMode && [
+                                            "px-0 py-3 text-[15px] leading-7 text-foreground",
+                                            "prose-slate dark:prose-invert prose-headings:tracking-normal prose-headings:text-foreground",
+                                            "prose-h1:text-[1.75rem] prose-h1:leading-tight prose-h1:font-semibold prose-h1:mt-8 prose-h1:mb-3",
+                                            "prose-h2:text-[1.45rem] prose-h2:leading-snug prose-h2:font-semibold prose-h2:mt-8 prose-h2:mb-2.5",
+                                            "prose-h3:text-[1.18rem] prose-h3:leading-snug prose-h3:font-semibold prose-h3:mt-6 prose-h3:mb-2",
+                                            "prose-p:my-2 prose-li:my-1 prose-ul:my-3 prose-ol:my-3",
+                                            "prose-a:text-primary prose-blockquote:my-4 prose-blockquote:border-l-2 prose-blockquote:border-primary/35 prose-blockquote:pl-4 prose-blockquote:not-italic prose-blockquote:text-muted-foreground",
+                                            "prose-code:rounded prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[0.9em] prose-code:font-medium prose-code:before:content-none prose-code:after:content-none",
+                                            editable ? "px-3 pl-3 sm:px-4 sm:pl-4" : "px-0"
+                                        ]
                                     )}
                                     style={{ minHeight, fontFamily: 'Inter, sans-serif' }}
                                     aria-placeholder={placeholder}
                                     placeholder={
-                                        <div className="absolute top-4 left-16 text-muted-foreground pointer-events-none text-sm">
+                                        <div className={cn(
+                                            "absolute top-4 left-16 text-muted-foreground pointer-events-none text-sm",
+                                            documentMode && "top-3 text-[15px]",
+                                            documentMode && (editable ? "left-3 sm:left-4" : "left-0")
+                                        )}>
                                             {placeholder}
                                         </div>
                                     }

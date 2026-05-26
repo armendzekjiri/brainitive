@@ -169,6 +169,31 @@ function PriorityIcon({ slug, className }: { slug?: string; className?: string }
     }
 }
 
+function PriorityBars({ slug, className }: { slug?: string; className?: string }) {
+    const levels: Record<string, { lines: number; color: string }> = {
+        highest: { lines: 3, color: '#E11D48' },
+        high: { lines: 3, color: '#E11D48' },
+        medium: { lines: 2, color: '#F59E0B' },
+        low: { lines: 1, color: '#94A3B8' },
+        lowest: { lines: 1, color: '#94A3B8' },
+    };
+    const cfg = levels[slug || ''] || { lines: 0, color: '#D0D6DE' };
+    return (
+        <span className={`inline-flex items-end gap-[2px] h-3 ${className || ''}`} title={`Priority: ${slug || 'none'}`}>
+            {[1, 2, 3].map(i => (
+                <span
+                    key={i}
+                    className="w-[3px] rounded-[1px]"
+                    style={{
+                        background: i <= cfg.lines ? cfg.color : 'hsl(var(--border))',
+                        height: i === 1 ? 4 : i === 2 ? 7 : 10,
+                    }}
+                />
+            ))}
+        </span>
+    );
+}
+
 // Recursive CommentItem component for nested replies
 interface CommentItemProps {
     comment: Comment;
@@ -290,7 +315,7 @@ function CommentItem({
     );
 }
 
-// Item Card Component
+// Item Card Component — redesigned (utility-first dense kanban)
 function ItemCard({
     item,
     workspace,
@@ -308,129 +333,131 @@ function ItemCard({
     onDragStart: (e: DragEvent, item: Item) => void;
     onDragEnd: () => void;
 }) {
+    const isDueSoon = item.due_date && (() => {
+        const d = new Date(item.due_date!);
+        const now = new Date();
+        const diff = d.getTime() - now.getTime();
+        return diff < 2 * 86400000;
+    })();
+
     return (
-        <Card
+        <article
             draggable
             onDragStart={(e) => onDragStart(e, item)}
             onDragEnd={onDragEnd}
             onClick={() => onEdit(item)}
-            className="cursor-pointer hover:shadow-md hover:border-primary/30 transition-all group bg-background border border-border/50"
+            className={cn(
+                'bg-card border border-border rounded-[9px] p-[10px_11px] flex flex-col gap-[7px] cursor-pointer',
+                'shadow-[0_1px_0_rgba(20,32,44,0.04)] transition-all duration-150 relative group',
+                'hover:border-border/80 hover:shadow-[0_2px_4px_rgba(20,32,44,0.04),0_4px_14px_-6px_rgba(20,32,44,0.12)]',
+            )}
         >
-            <CardContent className="p-3">
-                {/* Item Key and Labels */}
-                <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                        <ItemTypeIcon type={item.item_type} />
-                        <span className="text-xs font-medium text-primary">{item.key}</span>
-                    </div>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="size-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                                <MoreHorizontal className="size-3.5" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(item); }}>
-                                Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    const hasSubtasks = (item.children_count ?? 0) > 0;
-                                    if (hasSubtasks && !window.confirm(`This task has ${item.children_count} subtask(s). Deleting it will delete those subtasks too. Continue?`)) {
-                                        return;
-                                    }
-                                    router.delete(route('boards.items.destroy', [workspace.slug, project.slug, board.slug, item.id]));
-                                }}
-                                className="text-destructive focus:text-destructive"
-                            >
-                                Delete
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-
-                {/* Title */}
-                <p className="text-sm font-medium mb-3 line-clamp-2 leading-snug">{item.title}</p>
-
-                {/* Parent (subtask link) */}
-                {item.parent && (
-                    <div className="mb-2">
-                        <Link
-                            href={route('boards.items.show', [workspace.slug, project.slug, board.slug, item.parent.id])}
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-[10px] text-muted-foreground hover:text-primary hover:underline flex items-center gap-1"
+            {/* Labels */}
+            {item.labels && item.labels.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap">
+                    {item.labels.slice(0, 3).map((label) => (
+                        <span
+                            key={label.id}
+                            className="inline-flex items-center h-4 px-1.5 rounded-[3px] text-[10.5px] font-semibold tracking-[0.01em]"
+                            style={{ color: label.color ?? '#485E72', background: `${label.color ?? '#485E72'}1A` }}
                         >
-                            <ChevronUp className="size-3 shrink-0" />
-                            <span>Parent: {item.parent.key}</span>
-                        </Link>
-                    </div>
-                )}
-
-                {/* Labels */}
-                {item.labels && item.labels.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-3">
-                        {item.labels.slice(0, 2).map((label) => (
-                            <Badge
-                                key={label.id}
-                                variant="outline"
-                                className="text-[10px] px-1.5 py-0"
-                                style={{ borderColor: label.color, color: label.color }}
-                            >
-                                {label.name}
-                            </Badge>
-                        ))}
-                        {item.labels.length > 2 && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                +{item.labels.length - 2}
-                            </Badge>
-                        )}
-                    </div>
-                )}
-
-                {/* Footer */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <PriorityIcon slug={item.priority?.slug} />
-                        {item.story_points && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono">
-                                {item.story_points}
-                            </Badge>
-                        )}
-                        {item.due_date && (
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Calendar className="size-3" />
-                            </div>
-                        )}
-                        {(item.comments_count ?? 0) > 0 && (
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <MessageSquare className="size-3" />
-                                <span>{item.comments_count}</span>
-                            </div>
-                        )}
-                    </div>
-                    {item.assignee ? (
-                        <Avatar className="size-6 ring-2 ring-background">
-                            {item.assignee.avatar_display && (
-                                <AvatarImage src={item.assignee.avatar_display} alt={item.assignee.name} />
-                            )}
-                            <AvatarFallback className="text-[10px] bg-gradient-to-br from-brand-blue to-brand-slate text-white font-semibold">
-                                {item.assignee.name.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                        </Avatar>
-                    ) : (
-                        <div className="size-6 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
-                            <UserIcon className="size-3 text-muted-foreground/50" />
-                        </div>
+                            {label.name}
+                        </span>
+                    ))}
+                    {item.labels.length > 3 && (
+                        <span className="text-[10px] text-muted-foreground font-medium">+{item.labels.length - 3}</span>
                     )}
                 </div>
-            </CardContent>
-        </Card>
+            )}
+
+            {/* Title */}
+            <div className="text-[13px] font-semibold leading-[1.35] tracking-[-0.005em] text-foreground break-words line-clamp-2">
+                {item.title}
+            </div>
+
+            {/* Parent (subtask link) */}
+            {item.parent && (
+                <Link
+                    href={route('boards.items.show', [workspace.slug, project.slug, board.slug, item.parent.id])}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-1 -mt-1"
+                >
+                    <ChevronUp className="size-3 shrink-0" />
+                    <span className="font-mono">{item.parent.key}</span>
+                </Link>
+            )}
+
+            {/* Meta row */}
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <span className="font-mono text-[10.5px] tracking-normal">{item.key}</span>
+
+                {item.due_date && (
+                    <span className={cn('inline-flex items-center gap-[3px]', isDueSoon && 'text-amber-500 font-semibold')}>
+                        <Calendar className="size-[11px]" />
+                        {new Date(item.due_date).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+                    </span>
+                )}
+
+                {item.story_points != null && item.story_points > 0 && (
+                    <span className="inline-grid place-items-center min-w-[17px] h-[17px] px-[5px] text-[10px] font-bold rounded bg-secondary text-secondary-foreground border border-border">
+                        {item.story_points}
+                    </span>
+                )}
+
+                {(item.children_count ?? 0) > 0 && (
+                    <span className="inline-flex items-center gap-[3px]">
+                        <CheckSquare className="size-3" />
+                        {item.children_count}
+                    </span>
+                )}
+
+                {(item.comments_count ?? 0) > 0 && (
+                    <span className="inline-flex items-center gap-[3px]">
+                        <MessageSquare className="size-[11px]" />
+                        {item.comments_count}
+                    </span>
+                )}
+
+                <span className="flex-1" />
+
+                <PriorityBars slug={item.priority?.slug} />
+
+                {item.assignee ? (
+                    <Avatar className="size-[18px] ring-2 ring-card shrink-0">
+                        {item.assignee.avatar_display && (
+                            <AvatarImage src={item.assignee.avatar_display} alt={item.assignee.name} />
+                        )}
+                        <AvatarFallback className="text-[8px] bg-brand-slate text-white font-bold">
+                            {item.assignee.name.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                    </Avatar>
+                ) : (
+                    <div className="size-[18px] rounded-full border border-dashed border-muted-foreground/30 shrink-0" />
+                )}
+            </div>
+
+            {/* Hover context menu */}
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                    <button className="absolute top-2 right-2 size-5 rounded grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-secondary">
+                        <MoreHorizontal className="size-3.5" />
+                    </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(item); }}>Edit</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            const hasSubtasks = (item.children_count ?? 0) > 0;
+                            if (hasSubtasks && !window.confirm(`This task has ${item.children_count} subtask(s). Deleting it will delete those subtasks too. Continue?`)) return;
+                            router.delete(route('boards.items.destroy', [workspace.slug, project.slug, board.slug, item.id]));
+                        }}
+                        className="text-destructive focus:text-destructive"
+                    >Delete</DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </article>
     );
 }
 
@@ -579,7 +606,7 @@ function CreateItemInline({
     );
 }
 
-// Column Component
+// Column Component — redesigned
 function BoardColumnComponent({
     column,
     workspace,
@@ -610,44 +637,48 @@ function BoardColumnComponent({
     const columnColor = column.color || '#94a3b8';
 
     return (
-        <div
-            className={`flex-shrink-0 w-[240px] sm:w-[280px] flex flex-col max-h-full rounded-xl transition-colors ${isDragOver ? 'ring-2 ring-primary/40' : ''
-                } bg-muted dark:bg-muted/60`}
+        <section
+            className={cn(
+                'flex-shrink-0 w-[282px] flex flex-col rounded-[10px] border border-border bg-secondary/50 dark:bg-secondary/30 max-h-full min-h-[200px] transition-colors',
+                isDragOver && 'ring-2 ring-primary/40',
+            )}
             onDragOver={(e) => onDragOver(e, column)}
             onDrop={(e) => onDrop(e, column)}
         >
             {/* Column Header */}
-            <div className="px-3 py-3 flex items-center justify-between bg-secondary dark:bg-secondary/50 rounded-t-xl border-b border-border">
-                <div className="flex items-center gap-2">
-                    <div
-                        className="w-1 h-4 rounded-full"
-                        style={{ backgroundColor: columnColor }}
-                    />
-                    <h3 className="font-semibold text-sm uppercase tracking-wide text-foreground/80">
+            <header className="flex items-center justify-between px-[10px] py-[9px]">
+                <div className="flex items-center gap-[7px] min-w-0">
+                    <span className="w-2 h-2 rounded-[2px] shrink-0" style={{ background: columnColor }} />
+                    <h3 className="text-xs font-bold tracking-[0.02em] uppercase text-foreground m-0 whitespace-nowrap">
                         {column.name}
                     </h3>
-                    <Badge variant="secondary" className="text-xs font-medium px-1.5 py-0 h-5 min-w-[20px] flex items-center justify-center">
+                    <span className="text-[11px] font-semibold text-muted-foreground px-[7px] py-[1px] rounded-full bg-card border border-border">
                         {column.items?.length || 0}
-                    </Badge>
+                    </span>
                 </div>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="size-7">
-                            <MoreHorizontal className="size-4" />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Edit column</DropdownMenuItem>
-                        <DropdownMenuItem>Set WIP limit</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive">Delete column</DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
+                <div className="flex items-center gap-[2px]">
+                    <button className="size-6 grid place-items-center rounded-[5px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
+                        <Plus className="size-[13px]" />
+                    </button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button className="size-6 grid place-items-center rounded-[5px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
+                                <MoreHorizontal className="size-[13px]" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem>Edit column</DropdownMenuItem>
+                            <DropdownMenuItem>Set WIP limit</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-destructive">Delete column</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </header>
 
             {/* Items */}
-            <ScrollArea className="flex-1 px-2 pt-2">
-                <div className="space-y-2 pb-2 pr-1">
+            <ScrollArea className="flex-1 min-h-0">
+                <div className="flex flex-col gap-2 px-2 pb-3">
                     {column.items?.map((item) => (
                         <ItemCard
                             key={item.id}
@@ -664,7 +695,7 @@ function BoardColumnComponent({
             </ScrollArea>
 
             {/* Create Item */}
-            <div className="p-2 pt-0">
+            <div className="px-2 pb-3 pt-0">
                 <CreateItemInline
                     column={column}
                     workspace={workspace}
@@ -674,7 +705,7 @@ function BoardColumnComponent({
                     rootItems={rootItems}
                 />
             </div>
-        </div>
+        </section>
     );
 }
 
@@ -2625,122 +2656,101 @@ export default function BoardsShow({
             <Head title={`${board.name} - ${project.name}`} />
 
             <div className="flex flex-col h-full overflow-hidden">
-                {/* Board Header */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-3 sm:px-6 py-3 border-b bg-background/95 backdrop-blur">
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-3">
-                            <ProjectIcon project={project} size="md" className="shadow-sm" />
-                            <div>
-                                <h1 className="text-lg font-semibold tracking-tight">{board.name}</h1>
-                                <p className="text-xs text-muted-foreground">{project.name}</p>
+                {/* ─── Board Header ─── */}
+                <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-border/60">
+                    <div className="flex items-center gap-3">
+                        <span className="w-8 h-8 rounded-lg grid place-items-center shrink-0" style={{ background: project.color || '#0E83DC' }}>
+                            <Kanban className="size-[14px] text-white" />
+                        </span>
+                        <div>
+                            <h1 className="text-[17px] font-bold tracking-[-0.012em] leading-[1.1] m-0">{board.name}</h1>
+                            <div className="flex items-center gap-3 mt-1">
+                                <span className="inline-flex items-center gap-[5px] text-[11.5px] text-muted-foreground">
+                                    <span className="w-[7px] h-[7px] rounded-full" style={{ background: project.color || '#0E83DC' }} />
+                                    {project.name}
+                                </span>
+                                <span className="inline-flex items-center gap-[5px] text-[11.5px] text-muted-foreground">
+                                    <UserIcon className="size-3" />
+                                    {projectUsers.length} members
+                                </span>
                             </div>
                         </div>
-
-                        {/* View Tabs */}
-                        <div className="hidden sm:flex items-center gap-1 ml-4 p-1 bg-muted rounded-lg">
-                            <button
-                                onClick={() => setCurrentView('kanban')}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${currentView === 'kanban'
-                                    ? 'bg-background text-foreground shadow-sm'
-                                    : 'text-muted-foreground hover:text-foreground'
-                                    }`}
-                            >
-                                <Kanban className="size-4" />
-                                Board
-                            </button>
-                            <button
-                                onClick={() => setCurrentView('list')}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${currentView === 'list'
-                                    ? 'bg-background text-foreground shadow-sm'
-                                    : 'text-muted-foreground hover:text-foreground'
-                                    }`}
-                            >
-                                <List className="size-4" />
-                                List
-                            </button>
-                            <button
-                                onClick={() => setCurrentView('gantt')}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${currentView === 'gantt'
-                                    ? 'bg-background text-foreground shadow-sm'
-                                    : 'text-muted-foreground hover:text-foreground'
-                                    }`}
-                            >
-                                <GanttChart className="size-4" />
-                                Timeline
-                            </button>
-                            <button
-                                onClick={() => setCurrentView('calendar')}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${currentView === 'calendar'
-                                    ? 'bg-background text-foreground shadow-sm'
-                                    : 'text-muted-foreground hover:text-foreground'
-                                    }`}
-                            >
-                                <Calendar className="size-4" />
-                                Calendar
-                            </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className="inline-flex">
+                            {projectUsers.slice(0, 4).map((u, i) => (
+                                <Avatar key={u.id} className={cn('size-6 ring-2 ring-background', i > 0 && '-ml-1.5')}>
+                                    {u.avatar_display && <AvatarImage src={u.avatar_display} alt={u.name} />}
+                                    <AvatarFallback className="text-[9px] bg-brand-slate text-white font-bold">{u.name.charAt(0)}</AvatarFallback>
+                                </Avatar>
+                            ))}
+                            {projectUsers.length > 4 && (
+                                <div className="size-6 -ml-1.5 rounded-full bg-secondary border border-border ring-2 ring-background grid place-items-center text-[9px] font-semibold text-muted-foreground">
+                                    +{projectUsers.length - 4}
+                                </div>
+                            )}
                         </div>
+                        <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug])}>
+                            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs"><Settings className="size-[13px]" /></Button>
+                        </Link>
+                        <Button size="sm" className="h-7 gap-1.5 text-xs"><Plus className="size-[13px]" />New card</Button>
+                    </div>
+                </div>
+
+                {/* ─── Toolbar ─── */}
+                <div className="flex flex-col gap-2 px-5 py-2 border-b border-border/60">
+                    {/* Row 1: View tabs + view switcher */}
+                    <div className="flex items-center gap-2 min-h-[28px]">
+                        <div className="inline-flex p-[3px] bg-secondary border border-border rounded-[7px] gap-[1px]">
+                            {(['kanban', 'list', 'gantt', 'calendar'] as const).map(v => {
+                                const icons = { kanban: Kanban, list: List, gantt: GanttChart, calendar: Calendar };
+                                const labels = { kanban: 'Board', list: 'List', gantt: 'Timeline', calendar: 'Calendar' };
+                                const Ic = icons[v];
+                                return (
+                                    <button
+                                        key={v}
+                                        onClick={() => setCurrentView(v)}
+                                        className={cn(
+                                            'h-[22px] px-[9px] text-[11.5px] font-semibold text-muted-foreground rounded-[5px] inline-flex items-center gap-[5px] transition-colors',
+                                            currentView === v && 'bg-card text-foreground shadow-[0_1px_0_rgba(20,32,44,0.04),0_1px_2px_rgba(0,0,0,0.04)]',
+                                            currentView !== v && 'hover:text-foreground',
+                                        )}
+                                    >
+                                        <Ic className="size-3" />
+                                        <span className="hidden sm:inline">{labels[v]}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <div className="flex-1" />
                     </div>
 
-                    {/* Mobile view selector */}
-                    <div className="sm:hidden flex items-center gap-1 p-1 bg-muted rounded-lg w-full overflow-x-auto">
-                        <button
-                            onClick={() => setCurrentView('kanban')}
-                            className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${currentView === 'kanban'
-                                ? 'bg-background text-foreground shadow-sm'
-                                : 'text-muted-foreground hover:text-foreground'
-                                }`}
-                        >
-                            <Kanban className="size-4" />
-                        </button>
-                        <button
-                            onClick={() => setCurrentView('list')}
-                            className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${currentView === 'list'
-                                ? 'bg-background text-foreground shadow-sm'
-                                : 'text-muted-foreground hover:text-foreground'
-                                }`}
-                        >
-                            <List className="size-4" />
-                        </button>
-                        <button
-                            onClick={() => setCurrentView('gantt')}
-                            className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${currentView === 'gantt'
-                                ? 'bg-background text-foreground shadow-sm'
-                                : 'text-muted-foreground hover:text-foreground'
-                                }`}
-                        >
-                            <GanttChart className="size-4" />
-                        </button>
-                        <button
-                            onClick={() => setCurrentView('calendar')}
-                            className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${currentView === 'calendar'
-                                ? 'bg-background text-foreground shadow-sm'
-                                : 'text-muted-foreground hover:text-foreground'
-                                }`}
-                        >
-                            <Calendar className="size-4" />
-                        </button>
-                    </div>
-
-                    <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                    {/* Row 2: Filters + search + sort */}
+                    <div className="flex items-center gap-2 min-h-[28px] flex-wrap">
                         {/* Search */}
-                        <div className="relative flex-1 sm:flex-none">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <div className="relative">
+                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-[13px] text-muted-foreground" />
                             <Input
                                 type="search"
-                                placeholder="Search"
+                                placeholder="Search…"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9 h-9 sm:w-64 bg-muted/50 border-0"
+                                className="pl-8 h-[26px] w-48 text-xs bg-card border border-border rounded-md"
                             />
                         </div>
 
                         {/* Filter */}
                         <Popover open={filterOpen} onOpenChange={setFilterOpen}>
                             <PopoverTrigger asChild>
-                                <Button variant="outline" size="sm" className="gap-2 h-9">
-                                    <Filter className="size-4" />
+                                <button className={cn(
+                                    'inline-flex items-center gap-1.5 h-[26px] px-[9px] rounded-md text-xs font-medium border cursor-pointer transition-colors',
+                                    activeFiltersCount > 0
+                                        ? 'bg-accent border-transparent text-accent-foreground'
+                                        : 'bg-card border-border text-muted-foreground hover:bg-secondary',
+                                )}>
+                                    <Filter className="size-[11px]" />
                                     {activeFiltersCount ? `Filter (${activeFiltersCount})` : 'Filter'}
-                                </Button>
+                                </button>
                             </PopoverTrigger>
                             <PopoverContent className="w-80 p-4 space-y-4" align="end">
                                 <div className="flex items-center justify-between">
@@ -2989,19 +2999,17 @@ export default function BoardsShow({
                             </PopoverContent>
                         </Popover>
 
-                        {/* Board Settings */}
-                        <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug])}>
-                            <Button variant="outline" size="icon" className="size-9">
-                                <Settings className="size-4" />
-                            </Button>
-                        </Link>
+                        <div className="flex-1" />
+                        <button className="inline-flex items-center gap-1.5 h-[26px] px-[9px] rounded-md text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
+                            <SlidersHorizontal className="size-3" />Sort
+                        </button>
                     </div>
                 </div>
 
                 {/* View Content */}
                 {currentView === 'kanban' && (
-                    <div className="flex-1 overflow-x-auto overflow-y-hidden bg-muted/50 dark:bg-muted/30">
-                        <div className="flex gap-2 sm:gap-4 p-2 sm:p-6 h-full">
+                    <div className="flex-1 overflow-hidden bg-background">
+                        <div className="flex gap-3 p-[14px_20px_20px] h-full overflow-x-auto overflow-y-hidden items-start">
                             {filteredColumns.map((column) => (
                                 <BoardColumnComponent
                                     key={column.id}
@@ -3021,17 +3029,12 @@ export default function BoardsShow({
                             ))}
 
                             {/* Add Column Button */}
-                            <div className="flex-shrink-0 w-[240px] sm:w-[280px]">
-                                <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug])}>
-                                    <Button
-                                        variant="ghost"
-                                        className="w-full h-12 border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 text-muted-foreground gap-2"
-                                    >
-                                        <Plus className="size-4" />
-                                        <span className="hidden sm:inline">Add Column</span>
-                                    </Button>
-                                </Link>
-                            </div>
+                            <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug])} className="flex-shrink-0">
+                                <button className="w-[282px] min-h-[220px] border border-dashed border-border rounded-[10px] flex flex-col items-center justify-center gap-1.5 text-muted-foreground text-[12.5px] font-medium hover:bg-card hover:text-foreground hover:border-border transition-colors">
+                                    <Plus className="size-[14px]" />
+                                    <span>New column</span>
+                                </button>
+                            </Link>
                         </div>
                     </div>
                 )}

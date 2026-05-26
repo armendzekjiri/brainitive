@@ -15,9 +15,17 @@ export default {
     	extend: {
     		fontFamily: {
     			sans: [
-    				'Figtree',
+    				'Hanken Grotesk',
+    				'Inter',
                     ...defaultTheme.fontFamily.sans
-                ]
+                ],
+    			mono: [
+    				'JetBrains Mono',
+    				'ui-monospace',
+    				'SFMono-Regular',
+    				'Menlo',
+    				'monospace',
+    			],
     		},
     		borderRadius: {
     			lg: 'var(--radius)',

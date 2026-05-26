@@ -324,7 +324,7 @@ function PageTitleEditor({
                         setEditing(false);
                     }
                 }}
-                className="text-4xl font-bold bg-transparent border-none outline-none focus:ring-0 w-full placeholder:text-muted-foreground/50"
+                className="w-full border-none bg-transparent text-[2rem] font-semibold leading-tight tracking-normal outline-none placeholder:text-muted-foreground/50 focus:ring-0 md:text-[2.35rem]"
                 placeholder="Untitled"
             />
         );
@@ -333,7 +333,7 @@ function PageTitleEditor({
     return (
         <h1
             onClick={() => setEditing(true)}
-            className="text-4xl font-bold cursor-text hover:bg-accent/50 rounded-lg px-1 -mx-1 transition-colors"
+            className="cursor-text rounded-md px-1 -mx-1 text-[2rem] font-semibold leading-tight tracking-normal transition-colors hover:bg-accent/50 md:text-[2.35rem]"
         >
             {title || 'Untitled'}
         </h1>
@@ -599,7 +599,7 @@ function PageTableOfContents({ headings, headerOffset, scrollRoot }: {
 
     return (
         <div className="w-56">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 px-2">
+            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-3 px-2">
                 <ListIcon className="size-3.5" />
                 <span>On this page</span>
             </div>
@@ -613,13 +613,13 @@ function PageTableOfContents({ headings, headerOffset, scrollRoot }: {
                             data-toc-id={h.id}
                             onClick={() => scrollTo(h)}
                             className={cn(
-                                'flex items-center w-full text-left rounded-md transition-colors',
-                                'hover:bg-accent hover:text-accent-foreground',
+                                'relative flex items-center w-full text-left rounded-md border-l-2 border-transparent transition-colors',
+                                'hover:bg-accent/60 hover:text-accent-foreground',
                                 depth === 0 && 'text-sm font-medium py-1 px-2',
                                 depth === 1 && 'text-[13px] py-0.5',
                                 depth >= 2 && 'text-xs py-0.5',
                                 isActive
-                                    ? 'text-primary bg-primary/5'
+                                    ? 'border-primary text-foreground bg-transparent'
                                     : depth === 0 ? 'text-foreground/80' : 'text-muted-foreground',
                             )}
                             style={{ paddingLeft: `${8 + depth * 14}px` }}
@@ -902,11 +902,11 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
     const getStatusBadge = () => {
         switch (page.status) {
             case 'published':
-                return <Badge variant="default" className="bg-brand-green hover:bg-brand-green/90"><Globe className="size-3 mr-1" /> Published</Badge>;
+                return <Badge variant="outline" className="border-brand-green/25 bg-brand-green/5 text-brand-green hover:bg-brand-green/10"><Globe className="size-3 mr-1" /> Published</Badge>;
             case 'archived':
-                return <Badge variant="secondary"><Archive className="size-3 mr-1" /> Archived</Badge>;
+                return <Badge variant="secondary" className="bg-muted/70 text-muted-foreground"><Archive className="size-3 mr-1" /> Archived</Badge>;
             default:
-                return <Badge variant="outline"><FileEdit className="size-3 mr-1" /> Draft</Badge>;
+                return <Badge variant="outline" className="border-border/70 bg-background text-muted-foreground"><FileEdit className="size-3 mr-1" /> Draft</Badge>;
         }
     };
 
@@ -917,9 +917,9 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
             <div className="h-full flex flex-col bg-background">
 
                 {/* Breadcrumb bar — always visible, outside the scroll panels */}
-                <div className="shrink-0 border-b bg-background/95 backdrop-blur z-10">
-                    <div className={cn("mx-auto px-6 py-3", !isFullWidth && "max-w-6xl")}>
-                        <div className="flex items-center justify-between">
+                <div className="shrink-0 border-b border-border/60 bg-background/95 backdrop-blur z-10">
+                    <div className={cn("mx-auto px-5 py-2.5", !isFullWidth && "max-w-[1120px]")}>
+                        <div className="flex items-center justify-between gap-4">
                             {/* Breadcrumbs */}
                             <Breadcrumb>
                                 <BreadcrumbList>
@@ -951,16 +951,16 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                             </Breadcrumb>
 
                             {/* Actions */}
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                                 {/* Save Status - only show when editing */}
                                 {isEditing && isSaving && (
-                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1 px-1">
                                         <Save className="size-3 animate-pulse" />
                                         Saving...
                                     </span>
                                 )}
                                 {isEditing && !isSaving && lastSaved && (
-                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1 px-1">
                                         <Check className="size-3 text-brand-green" />
                                         Saved
                                     </span>
@@ -974,7 +974,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className={cn('h-8 px-2.5 text-xs gap-1.5 cursor-pointer', isWatching && 'bg-primary/5 text-primary border-primary/20')}
+                                        className={cn('h-8 px-2.5 text-xs gap-1.5 cursor-pointer border-transparent bg-transparent shadow-none hover:bg-accent', isWatching && 'bg-primary/5 text-primary border-primary/20')}
                                         onClick={toggleWatch}
                                     >
                                         {isWatching ? (
@@ -987,7 +987,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
 
                                 {/* Edit Button - show when in view mode and page is published */}
                                 {!isEditing && page.status === 'published' && page.type === 'page' && (
-                                    <Button size="sm" variant="outline" onClick={() => setIsEditing(true)}>
+                                    <Button size="sm" variant="ghost" className="h-8 px-2.5" onClick={() => setIsEditing(true)}>
                                         <Pencil className="size-4 mr-1.5" />
                                         Edit
                                     </Button>
@@ -1004,7 +1004,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                 {/* Publish Button - show when editing a published page */}
                                 {isEditing && page.status === 'published' && page.type === 'page' && (
                                     <>
-                                        <Button size="sm" variant="outline" onClick={() => setIsEditing(false)}>
+                                        <Button size="sm" variant="ghost" className="h-8 px-2.5" onClick={() => setIsEditing(false)}>
                                             <Eye className="size-4 mr-1.5" />
                                             Done
                                         </Button>
@@ -1094,54 +1094,55 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                 <div className="flex-1 overflow-hidden flex">
 
                     {/* Page content panel */}
-                    <div ref={contentPanelRef} className="flex-1 overflow-y-auto bg-background">
+                    <div ref={contentPanelRef} className="flex-1 overflow-y-auto bg-card text-card-foreground">
                         <div className={cn(
-                            "mx-auto px-6 pt-6 pb-8",
-                            !isFullWidth && "max-w-6xl"
+                            "mx-auto px-5 pt-8 pb-12",
+                            !isFullWidth && "max-w-[920px]",
+                            isFullWidth && "max-w-none xl:px-12"
                         )}>
                             {/* Icon and Title */}
-                            <div className="mb-8">
-                                <div className="flex items-center gap-3">
+                            <div className="mb-7">
+                                <div className="flex items-start gap-3">
                                     {isEditing ? (
                                         <PageIconPicker value={formData.icon} onChange={handleUpdateIcon} />
                                     ) : (
                                         (formData.icon?.startsWith('data:') || formData.icon?.startsWith('http') || formData.icon?.startsWith('/'))
-                                            ? <img src={formData.icon} className="size-14 rounded-xl object-cover" alt="icon" />
-                                            : <span className="text-5xl">{formData.icon || '📄'}</span>
+                                            ? <img src={formData.icon} className="mt-1 size-10 rounded-md object-cover" alt="icon" />
+                                            : <span className="mt-0.5 text-4xl leading-none">{formData.icon || '📄'}</span>
                                     )}
                                     {isEditing ? (
                                         <PageTitleEditor title={formData.name} onSave={handleUpdateName} />
                                     ) : (
-                                        <h1 className="text-4xl font-bold">{formData.name || 'Untitled'}</h1>
+                                        <h1 className="text-[2rem] font-semibold leading-tight tracking-normal md:text-[2.35rem]">{formData.name || 'Untitled'}</h1>
                                     )}
                                 </div>
-                                <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground flex-wrap">
+                                <div className="flex items-center gap-x-3 gap-y-1.5 mt-3 text-[13px] text-muted-foreground flex-wrap">
                                     {page.creator && (
                                         <div className="flex items-center gap-1.5">
-                                            <UserIcon className="size-4" />
+                                            <UserIcon className="size-3.5" />
                                             <span>Created by {page.creator.name}</span>
                                         </div>
                                     )}
                                     {page.lastEditor && (
                                         <div className="flex items-center gap-1.5">
-                                            <UserIcon className="size-4" />
+                                            <UserIcon className="size-3.5" />
                                             <span>Last edited by {page.lastEditor.name}</span>
                                         </div>
                                     )}
                                     <div className="flex items-center gap-1.5">
-                                        <Clock className="size-4" />
+                                        <Clock className="size-3.5" />
                                         <span>Updated {new Date(page.updated_at).toLocaleDateString()}</span>
                                     </div>
                                     {page.published_at && page.status === 'published' && (
                                         <div className="flex items-center gap-1.5">
-                                            <Globe className="size-4" />
+                                            <Globe className="size-3.5" />
                                             <span>Published {new Date(page.published_at).toLocaleDateString()}</span>
                                         </div>
                                     )}
                                     {/* Watcher avatars */}
                                     {(page.watchers?.length ?? 0) > 0 && (
                                         <div className="flex items-center gap-1.5">
-                                            <Users className="size-4" />
+                                            <Users className="size-3.5" />
                                             <div className="flex -space-x-1.5 overflow-hidden">
                                                 {(page.watchers ?? []).slice(0, 5).map(w => (
                                                     <Avatar key={w.id} className="size-5 border-2 border-background" title={w.name}>
@@ -1159,7 +1160,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                 </div>
                             </div>
 
-                            <Separator className="mb-2" />
+                            <Separator className="mb-3 bg-border/50" />
 
                             {/* Whiteboard page: embedded view-mode canvas + open editor button */}
                             {page.type === 'page' && isExcalidrawPage(page.content) && (
@@ -1194,6 +1195,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                     contentKey={`page-${page.uuid}-${isEditing}`}
                                     onHeadingsChange={setHeadings}
                                     className="border-0 rounded-none shadow-none bg-transparent overflow-visible"
+                                    documentMode
                                     stickyToolbar={isEditing}
                                     stickyTopOffset={0}
                                     projectId={project.id}
@@ -1254,7 +1256,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
 
                     {/* TOC panel — own scroll, naturally aligned next to content */}
                     {page.type === 'page' && !isExcalidrawPage(page.content) && headings.length > 0 && (
-                        <div className="hidden xl:flex w-64 shrink-0 flex-col border-l bg-background overflow-y-auto overflow-x-hidden px-4 pt-6">
+                        <div className="hidden xl:flex w-64 shrink-0 flex-col border-l border-border/60 bg-background overflow-y-auto overflow-x-hidden px-5 pt-8">
                             <PageTableOfContents
                                 headings={headings}
                                 headerOffset={0}

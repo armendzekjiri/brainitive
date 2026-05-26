@@ -14,6 +14,19 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.4.3',
+        title: 'Board & Document Design Refresh',
+        tag: 'Enhancement',
+        date: '2026-05-26',
+        items: [
+            'Board page: refreshed the board UI with a denser, cleaner Atlassian-style layout, improved card presentation, tighter columns, and updated visual polish.',
+            'Board styling: added JetBrains Mono for issue keys and expanded Tailwind support needed by the redesigned board surfaces.',
+            'Pages: refreshed the document editor page with a Confluence-style document surface, quieter header actions, softer status badges, and improved metadata spacing.',
+            'Pages editor: added document-mode typography for richer reading/editing, including tighter headings, prose spacing, links, quotes, inline code, and a cleaner table of contents.',
+            'Full-width documents: kept the white document background across the expanded page while preserving the existing edit toolbar and behavior.',
+        ]
+    },
+    {
         version: 'v1.4.2',
         title: 'Mobile Responsive Improvements',
         tag: 'Enhancement',

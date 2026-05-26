@@ -53,6 +53,7 @@
         "@excalidraw/excalidraw": "^0.18.0",
         "@fontsource/hanken-grotesk": "^5.2.8",
         "@fontsource/inter": "^5.2.8",
+        "@fontsource/jetbrains-mono": "^5.2.8",
         "@hookform/resolvers": "^5.2.2",
         "@lexical/clipboard": "^0.40.0",
         "@lexical/code": "^0.40.0",
