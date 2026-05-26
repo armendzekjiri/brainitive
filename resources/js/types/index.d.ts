@@ -370,18 +370,22 @@ export interface OnboardingState {
 /** My Work page: assigned item summary */
 export interface MyWorkItem {
     id: number;
+    work_type: 'board' | 'list';
     uuid: string;
     key: string;
     title: string;
-    description?: string;
+    description?: string | Record<string, any> | null;
     due_date?: string;
     completed_at?: string;
+    status?: 'todo' | 'done';
     position: number;
-    board: { id: number; name: string; slug: string };
+    source: { type: 'board' | 'list'; id: number; name: string; slug: string };
+    board?: { id: number; name: string; slug: string };
+    task_list?: { id: number; name: string; slug: string };
     column?: { id: number; name: string; is_done_column: boolean };
-    item_type?: ItemType;
-    priority?: ItemPriority;
-    assignee?: User;
+    item_type?: ItemType | null;
+    priority?: ItemPriority | null;
+    assignee?: User | null;
 }
 
 /** My Work page: project with assigned items */

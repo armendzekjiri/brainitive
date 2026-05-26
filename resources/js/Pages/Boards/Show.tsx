@@ -3,7 +3,6 @@ import { Head, router, useForm } from '@inertiajs/react';
 import { PageProps, Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User, Label as LabelType } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -461,8 +460,8 @@ function ItemCard({
     );
 }
 
-// Create Item Inline
-function CreateItemInline({
+// Create Item Dialog
+function CreateItemDialog({
     column,
     workspace,
     project,
@@ -490,6 +489,18 @@ function CreateItemInline({
     const isSubtask = data.item_type_id === subtaskTypeId;
     const canSubmit = data.title.trim() && (!isSubtask || (data.parent_id !== '' && data.parent_id != null));
 
+    useEffect(() => {
+        if (isCreating) {
+            window.setTimeout(() => inputRef.current?.focus(), 0);
+        }
+    }, [isCreating]);
+
+    const closeDialog = () => {
+        setIsCreating(false);
+        reset();
+        setData('parent_id', '');
+    };
+
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
         if (!canSubmit) return;
@@ -510,45 +521,54 @@ function CreateItemInline({
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Escape') {
-            setIsCreating(false);
-            reset();
+            closeDialog();
         }
     };
 
-    if (!isCreating) {
-        return (
-            <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start text-muted-foreground hover:text-foreground gap-2 h-9"
-                onClick={() => {
-                    setIsCreating(true);
-                    setTimeout(() => inputRef.current?.focus(), 0);
-                }}
-            >
-                <Plus className="size-4" />
-                Create
-            </Button>
-        );
-    }
-
     return (
-        <form onSubmit={handleSubmit} className="space-y-2">
-            <Card className="bg-background shadow-sm">
-                <CardContent className="p-3 space-y-2">
-                    <Input
-                        ref={inputRef}
-                        value={data.title}
-                        onChange={(e) => setData('title', e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        placeholder="What needs to be done?"
-                        className="border-0 p-0 h-auto text-sm focus-visible:ring-0 placeholder:text-muted-foreground/60"
-                        autoFocus
-                    />
-                    <div className="flex flex-col gap-1">
-                        <Label className="text-[10px] text-muted-foreground">Type</Label>
+        <Dialog
+            open={isCreating}
+            onOpenChange={(open) => {
+                if (open) {
+                    setIsCreating(true);
+                } else {
+                    closeDialog();
+                }
+            }}
+        >
+            <DialogTrigger asChild>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start text-muted-foreground hover:text-foreground gap-2 h-9"
+                >
+                    <Plus className="size-4" />
+                    Create
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md p-0 overflow-hidden">
+                <DialogHeader className="border-b px-5 py-4">
+                    <DialogTitle className="text-base">Create card</DialogTitle>
+                    <DialogDescription>
+                        Add a card to {column.name}.
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4 px-5 py-4">
+                    <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground">Title</Label>
+                        <Input
+                            ref={inputRef}
+                            value={data.title}
+                            onChange={(e) => setData('title', e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            placeholder="What needs to be done?"
+                            className="h-9 text-sm"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground">Type</Label>
                         <Select value={data.item_type_id || ''} onValueChange={(v) => setData('item_type_id', v)}>
-                            <SelectTrigger className="h-8 text-xs">
+                            <SelectTrigger className="h-9 text-sm">
                                 <SelectValue placeholder="Type" />
                             </SelectTrigger>
                             <SelectContent>
@@ -563,15 +583,15 @@ function CreateItemInline({
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="flex flex-col gap-1">
-                        <Label className="text-[10px] text-muted-foreground">
+                    <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground">
                             Parent task {isSubtask && <span className="text-destructive">*</span>}
                         </Label>
                         <Select
                             value={data.parent_id === '' || data.parent_id == null ? 'none' : String(data.parent_id)}
                             onValueChange={(v) => setData('parent_id', v === 'none' ? '' : Number(v))}
                         >
-                            <SelectTrigger className="h-8 text-xs">
+                            <SelectTrigger className="h-9 text-sm">
                                 <SelectValue placeholder="None" />
                             </SelectTrigger>
                             <SelectContent>
@@ -584,25 +604,22 @@ function CreateItemInline({
                             </SelectContent>
                         </Select>
                     </div>
-                </CardContent>
-            </Card>
-            <div className="flex items-center gap-2">
-                <Button type="submit" size="sm" disabled={processing || !canSubmit}>
-                    Create
-                </Button>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                        setIsCreating(false);
-                        reset();
-                    }}
-                >
-                    Cancel
-                </Button>
-            </div>
-        </form>
+                    <div className="flex items-center justify-end gap-2 border-t pt-4">
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={closeDialog}
+                        >
+                            Cancel
+                        </Button>
+                        <Button type="submit" size="sm" disabled={processing || !canSubmit}>
+                            Create
+                        </Button>
+                    </div>
+                </form>
+            </DialogContent>
+        </Dialog>
     );
 }
 
@@ -639,14 +656,14 @@ function BoardColumnComponent({
     return (
         <section
             className={cn(
-                'flex-shrink-0 w-[282px] flex flex-col rounded-[10px] border border-border bg-secondary/50 dark:bg-secondary/30 max-h-full min-h-[200px] transition-colors',
+                'flex-shrink-0 w-[282px] h-full min-h-0 flex flex-col rounded-[10px] border border-border bg-secondary/50 dark:bg-secondary/30 transition-colors',
                 isDragOver && 'ring-2 ring-primary/40',
             )}
             onDragOver={(e) => onDragOver(e, column)}
             onDrop={(e) => onDrop(e, column)}
         >
             {/* Column Header */}
-            <header className="flex items-center justify-between px-[10px] py-[9px]">
+            <header className="flex shrink-0 items-center justify-between px-[10px] py-[9px]">
                 <div className="flex items-center gap-[7px] min-w-0">
                     <span className="w-2 h-2 rounded-[2px] shrink-0" style={{ background: columnColor }} />
                     <h3 className="text-xs font-bold tracking-[0.02em] uppercase text-foreground m-0 whitespace-nowrap">
@@ -695,8 +712,8 @@ function BoardColumnComponent({
             </ScrollArea>
 
             {/* Create Item */}
-            <div className="px-2 pb-3 pt-0">
-                <CreateItemInline
+            <div className="shrink-0 px-2 pb-3 pt-0">
+                <CreateItemDialog
                     column={column}
                     workspace={workspace}
                     project={project}
@@ -3008,8 +3025,8 @@ export default function BoardsShow({
 
                 {/* View Content */}
                 {currentView === 'kanban' && (
-                    <div className="flex-1 overflow-hidden bg-background">
-                        <div className="flex gap-3 p-[14px_20px_20px] h-full overflow-x-auto overflow-y-hidden items-start">
+                    <div className="flex-1 min-h-0 overflow-hidden bg-background">
+                        <div className="flex h-full min-h-0 items-stretch gap-3 overflow-x-auto overflow-y-hidden p-[14px_20px_20px]">
                             {filteredColumns.map((column) => (
                                 <BoardColumnComponent
                                     key={column.id}
@@ -3029,8 +3046,8 @@ export default function BoardsShow({
                             ))}
 
                             {/* Add Column Button */}
-                            <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug])} className="flex-shrink-0">
-                                <button className="w-[282px] min-h-[220px] border border-dashed border-border rounded-[10px] flex flex-col items-center justify-center gap-1.5 text-muted-foreground text-[12.5px] font-medium hover:bg-card hover:text-foreground hover:border-border transition-colors">
+                            <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug])} className="flex-shrink-0 h-full">
+                                <button className="w-[282px] h-full min-h-[220px] border border-dashed border-border rounded-[10px] flex flex-col items-center justify-center gap-1.5 text-muted-foreground text-[12.5px] font-medium hover:bg-card hover:text-foreground hover:border-border transition-colors">
                                     <Plus className="size-[14px]" />
                                     <span>New column</span>
                                 </button>

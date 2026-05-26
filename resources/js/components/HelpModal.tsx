@@ -14,6 +14,17 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.4.4',
+        title: 'My Work Scope and Source Awareness',
+        tag: 'Enhancement',
+        date: '2026-05-26',
+        items: [
+            'My Work: added an Assigned/Created scope switch so the page can show work you own or work you created.',
+            'My Work: now includes both board items and list items, grouped by project with the exact source name shown in each row.',
+            'My Work rows: updated the task list styling to keep the dense reference layout while surfacing source type, status, priority, due date, and assignee context.',
+        ]
+    },
+    {
         version: 'v1.4.3',
         title: 'Board & Document Design Refresh',
         tag: 'Enhancement',
