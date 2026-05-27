@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Board;
 use App\Models\Item;
+use App\Models\Page;
+use App\Models\TaskList;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
@@ -165,6 +167,20 @@ class WorkspaceController extends Controller
             ->limit(3)
             ->get(['id', 'name', 'slug', 'project_id', 'updated_at']);
 
+        $lists = TaskList::whereIn('project_id', $projectIds)
+            ->withCount('items')
+            ->with('project:id,slug,name,color')
+            ->orderByDesc('updated_at')
+            ->limit(6)
+            ->get(['id', 'name', 'slug', 'project_id', 'updated_at']);
+
+        $documents = Page::whereIn('project_id', $projectIds)
+            ->where('type', 'page')
+            ->with('project:id,slug,name,color')
+            ->orderByDesc('updated_at')
+            ->limit(6)
+            ->get(['id', 'name', 'slug', 'icon', 'project_id', 'updated_at']);
+
         return Inertia::render('Workspaces/Show', [
             'workspace' => $workspace,
             'userRole' => $userRole,
@@ -176,6 +192,8 @@ class WorkspaceController extends Controller
             'upcomingDue' => $upcomingDue,
             'recentActivity' => $recentActivity,
             'pinnedBoards' => $pinnedBoards,
+            'lists' => $lists,
+            'documents' => $documents,
         ]);
     }
 

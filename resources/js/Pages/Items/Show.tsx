@@ -63,7 +63,7 @@ export default function ItemShow({
         projectItems,
         columns,
         currentUserId: currentUser.id,
-        onOpenItem: (it) =>
+        onOpenItem: (it: Item) =>
             router.visit(route('boards.items.show', [workspace.slug, project.slug, board.slug, it.id])),
     });
 

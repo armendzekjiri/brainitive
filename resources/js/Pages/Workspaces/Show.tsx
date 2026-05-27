@@ -15,9 +15,9 @@ import {
     Code2,
     Users,
     Calendar,
-    Clock,
     TrendingUp,
     CheckSquare,
+    ListChecks,
 } from 'lucide-react';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { cn } from '@/lib/utils';
@@ -26,6 +26,8 @@ type ProjRef = { slug: string; name: string; color?: string | null };
 type DueItem = { id: number; key: string; title: string; due_date: string; board?: { slug: string; name: string; project?: ProjRef } };
 type ActivityItem = { id: number; key: string; title: string; updated_at: string; completed_at?: string | null; assignee?: User | null; board?: { slug: string; project?: ProjRef } };
 type PinnedBoard = { id: number; name: string; slug: string; active_count: number; done_count: number; project?: ProjRef };
+type ListItem = { id: number; name: string; slug: string; items_count?: number; project?: ProjRef };
+type DocItem = { id: number; name: string; slug: string; icon?: string | null; project?: ProjRef };
 
 interface Props extends PageProps {
     workspace: Workspace & {
@@ -39,6 +41,8 @@ interface Props extends PageProps {
     upcomingDue: DueItem[];
     recentActivity: ActivityItem[];
     pinnedBoards: PinnedBoard[];
+    lists: ListItem[];
+    documents: DocItem[];
 }
 
 function relativeTime(iso: string): string {
@@ -87,7 +91,7 @@ function SideCard({ title, action, children }: { title: string; action?: React.R
     );
 }
 
-export default function WorkspacesShow({ workspace, userRole, stats, upcomingDue, recentActivity, pinnedBoards }: Props) {
+export default function WorkspacesShow({ workspace, userRole, stats, upcomingDue, recentActivity, pinnedBoards, lists, documents }: Props) {
     const canManage = userRole === 'admin';
     const canCreateProjects = ['admin', 'editor'].includes(userRole);
     const bookmarks = workspace.bookmarks ?? [];
@@ -325,6 +329,45 @@ export default function WorkspacesShow({ workspace, userRole, stats, upcomingDue
                             )}
                         </section>
 
+                        {/* Lists */}
+                        <section>
+                            <div className="mb-3 flex items-center justify-between">
+                                <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide"><ListChecks className="size-4" />Lists</h2>
+                            </div>
+                            {lists.length === 0 ? (
+                                <Card className="border-dashed bg-card/50">
+                                    <CardContent className="flex flex-col items-center justify-center py-8">
+                                        <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center mb-3"><ListChecks className="size-6 text-primary" /></div>
+                                        <p className="text-sm text-muted-foreground text-center">No lists yet.</p>
+                                    </CardContent>
+                                </Card>
+                            ) : (
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    {lists.map((list) => (
+                                        <Link key={list.id} href={list.project ? route('task-lists.show', [workspace.slug, list.project.slug, list.slug]) : '#'}>
+                                            <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 group">
+                                                <CardContent className="p-4">
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl" style={{ background: `${list.project?.color || '#0E83DC'}1A` }}>
+                                                            <ListChecks className="size-5" style={{ color: list.project?.color || '#0E83DC' }} />
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <h3 className="font-semibold truncate group-hover:text-primary transition-colors">{list.name}</h3>
+                                                            <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                                                                {list.project && <span className="inline-flex items-center gap-1"><span className="size-1.5 rounded-full" style={{ background: list.project.color || '#94a3b8' }} />{list.project.name}</span>}
+                                                                <span>·</span>
+                                                                <span>{list.items_count ?? 0} item{(list.items_count ?? 0) !== 1 ? 's' : ''}</span>
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        </Link>
+                                    ))}
+                                </div>
+                            )}
+                        </section>
+
                         {/* Snippets */}
                         <section>
                             <div className="mb-3 flex items-center justify-between">
@@ -356,6 +399,50 @@ export default function WorkspacesShow({ workspace, userRole, stats, upcomingDue
                                                         <div className="min-w-0 flex-1">
                                                             <h3 className="font-semibold truncate group-hover:text-primary transition-colors">{collection.name}</h3>
                                                             <p className="mt-0.5 text-xs text-muted-foreground">{collection.snippets_count ?? 0} snippet{(collection.snippets_count ?? 0) !== 1 ? 's' : ''}</p>
+                                                        </div>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        </Link>
+                                    ))}
+                                </div>
+                            )}
+                        </section>
+
+                        {/* Documents */}
+                        <section>
+                            <div className="mb-3 flex items-center justify-between">
+                                <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide"><FileText className="size-4" />Documents</h2>
+                            </div>
+                            {documents.length === 0 ? (
+                                <Card className="border-dashed bg-card/50">
+                                    <CardContent className="flex flex-col items-center justify-center py-8">
+                                        <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center mb-3"><FileText className="size-6 text-primary" /></div>
+                                        <p className="text-sm text-muted-foreground text-center">No documents yet.</p>
+                                    </CardContent>
+                                </Card>
+                            ) : (
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                    {documents.map((doc) => (
+                                        <Link key={doc.id} href={doc.project ? route('pages.show', [workspace.slug, doc.project.slug, doc.id]) : '#'}>
+                                            <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 group">
+                                                <CardContent className="p-4">
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl" style={{ background: `${doc.project?.color || '#0E83DC'}1A` }}>
+                                                            {doc.icon ? (
+                                                                <span className="text-xl leading-none">{doc.icon}</span>
+                                                            ) : (
+                                                                <FileText className="size-5" style={{ color: doc.project?.color || '#0E83DC' }} />
+                                                            )}
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <h3 className="font-semibold truncate group-hover:text-primary transition-colors">{doc.name}</h3>
+                                                            {doc.project && (
+                                                                <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                                                                    <span className="size-1.5 rounded-full" style={{ background: doc.project.color || '#94a3b8' }} />
+                                                                    {doc.project.name}
+                                                                </p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </CardContent>
