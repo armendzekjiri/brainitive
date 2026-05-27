@@ -70,6 +70,11 @@ class BoardController extends Controller
                                 'priority',
                                 'labels',
                                 'parent:id,key,title,board_id',
+                                'watchers:id,name,email,avatar',
+                                'outgoingLinks.targetItem:id,key,title,board_id',
+                                'outgoingLinks.targetItem.board:id,name,slug',
+                                'incomingLinks.sourceItem:id,key,title,board_id',
+                                'incomingLinks.sourceItem.board:id,name,slug',
                                 'attachments' => function ($a) {
                                     $a->with('user:id,name,email')->orderBy('created_at', 'desc');
                                 },
@@ -102,6 +107,14 @@ class BoardController extends Controller
         $projectUsers = $project->workspace->users()->get(['users.id', 'name', 'email', 'avatar']);
         $projectLabels = $project->labels()->orderBy('name')->get();
 
+        // All items in the project, for the "Link issue" picker in the item popup.
+        $projectItems = Item::whereHas('board', function ($q) use ($project) {
+            $q->where('project_id', $project->id);
+        })->select('id', 'key', 'title', 'board_id')
+          ->with('board:id,name,slug')
+          ->orderBy('key')
+          ->get();
+
         return Inertia::render('Boards/Show', [
             'workspace' => $workspace,
             'project' => $project,
@@ -110,6 +123,7 @@ class BoardController extends Controller
             'priorities' => $priorities,
             'projectUsers' => $projectUsers,
             'projectLabels' => $projectLabels,
+            'projectItems' => $projectItems,
         ]);
     }
 
@@ -406,8 +420,45 @@ class BoardController extends Controller
         $itemTypes = ItemType::forProject($project)->get();
         $priorities = ItemPriority::forProject($project)->orderBy('order')->get();
         $projectUsers = $project->workspace->users()->get(['users.id', 'name', 'email', 'avatar']);
-        $columns = $board->columns()->orderBy('position')->get();
         $projectLabels = $project->labels()->orderBy('name')->get();
+
+        // Columns WITH their items + relations, mirroring BoardController::show, so the
+        // item popup/full page can derive subtasks, parent options and a live copy.
+        $columns = $board->columns()->orderBy('position')->with([
+            'items' => function ($q) {
+                $q->orderBy('position')
+                    ->withCount('children')
+                    ->with([
+                        'assignee:id,name,email,avatar',
+                        'itemType',
+                        'priority',
+                        'labels',
+                        'parent:id,key,title,board_id',
+                        'watchers:id,name,email,avatar',
+                        'outgoingLinks.targetItem:id,key,title,board_id',
+                        'outgoingLinks.targetItem.board:id,name,slug',
+                        'incomingLinks.sourceItem:id,key,title,board_id',
+                        'incomingLinks.sourceItem.board:id,name,slug',
+                        'attachments' => function ($a) {
+                            $a->with('user:id,name,email')->orderBy('created_at', 'desc');
+                        },
+                        'comments' => function ($c) {
+                            $c->whereNull('parent_id')
+                                ->with(['user:id,name,email', 'replies'])
+                                ->orderBy('created_at', 'desc');
+                        },
+                    ]);
+            },
+        ])->get();
+
+        foreach ($columns as $column) {
+            foreach ($column->items as $colItem) {
+                foreach ($colItem->attachments as $attachment) {
+                    $attachment->url = asset('storage/' . $attachment->path);
+                    $attachment->formatted_size = $attachment->formatted_size;
+                }
+            }
+        }
 
         // Get all items in the project for linking (excluding current item)
         $projectItems = Item::whereHas('board', function($q) use ($project) {

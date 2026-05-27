@@ -607,29 +607,30 @@ export default function WorkspacesEdit({
                     </div>
 
                     {/* Tabs */}
-                    <Tabs value={settingsTab} onValueChange={(v) => setSettingsTab(v as typeof settingsTab)} className="pb-16">
-                        <TabsList className="mb-8 h-12 p-1">
-                            <TabsTrigger value="general" className="gap-2 px-4 h-10">
-                                <Settings className="size-4" />
-                                General
-                            </TabsTrigger>
-                            <TabsTrigger value="branding" className="gap-2 px-4 h-10">
-                                <Palette className="size-4" />
-                                Branding
-                            </TabsTrigger>
-                            <TabsTrigger value="members" className="gap-2 px-4 h-10">
-                                <Users className="size-4" />
-                                Members
-                            </TabsTrigger>
-                            <TabsTrigger value="ai" className="gap-2 px-4 h-10">
-                                <Bot className="size-4" />
-                                AI
-                            </TabsTrigger>
-                            <TabsTrigger value="danger" className="gap-2 px-4 h-10 text-destructive data-[state=active]:text-destructive">
-                                <Shield className="size-4" />
-                                Danger Zone
-                            </TabsTrigger>
-                        </TabsList>
+                    <Tabs value={settingsTab} onValueChange={(v) => setSettingsTab(v as typeof settingsTab)} orientation="vertical" className="pb-16">
+                        <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+                            <aside className="w-full lg:w-56 lg:shrink-0 lg:sticky lg:top-4">
+                                <div className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Settings</div>
+                                <TabsList className="flex h-auto w-full flex-row gap-1 overflow-x-auto bg-transparent p-0 lg:flex-col">
+                                    <TabsTrigger value="general" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
+                                        <Settings className="size-4" />General
+                                    </TabsTrigger>
+                                    <TabsTrigger value="branding" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
+                                        <Palette className="size-4" />Branding
+                                    </TabsTrigger>
+                                    <TabsTrigger value="members" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
+                                        <Users className="size-4" />Members
+                                        <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">{workspace.users.length}</span>
+                                    </TabsTrigger>
+                                    <TabsTrigger value="ai" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
+                                        <Bot className="size-4" />AI
+                                    </TabsTrigger>
+                                    <TabsTrigger value="danger" className="w-full justify-start gap-2 px-3 h-9 text-destructive data-[state=active]:bg-destructive/10 data-[state=active]:text-destructive data-[state=active]:shadow-none">
+                                        <Shield className="size-4" />Danger zone
+                                    </TabsTrigger>
+                                </TabsList>
+                            </aside>
+                            <div className="min-w-0 flex-1">
 
                         {/* General Settings */}
                         <TabsContent value="general">
@@ -1407,6 +1408,8 @@ export default function WorkspacesEdit({
                                 </CardContent>
                             </Card>
                         </TabsContent>
+                            </div>
+                        </div>
                     </Tabs>
                 </div>
             </div>

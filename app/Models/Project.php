@@ -130,6 +130,14 @@ class Project extends Model
     }
 
     /**
+     * Get all items in this project (across its boards).
+     */
+    public function items(): HasMany
+    {
+        return $this->hasMany(Item::class);
+    }
+
+    /**
      * Get all helpdesks in this project.
      */
     public function helpdesks(): HasMany

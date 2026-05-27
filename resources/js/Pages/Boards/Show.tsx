@@ -23,6 +23,16 @@ import {
     SheetTrigger,
 } from '@/components/ui/sheet';
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
     Popover,
     PopoverContent,
     PopoverTrigger,
@@ -95,6 +105,8 @@ import { Link } from '@inertiajs/react';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { Comment, Attachment } from '@/types';
 import { ItemTypeIcon } from '@/components/ItemTypeIcon';
+import { LabelChip, PriorityIndicator, TypeBadge, AssigneeAvatar, priorityMeta, itemAccentColor } from '@/components/board/ItemPrimitives';
+import { useItemDetail, ItemDetailMain, ItemDetailSidebar, ItemFilePreviewDialog, type ProjectItemLite } from '@/components/item/ItemDetail';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -105,213 +117,7 @@ interface Props extends PageProps {
     priorities: ItemPriority[];
     projectUsers: User[];
     projectLabels: LabelType[];
-}
-
-// ── File-type helpers (matching Items/Show) ────────────────────────────────
-type PreviewType = 'pdf' | 'image' | 'video' | 'other';
-
-function getFileIconByName(filename: string): { Icon: React.ComponentType<{ className?: string }>; colorClass: string } {
-    const ext = filename?.split('.').pop()?.toLowerCase() ?? '';
-    const map: Record<string, { Icon: React.ComponentType<{ className?: string }>; colorClass: string }> = {
-        pdf: { Icon: FileText, colorClass: 'text-red-600' },
-        doc: { Icon: FileText, colorClass: 'text-blue-600' },
-        docx: { Icon: FileText, colorClass: 'text-blue-600' },
-        rtf: { Icon: FileText, colorClass: 'text-blue-500' },
-        txt: { Icon: FileType, colorClass: 'text-muted-foreground' },
-        md: { Icon: FileType, colorClass: 'text-muted-foreground' },
-        xls: { Icon: FileSpreadsheet, colorClass: 'text-green-600' },
-        xlsx: { Icon: FileSpreadsheet, colorClass: 'text-green-600' },
-        csv: { Icon: FileSpreadsheet, colorClass: 'text-green-500' },
-        ppt: { Icon: FileText, colorClass: 'text-orange-600' },
-        pptx: { Icon: FileText, colorClass: 'text-orange-600' },
-        jpg: { Icon: FileImage, colorClass: 'text-purple-500' },
-        jpeg: { Icon: FileImage, colorClass: 'text-purple-500' },
-        png: { Icon: FileImage, colorClass: 'text-sky-500' },
-        gif: { Icon: FileImage, colorClass: 'text-pink-500' },
-        webp: { Icon: FileImage, colorClass: 'text-teal-500' },
-        svg: { Icon: FileImage, colorClass: 'text-amber-500' },
-        bmp: { Icon: FileImage, colorClass: 'text-muted-foreground' },
-        ico: { Icon: FileImage, colorClass: 'text-amber-500' },
-        zip: { Icon: FileArchive, colorClass: 'text-amber-600' },
-        rar: { Icon: FileArchive, colorClass: 'text-amber-600' },
-        '7z': { Icon: FileArchive, colorClass: 'text-amber-600' },
-        json: { Icon: FileCode, colorClass: 'text-amber-500' },
-        xml: { Icon: FileCode, colorClass: 'text-orange-500' },
-    };
-    return map[ext] ?? { Icon: File, colorClass: 'text-muted-foreground' };
-}
-
-function getFilePreviewType(filename: string): PreviewType {
-    const ext = filename?.split('.').pop()?.toLowerCase() ?? '';
-    if (['pdf'].includes(ext)) return 'pdf';
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext)) return 'image';
-    if (['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext)) return 'video';
-    return 'other';
-}
-
-// Priority icon component
-function PriorityIcon({ slug, className }: { slug?: string; className?: string }) {
-    const baseClass = `size-4 ${className || ''}`;
-    switch (slug) {
-        case 'highest':
-            return <ChevronUp className={`${baseClass} text-red-600`} />;
-        case 'high':
-            return <ChevronUp className={`${baseClass} text-orange-500`} />;
-        case 'medium':
-            return <Equal className={`${baseClass} text-yellow-500`} />;
-        case 'low':
-            return <ChevronDown className={`${baseClass} text-brand-blue`} />;
-        case 'lowest':
-            return <ChevronDown className={`${baseClass} text-brand-gray`} />;
-        default:
-            return <Equal className={`${baseClass} text-muted-foreground`} />;
-    }
-}
-
-function PriorityBars({ slug, className }: { slug?: string; className?: string }) {
-    const levels: Record<string, { lines: number; color: string }> = {
-        highest: { lines: 3, color: '#E11D48' },
-        high: { lines: 3, color: '#E11D48' },
-        medium: { lines: 2, color: '#F59E0B' },
-        low: { lines: 1, color: '#94A3B8' },
-        lowest: { lines: 1, color: '#94A3B8' },
-    };
-    const cfg = levels[slug || ''] || { lines: 0, color: '#D0D6DE' };
-    return (
-        <span className={`inline-flex items-end gap-[2px] h-3 ${className || ''}`} title={`Priority: ${slug || 'none'}`}>
-            {[1, 2, 3].map(i => (
-                <span
-                    key={i}
-                    className="w-[3px] rounded-[1px]"
-                    style={{
-                        background: i <= cfg.lines ? cfg.color : 'hsl(var(--border))',
-                        height: i === 1 ? 4 : i === 2 ? 7 : 10,
-                    }}
-                />
-            ))}
-        </span>
-    );
-}
-
-// Recursive CommentItem component for nested replies
-interface CommentItemProps {
-    comment: Comment;
-    depth: number;
-    replyingTo: { id: number; parentId?: number; userName: string } | null;
-    replyText: string;
-    setReplyText: (text: string) => void;
-    handleReply: (commentId: number, userName: string, parentId?: number) => void;
-    handlePostComment: (parentId?: number) => void;
-    cancelReply: () => void;
-    replyEditorKey: number;
-    projectId: number;
-}
-
-function CommentItem({
-    comment,
-    depth,
-    replyingTo,
-    replyText,
-    setReplyText,
-    handleReply,
-    handlePostComment,
-    cancelReply,
-    replyEditorKey,
-    projectId,
-}: CommentItemProps) {
-    const maxDepth = 5;
-    const avatarSize = depth === 0 ? 'size-8' : 'size-6';
-    const avatarTextSize = depth === 0 ? 'text-xs' : 'text-[10px]';
-    const nameTextSize = depth === 0 ? 'text-sm' : 'text-xs';
-    const timeTextSize = depth === 0 ? 'text-xs' : 'text-[10px]';
-
-    return (
-        <div className={`${depth > 0 ? 'border-l-2 border-muted pl-4' : ''}`}>
-            <div className="flex gap-3">
-                <Avatar className={`${avatarSize} shrink-0`}>
-                    <AvatarFallback className={`${avatarTextSize} ${depth === 0 ? 'bg-muted' : 'bg-muted/50'}`}>
-                        {comment.user?.name?.charAt(0).toUpperCase() || 'U'}
-                    </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`font-medium ${nameTextSize}`}>{comment.user?.name || 'Unknown'}</span>
-                        <span className={`${timeTextSize} text-muted-foreground`}>
-                            {new Date(comment.created_at).toLocaleDateString()} at {new Date(comment.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                    </div>
-                    <div
-                        className="text-sm mt-1 prose prose-sm max-w-none"
-                        dangerouslySetInnerHTML={{ __html: comment.body }}
-                    />
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground mt-1"
-                        onClick={() => handleReply(comment.id, comment.user?.name || 'Unknown', comment.parent_id || undefined)}
-                    >
-                        <Reply className="size-3 mr-1" />
-                        Reply
-                    </Button>
-
-                    {replyingTo?.id === comment.id && (
-                        <div className="mt-3">
-                            <div className="flex gap-2">
-                                <Avatar className="size-6 shrink-0 mt-1">
-                                    <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">U</AvatarFallback>
-                                </Avatar>
-                                <div className="flex-1 min-w-0">
-                                    <div className="rounded-lg border border-primary ring-1 ring-primary/20">
-                                        <RichLexicalEditor
-                                            key={replyEditorKey}
-                                            content={replyText || null}
-                                            onChange={(html) => setReplyText(html)}
-                                            placeholder={`Reply to ${replyingTo.userName}…`}
-                                            editable={true}
-                                            showToolbar={true}
-                                            minHeight="60px"
-                                            maxHeight="240px"
-                                            contentKey={`reply-${comment.id}-${replyEditorKey}`}
-                                            projectId={projectId}
-                                        />
-                                    </div>
-                                    <div className="flex justify-end gap-2 mt-2">
-                                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={cancelReply}>Cancel</Button>
-                                        <Button
-                                            size="sm"
-                                            className="h-7 text-xs"
-                                            onClick={() => handlePostComment(comment.id)}
-                                            disabled={!replyText.replace(/<[^>]*>/g, '').trim()}
-                                        >Reply</Button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {comment.replies && comment.replies.length > 0 && (
-                        <div className="mt-3 space-y-3">
-                            {comment.replies.map((reply) => (
-                                <CommentItem
-                                    key={reply.id}
-                                    comment={reply}
-                                    depth={Math.min(depth + 1, maxDepth)}
-                                    replyingTo={replyingTo}
-                                    replyText={replyText}
-                                    setReplyText={setReplyText}
-                                    handleReply={handleReply}
-                                    handlePostComment={handlePostComment}
-                                    cancelReply={cancelReply}
-                                    replyEditorKey={replyEditorKey}
-                                    projectId={projectId}
-                                />
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
+    projectItems?: ProjectItemLite[];
 }
 
 // Item Card Component — redesigned (utility-first dense kanban)
@@ -320,6 +126,8 @@ function ItemCard({
     workspace,
     project,
     board,
+    projectUsers,
+    subtasks,
     onEdit,
     onDragStart,
     onDragEnd,
@@ -328,6 +136,8 @@ function ItemCard({
     workspace: Workspace;
     project: Project;
     board: Board;
+    projectUsers: User[];
+    subtasks?: Item[];
     onEdit: (item: Item) => void;
     onDragStart: (e: DragEvent, item: Item) => void;
     onDragEnd: () => void;
@@ -338,6 +148,19 @@ function ItemCard({
         const diff = d.getTime() - now.getTime();
         return diff < 2 * 86400000;
     })();
+    const accent = itemAccentColor(item);
+    const [assignOpen, setAssignOpen] = useState(false);
+    const [confirmDelete, setConfirmDelete] = useState(false);
+    const subtaskCount = item.children_count ?? 0;
+
+    const assign = (userId: number | null) => {
+        setAssignOpen(false);
+        router.patch(
+            route('boards.items.update', [workspace.slug, project.slug, board.slug, item.id]),
+            { assigned_to: userId },
+            { preserveScroll: true },
+        );
+    };
 
     return (
         <article
@@ -346,22 +169,31 @@ function ItemCard({
             onDragEnd={onDragEnd}
             onClick={() => onEdit(item)}
             className={cn(
-                'bg-card border border-border rounded-[9px] p-[10px_11px] flex flex-col gap-[7px] cursor-pointer',
-                'shadow-[0_1px_0_rgba(20,32,44,0.04)] transition-all duration-150 relative group',
-                'hover:border-border/80 hover:shadow-[0_2px_4px_rgba(20,32,44,0.04),0_4px_14px_-6px_rgba(20,32,44,0.12)]',
+                'group relative flex flex-col gap-2 cursor-pointer overflow-hidden',
+                'rounded-xl border border-border/70 bg-card py-2.5 pl-3.5 pr-2.5',
+                'shadow-[0_1px_2px_rgba(20,32,44,0.05)] transition-all duration-150',
+                'hover:-translate-y-px hover:border-border hover:shadow-[0_6px_16px_-6px_rgba(20,32,44,0.22)]',
             )}
         >
+            {/* Left accent bar (priority → type) */}
+            <span
+                className="absolute inset-y-0 left-0 w-[3px]"
+                style={{ background: accent ?? 'transparent' }}
+                aria-hidden
+            />
+
+            {/* Top row: type + key */}
+            <div className="flex items-center gap-2 min-w-0 pr-5">
+                {item.item_type && <TypeBadge type={item.item_type} />}
+                <span className="flex-1" />
+                <span className="font-mono text-[10.5px] text-muted-foreground tracking-tight shrink-0">{item.key}</span>
+            </div>
+
             {/* Labels */}
             {item.labels && item.labels.length > 0 && (
                 <div className="flex items-center gap-1 flex-wrap">
                     {item.labels.slice(0, 3).map((label) => (
-                        <span
-                            key={label.id}
-                            className="inline-flex items-center h-4 px-1.5 rounded-[3px] text-[10.5px] font-semibold tracking-[0.01em]"
-                            style={{ color: label.color ?? '#485E72', background: `${label.color ?? '#485E72'}1A` }}
-                        >
-                            {label.name}
-                        </span>
+                        <LabelChip key={label.id} label={label} />
                     ))}
                     {item.labels.length > 3 && (
                         <span className="text-[10px] text-muted-foreground font-medium">+{item.labels.length - 3}</span>
@@ -370,9 +202,9 @@ function ItemCard({
             )}
 
             {/* Title */}
-            <div className="text-[13px] font-semibold leading-[1.35] tracking-[-0.005em] text-foreground break-words line-clamp-2">
+            <h4 className="m-0 text-[13px] font-semibold leading-[1.35] tracking-[-0.005em] text-foreground break-words line-clamp-2">
                 {item.title}
-            </div>
+            </h4>
 
             {/* Parent (subtask link) */}
             {item.parent && (
@@ -387,31 +219,31 @@ function ItemCard({
             )}
 
             {/* Meta row */}
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span className="font-mono text-[10.5px] tracking-normal">{item.key}</span>
+            <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
+                {item.priority && <PriorityIndicator slug={item.priority.slug} />}
 
                 {item.due_date && (
-                    <span className={cn('inline-flex items-center gap-[3px]', isDueSoon && 'text-amber-500 font-semibold')}>
+                    <span className={cn('inline-flex items-center gap-1', isDueSoon && 'text-amber-500 font-semibold')}>
                         <Calendar className="size-[11px]" />
                         {new Date(item.due_date).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
                     </span>
                 )}
 
                 {item.story_points != null && item.story_points > 0 && (
-                    <span className="inline-grid place-items-center min-w-[17px] h-[17px] px-[5px] text-[10px] font-bold rounded bg-secondary text-secondary-foreground border border-border">
+                    <span className="inline-grid place-items-center min-w-[18px] h-[18px] px-1.5 text-[10px] font-bold rounded-md bg-secondary text-secondary-foreground">
                         {item.story_points}
                     </span>
                 )}
 
                 {(item.children_count ?? 0) > 0 && (
-                    <span className="inline-flex items-center gap-[3px]">
+                    <span className="inline-flex items-center gap-1">
                         <CheckSquare className="size-3" />
                         {item.children_count}
                     </span>
                 )}
 
                 {(item.comments_count ?? 0) > 0 && (
-                    <span className="inline-flex items-center gap-[3px]">
+                    <span className="inline-flex items-center gap-1">
                         <MessageSquare className="size-[11px]" />
                         {item.comments_count}
                     </span>
@@ -419,26 +251,83 @@ function ItemCard({
 
                 <span className="flex-1" />
 
-                <PriorityBars slug={item.priority?.slug} />
-
-                {item.assignee ? (
-                    <Avatar className="size-[18px] ring-2 ring-card shrink-0">
-                        {item.assignee.avatar_display && (
-                            <AvatarImage src={item.assignee.avatar_display} alt={item.assignee.name} />
-                        )}
-                        <AvatarFallback className="text-[8px] bg-brand-slate text-white font-bold">
-                            {item.assignee.name.charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                    </Avatar>
-                ) : (
-                    <div className="size-[18px] rounded-full border border-dashed border-muted-foreground/30 shrink-0" />
-                )}
+                <Popover open={assignOpen} onOpenChange={setAssignOpen}>
+                    <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
+                        <button
+                            type="button"
+                            title={item.assignee ? `Assigned to ${item.assignee.name} — click to change` : 'Assign someone'}
+                            className="rounded-full shrink-0 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-primary ring-offset-1 ring-offset-card"
+                        >
+                            {item.assignee ? (
+                                <AssigneeAvatar user={item.assignee} />
+                            ) : (
+                                <span className="grid size-[18px] place-items-center rounded-full border border-dashed border-muted-foreground/50 text-muted-foreground/70 transition-colors hover:border-primary hover:text-primary">
+                                    <Plus className="size-3" />
+                                </span>
+                            )}
+                        </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="p-1 w-56" onClick={(e) => e.stopPropagation()}>
+                        <div className="max-h-60 overflow-y-auto">
+                            <button
+                                onClick={(e) => { e.stopPropagation(); assign(null); }}
+                                className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm hover:bg-muted/60 transition-colors text-left"
+                            >
+                                <AssigneeAvatar user={null} size={24} />
+                                <span className="flex-1 truncate text-muted-foreground">Unassigned</span>
+                                {!item.assigned_to && <Check className="size-3.5 shrink-0 text-primary" />}
+                            </button>
+                            {projectUsers.map((u) => (
+                                <button
+                                    key={u.id}
+                                    onClick={(e) => { e.stopPropagation(); assign(u.id); }}
+                                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm hover:bg-muted/60 transition-colors text-left"
+                                >
+                                    <AssigneeAvatar user={u} size={24} />
+                                    <span className="flex-1 truncate">{u.name}</span>
+                                    {item.assigned_to === u.id && <Check className="size-3.5 shrink-0 text-primary" />}
+                                </button>
+                            ))}
+                        </div>
+                    </PopoverContent>
+                </Popover>
             </div>
+
+            {/* Nested subtasks (same column) */}
+            {subtasks && subtasks.length > 0 && (
+                <div className="mt-0.5 overflow-hidden rounded-lg border border-border/60 bg-secondary/30">
+                    <div className="flex items-center gap-1.5 px-2.5 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <CheckSquare className="size-3" />
+                        Subtasks
+                        <span className="font-normal normal-case">{subtasks.length}</span>
+                    </div>
+                    <div className="divide-y divide-border/50">
+                        {subtasks.map((st) => {
+                            const done = !!st.completed_at;
+                            return (
+                                <button
+                                    key={st.id}
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); onEdit(st); }}
+                                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-secondary/70"
+                                >
+                                    <ItemTypeIcon type={st.item_type} className="size-3.5 shrink-0" />
+                                    <span className={cn('flex-1 truncate text-[11.5px] font-medium text-foreground/90', done && 'line-through text-muted-foreground')}>
+                                        {st.title}
+                                    </span>
+                                    <span className="shrink-0 font-mono text-[9.5px] text-muted-foreground">{st.key}</span>
+                                    <AssigneeAvatar user={st.assignee} size={15} />
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* Hover context menu */}
             <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                    <button className="absolute top-2 right-2 size-5 rounded grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-secondary">
+                    <button className="absolute top-2 right-2 size-5 rounded-md grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-secondary">
                         <MoreHorizontal className="size-3.5" />
                     </button>
                 </DropdownMenuTrigger>
@@ -446,16 +335,37 @@ function ItemCard({
                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(item); }}>Edit</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            const hasSubtasks = (item.children_count ?? 0) > 0;
-                            if (hasSubtasks && !window.confirm(`This task has ${item.children_count} subtask(s). Deleting it will delete those subtasks too. Continue?`)) return;
-                            router.delete(route('boards.items.destroy', [workspace.slug, project.slug, board.slug, item.id]));
-                        }}
+                        onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
                         className="text-destructive focus:text-destructive"
                     >Delete</DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Delete confirmation */}
+            <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+                <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete {item.key}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {subtaskCount > 0
+                                ? `This task has ${subtaskCount} subtask${subtaskCount > 1 ? 's' : ''}, which will be deleted too. This action cannot be undone.`
+                                : 'This action cannot be undone.'}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={(e) => e.stopPropagation()}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                router.delete(route('boards.items.destroy', [workspace.slug, project.slug, board.slug, item.id]));
+                            }}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </article>
     );
 }
@@ -631,6 +541,7 @@ function BoardColumnComponent({
     board,
     itemTypes,
     rootItems,
+    projectUsers,
     onEditItem,
     onDragStart,
     onDragEnd,
@@ -644,6 +555,7 @@ function BoardColumnComponent({
     board: Board;
     itemTypes: ItemType[];
     rootItems: Item[];
+    projectUsers: User[];
     onEditItem: (item: Item) => void;
     onDragStart: (e: DragEvent, item: Item) => void;
     onDragEnd: () => void;
@@ -652,6 +564,21 @@ function BoardColumnComponent({
     isDragOver: boolean;
 }) {
     const columnColor = column.color || '#94a3b8';
+
+    // Nest subtasks under their parent when both live in this column.
+    const items = column.items ?? [];
+    const idsInColumn = new Set(items.map((i) => i.id));
+    const isNestedSubtask = (i: Item) =>
+        i.item_type?.slug === 'subtask' && i.parent_id != null && idsInColumn.has(i.parent_id);
+    const subtasksByParent = new Map<number, Item[]>();
+    for (const i of items) {
+        if (isNestedSubtask(i)) {
+            const arr = subtasksByParent.get(i.parent_id!) ?? [];
+            arr.push(i);
+            subtasksByParent.set(i.parent_id!, arr);
+        }
+    }
+    const topLevelItems = items.filter((i) => !isNestedSubtask(i));
 
     return (
         <section
@@ -696,13 +623,15 @@ function BoardColumnComponent({
             {/* Items */}
             <ScrollArea className="flex-1 min-h-0">
                 <div className="flex flex-col gap-2 px-2 pb-3">
-                    {column.items?.map((item) => (
+                    {topLevelItems.map((item) => (
                         <ItemCard
                             key={item.id}
                             item={item}
                             workspace={workspace}
                             project={project}
                             board={board}
+                            projectUsers={projectUsers}
+                            subtasks={subtasksByParent.get(item.id)}
                             onEdit={onEditItem}
                             onDragStart={onDragStart}
                             onDragEnd={onDragEnd}
@@ -736,9 +665,12 @@ function ItemEditModal({
     priorities,
     projectUsers,
     projectLabels,
+    projectItems,
+    currentUserId,
     columns,
     open,
     onClose,
+    onOpenItem,
 }: {
     item: Item | null;
     workspace: Workspace;
@@ -748,273 +680,28 @@ function ItemEditModal({
     priorities: ItemPriority[];
     projectUsers: User[];
     projectLabels: LabelType[];
+    projectItems: ProjectItemLite[];
+    currentUserId: number;
     columns: BoardColumn[];
     open: boolean;
     onClose: () => void;
+    onOpenItem: (item: Item) => void;
 }) {
-    const [selectedLabels, setSelectedLabels] = useState<number[]>(
-        item?.labels?.map(l => l.id) || []
-    );
-    const [labelSearch, setLabelSearch] = useState('');
-    const [labelPopoverOpen, setLabelPopoverOpen] = useState(false);
-    const [newLabelName, setNewLabelName] = useState('');
-    const [comment, setComment] = useState('');
-    const [commentEditorKey, setCommentEditorKey] = useState(0);
-    const [commentActive, setCommentActive] = useState(false);
-    const [replyingTo, setReplyingTo] = useState<{ id: number; parentId?: number; userName: string } | null>(null);
-    const [replyText, setReplyText] = useState('');
-    const [replyEditorKey, setReplyEditorKey] = useState(0);
-    const [localComments, setLocalComments] = useState<Comment[]>(item?.comments || []);
-    const [localAttachments, setLocalAttachments] = useState<Attachment[]>(item?.attachments || []);
-    const [isUploading, setIsUploading] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    // Title inline editing
-    const [titleValue, setTitleValue] = useState(item?.title || '');
-    const [isEditingTitle, setIsEditingTitle] = useState(false);
-    const [titleDraft, setTitleDraft] = useState(item?.title || '');
-    const titleInputRef = useRef<HTMLInputElement>(null);
-
-    // Description edit/view state
-    const parseDescription = useCallback((desc: string | null | undefined): string => {
-        if (!desc) return '';
-        try {
-            const parsed = JSON.parse(desc);
-            if (parsed && typeof parsed === 'object' && Array.isArray(parsed.blocks)) {
-                return parsed.blocks.map((block: { type: string; data: { text?: string } }) => {
-                    if (block.type === 'paragraph') return `<p>${block.data?.text || ''}</p>`;
-                    return block.data?.text || '';
-                }).join('');
-            }
-            return desc;
-        } catch { return desc || ''; }
-    }, []);
-
-    const [editorContent, setEditorContent] = useState<string>(() => parseDescription(item?.description));
-    const [savedDescription, setSavedDescription] = useState<string>(() => parseDescription(item?.description));
-    const [editorKey, setEditorKey] = useState(0);
-    const [isEditingDescription, setIsEditingDescription] = useState(false);
-
-    // Sidebar property state
-    const [columnId, setColumnId] = useState(item?.column_id?.toString() || '');
-    const [assignedTo, setAssignedTo] = useState(item?.assigned_to?.toString() || '');
-    const [itemTypeId, setItemTypeId] = useState(item?.item_type_id?.toString() || '');
-    const [priorityId, setPriorityId] = useState(item?.priority_id?.toString() || '');
-    const [parentId, setParentId] = useState(item?.parent_id?.toString() || '');
-    const [storyPoints, setStoryPoints] = useState(item?.story_points?.toString() || '');
-    const [startDate, setStartDate] = useState(item?.start_date?.toString().split('T')[0] || '');
-    const [dueDate, setDueDate] = useState(item?.due_date?.toString().split('T')[0] || '');
+    const d = useItemDetail({
+        item,
+        workspace,
+        project,
+        board,
+        itemTypes,
+        priorities,
+        projectUsers,
+        projectLabels,
+        projectItems,
+        columns,
+        currentUserId,
+        onOpenItem,
+    });
     const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
-
-    // File preview
-    const [filePreview, setFilePreview] = useState<{ url: string; title: string; previewType: PreviewType } | null>(null);
-
-    // Update local data when item changes
-    useEffect(() => {
-        if (item?.comments) setLocalComments(item.comments);
-        if (item?.attachments) setLocalAttachments(item.attachments);
-    }, [item?.comments, item?.attachments]);
-
-    // Sync state when item changes (on open)
-    useEffect(() => {
-        if (item) {
-            setTitleValue(item.title || '');
-            setTitleDraft(item.title || '');
-            setSelectedLabels(item.labels?.map(l => l.id) || []);
-            setColumnId(item.column_id?.toString() || '');
-            setAssignedTo(item.assigned_to?.toString() || '');
-            setItemTypeId(item.item_type_id?.toString() || '');
-            setPriorityId(item.priority_id?.toString() || '');
-            setParentId(item.parent_id?.toString() || '');
-            setStoryPoints(item.story_points?.toString() || '');
-            setStartDate(item.start_date?.toString().split('T')[0] || '');
-            setDueDate(item.due_date?.toString().split('T')[0] || '');
-            const parsed = parseDescription(item.description);
-            setEditorContent(parsed);
-            setSavedDescription(parsed);
-        }
-    }, [item?.id]);
-
-    // Generic save helper
-    const saveProp = useCallback((fields: Record<string, any>) => {
-        if (!item) return;
-        router.patch(
-            route('boards.items.update', [workspace.slug, project.slug, board.slug, item.id]),
-            fields,
-            { preserveScroll: true },
-        );
-    }, [workspace.slug, project.slug, board.slug, item?.id]);
-
-    // Title handlers
-    const startEditTitle = () => {
-        setTitleDraft(titleValue);
-        setIsEditingTitle(true);
-        setTimeout(() => titleInputRef.current?.focus(), 0);
-    };
-    const saveTitle = () => {
-        if (!titleDraft.trim()) return;
-        setTitleValue(titleDraft);
-        setIsEditingTitle(false);
-        saveProp({ title: titleDraft });
-    };
-    const cancelTitle = () => {
-        setTitleDraft(titleValue);
-        setIsEditingTitle(false);
-    };
-
-    // Description handlers
-    const handleEditorChange = useCallback((content: string) => {
-        setEditorContent(content);
-    }, []);
-    const startEditDescription = () => setIsEditingDescription(true);
-    const saveDescription = () => {
-        setSavedDescription(editorContent);
-        setIsEditingDescription(false);
-        saveProp({ description: editorContent });
-    };
-    const cancelDescription = () => {
-        setEditorContent(savedDescription);
-        setEditorKey(k => k + 1);
-        setIsEditingDescription(false);
-    };
-
-    // Column/label handlers
-    const handleMoveToColumn = (newColId: string) => {
-        setColumnId(newColId);
-        if (!item) return;
-        router.patch(route('boards.items.move', [workspace.slug, project.slug, board.slug, item.id]), {
-            column_id: parseInt(newColId),
-            position: 0,
-        }, { preserveScroll: true });
-    };
-
-    const toggleLabel = (labelId: number) => {
-        if (!item) return;
-        const newLabels = selectedLabels.includes(labelId)
-            ? selectedLabels.filter(id => id !== labelId)
-            : [...selectedLabels, labelId];
-        setSelectedLabels(newLabels);
-        router.patch(route('boards.items.labels', [workspace.slug, project.slug, board.slug, item.id]), {
-            labels: newLabels,
-        }, { preserveScroll: true });
-    };
-
-    const handleCreateLabel = () => {
-        if (!newLabelName.trim()) return;
-        router.post(route('projects.labels.store', [workspace.slug, project.slug]), {
-            name: newLabelName.trim(),
-            color: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0'),
-        }, { preserveScroll: true, onSuccess: () => setNewLabelName('') });
-    };
-
-    // Comment helpers
-    const addReplyToComments = (comments: Comment[], parentId: number, newReply: Comment): Comment[] =>
-        comments.map(c => {
-            if (c.id === parentId) return { ...c, replies: [...(c.replies || []), newReply] };
-            if (c.replies?.length) return { ...c, replies: addReplyToComments(c.replies, parentId, newReply) };
-            return c;
-        });
-
-    const handlePostComment = (parentId?: number) => {
-        const rawBody = replyingTo ? replyText : comment;
-        const textBody = rawBody.replace(/<[^>]*>/g, '').trim();
-        if (!textBody || !item) return;
-
-        const optimisticComment: Comment = {
-            id: Date.now(),
-            item_id: item.id,
-            user_id: 0,
-            parent_id: parentId || undefined,
-            body: rawBody,
-            user: { id: 0, name: 'You', email: '' },
-            replies: [],
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-        };
-
-        if (parentId) {
-            setLocalComments(prev => addReplyToComments(prev, parentId, optimisticComment));
-            setReplyText('');
-            setReplyEditorKey(k => k + 1);
-            setReplyingTo(null);
-        } else {
-            setLocalComments(prev => [optimisticComment, ...prev]);
-            setComment('');
-            setCommentEditorKey(k => k + 1);
-            setCommentActive(false);
-        }
-
-        router.post(route('boards.items.comments.store', [workspace.slug, project.slug, board.slug, item.id]), {
-            body: rawBody,
-            parent_id: parentId || null,
-        }, { preserveScroll: true });
-    };
-
-    const handleReply = (commentId: number, userName: string, parentId?: number) => {
-        setReplyingTo({ id: commentId, parentId, userName });
-        setReplyText('');
-    };
-
-    const cancelReply = () => { setReplyingTo(null); setReplyText(''); setReplyEditorKey(k => k + 1); };
-
-    // Attachment handlers
-    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (!files || files.length === 0 || !item) return;
-        setIsUploading(true);
-        const formData = new FormData();
-        formData.append('file', files[0]);
-        router.post(route('boards.items.attachments.store', [workspace.slug, project.slug, board.slug, item.id]), formData, {
-            preserveScroll: true,
-            onFinish: () => {
-                setIsUploading(false);
-                if (fileInputRef.current) fileInputRef.current.value = '';
-            },
-        });
-    };
-
-    const handleDeleteAttachment = (attachmentId: number) => {
-        if (!item) return;
-        setLocalAttachments(prev => prev.filter(a => a.id !== attachmentId));
-        router.delete(route('boards.items.attachments.destroy', [workspace.slug, project.slug, board.slug, item.id, attachmentId]), {
-            preserveScroll: true,
-        });
-    };
-
-    // Checkbox toggle in view mode
-    const handleCheckboxToggle = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-        const target = e.target as HTMLElement;
-        const li = target.closest('li[role="checkbox"]') as HTMLElement | null;
-        if (!li) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const container = e.currentTarget;
-        const allItems = Array.from(container.querySelectorAll('li[role="checkbox"]'));
-        const idx = allItems.indexOf(li);
-        if (idx === -1) return;
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(savedDescription, 'text/html');
-        const docItems = Array.from(doc.querySelectorAll('li[role="checkbox"]'));
-        if (!docItems[idx]) return;
-        const isChecked = docItems[idx].getAttribute('aria-checked') === 'true';
-        docItems[idx].setAttribute('aria-checked', isChecked ? 'false' : 'true');
-        if (isChecked) {
-            docItems[idx].classList.remove('lexical-listitem-checked', 'line-through', 'text-muted-foreground');
-            docItems[idx].classList.add('lexical-listitem-unchecked');
-        } else {
-            docItems[idx].classList.remove('lexical-listitem-unchecked');
-            docItems[idx].classList.add('lexical-listitem-checked', 'line-through', 'text-muted-foreground');
-        }
-        const newHtml = doc.body.innerHTML;
-        setSavedDescription(newHtml);
-        setEditorContent(newHtml);
-        setEditorKey(k => k + 1);
-        saveProp({ description: newHtml });
-    }, [savedDescription, saveProp]);
-
-    const filteredLabels = projectLabels.filter(label =>
-        label.name.toLowerCase().includes(labelSearch.toLowerCase())
-    );
 
     if (!item) return null;
 
@@ -1024,10 +711,13 @@ function ItemEditModal({
                 <DialogContent className="max-w-6xl max-h-[92vh] p-0 gap-0 overflow-hidden [&>button]:hidden" aria-describedby={undefined}>
                     <DialogTitle className="sr-only">Edit {item.key}: {item.title}</DialogTitle>
 
+                    {/* Accent strip (priority → type) — mirrors the board card */}
+                    <span className="h-1 w-full shrink-0" style={{ background: d.accent ?? 'transparent' }} aria-hidden />
+
                     {/* ── Header ─────────────────────────────────────────── */}
                     <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b bg-background shrink-0">
-                        <div className="flex items-center gap-3">
-                            <ItemTypeIcon type={item.item_type} className="size-4" />
+                        <div className="flex items-center gap-2.5 min-w-0">
+                            <TypeBadge type={item.item_type} />
                             <span className="font-mono text-xs font-semibold text-primary tracking-wider">{item.key}</span>
                             {item.column && (
                                 <Badge variant="secondary" className="text-xs">
@@ -1046,182 +736,7 @@ function ItemEditModal({
                                 <SheetContent side="right" className="w-[300px] sm:w-[360px] p-0">
                                     <div className="px-5 py-5 h-full overflow-y-auto">
                                         <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</h2>
-                                        <div className="space-y-0 divide-y divide-border/50">
-                                            {/* Status */}
-                                            <div className="flex items-center min-h-[40px] py-1">
-                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Status</span>
-                                                <div className="flex-1">
-                                                    <Select value={columnId} onValueChange={handleMoveToColumn}>
-                                                        <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                                                            <SelectValue placeholder="None" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {columns.map((col) => (
-                                                                <SelectItem key={col.id} value={col.id.toString()}>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color || '#94a3b8' }} />
-                                                                        {col.name}
-                                                                    </div>
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </div>
-                                            {/* Assignee */}
-                                            <div className="flex items-center min-h-[40px] py-1">
-                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Assignee</span>
-                                                <div className="flex-1">
-                                                    <Select value={assignedTo || 'unassigned'} onValueChange={(v) => { const val = v === 'unassigned' ? '' : v; setAssignedTo(val); saveProp({ assigned_to: val || null }); }}>
-                                                        <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                                                            <SelectValue placeholder="Unassigned" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="unassigned">Unassigned</SelectItem>
-                                                            {projectUsers.map((user) => (
-                                                                <SelectItem key={user.id} value={user.id.toString()}>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <Avatar className="size-5">
-                                                                            {user.avatar_display && <AvatarImage src={user.avatar_display} alt={user.name} />}
-                                                                            <AvatarFallback className="text-[10px]">{user.name.charAt(0).toUpperCase()}</AvatarFallback>
-                                                                        </Avatar>
-                                                                        {user.name}
-                                                                    </div>
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </div>
-                                            {/* Type */}
-                                            <div className="flex items-center min-h-[40px] py-1">
-                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Type</span>
-                                                <div className="flex-1">
-                                                    <Select value={itemTypeId} onValueChange={(v) => { setItemTypeId(v); saveProp({ item_type_id: v }); }}>
-                                                        <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                                                            <SelectValue placeholder="None" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {itemTypes.map((type) => (
-                                                                <SelectItem key={type.id} value={type.id.toString()}>
-                                                                    <div className="flex items-center gap-2"><ItemTypeIcon type={type} />{type.name}</div>
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </div>
-                                            {/* Priority */}
-                                            <div className="flex items-center min-h-[40px] py-1">
-                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Priority</span>
-                                                <div className="flex-1">
-                                                    <Select value={priorityId} onValueChange={(v) => { setPriorityId(v); saveProp({ priority_id: v }); }}>
-                                                        <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                                                            <SelectValue placeholder="None" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {priorities.map((priority) => (
-                                                                <SelectItem key={priority.id} value={priority.id.toString()}>
-                                                                    <div className="flex items-center gap-2"><PriorityIcon slug={priority.slug} />{priority.name}</div>
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </div>
-                                            {/* Story Points */}
-                                            <div className="flex items-center min-h-[40px] py-1">
-                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Points</span>
-                                                <div className="flex-1 px-2 -ml-2">
-                                                    <Input type="number" min="0" value={storyPoints} onChange={(e) => setStoryPoints(e.target.value)} onBlur={() => saveProp({ story_points: storyPoints || null })} className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md" placeholder="None" />
-                                                </div>
-                                            </div>
-                                            {/* Start Date */}
-                                            <div className="flex items-center min-h-[40px] py-1">
-                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Start Date</span>
-                                                <div className="flex-1 px-2 -ml-2">
-                                                    <Input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); saveProp({ start_date: e.target.value || null }); }} className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md" />
-                                                </div>
-                                            </div>
-                                            {/* Due Date */}
-                                            <div className="flex items-center min-h-[40px] py-1">
-                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Due Date</span>
-                                                <div className="flex-1 px-2 -ml-2">
-                                                    <Input type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); saveProp({ due_date: e.target.value || null }); }} className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md" />
-                                                </div>
-                                            </div>
-                                            {/* Reporter */}
-                                            {item.reporter && (
-                                                <div className="flex items-center min-h-[40px] py-1">
-                                                    <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Reporter</span>
-                                                    <div className="flex-1 flex items-center gap-2 px-2">
-                                                        <Avatar className="size-5 shrink-0"><AvatarFallback className="text-[10px]">{item.reporter.name.charAt(0)}</AvatarFallback></Avatar>
-                                                        <span className="text-sm truncate">{item.reporter.name}</span>
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {/* Created */}
-                                            <div className="flex items-center min-h-[40px] py-1">
-                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Created</span>
-                                                <span className="flex-1 text-sm px-2">{new Date(item.created_at).toLocaleDateString()}</span>
-                                            </div>
-                                            {/* Updated */}
-                                            <div className="flex items-center min-h-[40px] py-1">
-                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Updated</span>
-                                                <span className="flex-1 text-sm px-2">{new Date(item.updated_at).toLocaleDateString()}</span>
-                                            </div>
-                                            {/* Labels */}
-                                            <div className="flex items-start min-h-[40px] py-1">
-                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground pt-2">Labels</span>
-                                                <div className="flex-1">
-                                                    <Popover open={labelPopoverOpen} onOpenChange={(o) => { setLabelPopoverOpen(o); if (!o) setLabelSearch(''); }}>
-                                                        <PopoverTrigger asChild>
-                                                            <button className="w-full text-left rounded-md px-2 py-1 -ml-2 hover:bg-muted/80 transition-colors min-h-[32px] flex flex-wrap gap-1 items-center">
-                                                                {selectedLabels.length === 0 ? (
-                                                                    <span className="text-sm text-muted-foreground">None</span>
-                                                                ) : (
-                                                                    selectedLabels.map((id) => {
-                                                                        const lbl = projectLabels.find(l => l.id === id);
-                                                                        if (!lbl) return null;
-                                                                        return (
-                                                                            <span key={id} className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full" style={{ backgroundColor: lbl.color + '22', color: lbl.color, border: `1px solid ${lbl.color}55` }}>
-                                                                                {lbl.name}
-                                                                            </span>
-                                                                        );
-                                                                    })
-                                                                )}
-                                                            </button>
-                                                        </PopoverTrigger>
-                                                        <PopoverContent className="p-0 w-56" align="start">
-                                                            <div className="p-2 border-b">
-                                                                <Input autoFocus placeholder="Search labels…" value={labelSearch} onChange={(e) => setLabelSearch(e.target.value)} className="h-7 text-xs border-0 shadow-none focus-visible:ring-0 px-1" />
-                                                            </div>
-                                                            <div className="max-h-52 overflow-y-auto p-1">
-                                                                {filteredLabels.map((label) => {
-                                                                    const active = selectedLabels.includes(label.id);
-                                                                    return (
-                                                                        <button key={label.id} onClick={() => toggleLabel(label.id)} className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm hover:bg-muted/60 transition-colors text-left">
-                                                                            <span className="size-3 rounded-full shrink-0 border" style={{ backgroundColor: label.color, borderColor: label.color }} />
-                                                                            <span className="flex-1 truncate text-xs">{label.name}</span>
-                                                                            {active && <Check className="size-3 shrink-0 text-primary" />}
-                                                                        </button>
-                                                                    );
-                                                                })}
-                                                                {filteredLabels.length === 0 && <p className="text-xs text-muted-foreground px-2 py-3 text-center">No labels found</p>}
-                                                            </div>
-                                                            <div className="p-2 border-t">
-                                                                <div className="flex gap-1.5">
-                                                                    <Input placeholder="New label name…" value={newLabelName} onChange={(e) => setNewLabelName(e.target.value)} className="h-7 text-xs flex-1" onKeyDown={(e) => { if (e.key === 'Enter' && newLabelName.trim()) { e.preventDefault(); handleCreateLabel(); } }} />
-                                                                    <Button size="sm" className="h-7 px-2" onClick={handleCreateLabel} disabled={!newLabelName.trim()}>
-                                                                        <Plus className="size-3" />
-                                                                    </Button>
-                                                                </div>
-                                                            </div>
-                                                        </PopoverContent>
-                                                    </Popover>
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <ItemDetailSidebar d={d} />
                                     </div>
                                 </SheetContent>
                             </Sheet>
@@ -1238,511 +753,21 @@ function ItemEditModal({
                     </div>
 
                     {/* ── Two-panel body ──────────────────────────────────── */}
-                    <div className="flex overflow-hidden" style={{ maxHeight: 'calc(92vh - 57px)' }}>
-
-                        {/* ── Main column ──────────────────────────────────── */}
+                    <div className="flex overflow-hidden" style={{ maxHeight: 'calc(92vh - 61px)' }}>
                         <div className="flex-1 overflow-y-auto min-w-0">
-                            <div className="px-8 py-6 space-y-0">
-
-                                {/* ── Title ──────────────────────────────────── */}
-                                <div className="mb-0">
-                                    {isEditingTitle ? (
-                                        <div className="flex items-center gap-2">
-                                            <Input
-                                                ref={titleInputRef}
-                                                value={titleDraft}
-                                                onChange={(e) => setTitleDraft(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') saveTitle();
-                                                    if (e.key === 'Escape') cancelTitle();
-                                                }}
-                                                className="text-xl font-semibold border-0 border-b-2 border-primary rounded-none px-0 py-1 h-auto focus-visible:ring-0 bg-transparent flex-1 leading-snug"
-                                                placeholder="Issue title"
-                                            />
-                                            <Button size="icon" variant="ghost" className="size-8 text-green-600 hover:text-green-700 hover:bg-green-50 shrink-0" onClick={saveTitle}>
-                                                <Check className="size-4" />
-                                            </Button>
-                                            <Button size="icon" variant="ghost" className="size-8 text-muted-foreground shrink-0" onClick={cancelTitle}>
-                                                <X className="size-4" />
-                                            </Button>
-                                        </div>
-                                    ) : (
-                                        <div
-                                            className="group flex items-center gap-2 cursor-text rounded-md -mx-2 px-2 py-1 hover:bg-muted/60 transition-colors"
-                                            onClick={startEditTitle}
-                                        >
-                                            <h1 className="text-xl font-semibold text-foreground leading-snug flex-1">
-                                                {titleValue || <span className="text-muted-foreground font-normal">Issue title</span>}
-                                            </h1>
-                                            <Pencil className="size-3.5 text-muted-foreground/0 group-hover:text-muted-foreground/60 transition-colors shrink-0" />
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* ── Description ────────────────────────────── */}
-                                <section className="pt-3 pb-4 border-t border-border/60">
-                                    <h2 className="text-sm font-semibold mb-3">Description</h2>
-                                    {isEditingDescription ? (
-                                        <div>
-                                            <RichLexicalEditor
-                                                key={`edit-${editorKey}`}
-                                                content={editorContent}
-                                                onChange={handleEditorChange}
-                                                placeholder="Add a description…"
-                                                editable={true}
-                                                minHeight="160px"
-                                                maxHeight="460px"
-                                                contentKey={`${item.id}-edit-${editorKey}`}
-                                                workspaceSlug={workspace.slug}
-                                                itemTitle={titleValue}
-                                                projectName={project.name}
-                                            />
-                                            <div className="flex items-center gap-2 mt-3 justify-end">
-                                                <Button variant="outline" size="sm" onClick={cancelDescription}>Discard</Button>
-                                                <Button size="sm" onClick={saveDescription}>Save</Button>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div
-                                            className="cursor-text rounded-md -mx-2 px-2 py-1 hover:bg-muted/60 transition-colors group relative select-text"
-                                            onClick={handleCheckboxToggle}
-                                            onDoubleClick={startEditDescription}
-                                        >
-                                            {savedDescription ? (
-                                                <RichLexicalEditor
-                                                    key={`view-${editorKey}`}
-                                                    content={savedDescription}
-                                                    onChange={() => { }}
-                                                    editable={false}
-                                                    showToolbar={false}
-                                                    minHeight="40px"
-                                                    maxHeight="460px"
-                                                    className="border-0 bg-transparent rounded-none shadow-none"
-                                                    contentKey={`${item.id}-view-${editorKey}`}
-                                                />
-                                            ) : (
-                                                <p className="text-sm text-muted-foreground py-2">Add a description…</p>
-                                            )}
-                                            <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                                <span className="text-[11px] bg-muted/80 text-muted-foreground px-1.5 py-0.5 rounded border">Double-click to edit</span>
-                                            </div>
-                                        </div>
-                                    )}
-                                </section>
-
-                                {/* ── Attachments ────────────────────────────── */}
-                                <section className="py-5 border-t border-border/60">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <h2 className="text-sm font-semibold flex items-center gap-2">
-                                            <Paperclip className="size-4 text-muted-foreground" />
-                                            Attachments
-                                            {localAttachments.length > 0 && (
-                                                <span className="text-xs font-normal text-muted-foreground">({localAttachments.length})</span>
-                                            )}
-                                        </h2>
-                                        <div>
-                                            <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-                                            <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1.5" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
-                                                <Upload className="size-3.5" />
-                                                {isUploading ? 'Uploading…' : 'Add'}
-                                            </Button>
-                                        </div>
-                                    </div>
-
-                                    {localAttachments.length > 0 ? (
-                                        <div className="space-y-1.5">
-                                            {localAttachments.map((attachment) => {
-                                                const { Icon, colorClass } = getFileIconByName(attachment.original_filename || attachment.filename || '');
-                                                const previewType = getFilePreviewType(attachment.original_filename || attachment.filename || '');
-                                                const canPreview = previewType !== 'other';
-                                                return (
-                                                    <div key={attachment.id} className="flex items-center gap-3 px-3 py-2 rounded-lg group hover:bg-muted/80 transition-colors -mx-1">
-                                                        {previewType === 'image' ? (
-                                                            <div className="size-9 rounded border overflow-hidden bg-muted shrink-0">
-                                                                <img src={attachment.url} alt={attachment.original_filename} className="size-full object-cover" />
-                                                            </div>
-                                                        ) : (
-                                                            <div className="size-9 flex items-center justify-center rounded border bg-background shrink-0">
-                                                                <Icon className={`size-4 ${colorClass}`} />
-                                                            </div>
-                                                        )}
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-sm font-medium truncate leading-none">{attachment.original_filename}</p>
-                                                            <p className="text-xs text-muted-foreground mt-0.5">
-                                                                {attachment.formatted_size || `${Math.round(attachment.size / 1024)} KB`} · {attachment.user?.name || 'Unknown'}
-                                                            </p>
-                                                        </div>
-                                                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            {canPreview && (
-                                                                <Button variant="ghost" size="icon" className="size-7" title="Preview"
-                                                                    onClick={() => setFilePreview({ url: attachment.url ?? '', title: attachment.original_filename ?? '', previewType })}>
-                                                                    <Eye className="size-3.5" />
-                                                                </Button>
-                                                            )}
-                                                            <a href={attachment.url} target="_blank" rel="noopener noreferrer" download={attachment.original_filename}>
-                                                                <Button variant="ghost" size="icon" className="size-7" title="Download"><Download className="size-3.5" /></Button>
-                                                            </a>
-                                                            <Button variant="ghost" size="icon" className="size-7 text-destructive hover:text-destructive" onClick={() => handleDeleteAttachment(attachment.id)}>
-                                                                <Trash2 className="size-3.5" />
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    ) : (
-                                        <button onClick={() => fileInputRef.current?.click()} className="w-full text-left text-sm text-muted-foreground hover:text-foreground transition-colors py-1">
-                                            + Add attachment
-                                        </button>
-                                    )}
-                                </section>
-
-                                {/* ── Activity / Comments ─────────────────────── */}
-                                <section className="py-5 border-t border-border/60">
-                                    <h2 className="text-sm font-semibold flex items-center gap-2 mb-5">
-                                        <MessageSquare className="size-4 text-muted-foreground" />
-                                        Activity
-                                        {localComments.length > 0 && <span className="text-xs font-normal text-muted-foreground">({localComments.length})</span>}
-                                    </h2>
-
-                                    {/* New comment input */}
-                                    <div className="flex gap-3 mb-6">
-                                        <Avatar className="size-8 shrink-0 mt-2">
-                                            <AvatarFallback className="text-xs bg-primary text-primary-foreground">U</AvatarFallback>
-                                        </Avatar>
-                                        <div className="flex-1 min-w-0">
-                                            <div
-                                                className={`rounded-lg border transition-colors ${commentActive ? 'border-primary ring-1 ring-primary/20' : 'border-border hover:border-muted-foreground/40'}`}
-                                                onClick={() => setCommentActive(true)}
-                                            >
-                                                <RichLexicalEditor
-                                                    key={commentEditorKey}
-                                                    content={comment || null}
-                                                    onChange={(html) => {
-                                                        setComment(html);
-                                                        if (!commentActive) setCommentActive(true);
-                                                    }}
-                                                    placeholder="Add a comment…"
-                                                    editable={true}
-                                                    showToolbar={commentActive}
-                                                    minHeight="60px"
-                                                    maxHeight="240px"
-                                                    contentKey={`comment-${commentEditorKey}`}
-                                                />
-                                            </div>
-                                            {commentActive && (
-                                                <div className="flex justify-end mt-2 gap-2">
-                                                    <Button variant="outline" size="sm" onClick={() => {
-                                                        setComment('');
-                                                        setCommentEditorKey(k => k + 1);
-                                                        setCommentActive(false);
-                                                    }}>Cancel</Button>
-                                                    <Button size="sm" onClick={() => handlePostComment()}>Save</Button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Existing comments */}
-                                    {localComments.length > 0 && (
-                                        <div className="space-y-5">
-                                            {localComments.map((c) => (
-                                                <CommentItem
-                                                    key={c.id}
-                                                    comment={c}
-                                                    depth={0}
-                                                    replyingTo={replyingTo}
-                                                    replyText={replyText}
-                                                    setReplyText={setReplyText}
-                                                    handleReply={handleReply}
-                                                    handlePostComment={handlePostComment}
-                                                    cancelReply={cancelReply}
-                                                    replyEditorKey={replyEditorKey}
-                                                    projectId={project.id}
-                                                />
-                                            ))}
-                                        </div>
-                                    )}
-                                </section>
-
-                            </div>
-                        </div>{/* /main column */}
-
-                        {/* ── Sidebar ──────────────────────────────────────── */}
+                            <ItemDetailMain d={d} />
+                        </div>
                         <div className="hidden lg:block w-[300px] shrink-0 overflow-y-auto border-l bg-background">
                             <div className="px-5 py-5">
                                 <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</h2>
-
-                                <div className="space-y-0 divide-y divide-border/50">
-                                    {/* Status */}
-                                    <div className="flex items-center min-h-[40px] py-1">
-                                        <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Status</span>
-                                        <div className="flex-1">
-                                            <Select value={columnId} onValueChange={handleMoveToColumn}>
-                                                <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                                                    <SelectValue placeholder="None" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {columns.map((col) => (
-                                                        <SelectItem key={col.id} value={col.id.toString()}>
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color || '#94a3b8' }} />
-                                                                {col.name}
-                                                            </div>
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    </div>
-
-                                    {/* Assignee */}
-                                    <div className="flex items-center min-h-[40px] py-1">
-                                        <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Assignee</span>
-                                        <div className="flex-1">
-                                            <Select value={assignedTo || 'unassigned'} onValueChange={(v) => { const val = v === 'unassigned' ? '' : v; setAssignedTo(val); saveProp({ assigned_to: val || null }); }}>
-                                                <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                                                    <SelectValue placeholder="Unassigned" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="unassigned">Unassigned</SelectItem>
-                                                    {projectUsers.map((user) => (
-                                                        <SelectItem key={user.id} value={user.id.toString()}>
-                                                            <div className="flex items-center gap-2">
-                                                                <Avatar className="size-5">
-                                                                    {user.avatar_display && <AvatarImage src={user.avatar_display} alt={user.name} />}
-                                                                    <AvatarFallback className="text-[10px]">{user.name.charAt(0).toUpperCase()}</AvatarFallback>
-                                                                </Avatar>
-                                                                {user.name}
-                                                            </div>
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    </div>
-
-                                    {/* Type */}
-                                    <div className="flex items-center min-h-[40px] py-1">
-                                        <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Type</span>
-                                        <div className="flex-1">
-                                            <Select value={itemTypeId} onValueChange={(v) => { setItemTypeId(v); saveProp({ item_type_id: v }); }}>
-                                                <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                                                    <SelectValue placeholder="None" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {itemTypes.map((type) => (
-                                                        <SelectItem key={type.id} value={type.id.toString()}>
-                                                            <div className="flex items-center gap-2"><ItemTypeIcon type={type} />{type.name}</div>
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    </div>
-
-                                    {/* Parent task */}
-                                    {(() => {
-                                        const rootItemsForEdit = columns.flatMap((c) => (c as BoardColumn & { items?: Item[] }).items || []).filter((i) => !i.parent_id && i.id !== item?.id);
-                                        const isSubtaskType = itemTypes.some((t) => t.slug === 'subtask' && t.id.toString() === itemTypeId);
-                                        return (
-                                            <div className="flex items-center min-h-[40px] py-1">
-                                                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Parent</span>
-                                                <div className="flex-1">
-                                                    <Select
-                                                        value={parentId || 'none'}
-                                                        onValueChange={(v) => {
-                                                            const val = v === 'none' ? '' : v;
-                                                            setParentId(val);
-                                                            saveProp({ parent_id: val ? parseInt(val, 10) : null });
-                                                        }}
-                                                    >
-                                                        <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                                                            <SelectValue placeholder="None" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            <SelectItem value="none" disabled={isSubtaskType}>None</SelectItem>
-                                                            {rootItemsForEdit.map((r) => (
-                                                                <SelectItem key={r.id} value={r.id.toString()}>
-                                                                    <span className="font-mono text-xs">{r.key}</span> {r.title}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
-                                            </div>
-                                        );
-                                    })()}
-
-                                    {/* Priority */}
-                                    <div className="flex items-center min-h-[40px] py-1">
-                                        <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Priority</span>
-                                        <div className="flex-1">
-                                            <Select value={priorityId} onValueChange={(v) => { setPriorityId(v); saveProp({ priority_id: v }); }}>
-                                                <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                                                    <SelectValue placeholder="None" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {priorities.map((priority) => (
-                                                        <SelectItem key={priority.id} value={priority.id.toString()}>
-                                                            <div className="flex items-center gap-2"><PriorityIcon slug={priority.slug} />{priority.name}</div>
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                    </div>
-
-                                    {/* Story Points */}
-                                    <div className="flex items-center min-h-[40px] py-1">
-                                        <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Points</span>
-                                        <div className="flex-1 px-2 -ml-2">
-                                            <Input
-                                                type="number" min="0"
-                                                value={storyPoints}
-                                                onChange={(e) => setStoryPoints(e.target.value)}
-                                                onBlur={() => saveProp({ story_points: storyPoints || null })}
-                                                className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
-                                                placeholder="None"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Start Date */}
-                                    <div className="flex items-center min-h-[40px] py-1">
-                                        <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Start Date</span>
-                                        <div className="flex-1 px-2 -ml-2">
-                                            <Input
-                                                type="date"
-                                                value={startDate}
-                                                onChange={(e) => { setStartDate(e.target.value); saveProp({ start_date: e.target.value || null }); }}
-                                                className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Due Date */}
-                                    <div className="flex items-center min-h-[40px] py-1">
-                                        <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Due Date</span>
-                                        <div className="flex-1 px-2 -ml-2">
-                                            <Input
-                                                type="date"
-                                                value={dueDate}
-                                                onChange={(e) => { setDueDate(e.target.value); saveProp({ due_date: e.target.value || null }); }}
-                                                className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Reporter */}
-                                    {item.reporter && (
-                                        <div className="flex items-center min-h-[40px] py-1">
-                                            <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Reporter</span>
-                                            <div className="flex-1 flex items-center gap-2 px-2">
-                                                <Avatar className="size-5 shrink-0"><AvatarFallback className="text-[10px]">{item.reporter.name.charAt(0)}</AvatarFallback></Avatar>
-                                                <span className="text-sm truncate">{item.reporter.name}</span>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Created */}
-                                    <div className="flex items-center min-h-[40px] py-1">
-                                        <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Created</span>
-                                        <span className="flex-1 text-sm px-2">{new Date(item.created_at).toLocaleDateString()}</span>
-                                    </div>
-
-                                    {/* Updated */}
-                                    <div className="flex items-center min-h-[40px] py-1">
-                                        <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Updated</span>
-                                        <span className="flex-1 text-sm px-2">{new Date(item.updated_at).toLocaleDateString()}</span>
-                                    </div>
-
-                                    {/* Labels */}
-                                    <div className="flex items-start min-h-[40px] py-1">
-                                        <span className="w-[40%] shrink-0 text-xs text-muted-foreground pt-2">Labels</span>
-                                        <div className="flex-1">
-                                            <Popover open={labelPopoverOpen} onOpenChange={(o) => { setLabelPopoverOpen(o); if (!o) setLabelSearch(''); }}>
-                                                <PopoverTrigger asChild>
-                                                    <button className="w-full text-left rounded-md px-2 py-1 -ml-2 hover:bg-muted/80 transition-colors min-h-[32px] flex flex-wrap gap-1 items-center">
-                                                        {selectedLabels.length === 0 ? (
-                                                            <span className="text-sm text-muted-foreground">None</span>
-                                                        ) : (
-                                                            selectedLabels.map((id) => {
-                                                                const lbl = projectLabels.find(l => l.id === id);
-                                                                if (!lbl) return null;
-                                                                return (
-                                                                    <span key={id} className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full"
-                                                                        style={{ backgroundColor: lbl.color + '22', color: lbl.color, border: `1px solid ${lbl.color}55` }}>
-                                                                        {lbl.name}
-                                                                    </span>
-                                                                );
-                                                            })
-                                                        )}
-                                                    </button>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="p-0 w-56" align="start">
-                                                    <div className="p-2 border-b">
-                                                        <Input autoFocus placeholder="Search labels…" value={labelSearch} onChange={(e) => setLabelSearch(e.target.value)}
-                                                            className="h-7 text-xs border-0 shadow-none focus-visible:ring-0 px-1" />
-                                                    </div>
-                                                    <div className="max-h-52 overflow-y-auto p-1">
-                                                        {filteredLabels.map((label) => {
-                                                            const active = selectedLabels.includes(label.id);
-                                                            return (
-                                                                <button key={label.id} onClick={() => toggleLabel(label.id)}
-                                                                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-sm hover:bg-muted/60 transition-colors text-left">
-                                                                    <span className="size-3 rounded-full shrink-0 border" style={{ backgroundColor: label.color, borderColor: label.color }} />
-                                                                    <span className="flex-1 truncate text-xs">{label.name}</span>
-                                                                    {active && <Check className="size-3 shrink-0 text-primary" />}
-                                                                </button>
-                                                            );
-                                                        })}
-                                                        {filteredLabels.length === 0 && <p className="text-xs text-muted-foreground px-2 py-3 text-center">No labels found</p>}
-                                                    </div>
-                                                    <div className="p-2 border-t">
-                                                        <div className="flex gap-1.5">
-                                                            <Input placeholder="New label name…" value={newLabelName} onChange={(e) => setNewLabelName(e.target.value)}
-                                                                className="h-7 text-xs flex-1"
-                                                                onKeyDown={(e) => { if (e.key === 'Enter' && newLabelName.trim()) { e.preventDefault(); handleCreateLabel(); } }} />
-                                                            <Button size="sm" className="h-7 px-2" onClick={handleCreateLabel} disabled={!newLabelName.trim()}>
-                                                                <Plus className="size-3" />
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                </PopoverContent>
-                                            </Popover>
-                                        </div>
-                                    </div>
-                                </div>{/* /divide-y */}
+                                <ItemDetailSidebar d={d} />
                             </div>
-                        </div>{/* /sidebar */}
-                    </div>{/* /two-panel */}
+                        </div>
+                    </div>
                 </DialogContent>
             </Dialog>
 
-            {/* File preview modal */}
-            <Dialog open={!!filePreview} onOpenChange={(open) => !open && setFilePreview(null)}>
-                <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
-                    {filePreview && (
-                        <>
-                            <DialogHeader className="px-6 py-3 border-b shrink-0">
-                                <DialogTitle className="truncate pr-8">{filePreview.title}</DialogTitle>
-                            </DialogHeader>
-                            <div className="flex-1 min-h-0 overflow-auto p-6 bg-muted/30">
-                                {filePreview.previewType === 'pdf' && (
-                                    <iframe src={filePreview.url} title={filePreview.title} className="w-full h-[70vh] rounded border bg-background" />
-                                )}
-                                {filePreview.previewType === 'image' && (
-                                    <img src={filePreview.url} alt={filePreview.title} className="max-w-full max-h-[70vh] object-contain mx-auto rounded" />
-                                )}
-                                {filePreview.previewType === 'video' && (
-                                    <video src={filePreview.url} controls className="w-full max-h-[70vh] rounded" title={filePreview.title} />
-                                )}
-                            </div>
-                        </>
-                    )}
-                </DialogContent>
-            </Dialog>
+            <ItemFilePreviewDialog d={d} />
         </>
     );
 }
@@ -1815,7 +840,7 @@ function ListView({
                                 </td>
                                 <td className="py-3">
                                     <div className="flex items-center gap-2">
-                                        <PriorityIcon slug={item.priority?.slug} />
+                                        <PriorityIndicator slug={item.priority?.slug} />
                                         <span className="text-sm">{item.priority?.name || 'None'}</span>
                                     </div>
                                 </td>
@@ -2549,6 +1574,7 @@ export default function BoardsShow({
     priorities,
     projectUsers,
     projectLabels,
+    projectItems = [],
 }: Props) {
     const itemTypes = boardItemTypes;
     const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -2563,14 +1589,18 @@ export default function BoardsShow({
     const [assigneeSearch, setAssigneeSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState<number[]>([]);
     const [labelFilter, setLabelFilter] = useState<number[]>([]);
+    const [priorityFilter, setPriorityFilter] = useState<number[]>([]);
+    const [typeFilter, setTypeFilter] = useState<number[]>([]);
     const currentUserId = auth.user?.id;
 
     const activeFiltersCount = useMemo(
         () =>
             (assigneeFilter !== 'any' ? 1 : 0) +
             (statusFilter.length ? 1 : 0) +
-            (labelFilter.length ? 1 : 0),
-        [assigneeFilter, statusFilter.length, labelFilter.length],
+            (labelFilter.length ? 1 : 0) +
+            (priorityFilter.length ? 1 : 0) +
+            (typeFilter.length ? 1 : 0),
+        [assigneeFilter, statusFilter.length, labelFilter.length, priorityFilter.length, typeFilter.length],
     );
 
     // Persist board view preference per project so user sees same view next time
@@ -2658,6 +1688,16 @@ export default function BoardsShow({
                     }
                 }
 
+                // Priority filter
+                if (priorityFilter.length && !(item.priority_id && priorityFilter.includes(item.priority_id))) {
+                    return false;
+                }
+
+                // Type filter
+                if (typeFilter.length && !(item.item_type_id && typeFilter.includes(item.item_type_id))) {
+                    return false;
+                }
+
                 return true;
             }) || [],
     }));
@@ -2715,37 +1755,35 @@ export default function BoardsShow({
                 </div>
 
                 {/* ─── Toolbar ─── */}
-                <div className="flex flex-col gap-2 px-5 py-2 border-b border-border/60">
-                    {/* Row 1: View tabs + view switcher */}
-                    <div className="flex items-center gap-2 min-h-[28px]">
-                        <div className="inline-flex p-[3px] bg-secondary border border-border rounded-[7px] gap-[1px]">
-                            {(['kanban', 'list', 'gantt', 'calendar'] as const).map(v => {
-                                const icons = { kanban: Kanban, list: List, gantt: GanttChart, calendar: Calendar };
-                                const labels = { kanban: 'Board', list: 'List', gantt: 'Timeline', calendar: 'Calendar' };
-                                const Ic = icons[v];
-                                return (
-                                    <button
-                                        key={v}
-                                        onClick={() => setCurrentView(v)}
-                                        className={cn(
-                                            'h-[22px] px-[9px] text-[11.5px] font-semibold text-muted-foreground rounded-[5px] inline-flex items-center gap-[5px] transition-colors',
-                                            currentView === v && 'bg-card text-foreground shadow-[0_1px_0_rgba(20,32,44,0.04),0_1px_2px_rgba(0,0,0,0.04)]',
-                                            currentView !== v && 'hover:text-foreground',
-                                        )}
-                                    >
-                                        <Ic className="size-3" />
-                                        <span className="hidden sm:inline">{labels[v]}</span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                        <div className="flex-1" />
+                <div className="flex items-center gap-2 px-5 py-2 border-b border-border/60 flex-wrap">
+                    {/* Views (left) */}
+                    <div className="inline-flex p-[3px] bg-secondary border border-border rounded-[7px] gap-[1px]">
+                        {(['kanban', 'list', 'gantt', 'calendar'] as const).map(v => {
+                            const icons = { kanban: Kanban, list: List, gantt: GanttChart, calendar: Calendar };
+                            const labels = { kanban: 'Board', list: 'List', gantt: 'Timeline', calendar: 'Calendar' };
+                            const Ic = icons[v];
+                            return (
+                                <button
+                                    key={v}
+                                    onClick={() => setCurrentView(v)}
+                                    className={cn(
+                                        'h-[22px] px-[9px] text-[11.5px] font-semibold text-muted-foreground rounded-[5px] inline-flex items-center gap-[5px] transition-colors',
+                                        currentView === v && 'bg-card text-foreground shadow-[0_1px_0_rgba(20,32,44,0.04),0_1px_2px_rgba(0,0,0,0.04)]',
+                                        currentView !== v && 'hover:text-foreground',
+                                    )}
+                                >
+                                    <Ic className="size-3" />
+                                    <span className="hidden sm:inline">{labels[v]}</span>
+                                </button>
+                            );
+                        })}
                     </div>
 
-                    {/* Row 2: Filters + search + sort */}
-                    <div className="flex items-center gap-2 min-h-[28px] flex-wrap">
-                        {/* Search */}
-                        <div className="relative">
+                    {/* push search + filter to the right */}
+                    <div className="flex-1" />
+
+                    {/* Search (right) */}
+                    <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-[13px] text-muted-foreground" />
                             <Input
                                 type="search"
@@ -2784,6 +1822,8 @@ export default function BoardsShow({
                                                 setAssigneePopoverOpen(false);
                                                 setStatusFilter([]);
                                                 setLabelFilter([]);
+                                                setPriorityFilter([]);
+                                                setTypeFilter([]);
                                             }}
                                         >
                                             Clear all
@@ -3013,14 +2053,84 @@ export default function BoardsShow({
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Priority */}
+                                {priorities.length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                            Priority
+                                        </p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {priorities.map((p) => {
+                                                const active = priorityFilter.includes(p.id);
+                                                return (
+                                                    <button
+                                                        key={p.id}
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setPriorityFilter((prev) =>
+                                                                prev.includes(p.id)
+                                                                    ? prev.filter((id) => id !== p.id)
+                                                                    : [...prev, p.id],
+                                                            )
+                                                        }
+                                                        className={cn(
+                                                            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs border transition-all',
+                                                            active
+                                                                ? 'border-primary bg-primary/10 text-primary font-semibold'
+                                                                : 'border-transparent bg-muted/60 text-muted-foreground hover:bg-muted',
+                                                        )}
+                                                    >
+                                                        <PriorityIndicator slug={p.slug} className="[&_svg]:size-3" />
+                                                        {p.name}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Type */}
+                                {itemTypes.length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                            Type
+                                        </p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {itemTypes.map((t) => {
+                                                const active = typeFilter.includes(t.id);
+                                                return (
+                                                    <button
+                                                        key={t.id}
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setTypeFilter((prev) =>
+                                                                prev.includes(t.id)
+                                                                    ? prev.filter((id) => id !== t.id)
+                                                                    : [...prev, t.id],
+                                                            )
+                                                        }
+                                                        className={cn(
+                                                            'flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs border transition-all',
+                                                            active
+                                                                ? 'border-primary bg-primary/10 text-primary font-semibold'
+                                                                : 'border-transparent bg-muted/60 text-muted-foreground hover:bg-muted',
+                                                        )}
+                                                    >
+                                                        <ItemTypeIcon type={t} className="size-3.5" />
+                                                        {t.name}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </PopoverContent>
                         </Popover>
 
-                        <div className="flex-1" />
                         <button className="inline-flex items-center gap-1.5 h-[26px] px-[9px] rounded-md text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
                             <SlidersHorizontal className="size-3" />Sort
                         </button>
-                    </div>
                 </div>
 
                 {/* View Content */}
@@ -3036,6 +2146,7 @@ export default function BoardsShow({
                                     board={board}
                                     itemTypes={itemTypes}
                                     rootItems={rootItems}
+                                    projectUsers={projectUsers}
                                     onEditItem={setEditingItem}
                                     onDragStart={handleDragStart}
                                     onDragEnd={handleDragEnd}
@@ -3107,9 +2218,12 @@ export default function BoardsShow({
                 priorities={priorities}
                 projectUsers={projectUsers}
                 projectLabels={projectLabels}
+                projectItems={projectItems}
+                currentUserId={auth.user.id}
                 columns={board.columns}
                 open={!!editingItem}
                 onClose={() => setEditingItem(null)}
+                onOpenItem={setEditingItem}
             />
         </AppLayout>
     );

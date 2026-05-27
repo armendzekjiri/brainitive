@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Board;
+use App\Models\Item;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
@@ -91,7 +93,12 @@ class WorkspaceController extends Controller
 
         $workspace->load([
             'projects' => function ($query) {
-                $query->withCount(['boards', 'pages'])->latest();
+                $query->withCount(['boards', 'pages'])
+                    ->withCount([
+                        'items as items_active' => fn ($q) => $q->whereNull('completed_at'),
+                        'items as items_done' => fn ($q) => $q->whereNotNull('completed_at'),
+                    ])
+                    ->latest();
             },
             'bookmarks' => function ($query) {
                 $query->limit(6)->orderBy('position');
@@ -113,9 +120,62 @@ class WorkspaceController extends Controller
             ? 'admin'
             : $request->user()->workspaceRole($workspace);
 
+        // ── Home metrics (scoped to accessible projects) ───────────────────
+        $projectIds = $workspace->projects->pluck('id');
+
+        $openTasks = Item::whereIn('project_id', $projectIds)->whereNull('completed_at')->count();
+        $doneLast7d = Item::whereIn('project_id', $projectIds)
+            ->where('completed_at', '>=', now()->subDays(7))
+            ->count();
+
+        $recentlyCompleted = Item::whereIn('project_id', $projectIds)
+            ->whereNotNull('completed_at')
+            ->where('completed_at', '>=', now()->subDays(30))
+            ->get(['created_at', 'completed_at']);
+        $avgCycleDays = $recentlyCompleted->count()
+            ? round($recentlyCompleted->avg(fn ($i) => $i->created_at->diffInHours($i->completed_at) / 24), 1)
+            : null;
+
+        $upcomingDue = Item::whereIn('project_id', $projectIds)
+            ->whereNull('completed_at')
+            ->whereNotNull('due_date')
+            ->whereDate('due_date', '>=', now()->startOfDay())
+            ->with(['board:id,slug,name,project_id', 'board.project:id,slug,name,color'])
+            ->orderBy('due_date')
+            ->limit(5)
+            ->get(['id', 'key', 'title', 'due_date', 'board_id', 'project_id']);
+
+        $recentActivity = Item::whereIn('project_id', $projectIds)
+            ->with([
+                'assignee:id,name,email,avatar',
+                'board:id,slug,name,project_id',
+                'board.project:id,slug,name,color',
+            ])
+            ->orderByDesc('updated_at')
+            ->limit(6)
+            ->get(['id', 'key', 'title', 'board_id', 'project_id', 'assigned_to', 'updated_at', 'created_at', 'completed_at']);
+
+        $pinnedBoards = Board::whereIn('project_id', $projectIds)
+            ->with('project:id,slug,name,color')
+            ->withCount([
+                'items as active_count' => fn ($q) => $q->whereNull('completed_at'),
+                'items as done_count' => fn ($q) => $q->whereNotNull('completed_at'),
+            ])
+            ->orderByDesc('updated_at')
+            ->limit(3)
+            ->get(['id', 'name', 'slug', 'project_id', 'updated_at']);
+
         return Inertia::render('Workspaces/Show', [
             'workspace' => $workspace,
             'userRole' => $userRole,
+            'stats' => [
+                'open_tasks' => $openTasks,
+                'done_last_7d' => $doneLast7d,
+                'avg_cycle_days' => $avgCycleDays,
+            ],
+            'upcomingDue' => $upcomingDue,
+            'recentActivity' => $recentActivity,
+            'pinnedBoards' => $pinnedBoards,
         ]);
     }
 
