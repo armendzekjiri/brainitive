@@ -2,14 +2,16 @@ import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { PageProps, Workspace, Project, Board, TaskList, Page as PageType, Helpdesk } from '@/types';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { LayoutGrid, Plus, Settings, ArrowRight, Kanban, FileText, Folder, ChevronRight, PencilRuler, Headphones, User, Calendar, Key, Users, List } from 'lucide-react';
+import {
+    LayoutGrid, Plus, Settings, ArrowRight, Kanban, FileText, Folder,
+    ChevronRight, PencilRuler, Headphones, Calendar, Key, Users, List,
+} from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { useState } from 'react';
@@ -28,93 +30,52 @@ interface Props extends PageProps {
     };
 }
 
-export default function ProjectsShow({ auth, workspace, project }: Props) {
+export default function ProjectsShow({ workspace, project }: Props) {
     const [createBoardDialogOpen, setCreateBoardDialogOpen] = useState(false);
     const [createHelpdeskDialogOpen, setCreateHelpdeskDialogOpen] = useState(false);
     const [createListDialogOpen, setCreateListDialogOpen] = useState(false);
 
-    const boardForm = useForm({
-        name: '',
-        description: '',
-    });
-    const helpdeskForm = useForm({
-        name: '',
-        description: '',
-    });
-    const listForm = useForm({
-        name: '',
-        description: '',
-    });
+    const boardForm = useForm({ name: '', description: '' });
+    const helpdeskForm = useForm({ name: '', description: '' });
+    const listForm = useForm({ name: '', description: '' });
 
     const createBoard = (e: React.FormEvent) => {
         e.preventDefault();
-        boardForm.post(route('boards.store', [workspace.slug, project.slug]), {
-            onSuccess: () => {
-                setCreateBoardDialogOpen(false);
-                boardForm.reset();
-            },
-        });
+        boardForm.post(route('boards.store', [workspace.slug, project.slug]), { onSuccess: () => { setCreateBoardDialogOpen(false); boardForm.reset(); } });
     };
-
     const createHelpdesk = (e: React.FormEvent) => {
         e.preventDefault();
-        helpdeskForm.post(route('helpdesks.store', [workspace.slug, project.slug]), {
-            onSuccess: () => {
-                setCreateHelpdeskDialogOpen(false);
-                helpdeskForm.reset();
-            },
-        });
+        helpdeskForm.post(route('helpdesks.store', [workspace.slug, project.slug]), { onSuccess: () => { setCreateHelpdeskDialogOpen(false); helpdeskForm.reset(); } });
     };
-
     const createList = (e: React.FormEvent) => {
         e.preventDefault();
-        listForm.post(route('task-lists.store', [workspace.slug, project.slug]), {
-            onSuccess: () => {
-                setCreateListDialogOpen(false);
-                listForm.reset();
-            },
-        });
+        listForm.post(route('task-lists.store', [workspace.slug, project.slug]), { onSuccess: () => { setCreateListDialogOpen(false); listForm.reset(); } });
     };
 
     const pages = project.pages ?? [];
-    const hasPages = pages.length > 0;
-
-    // Split: documents (folders + non-whiteboard pages) and whiteboards (flat list)
-    const documentPages = pages.filter((p) => p.type === 'folder' || !(p.type === 'page' && p.is_whiteboard));
-    const whiteboardPages = (function collectWhiteboards(nodes: PageWithChildren[]): PageWithChildren[] {
+    const documentPages = (function flatten(ps: PageWithChildren[]): PageWithChildren[] {
         const out: PageWithChildren[] = [];
-        for (const p of nodes) {
-            if (p.type === 'page' && p.is_whiteboard) out.push(p);
-            if (p.children?.length) out.push(...collectWhiteboards(p.children));
+        for (const p of ps) {
+            if (p.type === 'page' && !p.is_whiteboard) out.push(p);
+            if (p.type === 'folder') out.push(p);
+            if (p.children?.length) out.push(...flatten(p.children));
         }
         return out;
     })(pages);
-    const hasDocuments = documentPages.length > 0;
-    const hasWhiteboards = whiteboardPages.length > 0;
+    const whiteboardPages = pages.filter((p) => p.type === 'page' && p.is_whiteboard);
+    const accent = project.color || '#0E83DC';
 
     function renderPageItem(page: PageWithChildren, depth = 0) {
-        if (page.type === 'page' && page.is_whiteboard) return null; // Whiteboards listed in their own section
+        if (page.type === 'page' && page.is_whiteboard) return null;
         const href = route('pages.show', [workspace.slug, project.slug, page.uuid]);
         const isFolder = page.type === 'folder';
         const children = page.children ?? [];
-
         return (
             <div key={page.id} className="min-w-0" style={{ marginLeft: depth > 0 ? depth * 20 : 0 }}>
-                <Link
-                    href={href}
-                    className="flex items-center gap-3 py-2.5 px-3 -mx-3 rounded-lg hover:bg-muted/80 transition-colors group min-w-0"
-                >
-                    {isFolder ? (
-                        <Folder className="size-5 shrink-0 text-primary" />
-                    ) : (page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
-                        ? <img src={page.icon} className="size-6 rounded object-cover shrink-0" alt="" />
-                        : (
-                        <span className="text-lg shrink-0 w-6 text-center">{page.icon || '📄'}</span>
-                    )}
-                    <span className="truncate font-medium text-foreground group-hover:text-primary transition-colors">
-                        {page.name}
-                    </span>
-                    <ChevronRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
+                <Link href={href} className="flex items-center gap-3 py-2 px-3 -mx-3 rounded-lg hover:bg-muted/80 transition-colors group min-w-0">
+                    {isFolder ? <Folder className="size-4 shrink-0 text-primary" /> : page.icon ? <span className="text-base shrink-0 w-5 text-center">{page.icon}</span> : <FileText className="size-4 shrink-0 text-muted-foreground" />}
+                    <span className="truncate text-sm font-medium group-hover:text-primary transition-colors">{page.name}</span>
+                    <ChevronRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
                 </Link>
                 {children.map((child) => renderPageItem(child, depth + 1))}
             </div>
@@ -126,511 +87,207 @@ export default function ProjectsShow({ auth, workspace, project }: Props) {
             <Head title={project.name} />
 
             <div className="min-h-screen bg-muted/30">
-                <div className="p-6 md:p-8 lg:p-10 max-w-6xl mx-auto space-y-6">
-                    {/* Header card - solid bar uses blue when no project color */}
-                    <Card className="overflow-hidden border border-border bg-card shadow-sm">
-                        <div
-                            className="h-1.5 w-full"
-                            style={{ backgroundColor: project.color || '#0E83DC' }}
-                        />
-                        <CardContent className="pt-5 pb-5">
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
-                                <div className="flex items-start gap-5 min-w-0 flex-1">
-                                    <ProjectIcon project={project} size="xl" className="shadow-lg shrink-0" />
-                                    <div className="min-w-0 flex-1">
-                                        <h1 className="text-2xl md:text-3xl font-bold tracking-tight truncate">
-                                            {project.name}
-                                        </h1>
-                                        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 mt-2 text-sm text-muted-foreground">
-                                            {project.creator && (
-                                                <span className="flex items-center gap-1.5" title="Owner">
-                                                    <Avatar className="size-5">
-                                                        <AvatarImage src={project.creator.avatar_display ?? project.creator.avatar ?? undefined} alt="" />
-                                                        <AvatarFallback className="text-[10px] bg-primary/10 text-primary">
-                                                            {(project.creator.name || '?').slice(0, 2).toUpperCase()}
-                                                        </AvatarFallback>
-                                                    </Avatar>
-                                                    <span>{project.creator.name}</span>
-                                                </span>
-                                            )}
-                                            {project.key && (
-                                                <span className="flex items-center gap-1.5" title="Project key">
-                                                    <Key className="size-3.5 shrink-0" />
-                                                    <span className="font-mono">{project.key}</span>
-                                                </span>
-                                            )}
-                                            {project.created_at && (
-                                                <span className="flex items-center gap-1.5" title="Created">
-                                                    <Calendar className="size-3.5 shrink-0" />
-                                                    <span>{new Date(project.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-                                                </span>
-                                            )}
-                                            <span className="flex items-center gap-1.5" title="Boards">
-                                                <LayoutGrid className="size-3.5 shrink-0" />
-                                                <span>{project.boards?.length ?? 0} board{(project.boards?.length ?? 0) !== 1 ? 's' : ''}</span>
-                                            </span>
-                                            {project.users_count != null && (
-                                                <span className="flex items-center gap-1.5" title="Members">
-                                                    <Users className="size-3.5 shrink-0" />
-                                                    <span>{project.users_count} member{project.users_count !== 1 ? 's' : ''}</span>
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <Dialog open={createBoardDialogOpen} onOpenChange={setCreateBoardDialogOpen}>
-                                        <DialogTrigger asChild>
-                                            <Button size="lg" className="gap-2">
-                                                <Plus className="size-5" />
-                                                New Board
-                                            </Button>
-                                        </DialogTrigger>
-                                        <DialogContent className="sm:max-w-md">
-                                            <DialogHeader>
-                                                <DialogTitle className="text-xl">Create Board</DialogTitle>
-                                                <DialogDescription className="text-base">
-                                                    Create a new board to track your work.
-                                                </DialogDescription>
-                                            </DialogHeader>
-                                            <form onSubmit={createBoard} className="space-y-5 mt-4">
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="board-name" className="text-base">Board Name</Label>
-                                                    <Input
-                                                        id="board-name"
-                                                        value={boardForm.data.name}
-                                                        onChange={(e) => boardForm.setData('name', e.target.value)}
-                                                        placeholder="e.g., Sprint Board, Backlog"
-                                                        className="h-11"
-                                                        required
-                                                    />
-                                                    {boardForm.errors.name && <p className="text-sm text-destructive">{boardForm.errors.name}</p>}
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="board-description" className="text-base">Description (optional)</Label>
-                                                    <Textarea
-                                                        id="board-description"
-                                                        value={boardForm.data.description}
-                                                        onChange={(e) => boardForm.setData('description', e.target.value)}
-                                                        placeholder="What is this board for?"
-                                                        className="min-h-[100px]"
-                                                    />
-                                                </div>
-                                                <div className="flex justify-end gap-3 pt-2">
-                                                    <Button type="button" variant="outline" size="lg" onClick={() => setCreateBoardDialogOpen(false)}>
-                                                        Cancel
-                                                    </Button>
-                                                    <Button type="submit" size="lg" disabled={boardForm.processing}>
-                                                        {boardForm.processing ? 'Creating...' : 'Create Board'}
-                                                    </Button>
-                                                </div>
-                                            </form>
-                                        </DialogContent>
-                                    </Dialog>
-                                    <Link href={route('projects.edit', [workspace.slug, project.slug])}>
-                                        <Button variant="outline" size="icon" className="size-11">
-                                            <Settings className="size-5" />
-                                        </Button>
-                                    </Link>
+                {/* ── Banner ── */}
+                <div className="relative overflow-hidden border-b border-border">
+                    <div className="absolute inset-0" style={{ background: `linear-gradient(135deg, ${accent}, color-mix(in srgb, ${accent} 55%, #0b1620))` }} />
+                    <div className="absolute inset-0 bg-black/10" />
+
+                    <div className="relative px-6 md:px-8 py-7 flex flex-wrap items-start justify-between gap-4">
+                        <div className="flex items-start gap-4 min-w-0">
+                            <ProjectIcon project={project} size="xl" className="shadow-lg shrink-0 ring-2 ring-white/25" />
+                            <div className="min-w-0">
+                                <div className="text-[11px] font-semibold uppercase tracking-wider text-white/70">Project</div>
+                                <h1 className="text-2xl md:text-[28px] font-bold text-white leading-tight truncate">{project.name}</h1>
+                                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] text-white/85">
+                                    {project.creator && (
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <Avatar className="size-4">
+                                                {project.creator.avatar_display && <AvatarImage src={project.creator.avatar_display} alt={project.creator.name} />}
+                                                <AvatarFallback className="text-[8px] bg-white/25 text-white">{project.creator.name.charAt(0)}</AvatarFallback>
+                                            </Avatar>
+                                            {project.creator.name}
+                                        </span>
+                                    )}
+                                    {project.key && <span className="inline-flex items-center gap-1.5"><Key className="size-3" /><span className="font-mono">{project.key}</span></span>}
+                                    <span className="inline-flex items-center gap-1.5"><Calendar className="size-3" />{new Date(project.created_at).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                    <span className="inline-flex items-center gap-1.5"><LayoutGrid className="size-3" />{project.boards?.length ?? 0} board{(project.boards?.length ?? 0) !== 1 ? 's' : ''}</span>
+                                    {project.users_count != null && <span className="inline-flex items-center gap-1.5"><Users className="size-3" />{project.users_count} member{project.users_count !== 1 ? 's' : ''}</span>}
                                 </div>
                             </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Description – extra section under title, formatted rich HTML */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-lg">Description</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {project.description && project.description.trim() !== '' ? (
-                                <div
-                                    className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-2 prose-headings:font-semibold prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5 prose-pre:my-2 prose-pre:bg-muted prose-pre:rounded-lg prose-pre:p-3 prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-blockquote:border-primary prose-blockquote:bg-muted/50 prose-blockquote:py-1 prose-a:text-primary prose-a:no-underline hover:prose-a:underline"
-                                    dangerouslySetInnerHTML={{
-                                        __html: project.description.trim().startsWith('<')
-                                            ? project.description
-                                            : `<p>${project.description.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`,
-                                    }}
-                                />
-                            ) : (
-                                <p className="text-muted-foreground text-sm">No description.</p>
-                            )}
-                        </CardContent>
-                    </Card>
-
-                    {/* Grid: Boards | Lists | Helpdesks | Documents | Whiteboards */}
-                    <div className="grid gap-6 lg:grid-cols-2">
-                        {/* Row 1 - Col 1: Boards */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center gap-2">
-                                    <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                                        <LayoutGrid className="size-5 text-primary" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-lg">Boards</CardTitle>
-                                        <CardDescription>
-                                            Kanban boards and task management
-                                        </CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {project.boards.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center py-12 rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                        <div className="size-14 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                                            <LayoutGrid className="size-7 text-primary" />
-                                        </div>
-                                        <p className="text-sm font-medium text-foreground mb-1">No boards yet</p>
-                                        <p className="text-xs text-muted-foreground text-center max-w-[240px] mb-5">
-                                            Create a board to organize tasks with Kanban.
-                                        </p>
-                                        <Button size="sm" className="gap-2" onClick={() => setCreateBoardDialogOpen(true)}>
-                                            <Plus className="size-4" />
-                                            Create Board
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {project.boards.map((board) => (
-                                            <Link
-                                                key={board.id}
-                                                href={route('boards.show', [workspace.slug, project.slug, board.slug])}
-                                            >
-                                                <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-muted/80 transition-colors group">
-                                                    <div className="size-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                                                        <Kanban className="size-5 text-primary" />
-                                                    </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                                                            {board.name}
-                                                        </p>
-                                                        <div className="flex items-center gap-2 mt-0.5">
-                                                            <Badge variant="secondary" className="text-xs">
-                                                                {board.type.charAt(0).toUpperCase() + board.type.slice(1)}
-                                                            </Badge>
-                                                            <span className="text-xs text-muted-foreground truncate">
-                                                                {board.description || 'No description'}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                </div>
-                                            </Link>
-                                        ))}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Lists */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="size-9 rounded-lg bg-[#0E83DC]/10 flex items-center justify-center">
-                                            <List className="size-5 text-[#0E83DC]" />
-                                        </div>
-                                        <div>
-                                            <CardTitle className="text-lg">Lists</CardTitle>
-                                            <CardDescription>Task lists with due dates &amp; assignees</CardDescription>
-                                        </div>
-                                    </div>
-                                    {(project.task_lists?.length ?? 0) > 0 && (
-                                        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCreateListDialogOpen(true)}>
-                                            <Plus className="size-4" /> New
-                                        </Button>
-                                    )}
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {(!project.task_lists || project.task_lists.length === 0) ? (
-                                    <div className="flex flex-col items-center justify-center py-12 rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                        <div className="size-14 rounded-full bg-[#0E83DC]/10 flex items-center justify-center mb-4">
-                                            <List className="size-7 text-[#0E83DC]" />
-                                        </div>
-                                        <p className="text-sm font-medium text-foreground mb-1">No lists yet</p>
-                                        <p className="text-xs text-muted-foreground text-center max-w-[240px] mb-5">
-                                            Create a list to track tasks with assignees, due dates and recurring schedules.
-                                        </p>
-                                        <Button size="sm" className="gap-2" onClick={() => setCreateListDialogOpen(true)}>
-                                            <Plus className="size-4" /> Create List
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {project.task_lists.map((tl) => (
-                                            <Link key={tl.id} href={route('task-lists.show', [workspace.slug, project.slug, tl.slug])}>
-                                                <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-muted/80 transition-colors group">
-                                                    <div className="size-11 rounded-xl bg-[#0E83DC]/10 flex items-center justify-center shrink-0">
-                                                        <List className="size-5 text-[#0E83DC]" />
-                                                    </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">{tl.name}</p>
-                                                        {tl.description && (
-                                                            <p className="text-xs text-muted-foreground truncate mt-0.5">{tl.description}</p>
-                                                        )}
-                                                    </div>
-                                                    <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                </div>
-                                            </Link>
-                                        ))}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Row 1 - Col 2: Helpdesks */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                                            <Headphones className="size-5 text-primary" />
-                                        </div>
-                                        <div>
-                                            <CardTitle className="text-lg">Helpdesks</CardTitle>
-                                            <CardDescription>
-                                                Customer support ticket management
-                                            </CardDescription>
-                                        </div>
-                                    </div>
-                                    {(project.helpdesks?.length ?? 0) > 0 && (
-                                        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setCreateHelpdeskDialogOpen(true)}>
-                                            <Plus className="size-4" />
-                                            New
-                                        </Button>
-                                    )}
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {(!project.helpdesks || project.helpdesks.length === 0) ? (
-                                    <div className="flex flex-col items-center justify-center py-12 rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                        <div className="size-14 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                                            <Headphones className="size-7 text-primary" />
-                                        </div>
-                                        <p className="text-sm font-medium text-foreground mb-1">No helpdesks yet</p>
-                                        <p className="text-xs text-muted-foreground text-center max-w-[240px] mb-5">
-                                            Create a helpdesk to manage customer support tickets.
-                                        </p>
-                                        <Button size="sm" className="gap-2" onClick={() => setCreateHelpdeskDialogOpen(true)}>
-                                            <Plus className="size-4" />
-                                            Create Helpdesk
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {project.helpdesks?.map((helpdesk) => (
-                                            <Link
-                                                key={helpdesk.id}
-                                                href={route('helpdesks.show', [workspace.slug, project.slug, helpdesk.slug])}
-                                            >
-                                                <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-muted/80 transition-colors group">
-                                                    <div className="size-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                                                        <Headphones className="size-5 text-primary" />
-                                                    </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                                                            {helpdesk.name}
-                                                        </p>
-                                                        <div className="flex items-center gap-2 mt-0.5">
-                                                            <Badge variant="secondary" className="text-xs">
-                                                                Helpdesk
-                                                            </Badge>
-                                                            <span className="text-xs text-muted-foreground truncate">
-                                                                {helpdesk.description || 'No description'}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                </div>
-                                            </Link>
-                                        ))}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Row 2 - Col 1: Documents & folders */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center gap-2">
-                                    <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                                        <FileText className="size-5 text-primary" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-lg">Documents & folders</CardTitle>
-                                        <CardDescription>
-                                            Pages and folder structure
-                                        </CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {!hasDocuments ? (
-                                    <div className="flex flex-col items-center justify-center py-12 rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                        <div className="size-14 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                                            <FileText className="size-7 text-primary" />
-                                        </div>
-                                        <p className="text-sm font-medium text-foreground mb-1">No documents yet</p>
-                                        <p className="text-xs text-muted-foreground text-center max-w-[240px]">
-                                            Documents and folders are managed from the sidebar. Create a page or folder.
-                                        </p>
-                                        <Link href={route('workspaces.show', [workspace.slug])} className="mt-5">
-                                            <Button variant="outline" size="sm">
-                                                Open workspace
-                                            </Button>
-                                        </Link>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-0.5">
-                                        {documentPages.map((page) => renderPageItem(page))}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Row 2 - Col 2: Whiteboards */}
-                        <Card>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center gap-2">
-                                    <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center">
-                                        <PencilRuler className="size-5 text-primary" />
-                                    </div>
-                                    <div>
-                                        <CardTitle className="text-lg">Whiteboards</CardTitle>
-                                        <CardDescription>
-                                            Draw and sketch with whiteboard pages
-                                        </CardDescription>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                {!hasWhiteboards ? (
-                                    <div className="flex flex-col items-center justify-center py-10 rounded-xl border-2 border-dashed border-muted-foreground/25">
-                                        <PencilRuler className="size-10 text-primary/50 mb-3" />
-                                        <p className="text-sm text-muted-foreground text-center max-w-[280px]">
-                                            Create a whiteboard from the sidebar (Pages → Whiteboard) to draw diagrams and sketches.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="grid gap-3 sm:grid-cols-2">
-                                        {whiteboardPages.map((page) => (
-                                            <Link
-                                                key={page.id}
-                                                href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
-                                            >
-                                                <div className="flex items-center gap-4 p-3 rounded-xl hover:bg-muted/80 transition-colors group">
-                                                    <div className="size-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                                                        <PencilRuler className="size-5 text-primary" />
-                                                    </div>
-                                                    <div className="min-w-0 flex-1">
-                                                        <p className="font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                                                            {page.name}
-                                                        </p>
-                                                        <Badge variant="secondary" className="text-xs mt-1">
-                                                            Whiteboard
-                                                        </Badge>
-                                                    </div>
-                                                    <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                </div>
-                                            </Link>
-                                        ))}
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <Dialog open={createBoardDialogOpen} onOpenChange={setCreateBoardDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button size="sm" className="h-8 gap-1.5 bg-white text-primary hover:bg-white/90"><Plus className="size-3.5" />New board</Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-md">
+                                    <DialogHeader><DialogTitle>Create Board</DialogTitle><DialogDescription>Create a new board to track your work.</DialogDescription></DialogHeader>
+                                    <form onSubmit={createBoard} className="space-y-4 mt-4">
+                                        <div className="space-y-2"><Label>Board Name</Label><Input value={boardForm.data.name} onChange={(e) => boardForm.setData('name', e.target.value)} placeholder="e.g., Sprint Board" required />{boardForm.errors.name && <p className="text-sm text-destructive">{boardForm.errors.name}</p>}</div>
+                                        <div className="space-y-2"><Label>Description (optional)</Label><Textarea value={boardForm.data.description} onChange={(e) => boardForm.setData('description', e.target.value)} placeholder="What is this board for?" /></div>
+                                        <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setCreateBoardDialogOpen(false)}>Cancel</Button><Button type="submit" disabled={boardForm.processing}>{boardForm.processing ? 'Creating…' : 'Create'}</Button></div>
+                                    </form>
+                                </DialogContent>
+                            </Dialog>
+                            <Link href={route('projects.edit', [workspace.slug, project.slug])}>
+                                <Button size="icon" className="size-8 bg-white/15 text-white hover:bg-white/25 border border-white/20"><Settings className="size-3.5" /></Button>
+                            </Link>
+                        </div>
                     </div>
-
-                    {/* Create Helpdesk modal (same as Add content flow) */}
-                    <Dialog open={createHelpdeskDialogOpen} onOpenChange={setCreateHelpdeskDialogOpen}>
-                        <DialogContent className="sm:max-w-md">
-                            <DialogHeader>
-                                <DialogTitle className="text-xl">Create Helpdesk</DialogTitle>
-                                <DialogDescription className="text-base">
-                                    Create a helpdesk to manage customer support tickets.
-                                </DialogDescription>
-                            </DialogHeader>
-                            <form onSubmit={createHelpdesk} className="space-y-5 mt-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="helpdesk-name" className="text-base">Helpdesk Name</Label>
-                                    <Input
-                                        id="helpdesk-name"
-                                        value={helpdeskForm.data.name}
-                                        onChange={(e) => helpdeskForm.setData('name', e.target.value)}
-                                        placeholder="e.g., Customer Support, Technical Help"
-                                        className="h-11"
-                                        required
-                                    />
-                                    {helpdeskForm.errors.name && <p className="text-sm text-destructive">{helpdeskForm.errors.name}</p>}
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="helpdesk-description" className="text-base">Description (optional)</Label>
-                                    <Textarea
-                                        id="helpdesk-description"
-                                        value={helpdeskForm.data.description}
-                                        onChange={(e) => helpdeskForm.setData('description', e.target.value)}
-                                        placeholder="Brief description of this helpdesk"
-                                        className="min-h-[100px]"
-                                    />
-                                </div>
-                                <div className="flex justify-end gap-3 pt-2">
-                                    <Button type="button" variant="outline" size="lg" onClick={() => setCreateHelpdeskDialogOpen(false)}>
-                                        Cancel
-                                    </Button>
-                                    <Button type="submit" size="lg" disabled={helpdeskForm.processing}>
-                                        {helpdeskForm.processing ? 'Creating...' : 'Create Helpdesk'}
-                                    </Button>
-                                </div>
-                            </form>
-                        </DialogContent>
-                    </Dialog>
-
-                    {/* Create List dialog */}
-                    <Dialog open={createListDialogOpen} onOpenChange={setCreateListDialogOpen}>
-                        <DialogContent className="sm:max-w-md">
-                            <DialogHeader>
-                                <DialogTitle className="text-xl">Create List</DialogTitle>
-                                <DialogDescription className="text-base">
-                                    Create a task list with assignees, due dates and recurring items.
-                                </DialogDescription>
-                            </DialogHeader>
-                            <form onSubmit={createList} className="space-y-5 mt-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="list-name" className="text-base">List Name</Label>
-                                    <Input
-                                        id="list-name"
-                                        value={listForm.data.name}
-                                        onChange={(e) => listForm.setData('name', e.target.value)}
-                                        placeholder="e.g., Weekly Tasks, Sprint Backlog"
-                                        className="h-11"
-                                        required
-                                        autoFocus
-                                    />
-                                    {listForm.errors.name && <p className="text-sm text-destructive">{listForm.errors.name}</p>}
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="list-description" className="text-base">Description <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                                    <Textarea
-                                        id="list-description"
-                                        value={listForm.data.description}
-                                        onChange={(e) => listForm.setData('description', e.target.value)}
-                                        placeholder="What is this list for?"
-                                        className="min-h-[80px] resize-none"
-                                    />
-                                </div>
-                                <div className="flex justify-end gap-3 pt-2">
-                                    <Button type="button" variant="outline" size="lg" onClick={() => setCreateListDialogOpen(false)}>
-                                        Cancel
-                                    </Button>
-                                    <Button type="submit" size="lg" disabled={listForm.processing}>
-                                        {listForm.processing ? 'Creating...' : 'Create List'}
-                                    </Button>
-                                </div>
-                            </form>
-                        </DialogContent>
-                    </Dialog>
                 </div>
+
+                {/* ── Content ── */}
+                <div className="mx-auto max-w-5xl px-6 py-6 md:px-8 space-y-8">
+                    {/* Description */}
+                    {project.description && project.description.trim() !== '' && (
+                        <Card>
+                            <CardContent className="p-5">
+                                <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: project.description.trim().startsWith('<') ? project.description : `<p>${project.description.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>` }} />
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Boards */}
+                    <section>
+                        <div className="mb-3 flex items-center justify-between">
+                            <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide"><Kanban className="size-4" />Boards</h2>
+                            <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs text-muted-foreground" onClick={() => setCreateBoardDialogOpen(true)}><Plus className="size-3.5" />Add</Button>
+                        </div>
+                        {project.boards.length === 0 ? (
+                            <Card className="border-dashed bg-card/50"><CardContent className="flex flex-col items-center justify-center py-10"><div className="size-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4"><Kanban className="size-7 text-primary" /></div><p className="text-sm font-medium mb-1">No boards yet</p><p className="text-xs text-muted-foreground mb-4">Create a board to organize tasks with Kanban.</p><Button size="sm" className="gap-2" onClick={() => setCreateBoardDialogOpen(true)}><Plus className="size-4" />Create board</Button></CardContent></Card>
+                        ) : (
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {project.boards.map((board) => (
+                                    <Link key={board.id} href={route('boards.show', [workspace.slug, project.slug, board.slug])}>
+                                        <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 group">
+                                            <CardContent className="p-4">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl" style={{ background: `${accent}1A` }}><Kanban className="size-5" style={{ color: accent }} /></div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h3 className="font-semibold truncate group-hover:text-primary transition-colors">{board.name}</h3>
+                                                        <p className="mt-0.5 text-xs text-muted-foreground truncate">{board.description || 'No description'}</p>
+                                                    </div>
+                                                    <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all mt-0.5" />
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Lists */}
+                    <section>
+                        <div className="mb-3 flex items-center justify-between">
+                            <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide"><List className="size-4" />Lists</h2>
+                            <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs text-muted-foreground" onClick={() => setCreateListDialogOpen(true)}><Plus className="size-3.5" />Add</Button>
+                        </div>
+                        {(!project.task_lists || project.task_lists.length === 0) ? (
+                            <Card className="border-dashed bg-card/50"><CardContent className="flex flex-col items-center justify-center py-10"><div className="size-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4"><List className="size-7 text-primary" /></div><p className="text-sm font-medium mb-1">No lists yet</p><p className="text-xs text-muted-foreground mb-4">Create a list to track tasks.</p><Button size="sm" className="gap-2" onClick={() => setCreateListDialogOpen(true)}><Plus className="size-4" />Create list</Button></CardContent></Card>
+                        ) : (
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {project.task_lists.map((tl) => (
+                                    <Link key={tl.id} href={route('task-lists.show', [workspace.slug, project.slug, tl.slug])}>
+                                        <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 group">
+                                            <CardContent className="p-4">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10"><List className="size-5 text-primary" /></div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h3 className="font-semibold truncate group-hover:text-primary transition-colors">{tl.name}</h3>
+                                                        {tl.description && <p className="mt-0.5 text-xs text-muted-foreground truncate">{tl.description}</p>}
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Helpdesks */}
+                    <section>
+                        <div className="mb-3 flex items-center justify-between">
+                            <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide"><Headphones className="size-4" />Helpdesks</h2>
+                            <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs text-muted-foreground" onClick={() => setCreateHelpdeskDialogOpen(true)}><Plus className="size-3.5" />Add</Button>
+                        </div>
+                        {(!project.helpdesks || project.helpdesks.length === 0) ? (
+                            <Card className="border-dashed bg-card/50"><CardContent className="flex flex-col items-center justify-center py-10"><div className="size-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4"><Headphones className="size-7 text-primary" /></div><p className="text-sm font-medium mb-1">No helpdesks yet</p><p className="text-xs text-muted-foreground mb-4">Create a helpdesk for support tickets.</p><Button size="sm" className="gap-2" onClick={() => setCreateHelpdeskDialogOpen(true)}><Plus className="size-4" />Create helpdesk</Button></CardContent></Card>
+                        ) : (
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {project.helpdesks.map((hd) => (
+                                    <Link key={hd.id} href={route('helpdesks.show', [workspace.slug, project.slug, hd.slug])}>
+                                        <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 group">
+                                            <CardContent className="p-4">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10"><Headphones className="size-5 text-primary" /></div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h3 className="font-semibold truncate group-hover:text-primary transition-colors">{hd.name}</h3>
+                                                        <p className="mt-0.5 text-xs text-muted-foreground truncate">{hd.description || 'No description'}</p>
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+
+                    {/* Documents */}
+                    <section>
+                        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide"><FileText className="size-4" />Documents</h2>
+                        {documentPages.length === 0 ? (
+                            <Card className="border-dashed bg-card/50"><CardContent className="flex flex-col items-center justify-center py-10"><div className="size-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4"><FileText className="size-7 text-primary" /></div><p className="text-sm text-muted-foreground">No documents yet. Create pages from the sidebar.</p></CardContent></Card>
+                        ) : (
+                            <Card><CardContent className="p-4">{documentPages.map((p) => renderPageItem(p))}</CardContent></Card>
+                        )}
+                    </section>
+
+                    {/* Whiteboards */}
+                    {whiteboardPages.length > 0 && (
+                        <section>
+                            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide"><PencilRuler className="size-4" />Whiteboards</h2>
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {whiteboardPages.map((page) => (
+                                    <Link key={page.id} href={route('pages.show', [workspace.slug, project.slug, page.uuid])}>
+                                        <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 group">
+                                            <CardContent className="p-4">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10"><PencilRuler className="size-5 text-primary" /></div>
+                                                    <div className="min-w-0 flex-1"><h3 className="font-semibold truncate group-hover:text-primary transition-colors">{page.name}</h3><Badge variant="secondary" className="text-xs mt-1">Whiteboard</Badge></div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </Link>
+                                ))}
+                            </div>
+                        </section>
+                    )}
+                </div>
+
+                {/* Create dialogs */}
+                <Dialog open={createHelpdeskDialogOpen} onOpenChange={setCreateHelpdeskDialogOpen}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader><DialogTitle>Create Helpdesk</DialogTitle><DialogDescription>Create a helpdesk to manage support tickets.</DialogDescription></DialogHeader>
+                        <form onSubmit={createHelpdesk} className="space-y-4 mt-4">
+                            <div className="space-y-2"><Label>Helpdesk Name</Label><Input value={helpdeskForm.data.name} onChange={(e) => helpdeskForm.setData('name', e.target.value)} placeholder="e.g., Customer Support" required />{helpdeskForm.errors.name && <p className="text-sm text-destructive">{helpdeskForm.errors.name}</p>}</div>
+                            <div className="space-y-2"><Label>Description (optional)</Label><Textarea value={helpdeskForm.data.description} onChange={(e) => helpdeskForm.setData('description', e.target.value)} placeholder="Brief description" /></div>
+                            <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setCreateHelpdeskDialogOpen(false)}>Cancel</Button><Button type="submit" disabled={helpdeskForm.processing}>{helpdeskForm.processing ? 'Creating…' : 'Create'}</Button></div>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+                <Dialog open={createListDialogOpen} onOpenChange={setCreateListDialogOpen}>
+                    <DialogContent className="sm:max-w-md">
+                        <DialogHeader><DialogTitle>Create List</DialogTitle><DialogDescription>Create a task list with assignees and due dates.</DialogDescription></DialogHeader>
+                        <form onSubmit={createList} className="space-y-4 mt-4">
+                            <div className="space-y-2"><Label>List Name</Label><Input value={listForm.data.name} onChange={(e) => listForm.setData('name', e.target.value)} placeholder="e.g., Sprint Backlog" required autoFocus />{listForm.errors.name && <p className="text-sm text-destructive">{listForm.errors.name}</p>}</div>
+                            <div className="space-y-2"><Label>Description (optional)</Label><Textarea value={listForm.data.description} onChange={(e) => listForm.setData('description', e.target.value)} placeholder="What is this list for?" /></div>
+                            <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setCreateListDialogOpen(false)}>Cancel</Button><Button type="submit" disabled={listForm.processing}>{listForm.processing ? 'Creating…' : 'Create'}</Button></div>
+                        </form>
+                    </DialogContent>
+                </Dialog>
             </div>
         </AppLayout>
     );

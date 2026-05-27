@@ -14,6 +14,29 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.5.0',
+        title: 'Redesign: Board Cards, Shared Detail, Workspace & Project Home',
+        tag: 'Major Release',
+        date: '2026-05-27',
+        items: [
+            'Board cards: soft-modern redesign with left accent bar (priority → type color), type badge, pill labels via shared LabelChip, unified PriorityIndicator, and AssigneeAvatar.',
+            'Board cards: clickable assignee circle — assign users directly from the card without opening the popup; unassigned cards show a "+" affordance.',
+            'Board cards: proper in-app AlertDialog for delete confirmation (replaces browser alert).',
+            'Board cards: subtasks of type "subtask" now nest inside the parent card when in the same column, with clickable rows to open each subtask.',
+            'Item popup: added Subtasks section (list + inline "Add subtask" creator), Linked Issues (view + add/remove with dialog), and Watchers in the sidebar (functional toggle per member).',
+            'Shared ItemDetail component: extracted useItemDetail hook + ItemDetailMain + ItemDetailSidebar + ItemFilePreviewDialog into a single shared module — the popup and full-page item view now render identical markup from one source, eliminating drift.',
+            'Labels, priority, type badge, and avatars are now consistent everywhere via shared primitives (LabelChip, PriorityIndicator, TypeBadge, AssigneeAvatar).',
+            'Board toolbar: reorganized to a single row — views on the left, search + filter + sort on the right. Added Priority and Type filters to the filter popover.',
+            'Workspace Home: full redesign with gradient identity banner (logo + cover image), 4 real stat cards (open tasks, done 7d, avg cycle, health), pinned boards row, projects grid with real completion bars, and a side rail (recent activity, upcoming due dates, team). Added Lists and Documents sections aggregated across projects.',
+            'Workspace Settings: converted to a left-rail vertical settings nav with icon tabs, matching the new design language.',
+            'Project Home: full redesign matching Workspace Home style — gradient banner with project color, card-grid sections for Boards, Lists, Helpdesks, Documents, and Whiteboards.',
+            'Project Settings: converted to left-rail vertical settings nav with Danger Zone moved into its own tab.',
+            'App shell: tighter sidebar density (smaller icons, compact nav items), Inbox nav item linked to notifications, search bar in topbar, slimmer topbar (h-12).',
+            'Landing page: fixed white-screen-on-mobile-PWA bug caused by IntersectionObserver not firing in standalone mode — added standalone detection and timeout fallback in useScrollReveal.',
+            'Workspace Settings: added "Remove cover" button for clearing the header image.',
+        ]
+    },
+    {
         version: 'v1.4.4',
         title: 'My Work Scope and Source Awareness',
         tag: 'Enhancement',

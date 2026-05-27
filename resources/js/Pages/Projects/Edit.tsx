@@ -38,7 +38,7 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag, Users, ListTodo, Power, PowerOff } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag, Users, ListTodo, Power, PowerOff, Settings, Shield } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -372,13 +372,29 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
 
                 {/* Content */}
                 <div className="max-w-4xl mx-auto px-6 py-8">
-                    <Tabs defaultValue="general" className="space-y-6">
-                        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
-                            <TabsTrigger value="general">General</TabsTrigger>
-                            <TabsTrigger value="labels">Labels</TabsTrigger>
-                            <TabsTrigger value="item-types">Item types</TabsTrigger>
-                            <TabsTrigger value="members">Members</TabsTrigger>
-                        </TabsList>
+                    <Tabs defaultValue="general" orientation="vertical" className="space-y-0">
+                        <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+                            <aside className="w-full lg:w-52 lg:shrink-0 lg:sticky lg:top-4">
+                                <div className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Settings</div>
+                                <TabsList className="flex h-auto w-full flex-row gap-1 overflow-x-auto bg-transparent p-0 lg:flex-col">
+                                    <TabsTrigger value="general" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
+                                        <Settings className="size-4" />General
+                                    </TabsTrigger>
+                                    <TabsTrigger value="labels" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
+                                        <Tag className="size-4" />Labels
+                                    </TabsTrigger>
+                                    <TabsTrigger value="item-types" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
+                                        <ListTodo className="size-4" />Item types
+                                    </TabsTrigger>
+                                    <TabsTrigger value="members" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
+                                        <Users className="size-4" />Members
+                                    </TabsTrigger>
+                                    <TabsTrigger value="danger" className="w-full justify-start gap-2 px-3 h-9 text-destructive data-[state=active]:bg-destructive/10 data-[state=active]:text-destructive data-[state=active]:shadow-none">
+                                        <Shield className="size-4" />Danger zone
+                                    </TabsTrigger>
+                                </TabsList>
+                            </aside>
+                            <div className="min-w-0 flex-1 space-y-6">
 
                         <TabsContent value="general" className="space-y-8">
                     {/* General Settings */}
@@ -919,56 +935,44 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                         </CardContent>
                     </Card>
                         </TabsContent>
-                    </Tabs>
 
-                    <div className="mt-8 space-y-8">
-                    {/* Danger Zone */}
-                    <Card className="border-destructive/50">
-                        <CardHeader>
-                            <CardTitle className="text-destructive">Danger Zone</CardTitle>
-                            <CardDescription>
-                                Irreversible and destructive actions
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex items-center justify-between p-4 rounded-lg border border-destructive/30 bg-destructive/5">
-                                <div>
-                                    <p className="font-medium">Delete Project</p>
-                                    <p className="text-sm text-muted-foreground">
-                                        Permanently delete this project and all its data
-                                    </p>
-                                </div>
-                                <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                        <Button variant="destructive">Delete Project</Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                            <AlertDialogTitle>Delete Project</AlertDialogTitle>
-                                            <AlertDialogDescription>
-                                                This action cannot be undone. This will permanently delete the
-                                                project {`"${project.name}"`} and all its boards, items, and data.
-                                            </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                            <AlertDialogAction
-                                                onClick={() =>
-                                                    router.delete(
-                                                        route('projects.destroy', [workspace.slug, project.slug])
-                                                    )
-                                                }
-                                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                            >
-                                                Delete Project
-                                            </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                </AlertDialog>
+                        <TabsContent value="danger" className="space-y-8">
+                            <Card className="border-destructive/50">
+                                <CardHeader>
+                                    <CardTitle className="text-destructive">Danger Zone</CardTitle>
+                                    <CardDescription>Irreversible and destructive actions</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="flex items-center justify-between p-4 rounded-lg border border-destructive/30 bg-destructive/5">
+                                        <div>
+                                            <p className="font-medium">Delete Project</p>
+                                            <p className="text-sm text-muted-foreground">Permanently delete this project and all its data</p>
+                                        </div>
+                                        <AlertDialog>
+                                            <AlertDialogTrigger asChild>
+                                                <Button variant="destructive">Delete Project</Button>
+                                            </AlertDialogTrigger>
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                    <AlertDialogTitle>Delete Project</AlertDialogTitle>
+                                                    <AlertDialogDescription>This action cannot be undone. This will permanently delete the project {`"${project.name}"`} and all its boards, items, and data.</AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                    <AlertDialogAction
+                                                        onClick={() => router.delete(route('projects.destroy', [workspace.slug, project.slug]))}
+                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                                    >Delete Project</AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        </AlertDialog>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
                             </div>
-                        </CardContent>
-                    </Card>
-                </div>
+                        </div>
+                    </Tabs>
                 </div>
             </div>
         </AppLayout>

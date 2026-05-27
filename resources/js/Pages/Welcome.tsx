@@ -41,23 +41,33 @@ import { CookieConsent } from '@/components/CookieConsent';
 /* ─── Scroll-reveal hook ─── */
 function useScrollReveal() {
     const ref = useRef<HTMLDivElement>(null);
-    const [visible, setVisible] = useState(false);
+    // In standalone PWA mode the IntersectionObserver can silently fail to fire
+    // on initial load (viewport timing), causing a permanent white screen.
+    const isStandalone = typeof window !== 'undefined' &&
+        (window.matchMedia?.('(display-mode: standalone)').matches || (window.navigator as any).standalone);
+    const [visible, setVisible] = useState(isStandalone);
 
     useEffect(() => {
+        if (visible) return;
+
+        // Fallback: guarantee content appears even if the observer never fires
+        const timer = setTimeout(() => setVisible(true), 1200);
+
         const el = ref.current;
-        if (!el) return;
+        if (!el) return () => clearTimeout(timer);
         const obs = new IntersectionObserver(
             ([entry]) => {
                 if (entry.isIntersecting) {
                     setVisible(true);
                     obs.disconnect();
+                    clearTimeout(timer);
                 }
             },
             { threshold: 0.15 },
         );
         obs.observe(el);
-        return () => obs.disconnect();
-    }, []);
+        return () => { obs.disconnect(); clearTimeout(timer); };
+    }, [visible]);
 
     return { ref, visible };
 }

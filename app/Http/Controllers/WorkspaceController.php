@@ -378,6 +378,7 @@ class WorkspaceController extends Controller
             'is_public' => 'nullable|boolean',
             'logo' => 'nullable|file|image|max:2048',
             'header_image' => 'nullable|file|image|max:4096',
+            'remove_header_image' => 'nullable|boolean',
             'social_links' => 'nullable|array',
             'social_links.twitter' => 'nullable|url|max:255',
             'social_links.linkedin' => 'nullable|url|max:255',
@@ -394,11 +395,14 @@ class WorkspaceController extends Controller
             $validated['logo'] = $request->file('logo')->store('workspaces/logos', 'public');
         }
 
-        if (! $request->hasFile('header_image')) {
+        if ($request->boolean('remove_header_image')) {
+            $validated['header_image'] = null;
+        } elseif (! $request->hasFile('header_image')) {
             unset($validated['header_image']);
         } else {
             $validated['header_image'] = $request->file('header_image')->store('workspaces/headers', 'public');
         }
+        unset($validated['remove_header_image']);
 
         $workspace->update($validated);
 

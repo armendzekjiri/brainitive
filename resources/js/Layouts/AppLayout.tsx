@@ -1469,56 +1469,62 @@ function AppSidebar({
     return (
         <>
             <Sidebar className="border-r border-border/50 overflow-hidden min-w-0 flex flex-col">
-                <SidebarHeader className="p-3 pb-0">
-                    <Link href={route('workspaces.index')} className="flex items-center justify-center py-2 rounded-lg hover:bg-accent/50 transition-colors">
-                        <ApplicationLogo className="h-8 w-auto object-contain" alt="Brainitive" />
+                <SidebarHeader className="p-3 pb-2">
+                    <Link href={route('workspaces.index')} className="flex items-center gap-2.5 px-1 py-1 rounded-lg hover:bg-accent/50 transition-colors">
+                        <ApplicationLogo className="h-8 w-auto object-contain shrink-0" alt="Brainitive" />
                     </Link>
                 </SidebarHeader>
 
-                {/* Main Navigation - Fixed, not scrollable */}
-                <div className="px-3 py-4 flex-shrink-0">
+                {/* Main Navigation */}
+                <div className="px-3 pb-2 flex-shrink-0">
                     <SidebarMenu className="space-y-0.5">
                         <SidebarMenuItem>
-                            {currentWorkspace ? (
-                                <Link
-                                    href={route('workspaces.show', currentWorkspace.slug)}
-                                    className="flex items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors"
-                                >
-                                    <Home className="size-5 text-muted-foreground" />
-                                    <span className="text-sm font-medium">Home</span>
-                                </Link>
-                            ) : (
-                                <Link
-                                    href={route('workspaces.index')}
-                                    className="flex items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors"
-                                >
-                                    <Home className="size-5 text-muted-foreground" />
-                                    <span className="text-sm font-medium">Home</span>
-                                </Link>
-                            )}
+                            <Link
+                                href={currentWorkspace ? route('workspaces.show', currentWorkspace.slug) : route('workspaces.index')}
+                                className={cn(
+                                    'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                                    route().current() === 'workspaces.show' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                )}
+                            >
+                                <Home className="size-4" />
+                                <span>Home</span>
+                            </Link>
                         </SidebarMenuItem>
                         <SidebarMenuItem>
                             <Link
                                 href={route('my-work.index')}
                                 className={cn(
-                                    'flex items-center gap-3 px-2 py-2 rounded-lg transition-colors',
-                                    route().current() === 'my-work.index'
-                                        ? 'bg-accent text-accent-foreground'
-                                        : 'hover:bg-accent'
+                                    'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                                    route().current() === 'my-work.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                                 )}
                             >
-                                <ListTodo className="size-5 text-muted-foreground" />
-                                <span className="text-sm font-medium">My Work</span>
+                                <ListTodo className="size-4" />
+                                <span>My Work</span>
+                            </Link>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                            <Link
+                                href={route('notifications.page')}
+                                className={cn(
+                                    'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                                    route().current() === 'notifications.page' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                )}
+                            >
+                                <Bell className="size-4" />
+                                <span>Inbox</span>
                             </Link>
                         </SidebarMenuItem>
                         {currentWorkspace && (
                             <SidebarMenuItem>
                                 <Link
                                     href={route('bookmarks.index', currentWorkspace.slug)}
-                                    className="flex items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors"
+                                    className={cn(
+                                        'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                                        route().current() === 'bookmarks.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                    )}
                                 >
-                                    <BookmarkIcon className="size-5 text-muted-foreground" />
-                                    <span className="text-sm font-medium">Bookmarks</span>
+                                    <BookmarkIcon className="size-4" />
+                                    <span>Bookmarks</span>
                                 </Link>
                             </SidebarMenuItem>
                         )}
@@ -1526,10 +1532,13 @@ function AppSidebar({
                             <SidebarMenuItem>
                                 <Link
                                     href={route('snippets.index', currentWorkspace.slug)}
-                                    className="flex items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors"
+                                    className={cn(
+                                        'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                                        route().current() === 'snippets.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                    )}
                                 >
-                                    <Code2 className="size-5 text-muted-foreground" />
-                                    <span className="text-sm font-medium">Snippets</span>
+                                    <Code2 className="size-4" />
+                                    <span>Snippets</span>
                                 </Link>
                             </SidebarMenuItem>
                         )}
@@ -1706,43 +1715,34 @@ function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: 
     const { currentWorkspace } = usePage<PageProps>().props;
 
     return (
-        <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
-            <SidebarTrigger className="-ml-1 size-9" />
+        <header className="flex h-12 shrink-0 items-center gap-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
+            <SidebarTrigger className="-ml-1 size-8" />
 
-            {/* Breadcrumb / Title */}
-            <div className="flex items-center gap-2">
+            {/* Breadcrumb */}
+            <nav className="flex items-center gap-1.5 text-sm min-w-0">
                 {currentWorkspace && (
-                    <>
-                        <Link
-                            href={route('workspaces.show', currentWorkspace.slug)}
-                            className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                            {currentWorkspace.name}
-                        </Link>
-                    </>
+                    <Link
+                        href={route('workspaces.show', currentWorkspace.slug)}
+                        className="font-medium text-muted-foreground hover:text-foreground transition-colors truncate"
+                    >
+                        {currentWorkspace.name}
+                    </Link>
                 )}
-            </div>
+            </nav>
 
-            {/* Spacer */}
             <div className="flex-1" />
 
-            {/* Search trigger - opens search modal */}
+            {/* Search trigger */}
             <div className="w-full max-w-sm">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                     <Input
                         type="search"
                         placeholder="Search..."
-                        className="pl-9 h-9 bg-muted/50 border-0 focus-visible:ring-1 focus-visible:ring-primary/50 text-sm cursor-pointer"
+                        className="pl-9 h-8 bg-muted/50 border-0 focus-visible:ring-1 focus-visible:ring-primary/50 text-sm cursor-pointer"
                         readOnly
                         onFocus={() => onSearchClick?.()}
                         onClick={() => onSearchClick?.()}
-                        onKeyDown={(e) => {
-                            if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-                                e.preventDefault();
-                                onSearchClick?.();
-                            }
-                        }}
                     />
                     <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 hidden h-5 select-none items-center gap-1 rounded border bg-background px-1.5 font-mono text-[10px] font-medium sm:flex">
                         ⌘K
@@ -1750,25 +1750,23 @@ function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: 
                 </div>
             </div>
 
-            {/* Right side actions */}
-            <div className="flex items-center gap-2">
+            {/* Utilities */}
+            <div className="flex items-center gap-1.5">
                 <NotificationsDropdown />
-                {/* Theme quick toggle (full picker is in user menu) */}
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="size-9"
+                    className="size-8"
                     onClick={toggleTheme}
-                    aria-label={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                     title={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                 >
                     {resolvedTheme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
                 </Button>
-                <Button variant="ghost" size="icon" className="size-9" onClick={() => onOpenHelp?.()}>
-                    <HelpCircle className="size-5" />
+                <Button variant="ghost" size="icon" className="size-8" onClick={() => onOpenHelp?.()}>
+                    <HelpCircle className="size-4" />
                 </Button>
-                <Button size="sm" className="h-9 px-3 gap-1.5" onClick={onCreateClick}>
-                    <Plus className="size-4" />
+                <Button size="sm" className="h-8 px-3 gap-1.5" onClick={onCreateClick}>
+                    <Plus className="size-3.5" />
                     <span className="hidden sm:inline">Create</span>
                 </Button>
             </div>

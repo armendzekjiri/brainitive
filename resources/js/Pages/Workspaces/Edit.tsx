@@ -386,6 +386,7 @@ export default function WorkspacesEdit({
         is_public: workspace.is_public || false,
         logo: null as File | null,
         header_image: null as File | null,
+        remove_header_image: false,
         social_links: {
             twitter: workspace.social_links?.twitter || '',
             linkedin: workspace.social_links?.linkedin || '',
@@ -553,21 +554,39 @@ export default function WorkspacesEdit({
                         </Link>
                     </div>
 
-                    {/* Upload header button */}
-                    <label className="absolute bottom-4 right-4 cursor-pointer">
-                        <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleHeaderChange}
-                        />
-                        <Button variant="secondary" size="sm" className="gap-2" type="button" asChild>
-                            <span>
-                                <ImageIcon className="size-4" />
-                                Change cover
-                            </span>
-                        </Button>
-                    </label>
+                    {/* Cover image actions */}
+                    <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                        {headerPreview && (
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                className="gap-2"
+                                type="button"
+                                onClick={() => {
+                                    setHeaderPreview(null);
+                                    setData('remove_header_image', true);
+                                    post(route('workspaces.update', workspace.slug), { forceFormData: true });
+                                }}
+                            >
+                                <Trash2 className="size-4" />
+                                Remove cover
+                            </Button>
+                        )}
+                        <label className="cursor-pointer">
+                            <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleHeaderChange}
+                            />
+                            <Button variant="secondary" size="sm" className="gap-2" type="button" asChild>
+                                <span>
+                                    <ImageIcon className="size-4" />
+                                    Change cover
+                                </span>
+                            </Button>
+                        </label>
+                    </div>
                 </div>
 
                 {/* Profile section */}
