@@ -21,6 +21,9 @@ class TaskListItem extends Model
         'status',
         'assignee_id',
         'due_date',
+        'due_time',
+        'start_date',
+        'start_time',
         'recurrence',
         'position',
         'created_by',
@@ -31,6 +34,7 @@ class TaskListItem extends Model
         return [
             'description' => 'array',
             'due_date' => 'date',
+            'start_date' => 'date',
         ];
     }
 

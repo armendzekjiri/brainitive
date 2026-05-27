@@ -258,7 +258,9 @@ export function useItemDetail(args: UseItemDetailArgs) {
     const [parentId, setParentId] = useState(item?.parent_id?.toString() || '');
     const [storyPoints, setStoryPoints] = useState(item?.story_points?.toString() || '');
     const [startDate, setStartDate] = useState(item?.start_date?.toString().split('T')[0] || '');
+    const [startTime, setStartTime] = useState(item?.start_time?.substring(0, 5) || '');
     const [dueDate, setDueDate] = useState(item?.due_date?.toString().split('T')[0] || '');
+    const [dueTime, setDueTime] = useState(item?.due_time?.substring(0, 5) || '');
 
     // Linked issues
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -288,7 +290,9 @@ export function useItemDetail(args: UseItemDetailArgs) {
             setParentId(item.parent_id?.toString() || '');
             setStoryPoints(item.story_points?.toString() || '');
             setStartDate(item.start_date?.toString().split('T')[0] || '');
+            setStartTime(item.start_time?.substring(0, 5) || '');
             setDueDate(item.due_date?.toString().split('T')[0] || '');
+            setDueTime(item.due_time?.substring(0, 5) || '');
             const parsed = parseDescription(item.description);
             setEditorContent(parsed);
             setSavedDescription(parsed);
@@ -559,8 +563,10 @@ export function useItemDetail(args: UseItemDetailArgs) {
         handleEditorChange, startEditDescription, saveDescription, cancelDescription, handleCheckboxToggle,
         // properties
         columnId, assignedTo, itemTypeId, setItemTypeId, priorityId, setPriorityId,
-        parentId, setParentId, storyPoints, setStoryPoints, startDate, setStartDate,
-        dueDate, setDueDate, setAssignedTo, handleMoveToColumn,
+        parentId, setParentId, storyPoints, setStoryPoints,
+        startDate, setStartDate, startTime, setStartTime,
+        dueDate, setDueDate, dueTime, setDueTime,
+        setAssignedTo, handleMoveToColumn,
         // labels
         selectedLabels, labelSearch, setLabelSearch, labelPopoverOpen, setLabelPopoverOpen,
         newLabelName, setNewLabelName, filteredLabels, toggleLabel, handleCreateLabel,
@@ -957,7 +963,7 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
         item, live, columns, itemTypes, priorities, projectUsers, projectLabels, currentUserId,
         columnId, handleMoveToColumn, assignedTo, setAssignedTo, saveProp,
         itemTypeId, setItemTypeId, parentId, setParentId, priorityId, setPriorityId,
-        storyPoints, setStoryPoints, startDate, setStartDate, dueDate, setDueDate,
+        storyPoints, setStoryPoints, startDate, setStartDate, startTime, setStartTime, dueDate, setDueDate, dueTime, setDueTime,
         rootItemsForParent, watcherIds, toggleWatcher,
         selectedLabels, labelSearch, setLabelSearch, labelPopoverOpen, setLabelPopoverOpen,
         newLabelName, setNewLabelName, filteredLabels, toggleLabel, handleCreateLabel,
@@ -1092,12 +1098,26 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                     <Input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); saveProp({ start_date: e.target.value || null }); }} className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md" />
                 </div>
             </div>
+            {/* Start Time */}
+            <div className="flex items-center min-h-[40px] py-1">
+                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Start Time</span>
+                <div className="flex-1 px-2 -ml-2">
+                    <Input type="time" value={startTime} onChange={(e) => { setStartTime(e.target.value); saveProp({ start_time: e.target.value || null }); }} className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md" />
+                </div>
+            </div>
 
             {/* Due Date */}
             <div className="flex items-center min-h-[40px] py-1">
                 <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Due Date</span>
                 <div className="flex-1 px-2 -ml-2">
                     <Input type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); saveProp({ due_date: e.target.value || null }); }} className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md" />
+                </div>
+            </div>
+            {/* Due Time */}
+            <div className="flex items-center min-h-[40px] py-1">
+                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Due Time</span>
+                <div className="flex-1 px-2 -ml-2">
+                    <Input type="time" value={dueTime} onChange={(e) => { setDueTime(e.target.value); saveProp({ due_time: e.target.value || null }); }} className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md" />
                 </div>
             </div>
 

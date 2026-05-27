@@ -567,7 +567,9 @@ class BoardController extends Controller
             'priority_id' => 'nullable|exists:item_priorities,id',
             'assigned_to' => 'nullable|exists:users,id',
             'start_date' => 'nullable|date',
+            'start_time' => 'nullable|date_format:H:i',
             'due_date' => 'nullable|date',
+            'due_time' => 'nullable|date_format:H:i',
             'story_points' => 'nullable|integer|min:0',
             'parent_id' => [
                 'nullable',

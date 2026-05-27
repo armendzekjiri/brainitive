@@ -119,6 +119,9 @@ export interface TaskListItem {
     assignee_id?: number | null;
     assignee?: User | null;
     due_date?: string | null;
+    due_time?: string | null;
+    start_date?: string | null;
+    start_time?: string | null;
     recurrence?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null;
     position: number;
     created_by?: number;
@@ -201,7 +204,9 @@ export interface Item {
     position: number;
     story_points?: number;
     start_date?: string;
+    start_time?: string | null;
     due_date?: string;
+    due_time?: string | null;
     completed_at?: string;
     creator?: User;
     assignee?: User;
@@ -558,4 +563,30 @@ export interface TicketAttachment {
     uploaded_by_contact: boolean;
     formatted_size?: string;
     url?: string;
+}
+
+export interface CalendarEvent {
+    id: number;
+    type: 'board_item' | 'task_list_item';
+    key: string;
+    title: string;
+    start_date: string | null;
+    start_time: string | null;
+    due_date: string | null;
+    due_time: string | null;
+    is_completed: boolean;
+    color: string | null;
+    assignee: { id: number; name: string; avatar_display?: string | null } | null;
+    project: {
+        id: number;
+        name: string;
+        slug: string;
+        key: string;
+        color?: string | null;
+        workspace: { id: number; name: string; slug: string };
+    };
+    source: { type: 'board' | 'list'; id: number; name: string; slug: string };
+    href_params: string[];
+    item_type?: ItemType | null;
+    priority?: ItemPriority | null;
 }

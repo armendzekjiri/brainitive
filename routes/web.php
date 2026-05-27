@@ -111,6 +111,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // My Work — assigned items across all workspaces
     Route::get('/my-work', [MyWorkController::class, 'index'])->name('my-work.index');
 
+    // Calendar — personal calendar across all workspaces
+    Route::get('/calendar', [App\Http\Controllers\CalendarController::class, 'index'])->name('calendar.index');
+    Route::patch('/calendar/reschedule', [App\Http\Controllers\CalendarController::class, 'reschedule'])->name('calendar.reschedule');
+
     // Workspaces
     Route::resource('workspaces', WorkspaceController::class);
 

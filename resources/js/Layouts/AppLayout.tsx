@@ -83,6 +83,7 @@ import {
     LifeBuoy,
     Moon,
     Sun,
+    CalendarDays,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { ThemeMenu } from '@/components/ThemeMenu';
@@ -1500,6 +1501,18 @@ function AppSidebar({
                             >
                                 <ListTodo className="size-4" />
                                 <span>My Work</span>
+                            </Link>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                            <Link
+                                href={route('calendar.index')}
+                                className={cn(
+                                    'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                                    route().current() === 'calendar.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                )}
+                            >
+                                <CalendarDays className="size-4" />
+                                <span>Calendar</span>
                             </Link>
                         </SidebarMenuItem>
                         <SidebarMenuItem>

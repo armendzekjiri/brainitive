@@ -33,7 +33,9 @@ class Item extends Model
         'original_estimate',
         'time_spent',
         'start_date',
+        'start_time',
         'due_date',
+        'due_time',
         'completed_at',
         'metadata',
     ];

@@ -153,6 +153,9 @@ class TaskListController extends Controller
             'status' => 'sometimes|in:todo,done',
             'assignee_id' => 'nullable|integer|exists:users,id',
             'due_date' => 'nullable|date',
+            'due_time' => 'nullable|date_format:H:i',
+            'start_date' => 'nullable|date',
+            'start_time' => 'nullable|date_format:H:i',
             'recurrence' => 'nullable|in:daily,weekly,monthly,yearly',
         ]);
 
