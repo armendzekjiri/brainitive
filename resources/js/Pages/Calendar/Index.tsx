@@ -331,7 +331,7 @@ function useNow(intervalMs = 60_000) {
 
 // ── Resizable timed event ───────────────────────────────────────────────
 function TimedEvent({
-    event, top, height, hourHeight, snapMinutes, dateIso,
+    event, top, height, hourHeight, snapMinutes, dateIso, laneIdx, laneCount,
 }: {
     event: CalendarEvent;
     top: number;
@@ -339,36 +339,50 @@ function TimedEvent({
     hourHeight: number;
     snapMinutes: number;
     dateIso: string;
+    /** Horizontal position within an overlap group, 0-based. */
+    laneIdx: number;
+    /** Total number of side-by-side lanes for this overlap group. */
+    laneCount: number;
 }) {
-    const [resizeHeight, setResizeHeight] = useState<number | null>(null);
-    const resizing = resizeHeight !== null;
+    const [drag, setDrag] = useState<{ top: number; height: number } | null>(null);
+    const resizing = drag !== null;
 
-    const onResizeStart = (e: React.MouseEvent) => {
+    /** Common drag-resize handler. `edge` = which edge is being dragged. */
+    const startResize = (e: React.MouseEvent, edge: 'top' | 'bottom') => {
         if (event.is_recurring_instance) return;
         e.preventDefault();
         e.stopPropagation();
         const startY = e.clientY;
+        const startTop = top;
         const startHeight = height;
         const pxPerMin = hourHeight / 60;
-        const minHeight = snapMinutes * pxPerMin; // at least one snap unit
+        const minHeight = snapMinutes * pxPerMin;
 
+        let liveTop = startTop;
         let liveHeight = startHeight;
+
         const onMove = (ev: MouseEvent) => {
             const delta = ev.clientY - startY;
-            const raw = Math.max(minHeight, startHeight + delta);
-            const mins = Math.round(raw / pxPerMin / snapMinutes) * snapMinutes;
-            liveHeight = mins * pxPerMin;
-            setResizeHeight(liveHeight);
+            if (edge === 'bottom') {
+                const raw = Math.max(minHeight, startHeight + delta);
+                const mins = Math.round(raw / pxPerMin / snapMinutes) * snapMinutes;
+                liveHeight = mins * pxPerMin;
+            } else {
+                // Top edge: the top moves with the cursor; bottom (= startTop+startHeight) stays.
+                const bottom = startTop + startHeight;
+                const rawTop = Math.min(bottom - minHeight, Math.max(0, startTop + delta));
+                const minsTop = Math.round(rawTop / pxPerMin / snapMinutes) * snapMinutes;
+                liveTop = Math.max(0, minsTop * pxPerMin);
+                liveHeight = bottom - liveTop;
+            }
+            setDrag({ top: liveTop, height: liveHeight });
         };
         const onUp = () => {
             document.removeEventListener('mousemove', onMove);
             document.removeEventListener('mouseup', onUp);
-            setResizeHeight(null);
+            setDrag(null);
 
-            // Compute new start_time and due_time.
-            // top is the visual position in minutes since 00:00 (since startHour=0
-            // and hourHeight=60 in the grid).
-            const startMins = Math.round(top / pxPerMin);
+            const startMins = Math.round(liveTop / pxPerMin);
             const durationMins = Math.round(liveHeight / pxPerMin);
             const endMins = Math.min(startMins + durationMins, 1440 - 1);
             router.patch(
@@ -388,16 +402,43 @@ function TimedEvent({
         document.addEventListener('mouseup', onUp);
     };
 
-    const displayHeight = resizing ? (resizeHeight as number) : height;
+    const displayTop = resizing ? drag!.top : top;
+    const displayHeight = resizing ? drag!.height : height;
+
+    // Horizontal lane layout: each lane gets equal width, slight gap between.
+    const widthPct = 100 / laneCount;
+    const leftPct = widthPct * laneIdx;
 
     return (
-        <div className="absolute inset-x-1 z-10 group/event" style={{ top, height: displayHeight }}>
-            <EventChip event={event} fill />
+        <div
+            className="absolute z-10 group/event"
+            style={{
+                top: displayTop,
+                height: displayHeight,
+                left: `calc(${leftPct}% + 2px)`,
+                width: `calc(${widthPct}% - 4px)`,
+            }}
+        >
+            {/* Top resize handle */}
             {!event.is_recurring_instance && (
                 <div
-                    onMouseDown={onResizeStart}
+                    onMouseDown={(e) => startResize(e, 'top')}
                     className={cn(
-                        'absolute inset-x-0 bottom-0 h-1.5 cursor-row-resize',
+                        'absolute inset-x-0 top-0 h-1.5 cursor-row-resize z-10',
+                        'opacity-0 group-hover/event:opacity-100 transition-opacity',
+                        'bg-primary/30 hover:bg-primary/60',
+                        resizing && 'opacity-100 bg-primary/70',
+                    )}
+                    title="Drag to start earlier"
+                />
+            )}
+            <EventChip event={event} fill />
+            {/* Bottom resize handle */}
+            {!event.is_recurring_instance && (
+                <div
+                    onMouseDown={(e) => startResize(e, 'bottom')}
+                    className={cn(
+                        'absolute inset-x-0 bottom-0 h-1.5 cursor-row-resize z-10',
                         'opacity-0 group-hover/event:opacity-100 transition-opacity',
                         'bg-primary/30 hover:bg-primary/60',
                         resizing && 'opacity-100 bg-primary/70',
@@ -407,6 +448,45 @@ function TimedEvent({
             )}
         </div>
     );
+}
+
+/**
+ * Greedy lane assignment for overlapping events. Returns a parallel array of
+ * { laneIdx, laneCount } where laneCount is the number of simultaneous lanes
+ * active during this event's time range.
+ */
+function layoutLanes(items: { startMins: number; endMins: number }[]): { laneIdx: number; laneCount: number }[] {
+    if (items.length === 0) return [];
+    const sorted = items.map((it, originalIdx) => ({ ...it, originalIdx })).sort((a, b) => a.startMins - b.startMins);
+    const lanes: number[] = []; // lanes[i] = endMins of the event currently in lane i
+    const placement = new Array(items.length).fill(0).map(() => ({ laneIdx: 0, laneCount: 1 }));
+
+    sorted.forEach((it) => {
+        let laneIdx = lanes.findIndex((endMins) => endMins <= it.startMins);
+        if (laneIdx === -1) {
+            laneIdx = lanes.length;
+            lanes.push(it.endMins);
+        } else {
+            lanes[laneIdx] = it.endMins;
+        }
+        placement[it.originalIdx].laneIdx = laneIdx;
+    });
+
+    // Compute laneCount per event = max lanes used during ANY overlapping event's time
+    sorted.forEach((a) => {
+        let count = 1;
+        sorted.forEach((b) => {
+            if (a.originalIdx === b.originalIdx) return;
+            const overlaps = b.startMins < a.endMins && b.endMins > a.startMins;
+            if (overlaps) {
+                count = Math.max(count, placement[b.originalIdx].laneIdx + 1);
+            }
+        });
+        count = Math.max(count, placement[a.originalIdx].laneIdx + 1);
+        placement[a.originalIdx].laneCount = count;
+    });
+
+    return placement;
 }
 
 // ── Month view ───────────────────────────────────────────────────────────
@@ -638,30 +718,33 @@ function TimeGrid({
                                         </div>
                                     )}
 
-                                    {/* Timed events */}
-                                    {items.map((ev) => {
-                                        // Block top = start_time when set, otherwise due_time (treated as a
-                                        // short marker). Block end = due_time. If only due_time is set, fall
-                                        // back to a 30-min duration so the event is visible.
-                                        const startStr = ev.start_time || ev.due_time || '08:00';
-                                        const startMins = timeToMinutes(startStr);
-                                        const top = ((startMins / 60) - startHour) * HOUR_HEIGHT;
-                                        const endMins = ev.due_time && ev.start_time
-                                            ? timeToMinutes(ev.due_time)
-                                            : startMins + 30;
-                                        const height = Math.max(((endMins - startMins) / 60) * HOUR_HEIGHT, 24);
-                                        return (
+                                    {/* Timed events — compute layout with side-by-side lanes for overlaps */}
+                                    {(() => {
+                                        const computed = items.map((ev) => {
+                                            const startStr = ev.start_time || ev.due_time || '08:00';
+                                            const startMins = timeToMinutes(startStr);
+                                            const endMins = ev.due_time && ev.start_time
+                                                ? timeToMinutes(ev.due_time)
+                                                : startMins + 30;
+                                            const top = ((startMins / 60) - startHour) * HOUR_HEIGHT;
+                                            const height = Math.max(((endMins - startMins) / 60) * HOUR_HEIGHT, 24);
+                                            return { ev, top, height, startMins, endMins };
+                                        });
+                                        const lanes = layoutLanes(computed.map((c) => ({ startMins: c.startMins, endMins: c.endMins })));
+                                        return computed.map((c, i) => (
                                             <TimedEvent
-                                                key={`${ev.type}-${ev.id}-${ev.due_date}`}
-                                                event={ev}
-                                                top={top}
-                                                height={height}
+                                                key={`${c.ev.type}-${c.ev.id}-${c.ev.due_date}`}
+                                                event={c.ev}
+                                                top={c.top}
+                                                height={c.height}
                                                 hourHeight={HOUR_HEIGHT}
                                                 snapMinutes={SNAP_MINUTES}
                                                 dateIso={col.iso}
+                                                laneIdx={lanes[i].laneIdx}
+                                                laneCount={lanes[i].laneCount}
                                             />
-                                        );
-                                    })}
+                                        ));
+                                    })()}
                                 </div>
                             );
                         })}
