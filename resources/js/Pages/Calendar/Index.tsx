@@ -48,10 +48,15 @@ function timeToMinutes(time: string): number {
 }
 
 function formatTime(time: string): string {
-    const [h, m] = time.substring(0, 5).split(':').map(Number);
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const hr = h % 12 || 12;
-    return `${hr}${m ? ':' + String(m).padStart(2, '0') : ''} ${ampm}`;
+    // 24-hour format
+    return time.substring(0, 5);
+}
+
+function minutesToHHMM(mins: number): string {
+    const m = ((mins % 1440) + 1440) % 1440;
+    const hh = String(Math.floor(m / 60)).padStart(2, '0');
+    const mm = String(m % 60).padStart(2, '0');
+    return `${hh}:${mm}`;
 }
 
 function daysBetween(a: Date, b: Date): number {
@@ -305,6 +310,86 @@ function useNow(intervalMs = 60_000) {
     return now;
 }
 
+// ── Resizable timed event ───────────────────────────────────────────────
+function TimedEvent({
+    event, top, height, hourHeight, snapMinutes, dateIso,
+}: {
+    event: CalendarEvent;
+    top: number;
+    height: number;
+    hourHeight: number;
+    snapMinutes: number;
+    dateIso: string;
+}) {
+    const [resizeHeight, setResizeHeight] = useState<number | null>(null);
+    const resizing = resizeHeight !== null;
+
+    const onResizeStart = (e: React.MouseEvent) => {
+        if (event.is_recurring_instance) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const startY = e.clientY;
+        const startHeight = height;
+        const pxPerMin = hourHeight / 60;
+        const minHeight = snapMinutes * pxPerMin; // at least one snap unit
+
+        let liveHeight = startHeight;
+        const onMove = (ev: MouseEvent) => {
+            const delta = ev.clientY - startY;
+            const raw = Math.max(minHeight, startHeight + delta);
+            const mins = Math.round(raw / pxPerMin / snapMinutes) * snapMinutes;
+            liveHeight = mins * pxPerMin;
+            setResizeHeight(liveHeight);
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            setResizeHeight(null);
+
+            // Compute new start_time and due_time.
+            // top is the visual position in minutes since 00:00 (since startHour=0
+            // and hourHeight=60 in the grid).
+            const startMins = Math.round(top / pxPerMin);
+            const durationMins = Math.round(liveHeight / pxPerMin);
+            const endMins = Math.min(startMins + durationMins, 1440 - 1);
+            router.patch(
+                route('calendar.reschedule'),
+                {
+                    type: event.type,
+                    id: event.id,
+                    due_date: dateIso,
+                    start_date: dateIso,
+                    start_time: minutesToHHMM(startMins),
+                    due_time: minutesToHHMM(endMins),
+                },
+                { preserveScroll: true },
+            );
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
+
+    const displayHeight = resizing ? (resizeHeight as number) : height;
+
+    return (
+        <div className="absolute inset-x-1 z-10 group/event" style={{ top, height: displayHeight }}>
+            <EventChip event={event} />
+            {!event.is_recurring_instance && (
+                <div
+                    onMouseDown={onResizeStart}
+                    className={cn(
+                        'absolute inset-x-0 bottom-0 h-1.5 cursor-row-resize',
+                        'opacity-0 group-hover/event:opacity-100 transition-opacity',
+                        'bg-primary/30 hover:bg-primary/60',
+                        resizing && 'opacity-100 bg-primary/70',
+                    )}
+                    title="Drag to extend"
+                />
+            )}
+        </div>
+    );
+}
+
 // ── Month view ───────────────────────────────────────────────────────────
 function MonthView({ events, date }: { events: CalendarEvent[]; date: string }) {
     const d = parseISO(date);
@@ -478,15 +563,15 @@ function TimeGrid({
             {/* Time slots */}
             <div ref={scrollRef} className="flex-1 overflow-auto">
                 <div className="flex relative" style={{ height: (endHour - startHour) * HOUR_HEIGHT }}>
-                    {/* Time labels */}
+                    {/* Time labels (24h format) */}
                     <div className="w-14 shrink-0 relative">
                         {hours.map((h) => (
                             <div
                                 key={h}
-                                className="absolute right-2 text-[10px] text-muted-foreground -translate-y-1/2"
+                                className="absolute right-2 text-[10px] font-mono tabular-nums text-muted-foreground -translate-y-1/2"
                                 style={{ top: (h - startHour) * HOUR_HEIGHT }}
                             >
-                                {h % 12 || 12}{h < 12 ? 'a' : 'p'}
+                                {String(h).padStart(2, '0')}:00
                             </div>
                         ))}
                     </div>
@@ -536,15 +621,26 @@ function TimeGrid({
 
                                     {/* Timed events */}
                                     {items.map((ev) => {
-                                        const t = ev.due_time || ev.start_time || '08:00';
-                                        const mins = timeToMinutes(t);
-                                        const top = ((mins / 60) - startHour) * HOUR_HEIGHT;
-                                        const endT = ev.due_time && ev.start_time ? timeToMinutes(ev.due_time) : mins + 30;
-                                        const height = Math.max(((endT - mins) / 60) * HOUR_HEIGHT, 24);
+                                        // Block top = start_time when set, otherwise due_time (treated as a
+                                        // short marker). Block end = due_time. If only due_time is set, fall
+                                        // back to a 30-min duration so the event is visible.
+                                        const startStr = ev.start_time || ev.due_time || '08:00';
+                                        const startMins = timeToMinutes(startStr);
+                                        const top = ((startMins / 60) - startHour) * HOUR_HEIGHT;
+                                        const endMins = ev.due_time && ev.start_time
+                                            ? timeToMinutes(ev.due_time)
+                                            : startMins + 30;
+                                        const height = Math.max(((endMins - startMins) / 60) * HOUR_HEIGHT, 24);
                                         return (
-                                            <div key={`${ev.type}-${ev.id}-${ev.due_date}`} className="absolute inset-x-1 z-10" style={{ top, height }}>
-                                                <EventChip event={ev} />
-                                            </div>
+                                            <TimedEvent
+                                                key={`${ev.type}-${ev.id}-${ev.due_date}`}
+                                                event={ev}
+                                                top={top}
+                                                height={height}
+                                                hourHeight={HOUR_HEIGHT}
+                                                snapMinutes={SNAP_MINUTES}
+                                                dateIso={col.iso}
+                                            />
                                         );
                                     })}
                                 </div>
