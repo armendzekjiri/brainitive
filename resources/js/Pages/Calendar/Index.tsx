@@ -386,22 +386,24 @@ function EventChip({
 
 // ── Quick-create modal ───────────────────────────────────────────────────
 function QuickCreateModal({
-    state, onClose, accessibleProjects,
+    state, onClose, accessibleProjects, connections,
 }: {
     state: QuickCreateState;
     onClose: () => void;
     accessibleProjects: AccessibleProject[];
+    connections: CalendarConnectionRow[];
 }) {
     const open = !!state;
 
     // Auto-select first project (and its first board) on mount.
     const defaultProject = accessibleProjects[0];
 
-    const [type, setType] = useState<'board' | 'list'>('board');
+    const [type, setType] = useState<'board' | 'list' | 'google'>('board');
     const [title, setTitle] = useState('');
     const [projectId, setProjectId] = useState<number | null>(defaultProject?.id ?? null);
     const [boardId, setBoardId] = useState<number | null>(defaultProject?.boards[0]?.id ?? null);
     const [taskListId, setTaskListId] = useState<number | null>(defaultProject?.task_lists[0]?.id ?? null);
+    const [connectionId, setConnectionId] = useState<number | null>(connections[0]?.id ?? null);
     const [dateInput, setDateInput] = useState('');
     const [timeInput, setTimeInput] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -418,23 +420,43 @@ function QuickCreateModal({
             setProjectId(firstProject.id);
             setBoardId(firstProject.boards[0]?.id ?? null);
             setTaskListId(firstProject.task_lists[0]?.id ?? null);
-            // Auto-pick the kind that's available
             if (firstProject.boards.length === 0 && firstProject.task_lists.length > 0) setType('list');
             else setType('board');
         }
-    }, [state, accessibleProjects]);
+        setConnectionId(connections[0]?.id ?? null);
+    }, [state, accessibleProjects, connections]);
 
     const project = useMemo(() => accessibleProjects.find((p) => p.id === projectId) ?? null, [accessibleProjects, projectId]);
 
-    const canSubmit = title.trim()
-        && project
-        && dateInput
-        && ((type === 'board' && boardId) || (type === 'list' && taskListId));
+    const canSubmit = title.trim() && dateInput && (
+        (type === 'board' && project && boardId)
+        || (type === 'list' && project && taskListId)
+        || (type === 'google' && connectionId)
+    );
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!canSubmit || !project) return;
+        if (!canSubmit) return;
         setSubmitting(true);
+
+        if (type === 'google') {
+            const conn = connections.find((c) => c.id === connectionId);
+            if (!conn) { setSubmitting(false); return; }
+            const payload: Record<string, any> = { title: title.trim(), date: dateInput };
+            if (timeInput) payload.time = timeInput;
+            router.post(
+                route('calendar.connections.events.create', conn.id),
+                payload,
+                {
+                    preserveScroll: true,
+                    onSuccess: () => { setSubmitting(false); onClose(); },
+                    onError: () => setSubmitting(false),
+                },
+            );
+            return;
+        }
+
+        if (!project) { setSubmitting(false); return; }
 
         if (type === 'board') {
             const board = project.boards.find((b) => b.id === boardId);
@@ -509,7 +531,7 @@ function QuickCreateModal({
                                 !hasBoards && 'opacity-40 cursor-not-allowed',
                             )}
                         >
-                            Board item
+                            Board
                         </button>
                         <button
                             type="button"
@@ -521,7 +543,19 @@ function QuickCreateModal({
                                 !hasLists && 'opacity-40 cursor-not-allowed',
                             )}
                         >
-                            List item
+                            List
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setType('google')}
+                            disabled={connections.length === 0}
+                            className={cn(
+                                'flex-1 h-8 px-3 text-xs font-semibold rounded-[5px] transition-colors',
+                                type === 'google' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                                connections.length === 0 && 'opacity-40 cursor-not-allowed',
+                            )}
+                        >
+                            Calendar
                         </button>
                     </div>
 
@@ -537,7 +571,30 @@ function QuickCreateModal({
                         />
                     </div>
 
-                    {/* Project */}
+                    {/* Google calendar picker */}
+                    {type === 'google' && (
+                        <div className="space-y-1.5">
+                            <Label>Calendar</Label>
+                            <Select value={connectionId ? String(connectionId) : ''} onValueChange={(v) => setConnectionId(parseInt(v, 10))}>
+                                <SelectTrigger><SelectValue placeholder="Select calendar…" /></SelectTrigger>
+                                <SelectContent>
+                                    {connections.map((c) => (
+                                        <SelectItem key={c.id} value={String(c.id)}>
+                                            <span className="flex items-center gap-2">
+                                                <span className="size-2 rounded-full" style={{ background: c.external_calendar_color || '#4285F4' }} />
+                                                {c.external_calendar_name}
+                                                <span className="text-[10px] text-muted-foreground">· {c.account_email}</span>
+                                            </span>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
+                    {/* Project (Brainitive only) */}
+                    {type !== 'google' && (
+                    <>
                     <div className="space-y-1.5">
                         <Label>Project</Label>
                         <Select
@@ -597,6 +654,8 @@ function QuickCreateModal({
                                 <p className="text-xs text-muted-foreground">This project has no lists yet.</p>
                             )}
                         </div>
+                    )}
+                    </>
                     )}
 
                     {/* Date + time */}
