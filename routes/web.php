@@ -115,6 +115,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/calendar', [App\Http\Controllers\CalendarController::class, 'index'])->name('calendar.index');
     Route::patch('/calendar/reschedule', [App\Http\Controllers\CalendarController::class, 'reschedule'])->name('calendar.reschedule');
 
+    // Calendar connections (external providers: Google, etc.)
+    Route::prefix('calendar/connections')->controller(App\Http\Controllers\CalendarConnectionController::class)->group(function () {
+        Route::get('google/redirect', 'redirectToGoogle')->name('calendar.connections.google.redirect');
+        Route::get('google/callback', 'googleCallback')->name('calendar.connections.google.callback');
+        Route::get('pending', 'pendingPicker')->name('calendar.connections.pending');
+        Route::post('/', 'store')->name('calendar.connections.store');
+        Route::patch('{connection}/toggle', 'toggle')->name('calendar.connections.toggle');
+        Route::delete('{connection}', 'destroy')->name('calendar.connections.destroy');
+        Route::post('{connection}/events', 'createEvent')->name('calendar.connections.events.create');
+    });
+
     // Workspaces
     Route::resource('workspaces', WorkspaceController::class);
 

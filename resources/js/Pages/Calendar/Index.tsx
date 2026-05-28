@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, router, Link } from '@inertiajs/react';
-import { PageProps, CalendarEvent } from '@/types';
+import { PageProps, CalendarEvent, CalendarConnectionRow } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -9,8 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import {
-    ChevronLeft, ChevronRight, Calendar, Kanban, Clock, Filter, Check, Repeat,
+    ChevronLeft, ChevronRight, Calendar, Kanban, Clock, Filter, Check, Repeat, Plus, Trash2, ExternalLink, Settings,
 } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { AssigneeAvatar } from '@/components/board/ItemPrimitives';
 import { useState, useMemo, useEffect, useRef } from 'react';
 
@@ -36,6 +37,7 @@ type Filters = {
     me_only: boolean;
     show_completed: boolean;
     sources: string[];
+    connections: number[];
 };
 
 type QuickCreateState = { date: string; time: string | null } | null;
@@ -46,6 +48,7 @@ interface Props extends PageProps {
     date: string;
     projectsForFilter: ProjectFilterOption[];
     accessibleProjects: AccessibleProject[];
+    connections: CalendarConnectionRow[];
     filters: Filters;
 }
 
@@ -55,7 +58,8 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function eventHref(e: CalendarEvent): string {
     if (e.type === 'board_item') return route('boards.items.show', e.href_params);
-    return route('task-lists.show', e.href_params);
+    if (e.type === 'task_list_item') return route('task-lists.show', e.href_params);
+    return e.external_url || '#';
 }
 
 function timeToMinutes(time: string): number {
@@ -142,7 +146,8 @@ function filtersToParams(f: Filters): Record<string, any> {
     if (f.projects?.length) out.projects = f.projects;
     if (f.me_only) out.me_only = 1;
     if (!f.show_completed) out.show_completed = 0;
-    if (f.sources && f.sources.length < 2) out.sources = f.sources;
+    if (f.sources && f.sources.length < 3) out.sources = f.sources;
+    if (f.connections?.length) out.connections = f.connections;
     return out;
 }
 
@@ -159,9 +164,10 @@ function handleDrop(e: React.DragEvent, targetDate: string, targetTime?: string)
 
 // ── Filter popover ───────────────────────────────────────────────────────
 function FilterBar({
-    projectsForFilter, filters, view, date,
+    projectsForFilter, connections, filters, view, date,
 }: {
     projectsForFilter: ProjectFilterOption[];
+    connections: CalendarConnectionRow[];
     filters: Filters;
     view: string;
     date: string;
@@ -172,7 +178,8 @@ function FilterBar({
         (filters.projects?.length ? 1 : 0) +
         (filters.me_only ? 1 : 0) +
         (!filters.show_completed ? 1 : 0) +
-        (filters.sources && filters.sources.length < 2 ? 1 : 0);
+        (filters.sources && filters.sources.length < 3 ? 1 : 0) +
+        (filters.connections?.length ? 1 : 0);
 
     const apply = (next: Filters) => {
         router.get(route('calendar.index'), { view, date, ...filtersToParams(next) }, { preserveState: true });
@@ -201,7 +208,7 @@ function FilterBar({
                         <button
                             type="button"
                             className="text-xs text-primary hover:underline"
-                            onClick={() => apply({ projects: [], me_only: false, show_completed: true, sources: ['board', 'list'] })}
+                            onClick={() => apply({ projects: [], me_only: false, show_completed: true, sources: ['board', 'list', 'google'], connections: [] })}
                         >
                             Clear all
                         </button>
@@ -229,9 +236,10 @@ function FilterBar({
                 {/* Sources */}
                 <div className="space-y-1.5">
                     <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Source</p>
-                    <div className="flex gap-1.5">
-                        {(['board', 'list'] as const).map((src) => {
+                    <div className="flex gap-1.5 flex-wrap">
+                        {(['board', 'list', 'google'] as const).map((src) => {
                             const active = filters.sources?.includes(src);
+                            const label = src === 'board' ? 'Board' : src === 'list' ? 'Lists' : 'Google';
                             return (
                                 <button
                                     key={src}
@@ -239,19 +247,52 @@ function FilterBar({
                                         const next = active
                                             ? filters.sources.filter((s) => s !== src)
                                             : [...(filters.sources || []), src];
-                                        apply({ ...filters, sources: next.length === 0 ? ['board', 'list'] : next });
+                                        apply({ ...filters, sources: next.length === 0 ? ['board', 'list', 'google'] : next });
                                     }}
                                     className={cn(
-                                        'flex-1 px-2.5 py-1.5 rounded-full text-xs border transition-colors capitalize',
+                                        'flex-1 px-2.5 py-1.5 rounded-full text-xs border transition-colors',
                                         active ? 'border-primary bg-primary/10 text-primary font-semibold' : 'border-transparent bg-muted/60 text-muted-foreground hover:bg-muted',
                                     )}
                                 >
-                                    {src === 'board' ? 'Board items' : 'List items'}
+                                    {label}
                                 </button>
                             );
                         })}
                     </div>
                 </div>
+
+                {/* Connected calendars (per-calendar toggle) */}
+                {connections.length > 0 && (
+                    <div className="space-y-1.5">
+                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Connected calendars</p>
+                        <div className="space-y-0.5 max-h-40 overflow-y-auto">
+                            {connections.map((c) => {
+                                const active = filters.connections?.length === 0 || filters.connections?.includes(c.id);
+                                return (
+                                    <button
+                                        key={c.id}
+                                        onClick={() => {
+                                            const all = connections.map((x) => x.id);
+                                            const current = filters.connections?.length ? filters.connections : all;
+                                            const next = current.includes(c.id)
+                                                ? current.filter((id) => id !== c.id)
+                                                : [...current, c.id];
+                                            apply({ ...filters, connections: next.length === all.length ? [] : next });
+                                        }}
+                                        className={cn(
+                                            'flex items-center gap-2 w-full px-2.5 py-1.5 rounded-md text-xs transition-colors',
+                                            active ? 'bg-primary/5' : 'hover:bg-muted opacity-50',
+                                        )}
+                                    >
+                                        <span className="size-2 rounded-full shrink-0" style={{ background: c.external_calendar_color || '#4285F4' }} />
+                                        <span className="truncate flex-1 text-left">{c.external_calendar_name}</span>
+                                        <span className="text-[10px] text-muted-foreground truncate">{c.account_email}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
 
                 {/* Projects */}
                 {projectsForFilter.length > 0 && (
@@ -1110,10 +1151,156 @@ function DayView({ events, date, onQuickCreate }: { events: CalendarEvent[]; dat
     return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} onQuickCreate={onQuickCreate} />;
 }
 
+// ── Connections menu (Add calendar / Manage) ─────────────────────────────
+type PickerData = {
+    provider: string;
+    account_email: string;
+    account_name: string | null;
+    calendars: { id: string; summary: string; backgroundColor: string | null; primary: boolean; access_role: string }[];
+};
+
+function ConnectionsMenu({ connections }: { connections: CalendarConnectionRow[] }) {
+    const [manageOpen, setManageOpen] = useState(false);
+
+    return (
+        <>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <button className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium border border-border bg-card text-muted-foreground hover:bg-secondary transition-colors">
+                        <Plus className="size-3" />Add calendar
+                    </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem onClick={() => window.location.href = route('calendar.connections.google.redirect')}>
+                        <span className="size-4 rounded grid place-items-center text-[10px] font-bold bg-[#4285F4] text-white mr-2">G</span>
+                        Google Calendar
+                    </DropdownMenuItem>
+                    {connections.length > 0 && <DropdownMenuSeparator />}
+                    {connections.length > 0 && (
+                        <DropdownMenuItem onClick={() => setManageOpen(true)}>
+                            <Settings className="size-4 mr-2" />
+                            Manage connected ({connections.length})
+                        </DropdownMenuItem>
+                    )}
+                </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Connected calendars</DialogTitle>
+                        <DialogDescription>
+                            Calendars you've connected from external providers. Disconnecting removes the calendar's events from this page.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-1">
+                        {connections.length === 0 && <p className="text-sm text-muted-foreground py-4 text-center">No calendars connected yet.</p>}
+                        {connections.map((c) => (
+                            <div key={c.id} className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-muted/50">
+                                <span className="size-3 rounded-full shrink-0" style={{ background: c.external_calendar_color || '#4285F4' }} />
+                                <div className="min-w-0 flex-1">
+                                    <div className="text-sm font-medium truncate">{c.external_calendar_name}</div>
+                                    <div className="text-[11px] text-muted-foreground truncate">{c.account_email}</div>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-7 text-destructive hover:text-destructive"
+                                    onClick={() => {
+                                        if (!window.confirm(`Disconnect "${c.external_calendar_name}"?`)) return;
+                                        router.delete(route('calendar.connections.destroy', c.id), { preserveScroll: true });
+                                    }}
+                                    title="Disconnect"
+                                >
+                                    <Trash2 className="size-3.5" />
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </>
+    );
+}
+
+// ── Calendar picker dialog (after OAuth) ─────────────────────────────────
+function CalendarPickerDialog({ data, onClose }: { data: PickerData | null; onClose: () => void }) {
+    const [selected, setSelected] = useState<string[]>([]);
+    useEffect(() => {
+        if (data) {
+            const primary = data.calendars.find((c) => c.primary)?.id;
+            setSelected(primary ? [primary] : []);
+        }
+    }, [data]);
+
+    if (!data) return null;
+
+    const submit = () => {
+        if (selected.length === 0) return;
+        router.post(route('calendar.connections.store'), { external_calendar_ids: selected }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                // Clean the ?picking=... query param
+                window.history.replaceState({}, '', route('calendar.index'));
+                onClose();
+            },
+        });
+    };
+
+    return (
+        <Dialog open={!!data} onOpenChange={(o) => { if (!o) onClose(); }}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Choose calendars to add</DialogTitle>
+                    <DialogDescription>
+                        Pick which of <strong>{data.account_email}</strong>'s calendars to show on Brainitive.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-1 max-h-72 overflow-y-auto">
+                    {data.calendars.map((c) => {
+                        const active = selected.includes(c.id);
+                        return (
+                            <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => setSelected(active ? selected.filter((s) => s !== c.id) : [...selected, c.id])}
+                                className={cn(
+                                    'flex items-center gap-2 w-full px-2.5 py-2 rounded-md text-sm transition-colors',
+                                    active ? 'bg-primary/10' : 'hover:bg-muted',
+                                )}
+                            >
+                                <span className="size-3 rounded-full shrink-0" style={{ background: c.backgroundColor || '#4285F4' }} />
+                                <span className="flex-1 text-left truncate">{c.summary}</span>
+                                {c.primary && <span className="text-[10px] text-muted-foreground">primary</span>}
+                                {active && <Check className="size-4 text-primary shrink-0" />}
+                            </button>
+                        );
+                    })}
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                    <Button variant="outline" onClick={onClose}>Cancel</Button>
+                    <Button onClick={submit} disabled={selected.length === 0}>Add {selected.length} calendar{selected.length === 1 ? '' : 's'}</Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 // ── Main page ────────────────────────────────────────────────────────────
-export default function CalendarIndex({ events, view, date, projectsForFilter, accessibleProjects, filters }: Props) {
+export default function CalendarIndex({ events, view, date, projectsForFilter, accessibleProjects, connections, filters }: Props) {
     const d = parseISO(date);
     const [quickCreate, setQuickCreate] = useState<QuickCreateState>(null);
+    const [pickerData, setPickerData] = useState<PickerData | null>(null);
+
+    // If the URL has ?picking=google, fetch the pending session state and show picker.
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('picking') === 'google') {
+            fetch(route('calendar.connections.pending'), { credentials: 'same-origin' })
+                .then((r) => r.json())
+                .then((data) => { if (data.pending) setPickerData(data.pending); });
+        }
+    }, []);
     const headerLabel = view === 'month'
         ? d.toLocaleDateString('en', { month: 'long', year: 'numeric' })
         : view === 'week'
@@ -1144,7 +1331,8 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
                     </div>
                     <h1 className="text-lg font-bold tracking-tight">{headerLabel}</h1>
                     <div className="flex-1" />
-                    <FilterBar projectsForFilter={projectsForFilter} filters={filters} view={view} date={date} />
+                    <FilterBar projectsForFilter={projectsForFilter} connections={connections} filters={filters} view={view} date={date} />
+                    <ConnectionsMenu connections={connections} />
                     <div className="inline-flex p-[3px] bg-secondary border border-border rounded-[7px] gap-[1px]">
                         {VIEWS.map((v) => {
                             const icons = { month: Calendar, week: Kanban, day: Clock };
@@ -1175,7 +1363,10 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
                     state={quickCreate}
                     onClose={() => setQuickCreate(null)}
                     accessibleProjects={accessibleProjects}
+                    connections={connections}
                 />
+
+                <CalendarPickerDialog data={pickerData} onClose={() => setPickerData(null)} />
             </div>
         </AppLayout>
     );

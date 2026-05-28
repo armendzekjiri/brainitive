@@ -565,9 +565,20 @@ export interface TicketAttachment {
     url?: string;
 }
 
-export interface CalendarEvent {
+export interface CalendarConnectionRow {
     id: number;
-    type: 'board_item' | 'task_list_item';
+    provider: string;
+    account_email: string;
+    account_name: string | null;
+    external_calendar_id: string;
+    external_calendar_name: string | null;
+    external_calendar_color: string | null;
+    is_active: boolean;
+}
+
+export interface CalendarEvent {
+    id: number | string;
+    type: 'board_item' | 'task_list_item' | 'google_event';
     key: string;
     title: string;
     start_date: string | null;
@@ -590,4 +601,9 @@ export interface CalendarEvent {
     item_type?: ItemType | null;
     priority?: ItemPriority | null;
     is_recurring_instance?: boolean;
+    /** Google events: the external link to the event on calendar.google.com. */
+    external_url?: string | null;
+    /** Google events: which connection (and therefore which Google calendar) the event came from. */
+    connection_id?: number | null;
+    account_email?: string | null;
 }

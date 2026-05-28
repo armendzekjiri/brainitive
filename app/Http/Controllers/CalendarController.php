@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Board;
+use App\Models\CalendarConnection;
 use App\Models\Item;
 use App\Models\Project;
 use App\Models\TaskList;
 use App\Models\TaskListItem;
+use App\Services\GoogleCalendarService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -39,7 +41,7 @@ class CalendarController extends Controller
             ->all();
     }
 
-    public function index(Request $request): Response
+    public function index(Request $request, GoogleCalendarService $googleService): Response
     {
         $view = $request->get('view', 'month');
         $date = Carbon::parse($request->get('date', now()->toDateString()));
@@ -48,7 +50,8 @@ class CalendarController extends Controller
         $projectFilter = array_filter(array_map('intval', (array) $request->get('projects', [])));
         $meOnly = $request->boolean('me_only');
         $showCompleted = $request->boolean('show_completed', true);
-        $sourceFilter = (array) $request->get('sources', ['board', 'list']);
+        $sourceFilter = (array) $request->get('sources', ['board', 'list', 'google']);
+        $connectionFilter = array_filter(array_map('intval', (array) $request->get('connections', [])));
         $userId = $request->user()->id;
 
         [$rangeStart, $rangeEnd] = match ($view) {
@@ -233,6 +236,27 @@ class CalendarController extends Controller
             }
         }
 
+        // ── External calendars (Google) ─────────────────────────────────
+        $connections = CalendarConnection::query()
+            ->where('user_id', $userId)
+            ->where('is_active', true)
+            ->orderBy('account_email')
+            ->orderBy('external_calendar_name')
+            ->get();
+
+        $activeConnections = $connectionFilter
+            ? $connections->whereIn('id', $connectionFilter)
+            : $connections;
+
+        if (in_array('google', $sourceFilter, true)) {
+            foreach ($activeConnections->where('provider', 'google') as $conn) {
+                $googleEvents = $googleService->listEvents($conn, $rangeStart, $rangeEnd);
+                foreach ($googleEvents as $ge) {
+                    $events[] = $this->mapGoogleEvent($conn, $ge);
+                }
+            }
+        }
+
         // Projects + boards + task lists for filter dropdown AND quick-create form.
         $accessibleProjects = Project::query()
             ->whereIn('id', $accessibleIds)
@@ -287,13 +311,66 @@ class CalendarController extends Controller
             'date' => $date->toDateString(),
             'projectsForFilter' => $projectsForFilter,
             'accessibleProjects' => $accessibleProjects,
+            'connections' => $connections->map(fn ($c) => [
+                'id' => $c->id,
+                'provider' => $c->provider,
+                'account_email' => $c->account_email,
+                'account_name' => $c->account_name,
+                'external_calendar_id' => $c->external_calendar_id,
+                'external_calendar_name' => $c->external_calendar_name,
+                'external_calendar_color' => $c->external_calendar_color,
+                'is_active' => $c->is_active,
+            ]),
             'filters' => [
                 'projects' => $projectFilter,
                 'me_only' => $meOnly,
                 'show_completed' => $showCompleted,
                 'sources' => $sourceFilter,
+                'connections' => $connectionFilter,
             ],
         ]);
+    }
+
+    /** Convert a Google Calendar API event into our normalized CalendarEvent shape. */
+    private function mapGoogleEvent(CalendarConnection $conn, array $ge): array
+    {
+        $allDay = isset($ge['start']['date']);
+        $startDate = $allDay ? $ge['start']['date'] : substr($ge['start']['dateTime'] ?? '', 0, 10);
+        $startTime = $allDay ? null : substr($ge['start']['dateTime'] ?? '', 11, 5);
+        $endRaw = $ge['end']['date'] ?? $ge['end']['dateTime'] ?? null;
+        $endDate = $allDay
+            ? ($endRaw ? Carbon::parse($endRaw)->subDay()->toDateString() : $startDate)
+            : substr($endRaw ?? '', 0, 10);
+        $endTime = $allDay ? null : substr($endRaw ?? '', 11, 5);
+
+        $color = $conn->external_calendar_color ?: '#4285F4';
+
+        return [
+            'id' => $ge['id'],
+            'type' => 'google_event',
+            'key' => '',
+            'title' => $ge['summary'] ?? '(untitled)',
+            'start_date' => $startDate ?: null,
+            'start_time' => $startTime ?: null,
+            'due_date' => $endDate ?: $startDate,
+            'due_time' => $endTime ?: null,
+            'is_completed' => false,
+            'color' => $color,
+            'assignee' => null,
+            'project' => null,
+            'source' => [
+                'type' => 'google',
+                'id' => $conn->id,
+                'name' => $conn->external_calendar_name,
+                'slug' => $conn->external_calendar_id,
+            ],
+            'href_params' => [],
+            'item_type' => null,
+            'priority' => null,
+            'external_url' => $ge['htmlLink'] ?? null,
+            'connection_id' => $conn->id,
+            'account_email' => $conn->account_email,
+        ];
     }
 
     /**
