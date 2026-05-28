@@ -154,6 +154,7 @@ class GoogleCalendarService
         $body = [];
         if (isset($data['title'])) $body['summary'] = $data['title'];
         if (array_key_exists('description', $data)) $body['description'] = $data['description'];
+        if (array_key_exists('location', $data)) $body['location'] = $data['location'];
 
         $startDate = $data['start_date'] ?? null;
         $startTime = $data['start_time'] ?? null;
@@ -192,6 +193,37 @@ class GoogleCalendarService
             return null;
         }
         return $resp->json();
+    }
+
+    /** Fetch a single event with full details. */
+    public function getEvent(CalendarConnection $connection, string $eventId): ?array
+    {
+        if (! $this->ensureFreshToken($connection)) {
+            return null;
+        }
+        $calId = rawurlencode($connection->external_calendar_id);
+        $resp = $this->get($connection, "/calendars/{$calId}/events/{$eventId}");
+        if (! $resp->successful()) {
+            Log::warning('Google event fetch failed', [
+                'connection_id' => $connection->id,
+                'event_id' => $eventId,
+                'status' => $resp->status(),
+            ]);
+            return null;
+        }
+        return $resp->json();
+    }
+
+    /** Delete an event. */
+    public function deleteEvent(CalendarConnection $connection, string $eventId): bool
+    {
+        if (! $this->ensureFreshToken($connection)) {
+            return false;
+        }
+        $calId = rawurlencode($connection->external_calendar_id);
+        $resp = Http::withToken($connection->access_token)
+            ->delete(self::API_BASE . "/calendars/{$calId}/events/{$eventId}");
+        return $resp->successful() || $resp->status() === 410; // 410 = already gone
     }
 
     private function get(CalendarConnection $connection, string $path, array $query = []): Response

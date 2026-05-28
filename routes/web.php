@@ -124,6 +124,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('{connection}/toggle', 'toggle')->name('calendar.connections.toggle');
         Route::delete('{connection}', 'destroy')->name('calendar.connections.destroy');
         Route::post('{connection}/events', 'createEvent')->name('calendar.connections.events.create');
+        Route::get('{connection}/events/{eventId}', 'showEvent')->name('calendar.connections.events.show')->where('eventId', '[A-Za-z0-9_-]+');
+        Route::patch('{connection}/events/{eventId}', 'updateEvent')->name('calendar.connections.events.update')->where('eventId', '[A-Za-z0-9_-]+');
+        Route::delete('{connection}/events/{eventId}', 'deleteEvent')->name('calendar.connections.events.destroy')->where('eventId', '[A-Za-z0-9_-]+');
     });
 
     // Workspaces

@@ -118,8 +118,7 @@ function statusColor(event: CalendarEvent): { base: string; text: string } {
     const s = eventStatus(event);
     if (s === 'done') return { base: '#16A34A', text: '#16A34A' };       // green
     if (s === 'overdue') return { base: '#DC2626', text: '#DC2626' };    // red
-    const proj = event.color || event.project?.color || '#0E83DC';
-    return { base: proj, text: proj };
+    return { base: '#0E83DC', text: '#0E83DC' };                          // brand blue
 }
 
 function parseISO(s: string): Date {
@@ -349,13 +348,14 @@ function FilterBar({
 
 // ── Event chip (shared) ──────────────────────────────────────────────────
 function EventChip({
-    event, compact = false, multiDay = false, fill = false,
+    event, compact = false, multiDay = false, fill = false, onOpenGoogle,
 }: {
     event: CalendarEvent;
     compact?: boolean;
     multiDay?: boolean;
     /** When true (time-grid usage), the chip fills its parent's height. */
     fill?: boolean;
+    onOpenGoogle?: (eventId: string, connectionId: number) => void;
 }) {
     const { base: color } = statusColor(event);
     const timeLabel = event.start_time && event.due_time
@@ -365,31 +365,44 @@ function EventChip({
             : event.start_time
                 ? formatTime(event.start_time)
                 : null;
-    return (
-        <Link
-            href={eventHref(event)}
-            data-event="true"
-            draggable={!event.is_recurring_instance}
-            onDragStart={(e) => {
-                e.dataTransfer.setData('application/calendar-event', JSON.stringify({
-                    type: event.type,
-                    id: event.id,
-                    is_recurring_instance: event.is_recurring_instance,
-                    connection_id: event.connection_id ?? null,
-                }));
-                e.dataTransfer.effectAllowed = 'move';
-            }}
-            className={cn(
-                'group flex gap-1 rounded-md px-1.5 py-0.5 text-xs leading-snug transition-colors cursor-pointer overflow-hidden',
-                'hover:shadow-sm border border-transparent hover:border-border',
-                event.is_completed && 'opacity-50',
-                multiDay && 'rounded-none first:rounded-l-md last:rounded-r-md',
-                fill ? 'h-full items-start' : 'items-center',
-            )}
-            style={{ backgroundColor: `${color}15` }}
-            title={`${event.title}${event.project ? ' — ' + event.project.name : ''}`}
-        >
+
+    const isGoogle = event.type === 'google_event';
+
+    const sharedDragProps = {
+        'data-event': 'true' as const,
+        draggable: !event.is_recurring_instance,
+        onDragStart: (e: React.DragEvent) => {
+            e.dataTransfer.setData('application/calendar-event', JSON.stringify({
+                type: event.type,
+                id: event.id,
+                is_recurring_instance: event.is_recurring_instance,
+                connection_id: event.connection_id ?? null,
+            }));
+            e.dataTransfer.effectAllowed = 'move';
+        },
+        className: cn(
+            'group flex gap-1 rounded-md px-1.5 py-0.5 text-xs leading-snug transition-colors cursor-pointer overflow-hidden w-full text-left',
+            'hover:shadow-sm border border-transparent hover:border-border',
+            event.is_completed && 'opacity-50',
+            multiDay && 'rounded-none first:rounded-l-md last:rounded-r-md',
+            fill ? 'h-full items-start' : 'items-center',
+        ),
+        style: { backgroundColor: `${color}15` },
+        title: `${event.title}${event.project ? ' — ' + event.project.name : ''}`,
+    };
+
+    const inner = (
+        <>
             {!multiDay && <span className="w-[3px] self-stretch shrink-0 rounded-full" style={{ background: color }} />}
+            {event.type === 'google_event' && (
+                <span
+                    className="size-3.5 rounded-sm grid place-items-center shrink-0 text-[8px] font-bold text-white"
+                    style={{ background: event.color || '#4285F4' }}
+                    title={event.source?.name ? `Google: ${event.source.name}` : 'Google Calendar'}
+                >
+                    G
+                </span>
+            )}
             <span className={cn('min-w-0 flex-1 flex flex-col gap-0.5', !fill && 'flex-row items-center')}>
                 {fill && timeLabel && <span className="text-[10px] text-muted-foreground font-mono tabular-nums">{timeLabel}</span>}
                 <span className={cn('truncate font-medium flex items-center gap-1', event.is_completed && 'line-through')}>
@@ -399,6 +412,24 @@ function EventChip({
                 </span>
             </span>
             {!compact && event.assignee && <AssigneeAvatar user={event.assignee} size={16} className="shrink-0 mt-0.5" />}
+        </>
+    );
+
+    if (isGoogle && onOpenGoogle) {
+        return (
+            <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onOpenGoogle(String(event.id), event.connection_id!); }}
+                {...sharedDragProps}
+            >
+                {inner}
+            </button>
+        );
+    }
+
+    return (
+        <Link href={eventHref(event)} {...sharedDragProps}>
+            {inner}
         </Link>
     );
 }
@@ -734,7 +765,7 @@ function useNow(intervalMs = 60_000) {
 
 // ── Resizable timed event ───────────────────────────────────────────────
 function TimedEvent({
-    event, top, height, hourHeight, snapMinutes, dateIso, laneIdx, laneCount,
+    event, top, height, hourHeight, snapMinutes, dateIso, laneIdx, laneCount, onOpenGoogle,
 }: {
     event: CalendarEvent;
     top: number;
@@ -746,6 +777,7 @@ function TimedEvent({
     laneIdx: number;
     /** Total number of side-by-side lanes for this overlap group. */
     laneCount: number;
+    onOpenGoogle?: (eventId: string, connectionId: number) => void;
 }) {
     const [drag, setDrag] = useState<{ top: number; height: number } | null>(null);
     const resizing = drag !== null;
@@ -835,7 +867,7 @@ function TimedEvent({
                     title="Drag to start earlier"
                 />
             )}
-            <EventChip event={event} fill />
+            <EventChip event={event} fill onOpenGoogle={onOpenGoogle} />
             {/* Bottom resize handle */}
             {!event.is_recurring_instance && (
                 <div
@@ -893,7 +925,7 @@ function layoutLanes(items: { startMins: number; endMins: number }[]): { laneIdx
 }
 
 // ── Month view ───────────────────────────────────────────────────────────
-function MonthView({ events, date, onQuickCreate }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void }) {
+function MonthView({ events, date, onQuickCreate, onOpenGoogle }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenGoogle: (eventId: string, connectionId: number) => void }) {
     const d = parseISO(date);
     const year = d.getFullYear();
     const month = d.getMonth();
@@ -982,7 +1014,7 @@ function MonthView({ events, date, onQuickCreate }: { events: CalendarEvent[]; d
 
                             {/* Single-day events */}
                             <div className="space-y-0.5 mt-[26px]">
-                                {dayEvents.slice(0, 3).map((ev) => <EventChip key={`${ev.type}-${ev.id}`} event={ev} compact />)}
+                                {dayEvents.slice(0, 3).map((ev) => <EventChip key={`${ev.type}-${ev.id}`} event={ev} compact onOpenGoogle={onOpenGoogle} />)}
                                 {dayEvents.length > 3 && <div className="text-[10px] text-muted-foreground px-1.5">+{dayEvents.length - 3} more</div>}
                             </div>
                         </div>
@@ -1000,12 +1032,14 @@ function TimeGrid({
     timedByCol,
     dateKey,
     onQuickCreate,
+    onOpenGoogle,
 }: {
     columns: { key: string; label: string; iso: string }[];
     allDayByCol: Map<string, CalendarEvent[]>;
     timedByCol: Map<string, CalendarEvent[]>;
     dateKey: string;
     onQuickCreate: (s: NonNullable<QuickCreateState>) => void;
+    onOpenGoogle: (eventId: string, connectionId: number) => void;
 }) {
     const today = isoDate(new Date());
     const now = useNow();
@@ -1054,7 +1088,7 @@ function TimeGrid({
                                     onQuickCreate({ date: col.iso, time: null });
                                 }}
                             >
-                                {items.map((ev) => <EventChip key={`${ev.type}-${ev.id}`} event={ev} compact />)}
+                                {items.map((ev) => <EventChip key={`${ev.type}-${ev.id}`} event={ev} compact onOpenGoogle={onOpenGoogle} />)}
                             </div>
                         );
                     })}
@@ -1165,6 +1199,7 @@ function TimeGrid({
                                                 dateIso={col.iso}
                                                 laneIdx={lanes[i].laneIdx}
                                                 laneCount={lanes[i].laneCount}
+                                                onOpenGoogle={onOpenGoogle}
                                             />
                                         ));
                                     })()}
@@ -1179,7 +1214,7 @@ function TimeGrid({
 }
 
 // ── Week view ────────────────────────────────────────────────────────────
-function WeekView({ events, date, onQuickCreate }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void }) {
+function WeekView({ events, date, onQuickCreate, onOpenGoogle }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenGoogle: (eventId: string, connectionId: number) => void }) {
     const d = parseISO(date);
     const dayOfWeek = (d.getDay() + 6) % 7;
     const monday = new Date(d);
@@ -1203,11 +1238,11 @@ function WeekView({ events, date, onQuickCreate }: { events: CalendarEvent[]; da
         else allDayByCol.get(key)!.push(ev);
     });
 
-    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} onQuickCreate={onQuickCreate} />;
+    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} onQuickCreate={onQuickCreate} onOpenGoogle={onOpenGoogle} />;
 }
 
 // ── Day view ─────────────────────────────────────────────────────────────
-function DayView({ events, date, onQuickCreate }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void }) {
+function DayView({ events, date, onQuickCreate, onOpenGoogle }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenGoogle: (eventId: string, connectionId: number) => void }) {
     const d = parseISO(date);
     const iso = isoDate(d);
     const dayName = d.toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -1225,7 +1260,184 @@ function DayView({ events, date, onQuickCreate }: { events: CalendarEvent[]; dat
         else allDayByCol.get(iso)!.push(ev);
     });
 
-    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} onQuickCreate={onQuickCreate} />;
+    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} onQuickCreate={onQuickCreate} onOpenGoogle={onOpenGoogle} />;
+}
+
+// ── Google event editor dialog ───────────────────────────────────────────
+type GoogleEventDetails = {
+    id: string;
+    summary?: string;
+    description?: string;
+    location?: string;
+    start?: { date?: string; dateTime?: string; timeZone?: string };
+    end?: { date?: string; dateTime?: string; timeZone?: string };
+    htmlLink?: string;
+};
+
+function GoogleEventDialog({
+    eventId, connectionId, onClose,
+}: {
+    eventId: string | null;
+    connectionId: number | null;
+    onClose: () => void;
+}) {
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [details, setDetails] = useState<GoogleEventDetails | null>(null);
+    const [title, setTitle] = useState('');
+    const [description, setDescription] = useState('');
+    const [location, setLocation] = useState('');
+    const [allDay, setAllDay] = useState(false);
+    const [startDate, setStartDate] = useState('');
+    const [startTime, setStartTime] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [endTime, setEndTime] = useState('');
+
+    const open = !!eventId && !!connectionId;
+
+    useEffect(() => {
+        if (!open || !eventId || !connectionId) return;
+        setLoading(true);
+        fetch(route('calendar.connections.events.show', [connectionId, eventId]), { credentials: 'same-origin' })
+            .then((r) => r.json())
+            .then((data) => {
+                const ev: GoogleEventDetails = data.event;
+                setDetails(ev);
+                setTitle(ev?.summary || '');
+                setDescription(ev?.description || '');
+                setLocation(ev?.location || '');
+                if (ev?.start?.date) {
+                    setAllDay(true);
+                    setStartDate(ev.start.date);
+                    setStartTime('');
+                    // Google all-day end is exclusive — subtract a day for display
+                    const e = ev.end?.date ? new Date(ev.end.date) : new Date(ev.start.date);
+                    e.setDate(e.getDate() - 1);
+                    setEndDate(e.toISOString().split('T')[0]);
+                    setEndTime('');
+                } else if (ev?.start?.dateTime) {
+                    setAllDay(false);
+                    setStartDate(ev.start.dateTime.substring(0, 10));
+                    setStartTime(ev.start.dateTime.substring(11, 16));
+                    setEndDate(ev.end?.dateTime?.substring(0, 10) || ev.start.dateTime.substring(0, 10));
+                    setEndTime(ev.end?.dateTime?.substring(11, 16) || '');
+                }
+                setLoading(false);
+            })
+            .catch(() => setLoading(false));
+    }, [eventId, connectionId, open]);
+
+    if (!open) return null;
+
+    const save = () => {
+        if (!eventId || !connectionId) return;
+        setSaving(true);
+        const payload: Record<string, any> = {
+            title,
+            description,
+            location,
+            start_date: startDate,
+            end_date: endDate,
+            timezone: browserTimezone(),
+        };
+        if (!allDay) {
+            payload.start_time = startTime || null;
+            payload.end_time = endTime || null;
+        } else {
+            payload.start_time = null;
+            payload.end_time = null;
+        }
+        router.patch(route('calendar.connections.events.update', [connectionId, eventId]), payload, {
+            preserveScroll: true,
+            onSuccess: () => { setSaving(false); onClose(); },
+            onError: () => setSaving(false),
+        });
+    };
+
+    const remove = () => {
+        if (!eventId || !connectionId) return;
+        if (!window.confirm('Delete this event from Google Calendar?')) return;
+        router.delete(route('calendar.connections.events.destroy', [connectionId, eventId]), {
+            preserveScroll: true,
+            onSuccess: () => onClose(),
+        });
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Edit Google event</DialogTitle>
+                    <DialogDescription>Changes are saved directly to Google Calendar.</DialogDescription>
+                </DialogHeader>
+                {loading ? (
+                    <p className="text-sm text-muted-foreground py-8 text-center">Loading…</p>
+                ) : (
+                    <div className="space-y-4">
+                        <div className="space-y-1.5">
+                            <Label htmlFor="ge-title">Title</Label>
+                            <Input id="ge-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="ge-location">Location</Label>
+                            <Input id="ge-location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Address, room, video link…" />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="ge-desc">Description</Label>
+                            <textarea
+                                id="ge-desc"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                rows={4}
+                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                placeholder="Notes, agenda, links…"
+                            />
+                        </div>
+                        <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} />
+                            All day
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="ge-sd">Start date</Label>
+                                <Input id="ge-sd" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                            </div>
+                            {!allDay && (
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="ge-st">Start time</Label>
+                                    <Input id="ge-st" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                                </div>
+                            )}
+                            <div className="space-y-1.5">
+                                <Label htmlFor="ge-ed">End date</Label>
+                                <Input id="ge-ed" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                            </div>
+                            {!allDay && (
+                                <div className="space-y-1.5">
+                                    <Label htmlFor="ge-et">End time</Label>
+                                    <Input id="ge-et" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                                </div>
+                            )}
+                        </div>
+                        {details?.htmlLink && (
+                            <a href={details.htmlLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                                <ExternalLink className="size-3" />Open in Google Calendar
+                            </a>
+                        )}
+                    </div>
+                )}
+                <div className="flex items-center justify-between pt-2">
+                    <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={remove} disabled={loading || saving}>
+                        <Trash2 className="size-3.5 mr-1.5" />Delete
+                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+                        <Button onClick={save} disabled={loading || saving || !title.trim()}>{saving ? 'Saving…' : 'Save'}</Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
 }
 
 // ── Connections menu (Add calendar / Manage) ─────────────────────────────
@@ -1368,6 +1580,8 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
     const d = parseISO(date);
     const [quickCreate, setQuickCreate] = useState<QuickCreateState>(null);
     const [pickerData, setPickerData] = useState<PickerData | null>(null);
+    const [googleEvent, setGoogleEvent] = useState<{ id: string; connectionId: number } | null>(null);
+    const openGoogle = (id: string, connectionId: number) => setGoogleEvent({ id, connectionId });
 
     // If the URL has ?picking=google, fetch the pending session state and show picker.
     useEffect(() => {
@@ -1432,9 +1646,9 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
                     </div>
                 </div>
 
-                {view === 'month' && <MonthView events={events} date={date} onQuickCreate={setQuickCreate} />}
-                {view === 'week' && <WeekView events={events} date={date} onQuickCreate={setQuickCreate} />}
-                {view === 'day' && <DayView events={events} date={date} onQuickCreate={setQuickCreate} />}
+                {view === 'month' && <MonthView events={events} date={date} onQuickCreate={setQuickCreate} onOpenGoogle={openGoogle} />}
+                {view === 'week' && <WeekView events={events} date={date} onQuickCreate={setQuickCreate} onOpenGoogle={openGoogle} />}
+                {view === 'day' && <DayView events={events} date={date} onQuickCreate={setQuickCreate} onOpenGoogle={openGoogle} />}
 
                 <QuickCreateModal
                     state={quickCreate}
@@ -1444,6 +1658,12 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
                 />
 
                 <CalendarPickerDialog data={pickerData} onClose={() => setPickerData(null)} />
+
+                <GoogleEventDialog
+                    eventId={googleEvent?.id ?? null}
+                    connectionId={googleEvent?.connectionId ?? null}
+                    onClose={() => setGoogleEvent(null)}
+                />
             </div>
         </AppLayout>
     );

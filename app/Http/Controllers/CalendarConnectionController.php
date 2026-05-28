@@ -182,6 +182,43 @@ class CalendarConnectionController extends Controller
         return back()->with('status', 'Calendar disconnected.');
     }
 
+    /** Fetch full details for a single Google event (for the editor dialog). */
+    public function showEvent(Request $request, CalendarConnection $connection, string $eventId, GoogleCalendarService $service): JsonResponse
+    {
+        abort_unless($connection->user_id === Auth::id(), 403);
+        $event = $service->getEvent($connection, $eventId);
+        if (! $event) {
+            return response()->json(['error' => 'Event not found'], 404);
+        }
+        return response()->json(['event' => $event]);
+    }
+
+    /** Update a Google event's full content (title, description, location, times). */
+    public function updateEvent(Request $request, CalendarConnection $connection, string $eventId, GoogleCalendarService $service): RedirectResponse
+    {
+        abort_unless($connection->user_id === Auth::id(), 403);
+        $validated = $request->validate([
+            'title' => 'sometimes|string|max:500',
+            'description' => 'sometimes|nullable|string|max:10000',
+            'location' => 'sometimes|nullable|string|max:500',
+            'start_date' => 'sometimes|nullable|date_format:Y-m-d',
+            'start_time' => 'sometimes|nullable|date_format:H:i',
+            'end_date' => 'sometimes|nullable|date_format:Y-m-d',
+            'end_time' => 'sometimes|nullable|date_format:H:i',
+            'timezone' => 'nullable|string|max:64',
+        ]);
+        $service->updateEvent($connection, $eventId, $validated);
+        return back();
+    }
+
+    /** Delete a Google event. */
+    public function deleteEvent(Request $request, CalendarConnection $connection, string $eventId, GoogleCalendarService $service): RedirectResponse
+    {
+        abort_unless($connection->user_id === Auth::id(), 403);
+        $service->deleteEvent($connection, $eventId);
+        return back();
+    }
+
     /** Create an event on a specific Google calendar (called from QuickCreate). */
     public function createEvent(Request $request, CalendarConnection $connection, GoogleCalendarService $service): RedirectResponse
     {
