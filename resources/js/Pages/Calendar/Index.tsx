@@ -248,8 +248,23 @@ function FilterBar({
 }
 
 // ── Event chip (shared) ──────────────────────────────────────────────────
-function EventChip({ event, compact = false, multiDay = false }: { event: CalendarEvent; compact?: boolean; multiDay?: boolean }) {
+function EventChip({
+    event, compact = false, multiDay = false, fill = false,
+}: {
+    event: CalendarEvent;
+    compact?: boolean;
+    multiDay?: boolean;
+    /** When true (time-grid usage), the chip fills its parent's height. */
+    fill?: boolean;
+}) {
     const color = event.color || event.project?.color || '#0E83DC';
+    const timeLabel = event.start_time && event.due_time
+        ? `${formatTime(event.start_time)}–${formatTime(event.due_time)}`
+        : event.due_time
+            ? formatTime(event.due_time)
+            : event.start_time
+                ? formatTime(event.start_time)
+                : null;
     return (
         <Link
             href={eventHref(event)}
@@ -259,21 +274,25 @@ function EventChip({ event, compact = false, multiDay = false }: { event: Calend
                 e.dataTransfer.effectAllowed = 'move';
             }}
             className={cn(
-                'group flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs leading-snug transition-colors cursor-pointer overflow-hidden',
+                'group flex gap-1 rounded-md px-1.5 py-0.5 text-xs leading-snug transition-colors cursor-pointer overflow-hidden',
                 'hover:shadow-sm border border-transparent hover:border-border',
                 event.is_completed && 'opacity-50',
                 multiDay && 'rounded-none first:rounded-l-md last:rounded-r-md',
+                fill ? 'h-full items-start' : 'items-center',
             )}
             style={{ backgroundColor: `${color}15` }}
             title={`${event.title}${event.project ? ' — ' + event.project.name : ''}`}
         >
             {!multiDay && <span className="w-[3px] self-stretch shrink-0 rounded-full" style={{ background: color }} />}
-            <span className={cn('truncate font-medium flex items-center gap-1', event.is_completed && 'line-through')}>
-                {event.is_recurring_instance && <Repeat className="size-2.5 shrink-0 opacity-70" />}
-                {!compact && event.due_time && <span className="text-muted-foreground mr-1">{formatTime(event.due_time)}</span>}
-                {event.title}
+            <span className={cn('min-w-0 flex-1 flex flex-col gap-0.5', !fill && 'flex-row items-center')}>
+                {fill && timeLabel && <span className="text-[10px] text-muted-foreground font-mono tabular-nums">{timeLabel}</span>}
+                <span className={cn('truncate font-medium flex items-center gap-1', event.is_completed && 'line-through')}>
+                    {event.is_recurring_instance && <Repeat className="size-2.5 shrink-0 opacity-70" />}
+                    {!compact && !fill && event.due_time && <span className="text-muted-foreground mr-1">{formatTime(event.due_time)}</span>}
+                    {event.title}
+                </span>
             </span>
-            {!compact && event.assignee && <AssigneeAvatar user={event.assignee} size={16} className="ml-auto shrink-0" />}
+            {!compact && event.assignee && <AssigneeAvatar user={event.assignee} size={16} className="shrink-0 mt-0.5" />}
         </Link>
     );
 }
@@ -373,7 +392,7 @@ function TimedEvent({
 
     return (
         <div className="absolute inset-x-1 z-10 group/event" style={{ top, height: displayHeight }}>
-            <EventChip event={event} />
+            <EventChip event={event} fill />
             {!event.is_recurring_instance && (
                 <div
                     onMouseDown={onResizeStart}
