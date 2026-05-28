@@ -193,6 +193,7 @@ class CalendarConnectionController extends Controller
             'end_date' => 'nullable|date_format:Y-m-d',
             'end_time' => 'nullable|date_format:H:i',
             'description' => 'nullable|string|max:5000',
+            'timezone' => 'nullable|string|max:64',
         ]);
 
         $service->createEvent($connection, $validated);

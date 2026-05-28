@@ -105,17 +105,18 @@ class GoogleCalendarService
         // All-day vs timed
         $startDate = $data['date'];
         $endDate = $data['end_date'] ?? $startDate;
+        $tz = $data['timezone'] ?? config('app.timezone');
         $body = ['summary' => $data['title']];
         if (! empty($data['description'])) {
             $body['description'] = $data['description'];
         }
         if (! empty($data['time'])) {
-            $startDateTime = Carbon::parse("{$startDate} {$data['time']}");
+            $startDateTime = Carbon::parse("{$startDate} {$data['time']}", $tz);
             $endDateTime = ! empty($data['end_time'])
-                ? Carbon::parse("{$endDate} {$data['end_time']}")
+                ? Carbon::parse("{$endDate} {$data['end_time']}", $tz)
                 : $startDateTime->copy()->addMinutes(30);
-            $body['start'] = ['dateTime' => $startDateTime->toRfc3339String(), 'timeZone' => config('app.timezone')];
-            $body['end'] = ['dateTime' => $endDateTime->toRfc3339String(), 'timeZone' => config('app.timezone')];
+            $body['start'] = ['dateTime' => $startDateTime->toRfc3339String(), 'timeZone' => $tz];
+            $body['end'] = ['dateTime' => $endDateTime->toRfc3339String(), 'timeZone' => $tz];
         } else {
             $body['start'] = ['date' => $startDate];
             $body['end'] = ['date' => Carbon::parse($endDate)->copy()->addDay()->toDateString()];
@@ -158,15 +159,19 @@ class GoogleCalendarService
         $startTime = $data['start_time'] ?? null;
         $endDate = $data['end_date'] ?? $startDate;
         $endTime = $data['end_time'] ?? null;
+        // The time strings the user dragged to are in THEIR browser timezone, not
+        // the server's APP_TIMEZONE. Parse in their TZ and round-trip Google in
+        // that same TZ so the displayed time matches what they dropped.
+        $tz = $data['timezone'] ?? config('app.timezone');
 
         if ($startDate !== null) {
             if ($startTime) {
-                $startDt = Carbon::parse("{$startDate} {$startTime}");
+                $startDt = Carbon::parse("{$startDate} {$startTime}", $tz);
                 $endDt = $endTime
-                    ? Carbon::parse("{$endDate} {$endTime}")
+                    ? Carbon::parse("{$endDate} {$endTime}", $tz)
                     : $startDt->copy()->addMinutes(30);
-                $body['start'] = ['dateTime' => $startDt->toRfc3339String(), 'timeZone' => config('app.timezone')];
-                $body['end'] = ['dateTime' => $endDt->toRfc3339String(), 'timeZone' => config('app.timezone')];
+                $body['start'] = ['dateTime' => $startDt->toRfc3339String(), 'timeZone' => $tz];
+                $body['end'] = ['dateTime' => $endDt->toRfc3339String(), 'timeZone' => $tz];
             } else {
                 $body['start'] = ['date' => $startDate];
                 $body['end'] = ['date' => Carbon::parse($endDate)->copy()->addDay()->toDateString()];

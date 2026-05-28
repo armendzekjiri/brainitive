@@ -151,13 +151,26 @@ function filtersToParams(f: Filters): Record<string, any> {
     return out;
 }
 
+function browserTimezone(): string {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch {
+        return 'UTC';
+    }
+}
+
 function handleDrop(e: React.DragEvent, targetDate: string, targetTime?: string) {
     e.preventDefault();
     const data = e.dataTransfer.getData('application/calendar-event');
     if (!data) return;
     const parsed = JSON.parse(data);
     if (parsed.is_recurring_instance) return; // can't reschedule a virtual occurrence
-    const payload: Record<string, any> = { type: parsed.type, id: parsed.id, due_date: targetDate };
+    const payload: Record<string, any> = {
+        type: parsed.type,
+        id: parsed.id,
+        due_date: targetDate,
+        timezone: browserTimezone(),
+    };
     if (targetTime) payload.due_time = targetTime;
     if (parsed.connection_id) payload.connection_id = parsed.connection_id;
     router.patch(route('calendar.reschedule'), payload, { preserveScroll: true });
@@ -448,7 +461,7 @@ function QuickCreateModal({
         if (type === 'google') {
             const conn = connections.find((c) => c.id === connectionId);
             if (!conn) { setSubmitting(false); return; }
-            const payload: Record<string, any> = { title: title.trim(), date: dateInput };
+            const payload: Record<string, any> = { title: title.trim(), date: dateInput, timezone: browserTimezone() };
             if (timeInput) payload.time = timeInput;
             router.post(
                 route('calendar.connections.events.create', conn.id),
@@ -782,6 +795,7 @@ function TimedEvent({
                 start_date: dateIso,
                 start_time: minutesToHHMM(startMins),
                 due_time: minutesToHHMM(endMins),
+                timezone: browserTimezone(),
             };
             if (event.connection_id) payload.connection_id = event.connection_id;
             router.patch(route('calendar.reschedule'), payload, { preserveScroll: true });

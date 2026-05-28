@@ -441,6 +441,7 @@ class CalendarController extends Controller
             'due_time' => 'nullable|date_format:H:i',
             'start_date' => 'nullable|date',
             'start_time' => 'nullable|date_format:H:i',
+            'timezone' => 'nullable|string|max:64',
         ]);
 
         if ($validated['type'] === 'google_event') {
@@ -452,6 +453,7 @@ class CalendarController extends Controller
                 'start_time' => $validated['start_time'] ?? null,
                 'end_date' => $validated['due_date'] ?? $validated['start_date'] ?? null,
                 'end_time' => $validated['due_time'] ?? null,
+                'timezone' => $validated['timezone'] ?? null,
             ]);
 
             return back();
