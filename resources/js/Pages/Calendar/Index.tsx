@@ -9,7 +9,7 @@ import {
     ChevronLeft, ChevronRight, Calendar, Kanban, Clock, Filter, Check, Repeat,
 } from 'lucide-react';
 import { AssigneeAvatar } from '@/components/board/ItemPrimitives';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 
 type ProjectFilterOption = {
     id: number;
@@ -59,7 +59,13 @@ function daysBetween(a: Date, b: Date): number {
 }
 
 function isoDate(d: Date): string {
-    return d.toISOString().split('T')[0];
+    // Use LOCAL date components, not toISOString() (which uses UTC and shifts the
+    // date by ±1 in non-UTC timezones — that's why Thursday 28 was rendering as
+    // Friday 29 for CET users).
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
 }
 
 function parseISO(s: string): Date {
@@ -400,24 +406,40 @@ function TimeGrid({
     columns,
     allDayByCol,
     timedByCol,
-    startHour,
-    endHour,
+    dateKey,
 }: {
     columns: { key: string; label: string; iso: string }[];
     allDayByCol: Map<string, CalendarEvent[]>;
     timedByCol: Map<string, CalendarEvent[]>;
-    startHour: number;
-    endHour: number;
+    dateKey: string;
 }) {
     const today = isoDate(new Date());
     const now = useNow();
+    const startHour = 0;
+    const endHour = 24;
     const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i);
     const HOUR_HEIGHT = 60;
+    const SNAP_MINUTES = 15;
+
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    // Auto-scroll so the current time is centered when the visible date changes.
+    // The columns array always includes today when the user is on this view, or the
+    // selected day for day-view — we scroll to "now" regardless so users land near
+    // where they want to be.
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const nowMins = now.getHours() * 60 + now.getMinutes();
+        const nowTop = (nowMins / 60) * HOUR_HEIGHT;
+        const target = Math.max(0, nowTop - el.clientHeight / 2);
+        el.scrollTo({ top: target, behavior: 'auto' });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [dateKey]);
 
     // Now-line position
     const nowMins = now.getHours() * 60 + now.getMinutes();
     const nowTop = ((nowMins / 60) - startHour) * HOUR_HEIGHT;
-    const showNowLine = now.getHours() >= startHour && now.getHours() < endHour;
 
     return (
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -454,7 +476,7 @@ function TimeGrid({
             </div>
 
             {/* Time slots */}
-            <div className="flex-1 overflow-auto">
+            <div ref={scrollRef} className="flex-1 overflow-auto">
                 <div className="flex relative" style={{ height: (endHour - startHour) * HOUR_HEIGHT }}>
                     {/* Time labels */}
                     <div className="w-14 shrink-0 relative">
@@ -485,20 +507,24 @@ function TimeGrid({
                                             onDrop={(e) => {
                                                 const rect = e.currentTarget.getBoundingClientRect();
                                                 const y = e.clientY - rect.top;
-                                                const mins = Math.round(y / (HOUR_HEIGHT / 2)) * 30;
-                                                const totalMins = h * 60 + mins;
-                                                const hh = String(Math.floor(totalMins / 60)).padStart(2, '0');
+                                                // Snap to SNAP_MINUTES (15-min increments by default).
+                                                const minsWithinHour = Math.round((y / HOUR_HEIGHT) * 60 / SNAP_MINUTES) * SNAP_MINUTES;
+                                                const totalMins = h * 60 + Math.min(minsWithinHour, 59);
+                                                const hh = String(Math.floor(totalMins / 60) % 24).padStart(2, '0');
                                                 const mm = String(totalMins % 60).padStart(2, '0');
                                                 handleDrop(e, col.iso, `${hh}:${mm}`);
                                             }}
                                         >
-                                            <div className="h-[30px]" />
-                                            <div className="h-[30px] border-t border-border/30" />
+                                            {/* 15-min subdivision lines */}
+                                            <div className="h-[15px]" />
+                                            <div className="h-[15px] border-t border-border/20" />
+                                            <div className="h-[15px] border-t border-border/30" />
+                                            <div className="h-[15px] border-t border-border/20" />
                                         </div>
                                     ))}
 
                                     {/* Now line — only on today's column */}
-                                    {isTodayCol && showNowLine && (
+                                    {isTodayCol && (
                                         <div
                                             className="absolute inset-x-0 z-20 pointer-events-none"
                                             style={{ top: nowTop }}
@@ -556,8 +582,7 @@ function WeekView({ events, date }: { events: CalendarEvent[]; date: string }) {
         else allDayByCol.get(key)!.push(ev);
     });
 
-    const { startHour, endHour } = autoTimeRange(events);
-    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} startHour={startHour} endHour={endHour} />;
+    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} />;
 }
 
 // ── Day view ─────────────────────────────────────────────────────────────
@@ -579,21 +604,7 @@ function DayView({ events, date }: { events: CalendarEvent[]; date: string }) {
         else allDayByCol.get(iso)!.push(ev);
     });
 
-    const { startHour, endHour } = autoTimeRange(events);
-    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} startHour={startHour} endHour={endHour} />;
-}
-
-function autoTimeRange(events: CalendarEvent[]): { startHour: number; endHour: number } {
-    let minH = 6;
-    let maxH = 22;
-    events.forEach((ev) => {
-        const t = ev.due_time || ev.start_time;
-        if (!t) return;
-        const h = parseInt(t.substring(0, 2), 10);
-        if (h < minH) minH = h;
-        if (h + 1 > maxH) maxH = Math.min(h + 1, 24);
-    });
-    return { startHour: minH, endHour: maxH };
+    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} />;
 }
 
 // ── Main page ────────────────────────────────────────────────────────────
