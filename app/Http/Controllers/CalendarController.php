@@ -44,46 +44,67 @@ class CalendarController extends Controller
         $view = $request->get('view', 'month');
         $date = Carbon::parse($request->get('date', now()->toDateString()));
 
+        // Filters
+        $projectFilter = array_filter(array_map('intval', (array) $request->get('projects', [])));
+        $meOnly = $request->boolean('me_only');
+        $showCompleted = $request->boolean('show_completed', true);
+        $sourceFilter = (array) $request->get('sources', ['board', 'list']);
+        $userId = $request->user()->id;
+
         [$rangeStart, $rangeEnd] = match ($view) {
             'week' => [$date->copy()->startOfWeek(Carbon::MONDAY), $date->copy()->endOfWeek(Carbon::SUNDAY)],
             'day' => [$date->copy()->startOfDay(), $date->copy()->endOfDay()],
             default => [$date->copy()->startOfMonth()->subDays(7), $date->copy()->endOfMonth()->addDays(7)],
         };
 
-        $projectIds = $this->accessibleProjectIds($request);
+        $accessibleIds = $this->accessibleProjectIds($request);
+        $projectIds = $projectFilter
+            ? array_values(array_intersect($accessibleIds, $projectFilter))
+            : $accessibleIds;
 
-        $items = Item::query()
-            ->whereIn('project_id', $projectIds)
-            ->whereNull('parent_id')
-            ->where(function ($q) use ($rangeStart, $rangeEnd) {
-                $q->whereBetween('start_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
-                  ->orWhereBetween('due_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()]);
-            })
-            ->with([
-                'board:id,project_id,name,slug',
-                'board.project:id,workspace_id,name,slug,key,color',
-                'board.project.workspace:id,name,slug',
-                'itemType',
-                'priority',
-                'assignee:id,name,email,avatar',
-            ])
-            ->get();
+        $items = collect();
+        if (in_array('board', $sourceFilter, true)) {
+            $items = Item::query()
+                ->whereIn('project_id', $projectIds)
+                ->whereNull('parent_id')
+                ->when($meOnly, fn ($q) => $q->where('assigned_to', $userId))
+                ->when(! $showCompleted, fn ($q) => $q->whereNull('completed_at'))
+                ->where(function ($q) use ($rangeStart, $rangeEnd) {
+                    $q->whereBetween('start_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
+                      ->orWhereBetween('due_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()]);
+                })
+                ->with([
+                    'board:id,project_id,name,slug',
+                    'board.project:id,workspace_id,name,slug,key,color',
+                    'board.project.workspace:id,name,slug',
+                    'itemType',
+                    'priority',
+                    'assignee:id,name,email,avatar',
+                ])
+                ->get();
+        }
 
-        $taskListItems = TaskListItem::query()
-            ->whereHas('taskList', function ($q) use ($projectIds) {
-                $q->whereIn('project_id', $projectIds);
-            })
-            ->where(function ($q) use ($rangeStart, $rangeEnd) {
-                $q->whereBetween('start_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
-                  ->orWhereBetween('due_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()]);
-            })
-            ->with([
-                'taskList:id,project_id,name,slug',
-                'taskList.project:id,workspace_id,name,slug,key,color',
-                'taskList.project.workspace:id,name,slug',
-                'assignee:id,name,email,avatar',
-            ])
-            ->get();
+        $taskListItems = collect();
+        if (in_array('list', $sourceFilter, true)) {
+            $taskListItems = TaskListItem::query()
+                ->whereHas('taskList', function ($q) use ($projectIds) {
+                    $q->whereIn('project_id', $projectIds);
+                })
+                ->when($meOnly, fn ($q) => $q->where('assignee_id', $userId))
+                ->when(! $showCompleted, fn ($q) => $q->where('status', '!=', 'done'))
+                ->where(function ($q) use ($rangeStart, $rangeEnd) {
+                    $q->whereBetween('start_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
+                      ->orWhereBetween('due_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
+                      ->orWhereNotNull('recurrence'); // include recurring items for projection
+                })
+                ->with([
+                    'taskList:id,project_id,name,slug',
+                    'taskList.project:id,workspace_id,name,slug,key,color',
+                    'taskList.project.workspace:id,name,slug',
+                    'assignee:id,name,email,avatar',
+                ])
+                ->get();
+        }
 
         $events = [];
 
@@ -136,14 +157,12 @@ class CalendarController extends Controller
 
         foreach ($taskListItems as $tli) {
             $proj = $tli->taskList->project;
-            $events[] = [
+            $baseEvent = [
                 'id' => $tli->id,
                 'type' => 'task_list_item',
                 'key' => $proj->key . '-L' . $tli->id,
                 'title' => $tli->title,
-                'start_date' => $tli->start_date?->toDateString(),
                 'start_time' => $tli->start_time,
-                'due_date' => $tli->due_date?->toDateString(),
                 'due_time' => $tli->due_time,
                 'is_completed' => $tli->status === 'done',
                 'color' => $proj->color,
@@ -178,13 +197,118 @@ class CalendarController extends Controller
                 'item_type' => null,
                 'priority' => null,
             ];
+
+            // Compute occurrence dates: base due_date + projected recurrences within range
+            $occurrences = $this->projectRecurrence(
+                $tli->due_date,
+                $tli->recurrence,
+                $rangeStart,
+                $rangeEnd,
+            );
+
+            foreach ($occurrences as $idx => $occDate) {
+                // Only the first occurrence keeps the start_date; projected ones omit it.
+                $isOriginal = $idx === 0 && $occDate->equalTo($tli->due_date);
+                $events[] = array_merge($baseEvent, [
+                    'start_date' => $isOriginal ? $tli->start_date?->toDateString() : null,
+                    'due_date' => $occDate->toDateString(),
+                    'is_recurring_instance' => ! $isOriginal,
+                ]);
+            }
+
+            // Items with no due_date but with start_date (rare) — still render
+            if ($occurrences->isEmpty() && $tli->start_date) {
+                $events[] = array_merge($baseEvent, [
+                    'start_date' => $tli->start_date->toDateString(),
+                    'due_date' => null,
+                    'is_recurring_instance' => false,
+                ]);
+            }
         }
+
+        // Projects list for the filter dropdown
+        $projectsForFilter = Project::query()
+            ->whereIn('id', $accessibleIds)
+            ->with('workspace:id,name,slug')
+            ->orderBy('name')
+            ->get(['id', 'name', 'slug', 'key', 'color', 'workspace_id'])
+            ->map(fn ($p) => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'color' => $p->color,
+                'workspace' => $p->workspace ? ['id' => $p->workspace->id, 'name' => $p->workspace->name] : null,
+            ]);
 
         return Inertia::render('Calendar/Index', [
             'events' => $events,
             'view' => $view,
             'date' => $date->toDateString(),
+            'projectsForFilter' => $projectsForFilter,
+            'filters' => [
+                'projects' => $projectFilter,
+                'me_only' => $meOnly,
+                'show_completed' => $showCompleted,
+                'sources' => $sourceFilter,
+            ],
         ]);
+    }
+
+    /**
+     * Project a task-list-item's recurrence forward into [start, end].
+     * Returns a Collection of Carbon dates (always at start-of-day).
+     */
+    private function projectRecurrence(?Carbon $baseDate, ?string $recurrence, Carbon $rangeStart, Carbon $rangeEnd): \Illuminate\Support\Collection
+    {
+        $dates = collect();
+        if (! $baseDate) {
+            return $dates;
+        }
+
+        $base = $baseDate->copy()->startOfDay();
+
+        // No recurrence — just the base date if in range
+        if (! $recurrence) {
+            if ($base->betweenIncluded($rangeStart->copy()->startOfDay(), $rangeEnd->copy()->endOfDay())) {
+                $dates->push($base);
+            }
+            return $dates;
+        }
+
+        // Recurring — step backward to find the first occurrence in or before the range,
+        // then step forward through the range.
+        $step = function (Carbon $d, int $dir) use ($recurrence): Carbon {
+            return match ($recurrence) {
+                'daily' => $d->copy()->addDays($dir),
+                'weekly' => $d->copy()->addWeeks($dir),
+                'monthly' => $d->copy()->addMonths($dir),
+                'yearly' => $d->copy()->addYears($dir),
+                default => $d->copy(),
+            };
+        };
+
+        $cursor = $base->copy();
+        // Walk forward until we're at or past rangeStart
+        while ($cursor->lt($rangeStart)) {
+            $cursor = $step($cursor, 1);
+            // Safety: avoid infinite loop
+            if ($cursor->year - $rangeEnd->year > 1) {
+                return $dates;
+            }
+        }
+        // Walk backward if we overshot
+        while ($step($cursor, -1)->gte($rangeStart)) {
+            $cursor = $step($cursor, -1);
+        }
+
+        // Emit all occurrences in range
+        $safety = 0;
+        while ($cursor->lte($rangeEnd) && $safety < 500) {
+            $dates->push($cursor->copy());
+            $cursor = $step($cursor, 1);
+            $safety++;
+        }
+
+        return $dates;
     }
 
     public function reschedule(Request $request)

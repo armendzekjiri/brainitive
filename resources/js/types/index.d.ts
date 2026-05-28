@@ -589,4 +589,5 @@ export interface CalendarEvent {
     href_params: string[];
     item_type?: ItemType | null;
     priority?: ItemPriority | null;
+    is_recurring_instance?: boolean;
 }
