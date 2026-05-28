@@ -68,7 +68,12 @@ class CalendarController extends Controller
                 ->whereIn('project_id', $projectIds)
                 ->whereNull('parent_id')
                 ->when($meOnly, fn ($q) => $q->where('assigned_to', $userId))
-                ->when(! $showCompleted, fn ($q) => $q->whereNull('completed_at'))
+                ->when(! $showCompleted, function ($q) {
+                    // Hide items that are either marked completed_at OR sitting in a
+                    // "Done" column (some legacy items have one but not the other).
+                    $q->whereNull('completed_at')
+                        ->whereHas('column', fn ($cq) => $cq->where('is_done_column', false));
+                })
                 ->where(function ($q) use ($rangeStart, $rangeEnd) {
                     $q->whereBetween('start_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
                       ->orWhereBetween('due_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()]);
@@ -77,6 +82,7 @@ class CalendarController extends Controller
                     'board:id,project_id,name,slug',
                     'board.project:id,workspace_id,name,slug,key,color',
                     'board.project.workspace:id,name,slug',
+                    'column:id,name,is_done_column',
                     'itemType',
                     'priority',
                     'assignee:id,name,email,avatar',
@@ -119,7 +125,8 @@ class CalendarController extends Controller
                 'start_time' => $item->start_time,
                 'due_date' => $item->due_date?->toDateString(),
                 'due_time' => $item->due_time,
-                'is_completed' => $item->completed_at !== null,
+                'is_completed' => $item->completed_at !== null
+                    || ($item->column?->is_done_column ?? false),
                 'color' => $proj->color,
                 'assignee' => $item->assignee ? [
                     'id' => $item->assignee->id,
