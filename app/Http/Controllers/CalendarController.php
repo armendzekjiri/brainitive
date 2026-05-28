@@ -226,24 +226,60 @@ class CalendarController extends Controller
             }
         }
 
-        // Projects list for the filter dropdown
-        $projectsForFilter = Project::query()
+        // Projects + boards + task lists for filter dropdown AND quick-create form.
+        $accessibleProjects = Project::query()
             ->whereIn('id', $accessibleIds)
-            ->with('workspace:id,name,slug')
+            ->with([
+                'workspace:id,name,slug',
+                'boards' => function ($q) {
+                    $q->select('id', 'project_id', 'name', 'slug', 'position')
+                        ->orderBy('position')
+                        ->with(['columns' => function ($cq) {
+                            $cq->select('id', 'board_id', 'position')->orderBy('position');
+                        }]);
+                },
+                'taskLists' => function ($q) {
+                    $q->select('id', 'project_id', 'name', 'slug', 'position')->orderBy('position');
+                },
+            ])
             ->orderBy('name')
             ->get(['id', 'name', 'slug', 'key', 'color', 'workspace_id'])
             ->map(fn ($p) => [
                 'id' => $p->id,
                 'name' => $p->name,
+                'slug' => $p->slug,
                 'color' => $p->color,
-                'workspace' => $p->workspace ? ['id' => $p->workspace->id, 'name' => $p->workspace->name] : null,
+                'workspace' => $p->workspace ? [
+                    'id' => $p->workspace->id,
+                    'name' => $p->workspace->name,
+                    'slug' => $p->workspace->slug,
+                ] : null,
+                'boards' => $p->boards->map(fn ($b) => [
+                    'id' => $b->id,
+                    'name' => $b->name,
+                    'slug' => $b->slug,
+                    'first_column_id' => $b->columns->first()?->id,
+                ])->values(),
+                'task_lists' => $p->taskLists->map(fn ($tl) => [
+                    'id' => $tl->id,
+                    'name' => $tl->name,
+                    'slug' => $tl->slug,
+                ])->values(),
             ]);
+
+        $projectsForFilter = $accessibleProjects->map(fn ($p) => [
+            'id' => $p['id'],
+            'name' => $p['name'],
+            'color' => $p['color'],
+            'workspace' => $p['workspace'] ? ['id' => $p['workspace']['id'], 'name' => $p['workspace']['name']] : null,
+        ]);
 
         return Inertia::render('Calendar/Index', [
             'events' => $events,
             'view' => $view,
             'date' => $date->toDateString(),
             'projectsForFilter' => $projectsForFilter,
+            'accessibleProjects' => $accessibleProjects,
             'filters' => [
                 'projects' => $projectFilter,
                 'me_only' => $meOnly,

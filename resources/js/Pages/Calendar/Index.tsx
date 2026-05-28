@@ -3,6 +3,9 @@ import { Head, router, Link } from '@inertiajs/react';
 import { PageProps, CalendarEvent } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import {
@@ -18,6 +21,16 @@ type ProjectFilterOption = {
     workspace?: { id: number; name: string } | null;
 };
 
+type AccessibleProject = {
+    id: number;
+    name: string;
+    slug: string;
+    color?: string | null;
+    workspace: { id: number; name: string; slug: string } | null;
+    boards: { id: number; name: string; slug: string; first_column_id: number | null }[];
+    task_lists: { id: number; name: string; slug: string }[];
+};
+
 type Filters = {
     projects: number[];
     me_only: boolean;
@@ -25,11 +38,14 @@ type Filters = {
     sources: string[];
 };
 
+type QuickCreateState = { date: string; time: string | null } | null;
+
 interface Props extends PageProps {
     events: CalendarEvent[];
     view: 'month' | 'week' | 'day';
     date: string;
     projectsForFilter: ProjectFilterOption[];
+    accessibleProjects: AccessibleProject[];
     filters: Filters;
 }
 
@@ -268,6 +284,7 @@ function EventChip({
     return (
         <Link
             href={eventHref(event)}
+            data-event="true"
             draggable={!event.is_recurring_instance}
             onDragStart={(e) => {
                 e.dataTransfer.setData('application/calendar-event', JSON.stringify({ type: event.type, id: event.id, is_recurring_instance: event.is_recurring_instance }));
@@ -297,12 +314,250 @@ function EventChip({
     );
 }
 
+// ── Quick-create modal ───────────────────────────────────────────────────
+function QuickCreateModal({
+    state, onClose, accessibleProjects,
+}: {
+    state: QuickCreateState;
+    onClose: () => void;
+    accessibleProjects: AccessibleProject[];
+}) {
+    const open = !!state;
+
+    // Auto-select first project (and its first board) on mount.
+    const defaultProject = accessibleProjects[0];
+
+    const [type, setType] = useState<'board' | 'list'>('board');
+    const [title, setTitle] = useState('');
+    const [projectId, setProjectId] = useState<number | null>(defaultProject?.id ?? null);
+    const [boardId, setBoardId] = useState<number | null>(defaultProject?.boards[0]?.id ?? null);
+    const [taskListId, setTaskListId] = useState<number | null>(defaultProject?.task_lists[0]?.id ?? null);
+    const [dateInput, setDateInput] = useState('');
+    const [timeInput, setTimeInput] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (!state) return;
+        setTitle('');
+        setDateInput(state.date);
+        setTimeInput(state.time ?? '');
+        setSubmitting(false);
+        // Pick default project + child on open
+        const firstProject = accessibleProjects[0];
+        if (firstProject) {
+            setProjectId(firstProject.id);
+            setBoardId(firstProject.boards[0]?.id ?? null);
+            setTaskListId(firstProject.task_lists[0]?.id ?? null);
+            // Auto-pick the kind that's available
+            if (firstProject.boards.length === 0 && firstProject.task_lists.length > 0) setType('list');
+            else setType('board');
+        }
+    }, [state, accessibleProjects]);
+
+    const project = useMemo(() => accessibleProjects.find((p) => p.id === projectId) ?? null, [accessibleProjects, projectId]);
+
+    const canSubmit = title.trim()
+        && project
+        && dateInput
+        && ((type === 'board' && boardId) || (type === 'list' && taskListId));
+
+    const submit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!canSubmit || !project) return;
+        setSubmitting(true);
+
+        if (type === 'board') {
+            const board = project.boards.find((b) => b.id === boardId);
+            if (!board || !board.first_column_id) {
+                setSubmitting(false);
+                return;
+            }
+            const payload: Record<string, any> = {
+                title: title.trim(),
+                column_id: board.first_column_id,
+                due_date: dateInput,
+            };
+            if (timeInput) payload.due_time = timeInput;
+            router.post(
+                route('boards.items.store', [project.workspace!.slug, project.slug, board.slug]),
+                payload,
+                {
+                    preserveScroll: true,
+                    onSuccess: () => { setSubmitting(false); onClose(); },
+                    onError: () => setSubmitting(false),
+                },
+            );
+        } else {
+            const list = project.task_lists.find((l) => l.id === taskListId);
+            if (!list) {
+                setSubmitting(false);
+                return;
+            }
+            const payload: Record<string, any> = {
+                title: title.trim(),
+                due_date: dateInput,
+            };
+            if (timeInput) payload.due_time = timeInput;
+            router.post(
+                route('task-lists.items.store', [project.workspace!.slug, project.slug, list.slug]),
+                payload,
+                {
+                    preserveScroll: true,
+                    onSuccess: () => { setSubmitting(false); onClose(); },
+                    onError: () => setSubmitting(false),
+                },
+            );
+        }
+    };
+
+    if (!state) return null;
+
+    const hasBoards = project ? project.boards.length > 0 : false;
+    const hasLists = project ? project.task_lists.length > 0 : false;
+
+    return (
+        <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Quick create</DialogTitle>
+                    <DialogDescription>
+                        Add a new {type === 'board' ? 'board item' : 'list item'} on{' '}
+                        {new Date(state.date).toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        {state.time ? ` at ${state.time}` : ''}.
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={submit} className="space-y-4">
+                    {/* Type chooser */}
+                    <div className="inline-flex w-full p-[3px] bg-secondary border border-border rounded-md gap-[1px]">
+                        <button
+                            type="button"
+                            onClick={() => setType('board')}
+                            disabled={!hasBoards}
+                            className={cn(
+                                'flex-1 h-8 px-3 text-xs font-semibold rounded-[5px] transition-colors',
+                                type === 'board' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                                !hasBoards && 'opacity-40 cursor-not-allowed',
+                            )}
+                        >
+                            Board item
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setType('list')}
+                            disabled={!hasLists}
+                            className={cn(
+                                'flex-1 h-8 px-3 text-xs font-semibold rounded-[5px] transition-colors',
+                                type === 'list' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                                !hasLists && 'opacity-40 cursor-not-allowed',
+                            )}
+                        >
+                            List item
+                        </button>
+                    </div>
+
+                    {/* Title */}
+                    <div className="space-y-1.5">
+                        <Label htmlFor="qc-title">Title</Label>
+                        <Input
+                            id="qc-title"
+                            value={title}
+                            onChange={(e) => setTitle(e.target.value)}
+                            placeholder="What needs doing?"
+                            autoFocus
+                        />
+                    </div>
+
+                    {/* Project */}
+                    <div className="space-y-1.5">
+                        <Label>Project</Label>
+                        <Select
+                            value={projectId ? String(projectId) : ''}
+                            onValueChange={(v) => {
+                                const id = parseInt(v, 10);
+                                setProjectId(id);
+                                const p = accessibleProjects.find((x) => x.id === id);
+                                setBoardId(p?.boards[0]?.id ?? null);
+                                setTaskListId(p?.task_lists[0]?.id ?? null);
+                            }}
+                        >
+                            <SelectTrigger><SelectValue placeholder="Select project…" /></SelectTrigger>
+                            <SelectContent>
+                                {accessibleProjects.map((p) => (
+                                    <SelectItem key={p.id} value={String(p.id)}>
+                                        <span className="flex items-center gap-2">
+                                            <span className="size-2 rounded-full" style={{ background: p.color || '#94a3b8' }} />
+                                            {p.name}
+                                            {p.workspace && <span className="text-[10px] text-muted-foreground">· {p.workspace.name}</span>}
+                                        </span>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {/* Board OR List picker */}
+                    {type === 'board' && project && (
+                        <div className="space-y-1.5">
+                            <Label>Board</Label>
+                            <Select value={boardId ? String(boardId) : ''} onValueChange={(v) => setBoardId(parseInt(v, 10))}>
+                                <SelectTrigger><SelectValue placeholder="Select board…" /></SelectTrigger>
+                                <SelectContent>
+                                    {project.boards.map((b) => (
+                                        <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {project.boards.length === 0 && (
+                                <p className="text-xs text-muted-foreground">This project has no boards yet.</p>
+                            )}
+                        </div>
+                    )}
+                    {type === 'list' && project && (
+                        <div className="space-y-1.5">
+                            <Label>List</Label>
+                            <Select value={taskListId ? String(taskListId) : ''} onValueChange={(v) => setTaskListId(parseInt(v, 10))}>
+                                <SelectTrigger><SelectValue placeholder="Select list…" /></SelectTrigger>
+                                <SelectContent>
+                                    {project.task_lists.map((l) => (
+                                        <SelectItem key={l.id} value={String(l.id)}>{l.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {project.task_lists.length === 0 && (
+                                <p className="text-xs text-muted-foreground">This project has no lists yet.</p>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Date + time */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                            <Label htmlFor="qc-date">Date</Label>
+                            <Input id="qc-date" type="date" value={dateInput} onChange={(e) => setDateInput(e.target.value)} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="qc-time">Time</Label>
+                            <Input id="qc-time" type="time" value={timeInput} onChange={(e) => setTimeInput(e.target.value)} placeholder="(none)" />
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                        <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
+                        <Button type="submit" disabled={!canSubmit || submitting}>{submitting ? 'Creating…' : 'Create'}</Button>
+                    </div>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 // ── Multi-day bar (month view) ───────────────────────────────────────────
 function MultiDayBar({ event, span }: { event: CalendarEvent; span: number }) {
     const color = event.color || event.project?.color || '#0E83DC';
     return (
         <Link
             href={eventHref(event)}
+            data-event="true"
             className={cn(
                 'absolute left-0.5 right-0.5 h-[18px] rounded-md px-1.5 text-[11px] font-medium leading-[18px] truncate transition-shadow',
                 'hover:shadow-sm border border-transparent hover:border-border cursor-pointer',
@@ -411,6 +666,7 @@ function TimedEvent({
 
     return (
         <div
+            data-event="true"
             className="absolute z-10 group/event"
             style={{
                 top: displayTop,
@@ -490,7 +746,7 @@ function layoutLanes(items: { startMins: number; endMins: number }[]): { laneIdx
 }
 
 // ── Month view ───────────────────────────────────────────────────────────
-function MonthView({ events, date }: { events: CalendarEvent[]; date: string }) {
+function MonthView({ events, date, onQuickCreate }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void }) {
     const d = parseISO(date);
     const year = d.getFullYear();
     const month = d.getMonth();
@@ -548,11 +804,16 @@ function MonthView({ events, date }: { events: CalendarEvent[]; date: string }) 
                         <div
                             key={iso}
                             className={cn(
-                                'border-b border-r border-border p-1 min-h-[110px] transition-colors relative',
+                                'border-b border-r border-border p-1 min-h-[110px] transition-colors relative cursor-pointer hover:bg-muted/20',
                                 !inMonth && 'bg-muted/30 text-muted-foreground',
                             )}
                             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                             onDrop={(e) => handleDrop(e, iso)}
+                            onClick={(e) => {
+                                // Skip if click landed on an event chip
+                                if ((e.target as Element).closest('[data-event]')) return;
+                                onQuickCreate({ date: iso, time: null });
+                            }}
                         >
                             <div className={cn(
                                 'text-xs font-medium mb-0.5 w-6 h-6 flex items-center justify-center rounded-full',
@@ -591,11 +852,13 @@ function TimeGrid({
     allDayByCol,
     timedByCol,
     dateKey,
+    onQuickCreate,
 }: {
     columns: { key: string; label: string; iso: string }[];
     allDayByCol: Map<string, CalendarEvent[]>;
     timedByCol: Map<string, CalendarEvent[]>;
     dateKey: string;
+    onQuickCreate: (s: NonNullable<QuickCreateState>) => void;
 }) {
     const today = isoDate(new Date());
     const now = useNow();
@@ -636,9 +899,13 @@ function TimeGrid({
                         return (
                             <div
                                 key={col.key}
-                                className="border-l border-border p-1 min-h-[32px] space-y-0.5"
+                                className="border-l border-border p-1 min-h-[32px] space-y-0.5 cursor-pointer hover:bg-muted/30"
                                 onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                                 onDrop={(e) => handleDrop(e, col.iso)}
+                                onClick={(e) => {
+                                    if ((e.target as Element).closest('[data-event]')) return;
+                                    onQuickCreate({ date: col.iso, time: null });
+                                }}
                             >
                                 {items.map((ev) => <EventChip key={`${ev.type}-${ev.id}`} event={ev} compact />)}
                             </div>
@@ -685,18 +952,27 @@ function TimeGrid({
                                     {hours.map((h) => (
                                         <div
                                             key={h}
-                                            className="absolute inset-x-0 border-t border-border/60"
+                                            className="absolute inset-x-0 border-t border-border/60 cursor-pointer"
                                             style={{ top: (h - startHour) * HOUR_HEIGHT, height: HOUR_HEIGHT }}
                                             onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                                             onDrop={(e) => {
                                                 const rect = e.currentTarget.getBoundingClientRect();
                                                 const y = e.clientY - rect.top;
-                                                // Snap to SNAP_MINUTES (15-min increments by default).
                                                 const minsWithinHour = Math.round((y / HOUR_HEIGHT) * 60 / SNAP_MINUTES) * SNAP_MINUTES;
                                                 const totalMins = h * 60 + Math.min(minsWithinHour, 59);
                                                 const hh = String(Math.floor(totalMins / 60) % 24).padStart(2, '0');
                                                 const mm = String(totalMins % 60).padStart(2, '0');
                                                 handleDrop(e, col.iso, `${hh}:${mm}`);
+                                            }}
+                                            onClick={(e) => {
+                                                if ((e.target as Element).closest('[data-event]')) return;
+                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                const y = e.clientY - rect.top;
+                                                const minsWithinHour = Math.round((y / HOUR_HEIGHT) * 60 / SNAP_MINUTES) * SNAP_MINUTES;
+                                                const totalMins = h * 60 + Math.min(minsWithinHour, 59);
+                                                const hh = String(Math.floor(totalMins / 60) % 24).padStart(2, '0');
+                                                const mm = String(totalMins % 60).padStart(2, '0');
+                                                onQuickCreate({ date: col.iso, time: `${hh}:${mm}` });
                                             }}
                                         >
                                             {/* 15-min subdivision lines */}
@@ -756,7 +1032,7 @@ function TimeGrid({
 }
 
 // ── Week view ────────────────────────────────────────────────────────────
-function WeekView({ events, date }: { events: CalendarEvent[]; date: string }) {
+function WeekView({ events, date, onQuickCreate }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void }) {
     const d = parseISO(date);
     const dayOfWeek = (d.getDay() + 6) % 7;
     const monday = new Date(d);
@@ -780,11 +1056,11 @@ function WeekView({ events, date }: { events: CalendarEvent[]; date: string }) {
         else allDayByCol.get(key)!.push(ev);
     });
 
-    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} />;
+    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} onQuickCreate={onQuickCreate} />;
 }
 
 // ── Day view ─────────────────────────────────────────────────────────────
-function DayView({ events, date }: { events: CalendarEvent[]; date: string }) {
+function DayView({ events, date, onQuickCreate }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void }) {
     const d = parseISO(date);
     const iso = isoDate(d);
     const dayName = d.toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -802,12 +1078,13 @@ function DayView({ events, date }: { events: CalendarEvent[]; date: string }) {
         else allDayByCol.get(iso)!.push(ev);
     });
 
-    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} />;
+    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} onQuickCreate={onQuickCreate} />;
 }
 
 // ── Main page ────────────────────────────────────────────────────────────
-export default function CalendarIndex({ events, view, date, projectsForFilter, filters }: Props) {
+export default function CalendarIndex({ events, view, date, projectsForFilter, accessibleProjects, filters }: Props) {
     const d = parseISO(date);
+    const [quickCreate, setQuickCreate] = useState<QuickCreateState>(null);
     const headerLabel = view === 'month'
         ? d.toLocaleDateString('en', { month: 'long', year: 'numeric' })
         : view === 'week'
@@ -861,9 +1138,15 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, f
                     </div>
                 </div>
 
-                {view === 'month' && <MonthView events={events} date={date} />}
-                {view === 'week' && <WeekView events={events} date={date} />}
-                {view === 'day' && <DayView events={events} date={date} />}
+                {view === 'month' && <MonthView events={events} date={date} onQuickCreate={setQuickCreate} />}
+                {view === 'week' && <WeekView events={events} date={date} onQuickCreate={setQuickCreate} />}
+                {view === 'day' && <DayView events={events} date={date} onQuickCreate={setQuickCreate} />}
+
+                <QuickCreateModal
+                    state={quickCreate}
+                    onClose={() => setQuickCreate(null)}
+                    accessibleProjects={accessibleProjects}
+                />
             </div>
         </AppLayout>
     );
