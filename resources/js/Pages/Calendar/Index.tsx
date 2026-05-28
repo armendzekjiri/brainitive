@@ -89,6 +89,35 @@ function isoDate(d: Date): string {
     return `${y}-${m}-${day}`;
 }
 
+/**
+ * Decide the chip's status: 'done', 'overdue', or 'normal'. Overdue = not
+ * completed AND due_date in the past (or due_date===today AND due_time has passed).
+ */
+function eventStatus(event: CalendarEvent): 'done' | 'overdue' | 'normal' {
+    if (event.is_completed) return 'done';
+    const dueStr = event.due_date;
+    if (!dueStr) return 'normal';
+    const today = isoDate(new Date());
+    if (dueStr < today) return 'overdue';
+    if (dueStr === today && event.due_time) {
+        const now = new Date();
+        const nowMins = now.getHours() * 60 + now.getMinutes();
+        const [h, m] = event.due_time.substring(0, 5).split(':').map(Number);
+        const dueMins = h * 60 + (m || 0);
+        if (dueMins < nowMins) return 'overdue';
+    }
+    return 'normal';
+}
+
+/** Status → colors. Returns base hex (background tint) + text color. */
+function statusColor(event: CalendarEvent): { base: string; text: string } {
+    const s = eventStatus(event);
+    if (s === 'done') return { base: '#16A34A', text: '#16A34A' };       // green
+    if (s === 'overdue') return { base: '#DC2626', text: '#DC2626' };    // red
+    const proj = event.color || event.project?.color || '#0E83DC';
+    return { base: proj, text: proj };
+}
+
 function parseISO(s: string): Date {
     const [y, m, d] = s.split('-').map(Number);
     return new Date(y, m - 1, d);
@@ -273,7 +302,7 @@ function EventChip({
     /** When true (time-grid usage), the chip fills its parent's height. */
     fill?: boolean;
 }) {
-    const color = event.color || event.project?.color || '#0E83DC';
+    const { base: color } = statusColor(event);
     const timeLabel = event.start_time && event.due_time
         ? `${formatTime(event.start_time)}–${formatTime(event.due_time)}`
         : event.due_time
@@ -553,7 +582,7 @@ function QuickCreateModal({
 
 // ── Multi-day bar (month view) ───────────────────────────────────────────
 function MultiDayBar({ event, span }: { event: CalendarEvent; span: number }) {
-    const color = event.color || event.project?.color || '#0E83DC';
+    const { base: color } = statusColor(event);
     return (
         <Link
             href={eventHref(event)}

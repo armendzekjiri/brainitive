@@ -124,6 +124,9 @@ class TaskListController extends Controller
             'description' => 'nullable|array',
             'assignee_id' => 'nullable|integer|exists:users,id',
             'due_date' => 'nullable|date',
+            'due_time' => 'nullable|date_format:H:i',
+            'start_date' => 'nullable|date',
+            'start_time' => 'nullable|date_format:H:i',
             'recurrence' => 'nullable|in:daily,weekly,monthly,yearly',
         ]);
 
@@ -135,6 +138,9 @@ class TaskListController extends Controller
             'status' => 'todo',
             'assignee_id' => $validated['assignee_id'] ?? null,
             'due_date' => $validated['due_date'] ?? null,
+            'due_time' => $validated['due_time'] ?? null,
+            'start_date' => $validated['start_date'] ?? null,
+            'start_time' => $validated['start_time'] ?? null,
             'recurrence' => $validated['recurrence'] ?? null,
             'position' => $position,
             'created_by' => $request->user()->id,
