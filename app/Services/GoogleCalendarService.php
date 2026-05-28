@@ -3,8 +3,8 @@
 namespace App\Services;
 
 use App\Models\CalendarConnection;
+use Carbon\Carbon;
 use Illuminate\Http\Client\Response;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -128,6 +128,59 @@ class GoogleCalendarService
         if (! $resp->successful()) {
             Log::warning('Google event create failed', [
                 'connection_id' => $connection->id,
+                'status' => $resp->status(),
+                'body' => $resp->json(),
+            ]);
+            return null;
+        }
+        return $resp->json();
+    }
+
+    /**
+     * Patch an event on this calendar.
+     *
+     * Accepts a partial set of fields to change. For drag/resize: pass
+     * `start_date`, `start_time` (or null for all-day), `end_date`, `end_time`.
+     *
+     * @param  array{start_date?:string,start_time?:?string,end_date?:string,end_time?:?string,title?:string,description?:?string}  $data
+     */
+    public function updateEvent(CalendarConnection $connection, string $eventId, array $data): ?array
+    {
+        if (! $this->ensureFreshToken($connection)) {
+            return null;
+        }
+        $calId = rawurlencode($connection->external_calendar_id);
+        $body = [];
+        if (isset($data['title'])) $body['summary'] = $data['title'];
+        if (array_key_exists('description', $data)) $body['description'] = $data['description'];
+
+        $startDate = $data['start_date'] ?? null;
+        $startTime = $data['start_time'] ?? null;
+        $endDate = $data['end_date'] ?? $startDate;
+        $endTime = $data['end_time'] ?? null;
+
+        if ($startDate !== null) {
+            if ($startTime) {
+                $startDt = Carbon::parse("{$startDate} {$startTime}");
+                $endDt = $endTime
+                    ? Carbon::parse("{$endDate} {$endTime}")
+                    : $startDt->copy()->addMinutes(30);
+                $body['start'] = ['dateTime' => $startDt->toRfc3339String(), 'timeZone' => config('app.timezone')];
+                $body['end'] = ['dateTime' => $endDt->toRfc3339String(), 'timeZone' => config('app.timezone')];
+            } else {
+                $body['start'] = ['date' => $startDate];
+                $body['end'] = ['date' => Carbon::parse($endDate)->copy()->addDay()->toDateString()];
+            }
+        }
+
+        $resp = Http::withToken($connection->access_token)
+            ->acceptJson()
+            ->patch(self::API_BASE . "/calendars/{$calId}/events/{$eventId}", $body);
+
+        if (! $resp->successful()) {
+            Log::warning('Google event update failed', [
+                'connection_id' => $connection->id,
+                'event_id' => $eventId,
                 'status' => $resp->status(),
                 'body' => $resp->json(),
             ]);

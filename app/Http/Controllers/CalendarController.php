@@ -431,16 +431,31 @@ class CalendarController extends Controller
         return $dates;
     }
 
-    public function reschedule(Request $request)
+    public function reschedule(Request $request, GoogleCalendarService $googleService)
     {
         $validated = $request->validate([
-            'type' => 'required|in:board_item,task_list_item',
-            'id' => 'required|integer',
+            'type' => 'required|in:board_item,task_list_item,google_event',
+            'id' => 'required',
+            'connection_id' => 'required_if:type,google_event|nullable|integer|exists:calendar_connections,id',
             'due_date' => 'nullable|date',
             'due_time' => 'nullable|date_format:H:i',
             'start_date' => 'nullable|date',
             'start_time' => 'nullable|date_format:H:i',
         ]);
+
+        if ($validated['type'] === 'google_event') {
+            $connection = CalendarConnection::where('user_id', $request->user()->id)
+                ->findOrFail($validated['connection_id']);
+
+            $googleService->updateEvent($connection, (string) $validated['id'], [
+                'start_date' => $validated['start_date'] ?? $validated['due_date'] ?? null,
+                'start_time' => $validated['start_time'] ?? null,
+                'end_date' => $validated['due_date'] ?? $validated['start_date'] ?? null,
+                'end_time' => $validated['due_time'] ?? null,
+            ]);
+
+            return back();
+        }
 
         $projectIds = $this->accessibleProjectIds($request);
 

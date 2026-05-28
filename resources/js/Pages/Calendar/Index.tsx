@@ -159,6 +159,7 @@ function handleDrop(e: React.DragEvent, targetDate: string, targetTime?: string)
     if (parsed.is_recurring_instance) return; // can't reschedule a virtual occurrence
     const payload: Record<string, any> = { type: parsed.type, id: parsed.id, due_date: targetDate };
     if (targetTime) payload.due_time = targetTime;
+    if (parsed.connection_id) payload.connection_id = parsed.connection_id;
     router.patch(route('calendar.reschedule'), payload, { preserveScroll: true });
 }
 
@@ -357,7 +358,12 @@ function EventChip({
             data-event="true"
             draggable={!event.is_recurring_instance}
             onDragStart={(e) => {
-                e.dataTransfer.setData('application/calendar-event', JSON.stringify({ type: event.type, id: event.id, is_recurring_instance: event.is_recurring_instance }));
+                e.dataTransfer.setData('application/calendar-event', JSON.stringify({
+                    type: event.type,
+                    id: event.id,
+                    is_recurring_instance: event.is_recurring_instance,
+                    connection_id: event.connection_id ?? null,
+                }));
                 e.dataTransfer.effectAllowed = 'move';
             }}
             className={cn(
@@ -769,18 +775,16 @@ function TimedEvent({
             const startMins = Math.round(liveTop / pxPerMin);
             const durationMins = Math.round(liveHeight / pxPerMin);
             const endMins = Math.min(startMins + durationMins, 1440 - 1);
-            router.patch(
-                route('calendar.reschedule'),
-                {
-                    type: event.type,
-                    id: event.id,
-                    due_date: dateIso,
-                    start_date: dateIso,
-                    start_time: minutesToHHMM(startMins),
-                    due_time: minutesToHHMM(endMins),
-                },
-                { preserveScroll: true },
-            );
+            const payload: Record<string, any> = {
+                type: event.type,
+                id: event.id,
+                due_date: dateIso,
+                start_date: dateIso,
+                start_time: minutesToHHMM(startMins),
+                due_time: minutesToHHMM(endMins),
+            };
+            if (event.connection_id) payload.connection_id = event.connection_id;
+            router.patch(route('calendar.reschedule'), payload, { preserveScroll: true });
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
