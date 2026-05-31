@@ -168,54 +168,65 @@ class CalendarConnectionController extends Controller
         foreach ((array) ($validated['external_calendar_ids'] ?? []) as $calId) {
             $cal = $calendarsById->get($calId);
             if (! $cal) continue;
-            CalendarConnection::updateOrCreate(
-                [
-                    'user_id' => Auth::id(),
-                    'provider' => $pending['provider'],
-                    'kind' => 'calendar',
-                    'account_email' => $pending['account_email'],
-                    'external_calendar_id' => $cal['id'],
-                ],
-                array_merge($tokenFields, [
-                    'external_calendar_name' => $cal['summary'],
-                    'external_calendar_color' => $cal['backgroundColor'],
-                ]),
-            );
+            $this->upsertConnection($pending, 'calendar', $cal['id'], array_merge($tokenFields, [
+                'external_calendar_name' => $cal['summary'],
+                'external_calendar_color' => $cal['backgroundColor'],
+            ]));
         }
 
         $tasksById = collect($pending['task_lists'] ?? [])->keyBy('id');
         foreach ((array) ($validated['external_task_list_ids'] ?? []) as $listId) {
             $list = $tasksById->get($listId);
             if (! $list) continue;
-            CalendarConnection::updateOrCreate(
-                [
-                    'user_id' => Auth::id(),
-                    'provider' => $pending['provider'],
-                    'kind' => 'tasks',
-                    'account_email' => $pending['account_email'],
-                    'external_calendar_id' => $list['id'],
-                ],
-                array_merge($tokenFields, [
-                    'external_calendar_name' => $list['title'],
-                    'external_calendar_color' => null,
-                ]),
-            );
+            $this->upsertConnection($pending, 'tasks', $list['id'], array_merge($tokenFields, [
+                'external_calendar_name' => $list['title'],
+                'external_calendar_color' => null,
+            ]));
         }
 
         // When the same Google account is reconnected with a refreshed scope,
         // propagate the new tokens to all of that account's existing rows so
-        // refresh-token rotation stays in sync.
-        CalendarConnection::where('user_id', Auth::id())
+        // refresh-token rotation stays in sync. We must iterate and save each
+        // model rather than a mass query-builder update(), because the bulk
+        // update bypasses the `encrypted` cast and would write plaintext tokens
+        // into columns that are read back as encrypted payloads (causing a
+        // DecryptException on the next access).
+        $existing = CalendarConnection::where('user_id', Auth::id())
             ->where('account_email', $pending['account_email'])
-            ->update([
-                'access_token' => $pending['access_token'],
-                'refresh_token' => $pending['refresh_token'],
-                'token_expires_at' => now()->addSeconds($pending['expires_in'] - 60),
-            ]);
+            ->get();
+        foreach ($existing as $row) {
+            $row->access_token = $pending['access_token'];
+            $row->refresh_token = $pending['refresh_token'];
+            $row->token_expires_at = now()->addSeconds($pending['expires_in'] - 60);
+            $row->save();
+        }
 
         $request->session()->forget('calendar_connect_pending');
 
         return redirect()->route('calendar.index')->with('status', 'Connected.');
+    }
+
+    /**
+     * Find-or-create a connection for the authenticated user, reviving a
+     * previously soft-deleted row if one exists. updateOrCreate() only looks at
+     * non-trashed rows, so without this a disconnect-then-reconnect would try to
+     * INSERT over the still-present soft-deleted row and hit the unique index.
+     */
+    private function upsertConnection(array $pending, string $kind, string $externalId, array $attributes): void
+    {
+        $connection = CalendarConnection::withTrashed()->firstOrNew([
+            'user_id' => Auth::id(),
+            'provider' => $pending['provider'],
+            'kind' => $kind,
+            'account_email' => $pending['account_email'],
+            'external_calendar_id' => $externalId,
+        ]);
+
+        if ($connection->trashed()) {
+            $connection->restore();
+        }
+
+        $connection->fill($attributes)->save();
     }
 
     /** Toggle a connection's active state. */
