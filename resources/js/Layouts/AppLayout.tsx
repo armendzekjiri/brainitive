@@ -1386,11 +1386,13 @@ function ProjectItem({
 function AppSidebar({
     workspaces,
     currentWorkspace,
+    currentProjectId,
     onOpenSearch,
     onOpenHelp,
 }: {
     workspaces: Workspace[];
     currentWorkspace?: Workspace & { projects: (Project & { boards: Board[]; pages?: PageType[]; helpdesks?: Helpdesk[] })[] };
+    currentProjectId?: number | null;
     onOpenSearch?: () => void;
     onOpenHelp?: () => void;
 }) {
@@ -1419,9 +1421,9 @@ function AppSidebar({
 
     // Selected project state persisted in localStorage
     const [activeProjectId, setActiveProjectId] = useState<number | null>(() => {
-        if (typeof window === 'undefined') return null;
-        const saved = localStorage.getItem(`sidebar-active-project-${currentWorkspace?.id}`);
-        return saved ? parseInt(saved, 10) : null;
+        if (typeof window === 'undefined' || !currentWorkspace) return currentProjectId ?? null;
+        const saved = localStorage.getItem(`sidebar-active-project-${currentWorkspace.id}`);
+        return saved ? parseInt(saved, 10) : currentProjectId ?? null;
     });
 
     // Resolve the active project object
@@ -1429,20 +1431,24 @@ function AppSidebar({
 
     // Auto-detect project from URL on mount and navigation
     useEffect(() => {
+        if (!currentWorkspace) return;
+
         const detected = detectActiveProject();
-        if (detected) {
-            setActiveProjectId(detected.id);
-            if (currentWorkspace) {
-                localStorage.setItem(`sidebar-active-project-${currentWorkspace.id}`, String(detected.id));
+        const saved = localStorage.getItem(`sidebar-active-project-${currentWorkspace.id}`);
+        const savedProjectId = saved ? parseInt(saved, 10) : null;
+        const validProjectIds = new Set(projects.map((project) => project.id));
+        const rememberedProjectId = currentProjectId && validProjectIds.has(currentProjectId) ? currentProjectId : null;
+        const storedProjectId = savedProjectId && validProjectIds.has(savedProjectId) ? savedProjectId : null;
+        const existingProjectId = activeProjectId && validProjectIds.has(activeProjectId) ? activeProjectId : null;
+        const nextProjectId = detected?.id ?? rememberedProjectId ?? storedProjectId ?? existingProjectId ?? projects[0]?.id ?? null;
+
+        if (nextProjectId) {
+            if (nextProjectId !== activeProjectId) {
+                setActiveProjectId(nextProjectId);
             }
-        } else if (!activeProject && projects.length > 0) {
-            // Fallback: select first project if nothing saved/detected
-            setActiveProjectId(projects[0].id);
-            if (currentWorkspace) {
-                localStorage.setItem(`sidebar-active-project-${currentWorkspace.id}`, String(projects[0].id));
-            }
+            localStorage.setItem(`sidebar-active-project-${currentWorkspace.id}`, String(nextProjectId));
         }
-    }, [currentPageUuid, projects.length]);
+    }, [activeProjectId, currentProjectId, currentWorkspace?.id, detectActiveProject, projects]);
 
     const handleSelectProject = (project: Project & { boards: Board[]; pages?: PageType[]; helpdesks?: Helpdesk[] }) => {
         setActiveProjectId(project.id);
@@ -1485,7 +1491,7 @@ function AppSidebar({
                                 href={currentWorkspace ? route('workspaces.show', currentWorkspace.slug) : route('workspaces.index')}
                                 className={cn(
                                     'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-                                    route().current() === 'workspaces.show' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                    route().current() === 'workspaces.show' || route().current() === 'workspaces.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                                 )}
                             >
                                 <Home className="size-4" />
@@ -1959,6 +1965,7 @@ export default function AppLayout({ children, title }: Props) {
                 <AppSidebar
                     workspaces={workspaces}
                     currentWorkspace={currentWorkspace}
+                    currentProjectId={currentProjectId}
                     onOpenSearch={onOpenSearch}
                     onOpenHelp={() => setHelpModalOpen(true)}
                 />

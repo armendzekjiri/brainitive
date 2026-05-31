@@ -11,6 +11,10 @@ use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
+    private const LAST_WORKSPACE_SLUG_SESSION_KEY = 'last_sidebar_workspace_slug';
+
+    private const LAST_PROJECT_ID_SESSION_KEY = 'last_sidebar_project_id';
+
     /**
      * The root template that is loaded on the first page visit.
      *
@@ -81,6 +85,58 @@ class HandleInertiaRequests extends Middleware
         };
     }
 
+    private function workspaceSlugFromRoute(Request $request): ?string
+    {
+        $workspace = $request->route('workspace');
+
+        if ($workspace instanceof Workspace) {
+            return $workspace->slug;
+        }
+
+        return is_string($workspace) && $workspace !== '' ? $workspace : null;
+    }
+
+    private function shouldUseLastSidebarContext(Request $request): bool
+    {
+        return $request->routeIs(
+            'workspaces.index',
+            'my-work.index',
+            'calendar.index',
+            'notifications.page',
+        );
+    }
+
+    private function sidebarWorkspace(string $workspaceSlug): ?Workspace
+    {
+        return Workspace::where('slug', $workspaceSlug)
+            ->withCount('projects')
+            ->with(['projects' => function ($query) {
+                $query->with([
+                    'boards' => function ($q) {
+                        $q->select('id', 'project_id', 'name', 'slug', 'type')
+                            ->with(['columns' => function ($c) {
+                                $c->select('id', 'board_id', 'name', 'color', 'position')
+                                    ->orderBy('position');
+                            }]);
+                    },
+                    'taskLists' => function ($q) {
+                        $q->select('id', 'project_id', 'name', 'slug', 'position')
+                            ->orderBy('position');
+                    },
+                    'helpdesks' => function ($q) {
+                        $q->select('id', 'project_id', 'name', 'slug', 'description', 'position')
+                            ->orderBy('position');
+                    },
+                    'pages' => function ($q) {
+                        $q->with(['children' => self::pageTreeRecursive(7)])
+                            ->orderBy('type', 'desc')
+                            ->orderBy('position');
+                    },
+                ]);
+            }])
+            ->first();
+    }
+
     /**
      * Define the props that are shared by default.
      *
@@ -100,45 +156,32 @@ class HandleInertiaRequests extends Middleware
                 $workspaces = $user->workspaces()->withCount('projects')->get();
             }
 
-            // Determine current workspace from route
-            $workspaceSlug = $request->route('workspace');
-            if ($workspaceSlug instanceof Workspace) {
-                $workspaceSlug = $workspaceSlug->slug;
+            $routeWorkspaceSlug = $this->workspaceSlugFromRoute($request);
+            $workspaceSlug = $routeWorkspaceSlug;
+
+            if (! $workspaceSlug && $this->shouldUseLastSidebarContext($request)) {
+                $workspaceSlug = $request->session()->get(self::LAST_WORKSPACE_SLUG_SESSION_KEY);
+            }
+
+            if ($workspaceSlug && ! $workspaces->firstWhere('slug', $workspaceSlug)) {
+                $workspaceSlug = null;
+                $request->session()->forget([
+                    self::LAST_WORKSPACE_SLUG_SESSION_KEY,
+                    self::LAST_PROJECT_ID_SESSION_KEY,
+                ]);
             }
 
             if ($workspaceSlug) {
-                $currentWorkspace = Workspace::where('slug', $workspaceSlug)
-                    ->withCount('projects')
-                    ->with(['projects' => function ($query) {
-                        $query->with([
-                            'boards' => function ($q) {
-                                $q->select('id', 'project_id', 'name', 'slug', 'type')
-                                    ->with(['columns' => function ($c) {
-                                        $c->select('id', 'board_id', 'name', 'color', 'position')
-                                            ->orderBy('position');
-                                    }]);
-                            },
-                            'taskLists' => function ($q) {
-                                $q->select('id', 'project_id', 'name', 'slug', 'position')
-                                    ->orderBy('position');
-                            },
-                            'helpdesks' => function ($q) {
-                                $q->select('id', 'project_id', 'name', 'slug', 'description', 'position')
-                                    ->orderBy('position');
-                            },
-                            'pages' => function ($q) {
-                                $q->with(['children' => self::pageTreeRecursive(7)])
-                                    ->orderBy('type', 'desc')
-                                    ->orderBy('position');
-                            },
-                        ]);
-                    }])
-                    ->first();
+                $currentWorkspace = $this->sidebarWorkspace($workspaceSlug);
 
                 // Only show projects the user has access to (workspace admin sees all; others only assigned projects)
                 if ($currentWorkspace && $user) {
                     $accessible = $currentWorkspace->projects->filter(fn ($project) => $user->hasProjectAccess($project))->values();
                     $currentWorkspace->setRelation('projects', $accessible);
+
+                    if ($routeWorkspaceSlug) {
+                        $request->session()->put(self::LAST_WORKSPACE_SLUG_SESSION_KEY, $currentWorkspace->slug);
+                    }
                 }
             }
         }
@@ -150,10 +193,11 @@ class HandleInertiaRequests extends Middleware
             $boardParam = $request->route('board');
             if ($projectParam) {
                 $project = is_object($projectParam)
-                    ? $projectParam
+                    ? $currentWorkspace->projects->firstWhere('id', $projectParam->id)
                     : $currentWorkspace->projects->firstWhere('slug', $projectParam);
                 if ($project) {
                     $currentProjectId = $project->id;
+                    $request->session()->put(self::LAST_PROJECT_ID_SESSION_KEY, $project->id);
                     if ($boardParam) {
                         $board = is_object($boardParam)
                             ? $boardParam
@@ -162,6 +206,19 @@ class HandleInertiaRequests extends Middleware
                             $currentBoardId = $board->id;
                         }
                     }
+                }
+            }
+
+            if (! $currentProjectId) {
+                $lastProjectId = $request->session()->get(self::LAST_PROJECT_ID_SESSION_KEY);
+                $project = $lastProjectId
+                    ? $currentWorkspace->projects->firstWhere('id', (int) $lastProjectId)
+                    : null;
+
+                if ($project) {
+                    $currentProjectId = $project->id;
+                } elseif ($lastProjectId) {
+                    $request->session()->forget(self::LAST_PROJECT_ID_SESSION_KEY);
                 }
             }
         }
