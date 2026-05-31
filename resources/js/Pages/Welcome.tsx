@@ -288,7 +288,7 @@ export default function Welcome({
     return (
         <>
             <Head title="Brainitive – Workspaces, Boards & Wiki" />
-            <div className="min-h-screen overflow-x-hidden bg-[#F4F6F8] text-[#485E72]">
+            <div className="min-h-screen overflow-x-hidden bg-background text-[#485E72] dark:text-slate-100">
                 {/* ═══ Ambient background blobs ═══ */}
                 <div className="fixed inset-0 pointer-events-none overflow-hidden">
                     <div
@@ -307,7 +307,7 @@ export default function Welcome({
                 {/* ═══ Sticky Nav ═══ */}
                 <nav
                     className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled
-                            ? 'bg-white/80 backdrop-blur-xl shadow-[0_1px_3px_rgba(72,94,114,0.08)] border-b border-[#C0C5C0]/40'
+                            ? 'bg-card/80 backdrop-blur-xl shadow-[0_1px_3px_rgba(72,94,114,0.08)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.3)] border-b border-border/70'
                             : 'bg-transparent'
                         }`}
                 >
@@ -327,28 +327,28 @@ export default function Welcome({
                         <div className="hidden md:flex items-center gap-5">
                             <a
                                 href="#features"
-                                className="inline-flex items-center gap-1.5 text-sm font-medium text-[#485E72]/70 hover:text-[#0E83DC] transition-colors"
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC] transition-colors"
                             >
                                 <Layers className="h-3.5 w-3.5" />
                                 Features
                             </a>
                             <a
                                 href="#pricing"
-                                className="inline-flex items-center gap-1.5 text-sm font-medium text-[#485E72]/70 hover:text-[#0E83DC] transition-colors"
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC] transition-colors"
                             >
                                 <CreditCard className="h-3.5 w-3.5" />
                                 Pricing
                             </a>
                             <Link
                                 href="/privacy"
-                                className="inline-flex items-center gap-1.5 text-sm font-medium text-[#485E72]/70 hover:text-[#0E83DC] transition-colors"
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC] transition-colors"
                             >
                                 <ShieldCheck className="h-3.5 w-3.5" />
                                 Privacy
                             </Link>
                             <Link
                                 href="/terms"
-                                className="inline-flex items-center gap-1.5 text-sm font-medium text-[#485E72]/70 hover:text-[#0E83DC] transition-colors"
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC] transition-colors"
                             >
                                 <Scale className="h-3.5 w-3.5" />
                                 Terms
@@ -368,7 +368,7 @@ export default function Welcome({
                                 <>
                                     <Link
                                         href={route('login')}
-                                        className="hidden sm:inline text-sm font-semibold text-[#485E72] hover:text-[#0E83DC] transition-colors"
+                                        className="hidden sm:inline text-sm font-semibold text-[#485E72] dark:text-slate-100 hover:text-[#0E83DC] transition-colors"
                                     >
                                         Log in
                                     </Link>
@@ -385,7 +385,7 @@ export default function Welcome({
                             {/* Mobile menu toggle */}
                             <button
                                 type="button"
-                                className="md:hidden p-2 text-[#485E72]/70 hover:text-[#0E83DC] transition-colors"
+                                className="md:hidden p-2 text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC] transition-colors"
                                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                                 aria-label="Toggle menu"
                             >
@@ -400,11 +400,11 @@ export default function Welcome({
 
                     {/* Mobile dropdown */}
                     {mobileMenuOpen && (
-                        <div className="md:hidden bg-white/95 backdrop-blur-xl border-b border-[#C0C5C0]/30 px-6 py-4 space-y-3">
+                        <div className="md:hidden bg-card/95 backdrop-blur-xl border-b border-border/60 px-6 py-4 space-y-3">
                             <a
                                 href="#features"
                                 onClick={() => setMobileMenuOpen(false)}
-                                className="flex items-center gap-2 text-sm font-medium text-[#485E72]/70 hover:text-[#0E83DC]"
+                                className="flex items-center gap-2 text-sm font-medium text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC]"
                             >
                                 <Layers className="h-3.5 w-3.5" />
                                 Features
@@ -412,21 +412,21 @@ export default function Welcome({
                             <a
                                 href="#pricing"
                                 onClick={() => setMobileMenuOpen(false)}
-                                className="flex items-center gap-2 text-sm font-medium text-[#485E72]/70 hover:text-[#0E83DC]"
+                                className="flex items-center gap-2 text-sm font-medium text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC]"
                             >
                                 <CreditCard className="h-3.5 w-3.5" />
                                 Pricing
                             </a>
                             <Link
                                 href="/privacy"
-                                className="flex items-center gap-2 text-sm font-medium text-[#485E72]/70 hover:text-[#0E83DC]"
+                                className="flex items-center gap-2 text-sm font-medium text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC]"
                             >
                                 <ShieldCheck className="h-3.5 w-3.5" />
                                 Privacy
                             </Link>
                             <Link
                                 href="/terms"
-                                className="flex items-center gap-2 text-sm font-medium text-[#485E72]/70 hover:text-[#0E83DC]"
+                                className="flex items-center gap-2 text-sm font-medium text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC]"
                             >
                                 <Scale className="h-3.5 w-3.5" />
                                 Terms
@@ -434,7 +434,7 @@ export default function Welcome({
                             {!auth?.user && (
                                 <Link
                                     href={route('login')}
-                                    className="block text-sm font-medium text-[#485E72] hover:text-[#0E83DC]"
+                                    className="block text-sm font-medium text-[#485E72] dark:text-slate-100 hover:text-[#0E83DC]"
                                 >
                                     Log in
                                 </Link>
@@ -447,14 +447,14 @@ export default function Welcome({
                 <header className="relative z-10 pt-32 sm:pt-40 pb-20 sm:pb-28 px-6">
                     <div className="max-w-4xl mx-auto text-center">
                         {/* Badge */}
-                        <div className="inline-flex items-center gap-2 rounded-full border border-[#0E83DC]/20 bg-white/70 backdrop-blur-sm px-4 py-1.5 text-xs font-semibold text-[#0E83DC] mb-8 animate-fade-in shadow-sm">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-[#0E83DC]/20 bg-card/70 backdrop-blur-sm px-4 py-1.5 text-xs font-semibold text-[#0E83DC] mb-8 animate-fade-in shadow-sm">
                             <Sparkles className="h-3.5 w-3.5" />
                             All-in-one workspace platform
                         </div>
 
 
 
-                        <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-[#485E72] animate-fade-in-up leading-[1.1]">
+                        <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-[#485E72] dark:text-slate-100 animate-fade-in-up leading-[1.1]">
                             Your workspace for{' '}
                             <span className="relative inline-block">
                                 <span className="bg-gradient-to-r from-[#0E83DC] to-[#69A748] bg-clip-text text-transparent">
@@ -482,7 +482,7 @@ export default function Welcome({
                         </h1>
 
                         <p
-                            className="mt-6 text-lg sm:text-xl text-[#485E72]/70 max-w-2xl mx-auto animate-fade-in-up leading-relaxed"
+                            className="mt-6 text-lg sm:text-xl text-[#485E72]/70 dark:text-slate-300 max-w-2xl mx-auto animate-fade-in-up leading-relaxed"
                             style={{ animationDelay: '0.15s' }}
                         >
                             Brainitive brings workspaces, Kanban boards, and a full wiki
@@ -506,7 +506,7 @@ export default function Welcome({
                                         </Link>
                                         <Link
                                             href={route('login')}
-                                            className="inline-flex items-center rounded-2xl border-2 border-[#C0C5C0]/60 bg-white/60 backdrop-blur-sm px-7 py-4 text-base font-bold text-[#485E72] hover:border-[#0E83DC]/40 hover:bg-white transition-all"
+                                            className="inline-flex items-center rounded-2xl border-2 border-border bg-card/60 backdrop-blur-sm px-7 py-4 text-base font-bold text-[#485E72] dark:text-slate-100 hover:border-[#0E83DC]/40 hover:bg-card transition-all"
                                         >
                                             Log in
                                         </Link>
@@ -514,17 +514,17 @@ export default function Welcome({
                                     {(canLoginWithGoogle || canLoginWithGitHub) && (
                                         <>
                                             <div className="flex items-center gap-3 w-full max-w-xs">
-                                                <span className="flex-1 h-px bg-[#C0C5C0]/50" />
-                                                <span className="text-sm font-medium text-[#485E72]/60">
+                                                <span className="flex-1 h-px bg-border" />
+                                                <span className="text-sm font-medium text-[#485E72]/60 dark:text-slate-400">
                                                     or
                                                 </span>
-                                                <span className="flex-1 h-px bg-[#C0C5C0]/50" />
+                                                <span className="flex-1 h-px bg-border" />
                                             </div>
                                             <div className="flex flex-wrap items-center justify-center gap-3">
                                                 {canLoginWithGoogle && (
                                                     <a
                                                         href={route('login.google')}
-                                                        className="inline-flex items-center justify-center gap-3 rounded-2xl border-2 border-[#C0C5C0]/50 bg-white px-7 py-4 text-base font-bold text-[#485E72] shadow-lg shadow-[#485E72]/5 hover:bg-gray-50 hover:border-[#C0C5C0] transition-all hover:scale-[1.02]"
+                                                        className="inline-flex items-center justify-center gap-3 rounded-2xl border-2 border-border/80 bg-card px-7 py-4 text-base font-bold text-[#485E72] dark:text-slate-100 shadow-lg shadow-black/5 hover:bg-muted hover:border-border transition-all hover:scale-[1.02]"
                                                     >
                                                         <svg
                                                             className="h-6 w-6 shrink-0"
@@ -554,7 +554,7 @@ export default function Welcome({
                                                 {canLoginWithGitHub && (
                                                     <a
                                                         href={route('login.github')}
-                                                        className="inline-flex items-center justify-center gap-3 rounded-2xl border-2 border-[#C0C5C0]/50 bg-white px-7 py-4 text-base font-bold text-[#485E72] shadow-lg shadow-[#485E72]/5 hover:bg-gray-50 hover:border-[#C0C5C0] transition-all hover:scale-[1.02]"
+                                                        className="inline-flex items-center justify-center gap-3 rounded-2xl border-2 border-border/80 bg-card px-7 py-4 text-base font-bold text-[#485E72] dark:text-slate-100 shadow-lg shadow-black/5 hover:bg-muted hover:border-border transition-all hover:scale-[1.02]"
                                                     >
                                                         <svg
                                                             className="h-6 w-6 shrink-0"
@@ -593,12 +593,12 @@ export default function Welcome({
                             {stats.map((s) => (
                                 <div
                                     key={s.label}
-                                    className="text-center rounded-2xl bg-white/60 backdrop-blur-sm border border-[#C0C5C0]/30 py-5 px-3 shadow-sm"
+                                    className="text-center rounded-2xl bg-card/60 backdrop-blur-sm border border-border/60 py-5 px-3 shadow-sm"
                                 >
                                     <div className="text-2xl sm:text-3xl font-bold text-[#0E83DC]">
                                         {s.value}
                                     </div>
-                                    <div className="text-xs sm:text-sm text-[#485E72]/60 mt-1 font-medium">
+                                    <div className="text-xs sm:text-sm text-[#485E72]/60 dark:text-slate-400 mt-1 font-medium">
                                         {s.label}
                                     </div>
                                 </div>
@@ -618,10 +618,10 @@ export default function Welcome({
                                 <Globe className="h-3.5 w-3.5" />
                                 Features
                             </div>
-                            <h2 className="text-3xl sm:text-4xl font-bold text-[#485E72] mb-4">
+                            <h2 className="text-3xl sm:text-4xl font-bold text-[#485E72] dark:text-slate-100 mb-4">
                                 Everything you need to ship
                             </h2>
-                            <p className="text-[#485E72]/60 max-w-xl mx-auto text-lg">
+                            <p className="text-[#485E72]/60 dark:text-slate-400 max-w-xl mx-auto text-lg">
                                 Workspaces, Kanban boards, wiki pages, and rich editors
                                 &mdash; all in a single product.
                             </p>
@@ -633,7 +633,7 @@ export default function Welcome({
                                     key={feature.title}
                                     delay={i * 80}
                                 >
-                                    <div className="group h-full rounded-2xl border border-[#C0C5C0]/30 bg-white/70 backdrop-blur-sm p-6 transition-all duration-300 hover:bg-white hover:shadow-xl hover:shadow-[#485E72]/[0.06] hover:border-[#C0C5C0]/50 hover:-translate-y-1">
+                                    <div className="group h-full rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm p-6 transition-all duration-300 hover:bg-card hover:shadow-xl hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20 hover:border-border/80 hover:-translate-y-1">
                                         <div
                                             className="flex h-12 w-12 items-center justify-center rounded-xl mb-5 transition-transform group-hover:scale-110"
                                             style={{
@@ -646,10 +646,10 @@ export default function Welcome({
                                                 strokeWidth={1.8}
                                             />
                                         </div>
-                                        <h3 className="font-bold text-[#485E72] mb-2 text-base">
+                                        <h3 className="font-bold text-[#485E72] dark:text-slate-100 mb-2 text-base">
                                             {feature.title}
                                         </h3>
-                                        <p className="text-sm leading-relaxed text-[#485E72]/60">
+                                        <p className="text-sm leading-relaxed text-[#485E72]/60 dark:text-slate-400">
                                             {feature.description}
                                         </p>
                                     </div>
@@ -683,7 +683,7 @@ export default function Welcome({
                                 Real-time feel
                             </div>
                             <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-white/90 text-sm font-medium">
-                                <Palette className="h-4 w-4 text-[#C0C5C0]" />{' '}
+                                <Palette className="h-4 w-4 text-white/60" />{' '}
                                 Excalidraw built-in
                             </div>
                         </div>
@@ -701,10 +701,10 @@ export default function Welcome({
                                 <Sparkles className="h-3.5 w-3.5" />
                                 Pricing
                             </div>
-                            <h2 className="text-3xl sm:text-4xl font-bold text-[#485E72] mb-4">
+                            <h2 className="text-3xl sm:text-4xl font-bold text-[#485E72] dark:text-slate-100 mb-4">
                                 Simple, transparent pricing
                             </h2>
-                            <p className="text-[#485E72]/60 max-w-xl mx-auto text-lg">
+                            <p className="text-[#485E72]/60 dark:text-slate-400 max-w-xl mx-auto text-lg">
                                 Start free, upgrade when you need more workspaces or
                                 storage. All prices in euros (EUR).
                             </p>
@@ -717,27 +717,27 @@ export default function Welcome({
                                 <RevealSection delay={0}>
                                     <Link
                                         href={freePlan.href}
-                                        className="block w-full rounded-2xl border border-[#C0C5C0]/30 bg-white/70 backdrop-blur-sm p-6 sm:p-8 transition-all duration-300 hover:bg-white hover:shadow-lg hover:shadow-[#485E72]/[0.06] hover:-translate-y-0.5"
+                                        className="block w-full rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm p-6 sm:p-8 transition-all duration-300 hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20 hover:-translate-y-0.5"
                                     >
                                         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
                                             <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
                                                 <div>
-                                                    <h3 className="font-bold text-xl text-[#485E72]">
+                                                    <h3 className="font-bold text-xl text-[#485E72] dark:text-slate-100">
                                                         {freePlan.name}
                                                     </h3>
                                                     <div className="mt-1 flex items-baseline gap-1">
-                                                        <span className="text-3xl font-bold text-[#485E72]">
+                                                        <span className="text-3xl font-bold text-[#485E72] dark:text-slate-100">
                                                             €{freePlan.price}
                                                         </span>
-                                                        <span className="text-[#485E72]/50 text-sm">
+                                                        <span className="text-[#485E72]/50 dark:text-slate-400 text-sm">
                                                             {freePlan.period}
                                                         </span>
                                                     </div>
-                                                    <p className="mt-1 text-sm text-[#485E72]/60">
+                                                    <p className="mt-1 text-sm text-[#485E72]/60 dark:text-slate-400">
                                                         {freePlan.description}
                                                     </p>
                                                 </div>
-                                                <ul className="flex flex-wrap gap-x-6 gap-y-2 sm:gap-y-1 text-sm text-[#485E72]/70">
+                                                <ul className="flex flex-wrap gap-x-6 gap-y-2 sm:gap-y-1 text-sm text-[#485E72]/70 dark:text-slate-300">
                                                     {freePlan.features.map((f) => (
                                                         <li key={f} className="flex items-center gap-2">
                                                             <Check className="h-4 w-4 shrink-0 text-[#69A748]" />
@@ -765,8 +765,8 @@ export default function Welcome({
                                 >
                                     <div
                                         className={`h-full rounded-2xl border p-6 flex flex-col transition-all duration-300 hover:-translate-y-1 ${plan.highlighted
-                                                ? 'border-[#0E83DC]/40 bg-white ring-2 ring-[#0E83DC]/20 shadow-xl shadow-[#0E83DC]/10'
-                                                : 'border-[#C0C5C0]/30 bg-white/70 backdrop-blur-sm hover:bg-white hover:shadow-lg hover:shadow-[#485E72]/[0.06]'
+                                                ? 'border-[#0E83DC]/40 bg-card ring-2 ring-[#0E83DC]/20 shadow-xl shadow-[#0E83DC]/10'
+                                                : 'border-border/60 bg-card/70 backdrop-blur-sm hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20'
                                             }`}
                                     >
                                         {plan.highlighted && (
@@ -774,18 +774,18 @@ export default function Welcome({
                                                 Most popular
                                             </div>
                                         )}
-                                        <h3 className="font-bold text-lg text-[#485E72]">
+                                        <h3 className="font-bold text-lg text-[#485E72] dark:text-slate-100">
                                             {plan.name}
                                         </h3>
                                         <div className="mt-3 flex items-baseline gap-1">
-                                            <span className="text-3xl font-bold text-[#485E72]">
+                                            <span className="text-3xl font-bold text-[#485E72] dark:text-slate-100">
                                                 €{plan.price}
                                             </span>
-                                            <span className="text-[#485E72]/50 text-sm">
+                                            <span className="text-[#485E72]/50 dark:text-slate-400 text-sm">
                                                 {plan.period}
                                             </span>
                                         </div>
-                                        <p className="mt-2 text-sm text-[#485E72]/60">
+                                        <p className="mt-2 text-sm text-[#485E72]/60 dark:text-slate-400">
                                             {plan.description}
                                         </p>
                                         <ul className="mt-6 space-y-3 flex-1">
@@ -795,7 +795,7 @@ export default function Welcome({
                                                     className="flex items-start gap-2.5 text-sm"
                                                 >
                                                     <Check className="h-4 w-4 shrink-0 mt-0.5 text-[#69A748]" />
-                                                    <span className="text-[#485E72]/70">
+                                                    <span className="text-[#485E72]/70 dark:text-slate-300">
                                                         {f}
                                                     </span>
                                                 </li>
@@ -820,18 +820,18 @@ export default function Welcome({
                         <RevealSection delay={320} className="mt-8">
                             <a
                                 href="mailto:hello@brainitive.com?subject=Enterprise%20plan"
-                                className="block w-full rounded-2xl border-2 border-[#C0C5C0]/40 bg-white/70 backdrop-blur-sm p-6 sm:p-8 transition-all duration-300 hover:border-[#0E83DC]/30 hover:bg-white hover:shadow-lg hover:shadow-[#485E72]/[0.06] group"
+                                className="block w-full rounded-2xl border-2 border-border/70 bg-card/70 backdrop-blur-sm p-6 sm:p-8 transition-all duration-300 hover:border-[#0E83DC]/30 hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20 group"
                             >
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                                     <div>
-                                        <h3 className="font-bold text-xl text-[#485E72]">
+                                        <h3 className="font-bold text-xl text-[#485E72] dark:text-slate-100">
                                             Custom for Enterprise
                                         </h3>
-                                        <p className="mt-1 text-sm text-[#485E72]/60">
+                                        <p className="mt-1 text-sm text-[#485E72]/60 dark:text-slate-400">
                                             Custom limits, SLA, dedicated success manager &amp; integrations. Contact us for a quote.
                                         </p>
                                     </div>
-                                    <span className="inline-flex items-center gap-2 rounded-xl border-2 border-[#C0C5C0]/50 px-5 py-2.5 text-sm font-bold text-[#485E72] group-hover:border-[#0E83DC]/40 group-hover:text-[#0E83DC] transition-all shrink-0">
+                                    <span className="inline-flex items-center gap-2 rounded-xl border-2 border-border/80 px-5 py-2.5 text-sm font-bold text-[#485E72] dark:text-slate-100 group-hover:border-[#0E83DC]/40 group-hover:text-[#0E83DC] transition-all shrink-0">
                                         Contact us
                                         <ChevronRight className="h-4 w-4" />
                                     </span>
@@ -858,7 +858,7 @@ export default function Welcome({
                                     </p>
                                     <Link
                                         href={route('register')}
-                                        className="group inline-flex items-center gap-2 rounded-2xl bg-white px-8 py-4 text-base font-bold text-[#0E83DC] shadow-xl hover:shadow-2xl transition-all hover:scale-[1.02]"
+                                        className="group inline-flex items-center gap-2 rounded-2xl bg-card px-8 py-4 text-base font-bold text-[#0E83DC] shadow-xl hover:shadow-2xl transition-all hover:scale-[1.02]"
                                     >
                                         Create free account
                                         <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
@@ -870,7 +870,7 @@ export default function Welcome({
                 )}
 
                 {/* ═══ Footer ═══ */}
-                <footer className="relative z-10 border-t border-[#C0C5C0]/30 bg-white/40 backdrop-blur-sm">
+                <footer className="relative z-10 border-t border-border/60 bg-card/40 backdrop-blur-sm">
                     <div className="max-w-6xl mx-auto px-6 py-12">
                         <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
                             <div className="flex items-center gap-3">
@@ -884,37 +884,37 @@ export default function Welcome({
                             <div className="flex flex-wrap items-center justify-center gap-6 text-sm">
                                 <a
                                     href="#features"
-                                    className="text-[#485E72]/60 hover:text-[#0E83DC] transition-colors font-medium"
+                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
                                 >
                                     Features
                                 </a>
                                 <a
                                     href="#pricing"
-                                    className="text-[#485E72]/60 hover:text-[#0E83DC] transition-colors font-medium"
+                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
                                 >
                                     Pricing
                                 </a>
                                 <Link
                                     href="/privacy"
-                                    className="text-[#485E72]/60 hover:text-[#0E83DC] transition-colors font-medium"
+                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
                                 >
                                     Privacy Policy
                                 </Link>
                                 <Link
                                     href="/terms"
-                                    className="text-[#485E72]/60 hover:text-[#0E83DC] transition-colors font-medium"
+                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
                                 >
                                     Terms of Service
                                 </Link>
                                 <Link
                                     href="/cookies"
-                                    className="text-[#485E72]/60 hover:text-[#0E83DC] transition-colors font-medium"
+                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
                                 >
                                     Cookie Policy
                                 </Link>
                                 <Link
                                     href="/refund"
-                                    className="text-[#485E72]/60 hover:text-[#0E83DC] transition-colors font-medium"
+                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
                                 >
                                     Refund Policy
                                 </Link>
@@ -927,14 +927,14 @@ export default function Welcome({
                                             ),
                                         )
                                     }
-                                    className="text-[#485E72]/60 hover:text-[#0E83DC] transition-colors font-medium"
+                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
                                 >
                                     Cookie settings
                                 </button>
                             </div>
                         </div>
-                        <div className="mt-8 pt-6 border-t border-[#C0C5C0]/20 flex flex-col sm:flex-row items-center justify-between gap-4">
-                            <p className="text-xs text-[#485E72]/40">
+                        <div className="mt-8 pt-6 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <p className="text-xs text-[#485E72]/40 dark:text-slate-500">
                                 &copy; {new Date().getFullYear()} Brainitive.
                                 All rights reserved.
                             </p>
