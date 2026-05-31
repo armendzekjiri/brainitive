@@ -6,6 +6,7 @@ use App\Mcp\Tools\Concerns\InteractsWithBrainitive;
 use App\Models\Item;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
+use App\Support\Mcp\PageContentConverter;
 use App\Support\Mcp\ResourceLocator;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -29,6 +30,8 @@ class CreateBoardItemTool extends Tool
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'column_id' => 'nullable|integer',
+            'due_date' => 'nullable|date_format:Y-m-d',
+            'due_time' => 'nullable|date_format:H:i',
         ]);
 
         $user = $request->user();
@@ -63,12 +66,19 @@ class CreateBoardItemTool extends Tool
 
         $item = $board->items()->create([
             'title' => $validated['title'],
-            'description' => $validated['description'] ?? null,
+            // Board descriptions render through the Lexical editor as HTML, so
+            // convert the assistant's Markdown to HTML (plain text would not
+            // display as the card body).
+            'description' => ! empty($validated['description'])
+                ? PageContentConverter::markdownToHtml($validated['description'])
+                : null,
             'project_id' => $project->id,
             'column_id' => $column->id,
             'item_type_id' => ItemType::where('is_default', true)->first()?->id,
             'priority_id' => ItemPriority::where('is_default', true)->first()?->id,
             'key' => $project->getNextItemKey(),
+            'due_date' => $validated['due_date'] ?? null,
+            'due_time' => $validated['due_time'] ?? null,
             'created_by' => $user->id,
             'reporter_id' => $user->id,
             'position' => $maxPosition + 1,
@@ -107,8 +117,10 @@ class CreateBoardItemTool extends Tool
             'project' => $schema->string()->description('The project slug.')->required(),
             'board' => $schema->string()->description('The board slug.')->required(),
             'title' => $schema->string()->description('The card title.')->required(),
-            'description' => $schema->string()->description('Optional description.'),
+            'description' => $schema->string()->description('Optional card body as Markdown (converted to the editor format automatically).'),
             'column_id' => $schema->integer()->description('Optional target column id (from get_board). Defaults to the first column.'),
+            'due_date' => $schema->string()->description('Optional due date YYYY-MM-DD.'),
+            'due_time' => $schema->string()->description('Optional due time HH:MM (24h).'),
         ];
     }
 }

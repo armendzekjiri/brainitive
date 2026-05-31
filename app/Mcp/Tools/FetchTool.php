@@ -92,7 +92,7 @@ class FetchTool extends Tool
     private function extract(mixed $model, string $type): array
     {
         return match ($type) {
-            'page' => [$model->name, PageContentConverter::docToMarkdown($model->content)],
+            'page' => [$model->name, PageContentConverter::htmlToMarkdown(PageContentConverter::pageContentToHtml($model->content))],
             'item' => [$model->title ?: $model->key, trim(($model->key ? $model->key.' — ' : '').strip_tags((string) $model->description))],
             'project' => [$model->name, (string) $model->description],
             'workspace' => [$model->name, (string) $model->description],

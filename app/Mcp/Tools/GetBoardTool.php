@@ -39,7 +39,7 @@ class GetBoardTool extends Tool
 
         $items = $board->items()->whereNull('parent_id')
             ->orderBy('position')
-            ->get(['id', 'key', 'title', 'column_id', 'assigned_to']);
+            ->get(['id', 'key', 'title', 'column_id', 'assigned_to', 'due_date']);
 
         $columns = $board->columns()->orderBy('position')->get(['id', 'name', 'slug'])
             ->map(fn ($col) => [
@@ -49,6 +49,7 @@ class GetBoardTool extends Tool
                     'id' => $i->id,
                     'key' => $i->key,
                     'title' => $i->title,
+                    'due_date' => $i->due_date?->format('Y-m-d'),
                 ])->values()->all(),
             ])
             ->all();
@@ -73,6 +74,7 @@ class GetBoardTool extends Tool
                     'id' => $schema->integer(),
                     'key' => $schema->string(),
                     'title' => $schema->string(),
+                    'due_date' => $schema->string(),
                 ])),
             ])),
         ];

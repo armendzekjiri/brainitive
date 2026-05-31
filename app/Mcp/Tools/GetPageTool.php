@@ -53,7 +53,7 @@ class GetPageTool extends Tool
         return Response::structured([
             'title' => $page->name,
             'type' => $page->type,
-            'markdown' => PageContentConverter::docToMarkdown($page->content),
+            'markdown' => PageContentConverter::htmlToMarkdown(PageContentConverter::pageContentToHtml($page->content)),
             'location' => ResourceLocator::locate($page),
         ]);
     }

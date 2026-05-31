@@ -11,8 +11,10 @@ use App\Mcp\Tools\CreatePageTool;
 use App\Mcp\Tools\CreateSnippetCollectionTool;
 use App\Mcp\Tools\CreateSnippetTool;
 use App\Mcp\Tools\CreateTaskTool;
+use App\Mcp\Tools\DeleteBoardItemTool;
 use App\Mcp\Tools\DeleteCalendarEventTool;
 use App\Mcp\Tools\FetchTool;
+use App\Mcp\Tools\GetBoardItemTool;
 use App\Mcp\Tools\GetBoardTool;
 use App\Mcp\Tools\GetPageTool;
 use App\Mcp\Tools\GetProjectTool;
@@ -29,6 +31,7 @@ use App\Mcp\Tools\ListTaskListsTool;
 use App\Mcp\Tools\ListWorkspacesTool;
 use App\Mcp\Tools\MoveBoardItemTool;
 use App\Mcp\Tools\SearchTool;
+use App\Mcp\Tools\UpdateBoardItemTool;
 use App\Mcp\Tools\UpdateCalendarEventTool;
 use App\Mcp\Tools\UpdateGoogleTaskTool;
 use App\Mcp\Tools\UpdatePageTool;
@@ -103,8 +106,11 @@ class BrainitiveServer extends Server
         // Boards
         ListBoardsTool::class,
         GetBoardTool::class,
+        GetBoardItemTool::class,
         CreateBoardItemTool::class,
+        UpdateBoardItemTool::class,
         MoveBoardItemTool::class,
+        DeleteBoardItemTool::class,
         // Snippets
         ListSnippetsTool::class,
         CreateSnippetCollectionTool::class,
