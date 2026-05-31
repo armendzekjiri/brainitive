@@ -19,6 +19,7 @@ use App\Policies\WorkspacePolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Passport\Passport;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -36,6 +37,14 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Vite::prefetch(concurrency: 3);
+
+        // OAuth 2.1 (Passport) — powers the remote MCP server connect flow for
+        // ChatGPT / Claude. The consent screen shown during "Add connector" is
+        // our branded view; tokens are long-lived so connectors stay linked.
+        Passport::authorizationView(fn ($parameters) => view('mcp.authorize', $parameters));
+        Passport::tokensExpireIn(now()->addDays(30));
+        Passport::refreshTokensExpireIn(now()->addDays(60));
+        Passport::personalAccessTokensExpireIn(now()->addYear());
 
         // Register policies
         Gate::policy(Workspace::class, WorkspacePolicy::class);

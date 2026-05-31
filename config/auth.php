@@ -40,6 +40,13 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // OAuth 2.1 guard (Laravel Passport). Used by the remote MCP server
+        // (routes/ai.php) and the CLI/API token endpoints (routes/api.php).
+        'api' => [
+            'driver' => 'passport',
+            'provider' => 'users',
+        ],
     ],
 
     /*

@@ -9,11 +9,11 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-// Public: issue a Sanctum token from email + password
+// Public: issue a Passport personal access token from email + password
 Route::post('/cli/login', [CliController::class, 'login']);
 
-// Protected endpoints — require a valid Sanctum API token
-Route::middleware('auth:sanctum')->group(function () {
+// Protected endpoints — require a valid Passport API token (Bearer)
+Route::middleware('auth:api')->group(function () {
     Route::get('/cli/me', [CliController::class, 'me']);
     Route::delete('/cli/logout', [CliController::class, 'logout']);
 
