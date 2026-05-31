@@ -87,7 +87,7 @@ export default function Login({
             {(canLoginWithGoogle || canLoginWithGitHub) && (
                 <div className="relative my-4">
                     <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t border-[#C0C5C0]" />
+                        <span className="w-full border-t border-border" />
                     </div>
                     <div className="relative flex justify-center text-xs">
                         <span className="bg-background px-2 text-muted-foreground">
@@ -108,6 +108,7 @@ export default function Login({
                         value={data.email}
                         className="mt-1 block w-full"
                         autoComplete="username"
+                        placeholder="name@example.com"
                         isFocused={true}
                         onChange={(e) => setData('email', e.target.value)}
                     />
@@ -125,6 +126,7 @@ export default function Login({
                         value={data.password}
                         className="mt-1 block w-full"
                         autoComplete="current-password"
+                        placeholder="Enter your password"
                         onChange={(e) => setData('password', e.target.value)}
                     />
 
