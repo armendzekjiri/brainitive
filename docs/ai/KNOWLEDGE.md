@@ -11,6 +11,21 @@ what it is, and what to do about it. Promote recurring plan-file gotchas up here
 
 ## Environment & setup gotchas
 
+### Brainitive project keys are Brainitive cards
+`BRAI-*` keys in this project (for example `BRAI-41`) identify cards on the Brainitive
+project board, not Jira issues. When a user references one, start with the Brainitive MCP
+board tools. Only check Jira/Atlassian if the user explicitly asks for that external
+tracker.
+
+### SQLite-incompatible migrations
+- `2026_02_03_145210_add_member_role_to_workspace_user_table` uses
+  `ALTER TABLE … DROP CONSTRAINT`, which SQLite doesn't support. Breaks `php artisan
+  migrate` on a fresh DB **and** all `RefreshDatabase` feature tests (which use `:memory:`).
+  **Workaround:** recreate the `workspace_user` table with `'member'` in the CHECK
+  constraint, then fake the migration.
+- `2026_02_23_153119_extend_bookmarks_icon_for_url` uses MySQL `MODIFY` syntax with no
+  SQLite branch. SQLite ignores varchar length, so this can be safely faked locally.
+
 ### Email verification blocks login in dev
 Registration requires email verification. With the default `MAIL_MAILER=log`, the
 verification email is written to `storage/logs/`. To bypass during development:
