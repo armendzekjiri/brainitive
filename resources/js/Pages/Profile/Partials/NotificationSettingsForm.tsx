@@ -15,16 +15,29 @@ export default function NotificationSettingsForm({ className = '' }: { className
     const { props } = usePage<PageProps>();
     const vapidPublicKey = props.push?.vapidPublicKey ?? null;
 
-    const [supported, setSupported] = useState(true);
+    // 'ok' once we can actually offer the toggle; otherwise an explanation.
+    type Reason = 'ok' | 'insecure' | 'unsupported' | 'unconfigured';
+    const [reason, setReason] = useState<Reason>('ok');
     const [enabled, setEnabled] = useState(false);
     const [busy, setBusy] = useState(false);
     const [blocked, setBlocked] = useState(false);
 
     useEffect(() => {
-        if (!isPushSupported() || !vapidPublicKey) {
-            setSupported(false);
+        // Service workers + Push require a secure context (HTTPS, or localhost).
+        if (typeof window !== 'undefined' && window.isSecureContext === false) {
+            setReason('insecure');
             return;
         }
+        if (!isPushSupported()) {
+            setReason('unsupported');
+            return;
+        }
+        if (!vapidPublicKey) {
+            // Browser is fine; the server just hasn't been given VAPID keys.
+            setReason('unconfigured');
+            return;
+        }
+        setReason('ok');
         setBlocked(pushPermission() === 'denied');
         isSubscribed().then(setEnabled);
     }, [vapidPublicKey]);
@@ -54,12 +67,16 @@ export default function NotificationSettingsForm({ className = '' }: { className
         }
     }
 
-    if (!supported) {
+    if (reason !== 'ok') {
+        const message =
+            reason === 'insecure'
+                ? 'Push notifications need a secure connection (HTTPS). Open this site over https:// and try again.'
+                : reason === 'unconfigured'
+                  ? 'Push notifications aren’t set up on the server yet. Ask an administrator to configure the VAPID keys.'
+                  : 'Your browser doesn’t support push notifications.';
         return (
             <div className={className}>
-                <p className="text-sm text-muted-foreground">
-                    Your browser doesn’t support push notifications.
-                </p>
+                <p className="text-sm text-muted-foreground">{message}</p>
             </div>
         );
     }
