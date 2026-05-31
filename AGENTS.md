@@ -1,5 +1,16 @@
 # Brainitive — Agent Instructions
 
+> **Single source of truth:** architecture, conventions, patterns, workflow, and shared
+> knowledge live in [`docs/ai/`](docs/ai/README.md). Read that first. This file only covers
+> Cursor Cloud / Codex environment specifics.
+>
+> - [`docs/ai/ARCHITECTURE.md`](docs/ai/ARCHITECTURE.md) — module map + file pointers
+> - [`docs/ai/CONVENTIONS.md`](docs/ai/CONVENTIONS.md) — coding rules & patterns
+> - [`docs/ai/WORKFLOW.md`](docs/ai/WORKFLOW.md) — how we work, definition of done
+> - [`docs/ai/skills/`](docs/ai/skills) — task recipes
+> - [`docs/ai/KNOWLEDGE.md`](docs/ai/KNOWLEDGE.md) — decisions & gotchas
+> - [`docs/ai/tasks/`](docs/ai/tasks) — one plan file per branch
+
 ## Cursor Cloud specific instructions
 
 ### Overview

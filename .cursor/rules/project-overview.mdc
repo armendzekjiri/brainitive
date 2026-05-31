@@ -6,6 +6,13 @@ alwaysApply: true
 
 # Brainitive — Project Overview
 
+> Shared AI knowledge base (kept in sync across all agents): `docs/ai/ARCHITECTURE.md`
+> (module map), `docs/ai/CONVENTIONS.md` (rules), `docs/ai/WORKFLOW.md` (how we work),
+> `docs/ai/skills/` (recipes), `docs/ai/KNOWLEDGE.md` (gotchas), `docs/ai/tasks/` (per-branch
+> plans). These Cursor rules mirror that source — when conventions change, update `docs/ai/`
+> too. Note: the per-module model/policy counts in these rules are illustrative; the
+> authoritative module map is `docs/ai/ARCHITECTURE.md`.
+
 Brainitive is an all-in-one workspace platform for teams: workspaces, Kanban boards, wiki/docs, rich editors, whiteboard (Excalidraw), and bookmarks. It's a Laravel 12 + Inertia.js + React 18 + TypeScript monolith.
 
 ## Brand Colors
