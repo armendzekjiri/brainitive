@@ -41,10 +41,11 @@ type Filters = {
 };
 
 type QuickCreateState = { date: string; time: string | null } | null;
+type CalendarView = 'month' | 'week' | 'day';
 
 interface Props extends PageProps {
     events: CalendarEvent[];
-    view: 'month' | 'week' | 'day';
+    view: CalendarView;
     date: string;
     projectsForFilter: ProjectFilterOption[];
     accessibleProjects: AccessibleProject[];
@@ -53,7 +54,7 @@ interface Props extends PageProps {
 }
 
 const VIEW_LABELS = { month: 'Month', week: 'Week', day: 'Day' } as const;
-const VIEWS: ('month' | 'week' | 'day')[] = ['month', 'week', 'day'];
+const VIEWS: CalendarView[] = ['month', 'week', 'day'];
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function eventHref(e: CalendarEvent): string {
@@ -126,7 +127,7 @@ function parseISO(s: string): Date {
     return new Date(y, m - 1, d);
 }
 
-function navigateCalendar(view: string, date: string, dir: -1 | 0 | 1, filters: Filters) {
+function navigateCalendar(view: CalendarView, date: string, dir: -1 | 0 | 1, filters: Filters) {
     const d = new Date(date);
     let target: string;
     if (dir === 0) {
@@ -138,6 +139,10 @@ function navigateCalendar(view: string, date: string, dir: -1 | 0 | 1, filters: 
         target = isoDate(d);
     }
     router.get(route('calendar.index'), { view, date: target, ...filtersToParams(filters) }, { preserveState: true });
+}
+
+function saveCalendarView(view: CalendarView) {
+    void window.axios.patch(route('calendar.view.update'), { view }).catch(() => {});
 }
 
 function filtersToParams(f: Filters): Record<string, any> {
@@ -182,7 +187,7 @@ function FilterBar({
     projectsForFilter: ProjectFilterOption[];
     connections: CalendarConnectionRow[];
     filters: Filters;
-    view: string;
+    view: CalendarView;
     date: string;
 }) {
     const [open, setOpen] = useState(false);
@@ -1823,6 +1828,13 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
         if (kind === 'task') setGoogleTask({ id, connectionId });
         else setGoogleEvent({ id, connectionId });
     };
+    const changeView = (nextView: CalendarView) => {
+        if (nextView !== view) {
+            saveCalendarView(nextView);
+        }
+
+        router.get(route('calendar.index'), { view: nextView, date, ...filtersToParams(filters) }, { preserveState: true });
+    };
 
     // If the URL has ?picking=google, fetch the pending session state and show picker.
     useEffect(() => {
@@ -1872,7 +1884,7 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
                             return (
                                 <button
                                     key={v}
-                                    onClick={() => router.get(route('calendar.index'), { view: v, date, ...filtersToParams(filters) }, { preserveState: true })}
+                                    onClick={() => changeView(v)}
                                     className={cn(
                                         'h-[22px] px-[9px] text-[11.5px] font-semibold text-muted-foreground rounded-[5px] inline-flex items-center gap-[5px] transition-colors',
                                         view === v && 'bg-card text-foreground shadow-[0_1px_0_rgba(20,32,44,0.04),0_1px_2px_rgba(0,0,0,0.04)]',

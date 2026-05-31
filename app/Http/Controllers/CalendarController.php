@@ -2,11 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Board;
 use App\Models\CalendarConnection;
 use App\Models\Item;
 use App\Models\Project;
-use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Services\GoogleCalendarService;
 use App\Services\GoogleTasksService;
@@ -17,6 +15,8 @@ use Inertia\Response;
 
 class CalendarController extends Controller
 {
+    private const CALENDAR_VIEWS = ['month', 'week', 'day'];
+
     private function accessibleProjectIds(Request $request): array
     {
         $user = $request->user();
@@ -42,9 +42,24 @@ class CalendarController extends Controller
             ->all();
     }
 
+    private function resolveView(Request $request): string
+    {
+        $requestedView = $request->get('view');
+        if (in_array($requestedView, self::CALENDAR_VIEWS, true)) {
+            return $requestedView;
+        }
+
+        $savedView = $request->user()->calendar_view;
+        if (in_array($savedView, self::CALENDAR_VIEWS, true)) {
+            return $savedView;
+        }
+
+        return 'month';
+    }
+
     public function index(Request $request, GoogleCalendarService $googleService, GoogleTasksService $tasksService): Response
     {
-        $view = $request->get('view', 'month');
+        $view = $this->resolveView($request);
         $date = Carbon::parse($request->get('date', now()->toDateString()));
 
         // Filters
@@ -80,7 +95,7 @@ class CalendarController extends Controller
                 })
                 ->where(function ($q) use ($rangeStart, $rangeEnd) {
                     $q->whereBetween('start_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
-                      ->orWhereBetween('due_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()]);
+                        ->orWhereBetween('due_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()]);
                 })
                 ->with([
                     'board:id,project_id,name,slug',
@@ -104,8 +119,8 @@ class CalendarController extends Controller
                 ->when(! $showCompleted, fn ($q) => $q->where('status', '!=', 'done'))
                 ->where(function ($q) use ($rangeStart, $rangeEnd) {
                     $q->whereBetween('start_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
-                      ->orWhereBetween('due_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
-                      ->orWhereNotNull('recurrence'); // include recurring items for projection
+                        ->orWhereBetween('due_date', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
+                        ->orWhereNotNull('recurrence'); // include recurring items for projection
                 })
                 ->with([
                     'taskList:id,project_id,name,slug',
@@ -171,7 +186,7 @@ class CalendarController extends Controller
             $baseEvent = [
                 'id' => $tli->id,
                 'type' => 'task_list_item',
-                'key' => $proj->key . '-L' . $tli->id,
+                'key' => $proj->key.'-L'.$tli->id,
                 'title' => $tli->title,
                 'start_time' => $tli->start_time,
                 'due_time' => $tli->due_time,
@@ -340,6 +355,19 @@ class CalendarController extends Controller
         ]);
     }
 
+    public function updateView(Request $request)
+    {
+        $validated = $request->validate([
+            'view' => 'required|in:month,week,day',
+        ]);
+
+        $request->user()->update([
+            'calendar_view' => $validated['view'],
+        ]);
+
+        return response()->noContent();
+    }
+
     /** Convert a Google Tasks task into our normalized CalendarEvent shape. */
     private function mapGoogleTask(CalendarConnection $conn, array $gt): array
     {
@@ -447,6 +475,7 @@ class CalendarController extends Controller
             if ($base->betweenIncluded($rangeStart->copy()->startOfDay(), $rangeEnd->copy()->endOfDay())) {
                 $dates->push($base);
             }
+
             return $dates;
         }
 

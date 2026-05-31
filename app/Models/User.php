@@ -36,6 +36,7 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
         'bio',
         'phone',
         'onboarding_state',
+        'calendar_view',
     ];
 
     protected $appends = ['avatar_display'];
