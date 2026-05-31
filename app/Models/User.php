@@ -12,12 +12,13 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Passport\Contracts\OAuthenticatable;
 use Laravel\Passport\HasApiTokens;
+use NotificationChannels\WebPush\HasPushSubscriptions;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasApiTokens, HasFactory, HasRoles, Notifiable;
+    use HasApiTokens, HasFactory, HasPushSubscriptions, HasRoles, Notifiable;
 
     /**
      * The attributes that are mass assignable.

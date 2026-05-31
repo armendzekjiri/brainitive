@@ -3,12 +3,13 @@
 namespace App\Notifications;
 
 use App\Models\User;
+use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 
 class MentionNotification extends Notification
 {
-    use Queueable;
+    use Queueable, SendsWebPush;
 
     public function __construct(
         public readonly string $contextType, // 'item' or 'page'
@@ -19,7 +20,16 @@ class MentionNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        return ['database'];
+        return $this->withWebPush($notifiable, ['database']);
+    }
+
+    public function toWebPush(object $notifiable, $notification)
+    {
+        return $this->webPush(
+            "{$this->actor->name} mentioned you",
+            "In {$this->contextType}: {$this->contextTitle}",
+            $this->contextUrl,
+        );
     }
 
     public function toDatabase(object $notifiable): array

@@ -6,13 +6,14 @@ use App\Models\Ticket;
 use App\Models\TicketReply;
 use App\Models\TicketContact;
 use App\Models\User;
+use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Notification;
 
 class TicketReplyNotification extends Notification implements ShouldQueue
 {
-    use Queueable;
+    use Queueable, SendsWebPush;
 
     public function __construct(
         public readonly Ticket $ticket,
@@ -22,14 +23,32 @@ class TicketReplyNotification extends Notification implements ShouldQueue
 
     /**
      * Get the notification's delivery channels.
-     * Contact: email only (queued). Users: database + email.
+     * Contact: email only (queued). Users: database + email + push.
      */
     public function via(object $notifiable): array
     {
         if ($notifiable instanceof TicketContact) {
             return ['mail'];
         }
-        return ['database', 'mail'];
+        return $this->withWebPush($notifiable, ['database', 'mail']);
+    }
+
+    public function toWebPush(object $notifiable, $notification)
+    {
+        $helpdesk = $this->ticket->helpdesk;
+        $project = $helpdesk->project;
+        $workspace = $project->workspace;
+        $url = route('tickets.show', [$workspace->slug, $project->slug, $helpdesk->slug, $this->ticket->id]);
+
+        $actorName = $this->author instanceof User
+            ? $this->author->name
+            : ($this->author instanceof TicketContact ? ($this->author->name ?: $this->author->email) : 'Support');
+
+        return $this->webPush(
+            "Reply on {$this->ticket->key}",
+            "{$actorName}: " . \Illuminate\Support\Str::limit(strip_tags($this->reply->body), 80),
+            $url,
+        );
     }
 
     /**

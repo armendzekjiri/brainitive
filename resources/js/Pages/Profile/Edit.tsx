@@ -3,6 +3,7 @@ import { PageProps } from '@/types';
 import { Head } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import DeleteUserForm from './Partials/DeleteUserForm';
+import NotificationSettingsForm from './Partials/NotificationSettingsForm';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm';
 
@@ -31,6 +32,16 @@ export default function Edit({
                             status={status}
                             className="max-w-xl"
                         />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Notifications</CardTitle>
+                        <CardDescription>Control browser push notifications for this device.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <NotificationSettingsForm className="max-w-xl" />
                     </CardContent>
                 </Card>
 

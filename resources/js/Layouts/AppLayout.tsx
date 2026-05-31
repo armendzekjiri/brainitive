@@ -9,6 +9,7 @@ import { CommandPalette, CmdIcon, PaletteCommand } from '@/components/CommandPal
 import { QuickCreateSnippetModal } from '@/components/QuickCreateSnippetModal';
 import { QuickCreateBookmarkModal } from '@/components/QuickCreateBookmarkModal';
 import { GlobalStickyNotes } from '@/components/GlobalStickyNotes';
+import { PushPrompt } from '@/components/PushPrompt';
 import { SidebarResizer, getInitialSidebarWidth } from '@/components/SidebarResizer';
 import { HelpModal } from '@/components/HelpModal';
 import { NotificationsDropdown } from '@/components/NotificationsDropdown';
@@ -2005,6 +2006,7 @@ export default function AppLayout({ children, title }: Props) {
             <HelpModal open={helpModalOpen} onOpenChange={setHelpModalOpen} />
             <GlobalStickyNotes />
             <WelcomeModal />
+            <PushPrompt />
             <Toaster richColors position="bottom-right" closeButton />
         </GlobalCreateModalContext.Provider>
     );
