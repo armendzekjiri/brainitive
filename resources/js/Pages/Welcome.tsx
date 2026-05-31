@@ -19,6 +19,8 @@ import {
     Shield,
     Menu,
     X,
+    Moon,
+    Sun,
     Bookmark,
     Layers,
     LifeBuoy,
@@ -28,6 +30,8 @@ import {
     Scale,
     Cookie,
 } from 'lucide-react';
+import { useTheme } from '@/hooks/useTheme';
+import { Button } from '@/components/ui/button';
 import { CookieConsent } from '@/components/CookieConsent';
 
 /*
@@ -105,6 +109,7 @@ export default function Welcome({
 }>) {
     const [scrolled, setScrolled] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const { resolvedTheme, toggleTheme } = useTheme();
 
     useEffect(() => {
         const onScroll = () => setScrolled(window.scrollY > 20);
@@ -356,6 +361,15 @@ export default function Welcome({
                         </div>
 
                         <div className="flex items-center gap-3">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-8 text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC]"
+                                onClick={toggleTheme}
+                                title={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                            >
+                                {resolvedTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                            </Button>
                             {auth?.user ? (
                                 <Link
                                     href={route('dashboard')}
