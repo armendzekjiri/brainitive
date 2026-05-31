@@ -2,113 +2,123 @@
 
 namespace App\Support\Mcp;
 
+use DOMDocument;
+use DOMNode;
 use Illuminate\Support\Str;
 
 /**
- * Converts between Markdown (what an AI assistant naturally produces) and the
- * TipTap / ProseMirror document JSON that Brainitive pages store:
+ * Converts between Markdown (what an AI assistant produces) and the HTML that
+ * Brainitive's Lexical editor reads/writes.
  *
- *   { "type": "doc", "content": [ { "type": "paragraph", ... }, ... ] }
+ *  - Pages store content as { "type": "lexical", "html": "<h1>…</h1>…" }
+ *    (see resources/js/Pages/Pages/Show.tsx → extractHtmlContent / save).
+ *  - Board item descriptions store the raw HTML string directly
+ *    (see resources/js/components/item/ItemDetail.tsx).
  *
- * The page editor is TipTap StarterKit (see resources/js/components/editor/
- * PageEditor.tsx), so the node names here match StarterKit's schema.
- *
- * Supported block nodes: heading, paragraph, bulletList, orderedList,
- * blockquote, codeBlock, horizontalRule. Supported inline marks: bold,
- * italic, code, link. Anything else degrades to plain paragraphs so a round
- * trip never loses the user's text.
+ * So markdownToHtml() feeds writes and htmlToMarkdown() feeds reads. A legacy
+ * docToMarkdown() is kept for pages created before the Lexical migration, whose
+ * content is the old TipTap/ProseMirror { type:'doc', content:[…] } shape.
  */
 class PageContentConverter
 {
-    /**
-     * Markdown string -> TipTap doc array.
-     *
-     * @return array{type: string, content: array<int, array<string, mixed>>}
-     */
-    public static function markdownToDoc(string $markdown): array
+    /** Wrap HTML in the Lexical page-content envelope the editor expects. */
+    public static function htmlToPageContent(string $html): array
+    {
+        return ['type' => 'lexical', 'html' => $html];
+    }
+
+    /** Pull the editable HTML out of a stored page content value (any format). */
+    public static function pageContentToHtml(mixed $content): string
+    {
+        if (! is_array($content)) {
+            return '';
+        }
+
+        // Current Lexical format.
+        if (($content['type'] ?? null) === 'lexical' && is_string($content['html'] ?? null)) {
+            return $content['html'];
+        }
+
+        // Legacy TipTap doc → render to HTML via Markdown bridge.
+        if (($content['type'] ?? null) === 'doc') {
+            return self::markdownToHtml(self::docToMarkdown($content));
+        }
+
+        return '';
+    }
+
+    // ── Markdown → HTML ──────────────────────────────────────────────────────
+
+    public static function markdownToHtml(string $markdown): string
     {
         $lines = preg_split("/\r\n|\n|\r/", $markdown);
-        $nodes = [];
+        $html = [];
         $i = 0;
         $count = count($lines);
 
         while ($i < $count) {
             $line = $lines[$i];
 
-            // Blank line — skip.
             if (trim($line) === '') {
                 $i++;
                 continue;
             }
 
-            // Fenced code block: ```lang ... ```
+            // Fenced code block.
             if (preg_match('/^```\s*([\w+-]*)\s*$/', $line, $m)) {
-                $language = $m[1] ?: null;
                 $code = [];
                 $i++;
                 while ($i < $count && ! preg_match('/^```\s*$/', $lines[$i])) {
                     $code[] = $lines[$i];
                     $i++;
                 }
-                $i++; // consume closing fence
-                $nodes[] = [
-                    'type' => 'codeBlock',
-                    'attrs' => ['language' => $language],
-                    'content' => self::textContent(implode("\n", $code)),
-                ];
+                $i++;
+                $lang = $m[1] ? ' class="language-'.$m[1].'"' : '';
+                $html[] = '<pre><code'.$lang.'>'.self::esc(implode("\n", $code)).'</code></pre>';
                 continue;
             }
 
             // Horizontal rule.
             if (preg_match('/^(-{3,}|\*{3,}|_{3,})\s*$/', $line)) {
-                $nodes[] = ['type' => 'horizontalRule'];
+                $html[] = '<hr>';
                 $i++;
                 continue;
             }
 
-            // ATX heading: # .. ######
+            // Heading.
             if (preg_match('/^(#{1,6})\s+(.*)$/', $line, $m)) {
-                $nodes[] = [
-                    'type' => 'heading',
-                    'attrs' => ['level' => strlen($m[1])],
-                    'content' => self::inlineToNodes(trim($m[2])),
-                ];
+                $level = strlen($m[1]);
+                $html[] = "<h{$level}>".self::inline(trim($m[2]))."</h{$level}>";
                 $i++;
                 continue;
             }
 
-            // Blockquote (consecutive `>` lines).
+            // Blockquote.
             if (preg_match('/^>\s?(.*)$/', $line)) {
                 $quote = [];
                 while ($i < $count && preg_match('/^>\s?(.*)$/', $lines[$i], $m)) {
                     $quote[] = $m[1];
                     $i++;
                 }
-                $nodes[] = [
-                    'type' => 'blockquote',
-                    'content' => [[
-                        'type' => 'paragraph',
-                        'content' => self::inlineToNodes(trim(implode(' ', $quote))),
-                    ]],
-                ];
+                $html[] = '<blockquote><p>'.self::inline(trim(implode(' ', $quote))).'</p></blockquote>';
                 continue;
             }
 
-            // Bullet list (-, *, +).
+            // Bullet list.
             if (preg_match('/^\s*[-*+]\s+(.*)$/', $line)) {
-                [$items, $i] = self::collectListItems($lines, $i, $count, '/^\s*[-*+]\s+(.*)$/');
-                $nodes[] = ['type' => 'bulletList', 'content' => $items];
+                [$items, $i] = self::collectList($lines, $i, $count, '/^\s*[-*+]\s+(.*)$/');
+                $html[] = '<ul>'.implode('', array_map(fn ($t) => '<li>'.self::inline($t).'</li>', $items)).'</ul>';
                 continue;
             }
 
-            // Ordered list (1. 2. ...).
+            // Ordered list.
             if (preg_match('/^\s*\d+[.)]\s+(.*)$/', $line)) {
-                [$items, $i] = self::collectListItems($lines, $i, $count, '/^\s*\d+[.)]\s+(.*)$/');
-                $nodes[] = ['type' => 'orderedList', 'content' => $items];
+                [$items, $i] = self::collectList($lines, $i, $count, '/^\s*\d+[.)]\s+(.*)$/');
+                $html[] = '<ol>'.implode('', array_map(fn ($t) => '<li>'.self::inline($t).'</li>', $items)).'</ol>';
                 continue;
             }
 
-            // Otherwise a paragraph — gather consecutive non-blank, non-block lines.
+            // Paragraph (gather consecutive plain lines).
             $para = [$line];
             $i++;
             while ($i < $count
@@ -117,34 +127,169 @@ class PageContentConverter
                 $para[] = $lines[$i];
                 $i++;
             }
-            $nodes[] = [
-                'type' => 'paragraph',
-                'content' => self::inlineToNodes(trim(implode(' ', $para))),
-            ];
+            $html[] = '<p>'.self::inline(trim(implode(' ', $para))).'</p>';
         }
 
-        return ['type' => 'doc', 'content' => $nodes];
+        return implode('', $html);
     }
 
     /**
-     * TipTap doc array -> Markdown string.
-     *
-     * @param  array<string, mixed>|null  $doc
+     * @param  array<int, string>  $lines
+     * @return array{0: array<int, string>, 1: int}
      */
-    public static function docToMarkdown(?array $doc): string
+    private static function collectList(array $lines, int $i, int $count, string $pattern): array
     {
-        if (! is_array($doc)) {
+        $items = [];
+        while ($i < $count && preg_match($pattern, $lines[$i], $m)) {
+            $items[] = trim($m[1]);
+            $i++;
+        }
+
+        return [$items, $i];
+    }
+
+    /** Inline Markdown (bold, italic, code, links) → HTML, escaping the rest. */
+    private static function inline(string $text): string
+    {
+        // Tokenise so we can escape literal text but keep generated tags.
+        $pattern = '/(\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|_(.+?)_|`(.+?)`|\[(.+?)\]\((\S+?)\))/';
+        $out = '';
+        $offset = 0;
+
+        while (preg_match($pattern, $text, $m, PREG_OFFSET_CAPTURE, $offset)) {
+            $start = $m[0][1];
+            if ($start > $offset) {
+                $out .= self::esc(substr($text, $offset, $start - $offset));
+            }
+
+            $token = $m[0][0];
+            if (Str::startsWith($token, '**') || Str::startsWith($token, '__')) {
+                $out .= '<strong>'.self::esc($m[2][0] !== '' ? $m[2][0] : $m[3][0]).'</strong>';
+            } elseif (Str::startsWith($token, '`')) {
+                $out .= '<code>'.self::esc($m[6][0]).'</code>';
+            } elseif (Str::startsWith($token, '[')) {
+                $out .= '<a href="'.self::esc($m[8][0]).'">'.self::esc($m[7][0]).'</a>';
+            } else {
+                $out .= '<em>'.self::esc($m[4][0] !== '' ? $m[4][0] : $m[5][0]).'</em>';
+            }
+
+            $offset = $start + strlen($token);
+        }
+
+        if ($offset < strlen($text)) {
+            $out .= self::esc(substr($text, $offset));
+        }
+
+        return $out;
+    }
+
+    private static function esc(string $text): string
+    {
+        return htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+
+    // ── HTML → Markdown ──────────────────────────────────────────────────────
+
+    public static function htmlToMarkdown(?string $html): string
+    {
+        if (! is_string($html) || trim($html) === '') {
             return '';
         }
 
-        $content = $doc['content'] ?? [];
-        if (! is_array($content)) {
+        $dom = new DOMDocument;
+        libxml_use_internal_errors(true);
+        // Force UTF-8 and wrap so a fragment parses predictably.
+        $dom->loadHTML('<?xml encoding="UTF-8"><div id="__root">'.$html.'</div>', LIBXML_NOERROR | LIBXML_NOWARNING);
+        libxml_clear_errors();
+
+        $root = $dom->getElementById('__root');
+        if (! $root) {
+            return trim(strip_tags($html));
+        }
+
+        $blocks = [];
+        foreach ($root->childNodes as $child) {
+            $rendered = self::block($child);
+            if ($rendered !== '') {
+                $blocks[] = $rendered;
+            }
+        }
+
+        return trim(implode("\n\n", $blocks));
+    }
+
+    private static function block(DOMNode $node): string
+    {
+        if ($node->nodeType === XML_TEXT_NODE) {
+            return trim($node->textContent) === '' ? '' : trim($node->textContent);
+        }
+
+        $name = strtolower($node->nodeName);
+
+        return match ($name) {
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6' => str_repeat('#', (int) substr($name, 1)).' '.self::inlineText($node),
+            'p', 'div' => self::inlineText($node),
+            'pre' => "```\n".trim($node->textContent)."\n```",
+            'blockquote' => '> '.str_replace("\n", "\n> ", trim(self::inlineText($node))),
+            'hr' => '---',
+            'ul' => self::list($node, false),
+            'ol' => self::list($node, true),
+            default => self::inlineText($node),
+        };
+    }
+
+    private static function list(DOMNode $node, bool $ordered): string
+    {
+        $out = [];
+        $n = 1;
+        foreach ($node->childNodes as $li) {
+            if (strtolower($li->nodeName) !== 'li') {
+                continue;
+            }
+            $prefix = $ordered ? ($n++).'. ' : '- ';
+            $out[] = $prefix.trim(self::inlineText($li));
+        }
+
+        return implode("\n", $out);
+    }
+
+    /** Render inline children of a node to Markdown. */
+    private static function inlineText(DOMNode $node): string
+    {
+        $out = '';
+        foreach ($node->childNodes as $child) {
+            if ($child->nodeType === XML_TEXT_NODE) {
+                $out .= $child->textContent;
+                continue;
+            }
+
+            $name = strtolower($child->nodeName);
+            $inner = self::inlineText($child);
+            $out .= match ($name) {
+                'strong', 'b' => "**{$inner}**",
+                'em', 'i' => "*{$inner}*",
+                'code' => "`{$inner}`",
+                'a' => '['.$inner.']('.($child->attributes?->getNamedItem('href')?->nodeValue ?? '').')',
+                'br' => "\n",
+                default => $inner,
+            };
+        }
+
+        return $out;
+    }
+
+    // ── Legacy TipTap doc → Markdown (pages created before Lexical) ───────────
+
+    /** @param array<string, mixed>|null $doc */
+    public static function docToMarkdown(?array $doc): string
+    {
+        if (! is_array($doc) || ! is_array($doc['content'] ?? null)) {
             return '';
         }
 
         $blocks = [];
-        foreach ($content as $node) {
-            $rendered = self::renderBlock($node);
+        foreach ($doc['content'] as $node) {
+            $rendered = self::legacyBlock($node);
             if ($rendered !== null) {
                 $blocks[] = $rendered;
             }
@@ -153,160 +298,58 @@ class PageContentConverter
         return trim(implode("\n\n", $blocks));
     }
 
-    // ── internals ──────────────────────────────────────────────────────────
-
-    /**
-     * @param  array<int, string>  $lines
-     * @return array{0: array<int, array<string, mixed>>, 1: int}
-     */
-    private static function collectListItems(array $lines, int $i, int $count, string $pattern): array
-    {
-        $items = [];
-        while ($i < $count && preg_match($pattern, $lines[$i], $m)) {
-            $items[] = [
-                'type' => 'listItem',
-                'content' => [[
-                    'type' => 'paragraph',
-                    'content' => self::inlineToNodes(trim($m[1])),
-                ]],
-            ];
-            $i++;
-        }
-
-        return [$items, $i];
-    }
-
-    /** Wrap plain text as a single text node array (empty -> empty array). */
-    private static function textContent(string $text): array
-    {
-        return $text === '' ? [] : [['type' => 'text', 'text' => $text]];
-    }
-
-    /**
-     * Parse inline markdown (bold, italic, code, links) into TipTap text nodes.
-     *
-     * @return array<int, array<string, mixed>>
-     */
-    private static function inlineToNodes(string $text): array
-    {
-        if ($text === '') {
-            return [];
-        }
-
-        $nodes = [];
-        $pattern = '/(\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|_(.+?)_|`(.+?)`|\[(.+?)\]\((\S+?)\))/';
-        $offset = 0;
-
-        while (preg_match($pattern, $text, $m, PREG_OFFSET_CAPTURE, $offset)) {
-            $start = $m[0][1];
-            if ($start > $offset) {
-                $nodes[] = ['type' => 'text', 'text' => substr($text, $offset, $start - $offset)];
-            }
-
-            $token = $m[0][0];
-            if (Str::startsWith($token, '**') || Str::startsWith($token, '__')) {
-                $nodes[] = self::markedText($m[2][0] !== '' ? $m[2][0] : $m[3][0], [['type' => 'bold']]);
-            } elseif (Str::startsWith($token, '`')) {
-                $nodes[] = self::markedText($m[6][0], [['type' => 'code']]);
-            } elseif (Str::startsWith($token, '[')) {
-                $nodes[] = self::markedText($m[7][0], [['type' => 'link', 'attrs' => ['href' => $m[8][0]]]]);
-            } else { // single * or _ => italic
-                $nodes[] = self::markedText($m[4][0] !== '' ? $m[4][0] : $m[5][0], [['type' => 'italic']]);
-            }
-
-            $offset = $start + strlen($token);
-        }
-
-        if ($offset < strlen($text)) {
-            $nodes[] = ['type' => 'text', 'text' => substr($text, $offset)];
-        }
-
-        return $nodes;
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $marks
-     * @return array<string, mixed>
-     */
-    private static function markedText(string $text, array $marks): array
-    {
-        return ['type' => 'text', 'text' => $text, 'marks' => $marks];
-    }
-
-    /** @param  array<string, mixed>  $node */
-    private static function renderBlock(array $node, int $depth = 0): ?string
+    /** @param array<string, mixed> $node */
+    private static function legacyBlock(array $node): ?string
     {
         $type = $node['type'] ?? null;
+        $text = self::legacyInline($node['content'] ?? []);
 
         return match ($type) {
-            'heading' => str_repeat('#', (int) ($node['attrs']['level'] ?? 1)).' '.self::renderInline($node['content'] ?? []),
-            'paragraph' => self::renderInline($node['content'] ?? []),
-            'codeBlock' => "```".($node['attrs']['language'] ?? '')."\n".self::renderInline($node['content'] ?? [], true)."\n```",
-            'blockquote' => self::renderQuote($node['content'] ?? []),
-            'horizontalRule' => '---',
-            'bulletList' => self::renderList($node['content'] ?? [], false),
-            'orderedList' => self::renderList($node['content'] ?? [], true),
-            default => self::renderInline($node['content'] ?? []) ?: null,
+            'heading' => str_repeat('#', (int) ($node['attrs']['level'] ?? 1)).' '.$text,
+            'paragraph' => $text,
+            'codeBlock' => "```\n".$text."\n```",
+            'bulletList', 'orderedList' => self::legacyList($node),
+            default => $text ?: null,
         };
     }
 
-    /** @param array<int, array<string,mixed>> $items */
-    private static function renderList(array $items, bool $ordered): string
+    /** @param array<string, mixed> $node */
+    private static function legacyList(array $node): string
     {
+        $ordered = ($node['type'] ?? '') === 'orderedList';
         $out = [];
         $n = 1;
-        foreach ($items as $item) {
+        foreach ($node['content'] ?? [] as $item) {
             $inner = '';
             foreach ($item['content'] ?? [] as $child) {
-                $inner .= self::renderInline($child['content'] ?? []);
+                $inner .= self::legacyInline($child['content'] ?? []);
             }
-            $prefix = $ordered ? ($n++).'. ' : '- ';
-            $out[] = $prefix.$inner;
+            $out[] = ($ordered ? ($n++).'. ' : '- ').$inner;
         }
 
         return implode("\n", $out);
     }
 
-    /** @param array<int, array<string,mixed>> $content */
-    private static function renderQuote(array $content): string
-    {
-        $lines = [];
-        foreach ($content as $child) {
-            $lines[] = '> '.self::renderInline($child['content'] ?? []);
-        }
-
-        return implode("\n", $lines);
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $nodes
-     */
-    private static function renderInline(array $nodes, bool $raw = false): string
+    /** @param array<int, array<string, mixed>> $nodes */
+    private static function legacyInline(array $nodes): string
     {
         $out = '';
         foreach ($nodes as $node) {
             if (($node['type'] ?? '') !== 'text') {
-                // Nested unknown inline node — render its children if present.
-                $out .= self::renderInline($node['content'] ?? []);
+                $out .= self::legacyInline($node['content'] ?? []);
                 continue;
             }
-
-            $text = $node['text'] ?? '';
-            if ($raw) {
-                $out .= $text;
-                continue;
-            }
-
+            $t = $node['text'] ?? '';
             foreach ($node['marks'] ?? [] as $mark) {
-                $text = match ($mark['type'] ?? '') {
-                    'bold' => "**{$text}**",
-                    'italic' => "*{$text}*",
-                    'code' => "`{$text}`",
-                    'link' => '['.$text.']('.($mark['attrs']['href'] ?? '').')',
-                    default => $text,
+                $t = match ($mark['type'] ?? '') {
+                    'bold' => "**{$t}**",
+                    'italic' => "*{$t}*",
+                    'code' => "`{$t}`",
+                    'link' => '['.$t.']('.($mark['attrs']['href'] ?? '').')',
+                    default => $t,
                 };
             }
-            $out .= $text;
+            $out .= $t;
         }
 
         return $out;

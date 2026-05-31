@@ -56,20 +56,14 @@ class UpdatePageTool extends Tool
         }
 
         if (isset($validated['markdown'])) {
-            $incoming = PageContentConverter::markdownToDoc($validated['markdown']);
+            $html = PageContentConverter::markdownToHtml($validated['markdown']);
 
             if (($validated['mode'] ?? 'replace') === 'append') {
-                $existing = is_array($page->content) ? ($page->content['content'] ?? []) : [];
-                $incoming['content'] = array_merge($existing, $incoming['content']);
+                $existing = PageContentConverter::pageContentToHtml($page->content);
+                $html = $existing.$html;
             }
 
-            // Preserve any embedded excalidraw data the editor keeps alongside content.
-            $current = $page->content ?? [];
-            if (is_array($current) && ! empty($current['excalidrawEmbeds'])) {
-                $incoming['excalidrawEmbeds'] = $current['excalidrawEmbeds'];
-            }
-
-            $changes['content'] = $incoming;
+            $changes['content'] = PageContentConverter::htmlToPageContent($html);
         }
 
         $page->update($changes);

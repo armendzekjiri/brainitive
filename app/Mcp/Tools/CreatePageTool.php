@@ -46,8 +46,8 @@ class CreatePageTool extends Tool
         }
 
         $content = ! empty($validated['markdown'])
-            ? PageContentConverter::markdownToDoc($validated['markdown'])
-            : ['type' => 'doc', 'content' => []];
+            ? PageContentConverter::htmlToPageContent(PageContentConverter::markdownToHtml($validated['markdown']))
+            : ['type' => 'lexical', 'html' => ''];
 
         $page = $project->allPages()->create([
             'name' => $validated['title'],
