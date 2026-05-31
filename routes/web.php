@@ -9,8 +9,8 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PageStickyNoteController;
 use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SnippetController;
 use App\Http\Controllers\WorkspaceController;
@@ -114,6 +114,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Calendar — personal calendar across all workspaces
     Route::get('/calendar', [App\Http\Controllers\CalendarController::class, 'index'])->name('calendar.index');
+    Route::patch('/calendar/view', [App\Http\Controllers\CalendarController::class, 'updateView'])->name('calendar.view.update');
     Route::patch('/calendar/reschedule', [App\Http\Controllers\CalendarController::class, 'reschedule'])->name('calendar.reschedule');
 
     // Calendar connections (external providers: Google, etc.)

@@ -7,6 +7,7 @@ export interface User {
     avatar_display?: string | null;
     bio?: string | null;
     phone?: string | null;
+    calendar_view?: 'month' | 'week' | 'day' | null;
     is_instance_admin?: boolean;
     pivot?: {
         role?: 'admin' | 'editor' | 'viewer' | 'member';
