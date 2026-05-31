@@ -139,9 +139,9 @@ $table->softDeletes();              // main entities
 $table->foreignId('workspace_id')->constrained()->cascadeOnDelete();
 $table->json('settings')->nullable();
 ```
-Keep migrations cross-DB safe (the default is SQLite, tests use `:memory:`). Avoid raw
-`ALTER TABLE … DROP CONSTRAINT` / MySQL-only `MODIFY` without a SQLite branch — see the trap
-list in [`KNOWLEDGE.md`](./KNOWLEDGE.md).
+Keep migrations cross-DB safe (the default is SQLite, tests use `:memory:`). Branch on the
+database driver before using raw engine-specific SQL such as constraint changes or MySQL
+`MODIFY` statements.
 
 ### Notifications
 - Channels via `via()`. Use the `App\Notifications\Concerns\SendsWebPush` trait + its

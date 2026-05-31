@@ -40,6 +40,4 @@ This runs: `php artisan serve`, `php artisan queue:listen`, `php artisan pail`, 
 
 ### Known issues
 
-- **Migration `2026_02_03_145210_add_member_role_to_workspace_user_table`** uses `ALTER TABLE ... DROP CONSTRAINT` syntax that is incompatible with SQLite. This affects both `php artisan migrate` on a fresh DB and PHPUnit tests (which use `:memory:` SQLite). Workaround for fresh setup: recreate the `workspace_user` table with the `'member'` role in the CHECK constraint, then fake the migration. The same migration also causes all Feature tests to fail with `RefreshDatabase`.
-- **Migration `2026_02_23_153119_extend_bookmarks_icon_for_url`** uses MySQL `MODIFY` syntax without a SQLite branch. Since SQLite doesn't enforce varchar length, this can be safely faked for local development.
 - **Email verification**: Registration requires email verification. With the default `MAIL_MAILER=log` configuration, verification emails are written to `storage/logs/`. To bypass during development, manually verify the user: `php artisan tinker --execute="\App\Models\User::where('email','...')->update(['email_verified_at'=>now()]);"`.

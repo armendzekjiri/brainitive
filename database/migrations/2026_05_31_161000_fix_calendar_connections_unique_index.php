@@ -21,23 +21,40 @@ return new class extends Migration
 {
     public function up(): void
     {
+        $driver = DB::getDriverName();
+
         // Drop the original full unique index (created in the table migration).
-        DB::statement('ALTER TABLE calendar_connections DROP CONSTRAINT IF EXISTS cal_conn_unique');
-        DB::statement('DROP INDEX IF EXISTS cal_conn_unique');
+        if ($driver === 'pgsql') {
+            DB::statement('ALTER TABLE calendar_connections DROP CONSTRAINT IF EXISTS cal_conn_unique');
+        } else {
+            DB::statement('DROP INDEX IF EXISTS cal_conn_unique');
+        }
 
         DB::statement(
             'CREATE UNIQUE INDEX cal_conn_unique ON calendar_connections '
-            . '(user_id, provider, kind, account_email, external_calendar_id) '
-            . 'WHERE deleted_at IS NULL'
+            .'(user_id, provider, kind, account_email, external_calendar_id) '
+            .'WHERE deleted_at IS NULL'
         );
     }
 
     public function down(): void
     {
+        $driver = DB::getDriverName();
+
         DB::statement('DROP INDEX IF EXISTS cal_conn_unique');
+
+        if ($driver === 'sqlite') {
+            DB::statement(
+                'CREATE UNIQUE INDEX cal_conn_unique ON calendar_connections '
+                .'(user_id, provider, account_email, external_calendar_id)'
+            );
+
+            return;
+        }
+
         DB::statement(
             'ALTER TABLE calendar_connections ADD CONSTRAINT cal_conn_unique '
-            . 'UNIQUE (user_id, provider, account_email, external_calendar_id)'
+            .'UNIQUE (user_id, provider, account_email, external_calendar_id)'
         );
     }
 };
