@@ -6,14 +6,21 @@ connected, every piece of work must have a card on that board, moved to **Testin
 done. The local `docs/ai/tasks/<branch>.md` remains the *detailed plan*; the board card is
 the *tracker*. They link to each other.
 
-> **Status: dormant until MCP is connected.** As of now there is no Brainitive MCP
-> connection in this environment. If the Brainitive MCP tools below are **not** available,
-> skip this skill and rely on the local plan file alone. Do not fabricate board updates.
+> **MCP-dependent.** Use this skill when the Brainitive MCP tools are available in the
+> current environment. If they are **not** available, rely on the local plan file alone and
+> say that Brainitive updates were skipped. Do not fabricate board updates.
 
 ## How to tell if MCP is connected
 The Brainitive MCP tools are present in your tool list, e.g. `list_workspaces`,
 `list_boards`, `get_board`, `create_board_item`, `move_board_item`, `update_board_item`.
 If they aren't available, this skill doesn't apply right now.
+
+## Tracker ownership
+For this project, work item keys like `BRAI-41` are **Brainitive board card keys**, not Jira
+issues. Start with the Brainitive MCP tools (`list_workspaces` → `list_projects` →
+`list_boards` → `get_board` / `get_board_item`) when the user references a `BRAI-*` key.
+Do not query Jira/Atlassian for Brainitive project work unless the user explicitly names
+Jira/Atlassian or asks you to compare with an external tracker.
 
 ## The flow
 
@@ -47,10 +54,36 @@ to Done — the agent does **not** move cards to Done). Mark `tasks/<branch>.md`
 
 ### 5. Document in a Brainitive Page — when it makes sense
 Use judgment: for a user-facing feature or a notable change, write or update a Brainitive
-**Page** with `create_page` / `update_page` describing what changed and how to use it (page
-bodies are Markdown, converted automatically). Skip this for small/internal fixes. This is
-the in-product documentation, separate from the repo's `docs/ai/` (which documents *how we
-build*, not *what the product does*).
+**Page** describing what changed and how to use it. Skip this for small/internal fixes.
+Follow the **page writing/editing rules** below.
+
+---
+
+## Page writing / editing rules
+
+When writing or editing Brainitive Pages via MCP (`create_page` / `update_page`):
+
+### Where pages go — structure
+- **AI-agent documentation lives under one parent page: "General AI Documentation"**
+  (workspace `personal`, project `brainitive`, uuid `0b4eb6f8-efa9-4191-8425-f6fe4dde676d`).
+  It is the index/parent for all AI docs.
+- **Every AI documentation page is a child of that parent** — pass its uuid as `parent_uuid`
+  on `create_page`. Never create AI docs at the project root.
+- **Check first, don't duplicate.** `list_pages` (or `search`) before creating; if a page on
+  the topic already exists, **`update_page`** it (mode `replace` to rewrite, `append` to add)
+  instead of making a second one.
+- **Update the parent index.** When you add, rename, or remove an AI documentation child,
+  update the "General AI Documentation" page so its `Pages` section stays accurate.
+
+### How to write
+- **Body is Markdown** — headings, lists, bold, links, code blocks (converted automatically).
+- Lead with a one-line purpose. Keep it readable for non-developers browsing Brainitive.
+- **Repo `docs/ai/` is authoritative**; these pages mirror the key parts. When they could
+  drift, say "authoritative version lives in `docs/ai/...`" and link the concept, so readers
+  know where truth lives.
+- These pages document **what the product does / how we work in-product**; the repo `docs/ai/`
+  documents **how we build**. Don't paste build internals into product pages.
+- After `create_page`/`update_page`, share the returned `location.url` with the user.
 
 ## Summary
 ```

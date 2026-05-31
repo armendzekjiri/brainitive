@@ -27,8 +27,10 @@ agents producing consistent, locatable work.
 > board on Brainitive.app is the source of truth for *status*: every task gets a card, and
 > it's moved to **Testing** when done. The local `tasks/<branch>.md` is the *detailed plan*;
 > the card is the *tracker*. Full steps: [skills/track-work-in-brainitive.md](./skills/track-work-in-brainitive.md).
-> If MCP is **not** connected (current state), skip the card and use the local plan only —
-> don't fabricate board updates.
+> `BRAI-*` keys refer to Brainitive board cards for this project, not Jira issues. Do not
+> check Jira/Atlassian for Brainitive work unless the user explicitly asks for it.
+> If MCP is **not** connected, skip the card and use the local plan only — don't fabricate
+> board updates.
 
 ### 1 — Branch off `main`
 Never commit to `main`. Use the existing prefixes: `feat/...`, `fix/...`, `chore/...`
