@@ -59,6 +59,32 @@ class GetProjectTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'project' => $schema->string(),
+            'key' => $schema->string(),
+            'pages' => $schema->array()->items($schema->object([
+                'uuid' => $schema->string(),
+                'name' => $schema->string(),
+                'type' => $schema->string(),
+            ])),
+            'boards' => $schema->array()->items($schema->object([
+                'slug' => $schema->string(),
+                'name' => $schema->string(),
+            ])),
+            'task_lists' => $schema->array()->items($schema->object([
+                'slug' => $schema->string(),
+                'name' => $schema->string(),
+                'open' => $schema->integer(),
+                'total' => $schema->integer(),
+            ])),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

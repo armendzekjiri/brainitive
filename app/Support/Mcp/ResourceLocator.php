@@ -147,6 +147,22 @@ class ResourceLocator
     }
 
     /**
+     * JSON Schema fragment describing the array returned by locate(), for use
+     * in MCP tools' outputSchema(). Accepts the tool's JsonSchema factory.
+     */
+    public static function outputSchema($schema)
+    {
+        return $schema->object([
+            'type' => $schema->string()->description('Kind of content, e.g. page, board item, task.'),
+            'title' => $schema->string(),
+            'workspace' => $schema->string(),
+            'project' => $schema->string()->description('Null for workspace-level content (snippets, bookmarks).'),
+            'breadcrumb' => $schema->string()->description('Human-readable path, e.g. "Workspace / Project / Page".'),
+            'url' => $schema->string()->description('Direct link to open the content in Brainitive.'),
+        ]);
+    }
+
+    /**
      * @return array{type: string, title: string, workspace: ?string, project: ?string, breadcrumb: string, url: string}
      */
     private static function build(string $type, string $title, ?Workspace $workspace, ?Project $project, string $url, ?string $extra = null): array

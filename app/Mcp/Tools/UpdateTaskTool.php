@@ -88,6 +88,21 @@ class UpdateTaskTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'updated' => $schema->boolean(),
+            'task_id' => $schema->integer(),
+            'status' => $schema->string(),
+            'recurrence_rolled_forward' => $schema->boolean(),
+            'next_due_date' => $schema->string(),
+            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

@@ -53,6 +53,23 @@ class ListPagesTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'project' => $schema->string(),
+            'pages' => $schema->array()->items($schema->object([
+                'uuid' => $schema->string(),
+                'name' => $schema->string(),
+                'type' => $schema->string()->description('page or folder.'),
+                'parent_id' => $schema->integer(),
+            ])),
+            'count' => $schema->integer(),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

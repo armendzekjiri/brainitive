@@ -52,6 +52,17 @@ class UpdateGoogleTaskTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'updated' => $schema->boolean(),
+            'task' => \App\Support\Mcp\CalendarFormatter::taskSchema($schema),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

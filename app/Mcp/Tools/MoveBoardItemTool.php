@@ -70,6 +70,19 @@ class MoveBoardItemTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'moved' => $schema->boolean(),
+            'item_key' => $schema->string(),
+            'column' => $schema->string(),
+            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

@@ -105,6 +105,20 @@ class FetchTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'id' => $schema->string(),
+            'title' => $schema->string(),
+            'text' => $schema->string()->description('Full content of the result.'),
+            'url' => $schema->string(),
+            'metadata' => $schema->object(['type' => $schema->string()]),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

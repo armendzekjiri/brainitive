@@ -34,6 +34,37 @@ class CalendarFormatter
         ];
     }
 
+    /** JSON Schema fragment for one event() result (for tools' outputSchema). */
+    public static function eventSchema($schema)
+    {
+        return $schema->object([
+            'event_id' => $schema->string(),
+            'title' => $schema->string(),
+            'all_day' => $schema->boolean(),
+            'start' => $schema->string()->description('RFC3339 datetime, or YYYY-MM-DD for all-day.'),
+            'end' => $schema->string(),
+            'description' => $schema->string(),
+            'location' => $schema->string(),
+            'link' => $schema->string()->description('Link to open the event in Google Calendar.'),
+            'calendar' => $schema->string(),
+            'connection_id' => $schema->integer(),
+        ]);
+    }
+
+    /** JSON Schema fragment for one task() result (for tools' outputSchema). */
+    public static function taskSchema($schema)
+    {
+        return $schema->object([
+            'task_id' => $schema->string(),
+            'title' => $schema->string(),
+            'notes' => $schema->string(),
+            'due' => $schema->string()->description('RFC3339 due date, if set.'),
+            'completed' => $schema->boolean(),
+            'list' => $schema->string(),
+            'connection_id' => $schema->integer(),
+        ]);
+    }
+
     /**
      * @param  array<string, mixed>  $task  raw Google Tasks task
      * @return array<string, mixed>

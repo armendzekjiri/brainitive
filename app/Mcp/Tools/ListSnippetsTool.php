@@ -55,6 +55,26 @@ class ListSnippetsTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'workspace' => $schema->string(),
+            'collections' => $schema->array()->items($schema->object([
+                'name' => $schema->string(),
+                'slug' => $schema->string(),
+                'snippets' => $schema->array()->items($schema->object([
+                    'title' => $schema->string(),
+                    'slug' => $schema->string(),
+                    'language' => $schema->string(),
+                ])),
+            ])),
+            'count' => $schema->integer(),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

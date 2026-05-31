@@ -62,6 +62,25 @@ class GetBoardTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'board' => $schema->string(),
+            'columns' => $schema->array()->items($schema->object([
+                'column_id' => $schema->integer(),
+                'name' => $schema->string(),
+                'items' => $schema->array()->items($schema->object([
+                    'id' => $schema->integer(),
+                    'key' => $schema->string(),
+                    'title' => $schema->string(),
+                ])),
+            ])),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [
