@@ -86,6 +86,20 @@ class CreateBoardItemTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'created' => $schema->boolean(),
+            'item_id' => $schema->integer(),
+            'item_key' => $schema->string()->description('Human key, e.g. PROJ-12.'),
+            'column' => $schema->string(),
+            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

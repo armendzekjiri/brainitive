@@ -40,6 +40,17 @@ class DeleteCalendarEventTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'deleted' => $schema->boolean(),
+            'event_id' => $schema->string(),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

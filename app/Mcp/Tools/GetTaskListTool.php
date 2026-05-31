@@ -60,6 +60,24 @@ class GetTaskListTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'task_list' => $schema->string(),
+            'tasks' => $schema->array()->items($schema->object([
+                'id' => $schema->integer(),
+                'title' => $schema->string(),
+                'status' => $schema->string()->description('todo or done.'),
+                'due_date' => $schema->string(),
+                'recurrence' => $schema->string(),
+            ])),
+            'count' => $schema->integer(),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

@@ -61,6 +61,19 @@ class GetPageTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'title' => $schema->string(),
+            'type' => $schema->string(),
+            'markdown' => $schema->string()->description('Page body as Markdown (null for whiteboards).'),
+            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

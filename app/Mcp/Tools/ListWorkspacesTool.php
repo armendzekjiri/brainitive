@@ -37,6 +37,22 @@ class ListWorkspacesTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'workspaces' => $schema->array()->items($schema->object([
+                'name' => $schema->string(),
+                'slug' => $schema->string(),
+                'projects_count' => $schema->integer(),
+                'role' => $schema->string(),
+            ])),
+            'count' => $schema->integer(),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [];

@@ -77,6 +77,17 @@ class CreateCalendarEventTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'created' => $schema->boolean(),
+            'event' => \App\Support\Mcp\CalendarFormatter::eventSchema($schema),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

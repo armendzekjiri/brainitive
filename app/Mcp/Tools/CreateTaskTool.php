@@ -66,6 +66,18 @@ class CreateTaskTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'created' => $schema->boolean(),
+            'task_id' => $schema->integer(),
+            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

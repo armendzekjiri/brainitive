@@ -57,6 +57,21 @@ class SearchTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'results' => $schema->array()->items($schema->object([
+                'id' => $schema->string()->description('"type:id" handle to pass to fetch.'),
+                'title' => $schema->string(),
+                'url' => $schema->string(),
+                'subtitle' => $schema->string(),
+            ])),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

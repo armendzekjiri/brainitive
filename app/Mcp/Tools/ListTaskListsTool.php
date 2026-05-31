@@ -56,6 +56,23 @@ class ListTaskListsTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'project' => $schema->string(),
+            'task_lists' => $schema->array()->items($schema->object([
+                'name' => $schema->string(),
+                'slug' => $schema->string(),
+                'open' => $schema->integer(),
+                'total' => $schema->integer(),
+            ])),
+            'count' => $schema->integer(),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

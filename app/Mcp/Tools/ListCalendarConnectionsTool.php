@@ -39,6 +39,23 @@ class ListCalendarConnectionsTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'connections' => $schema->array()->items($schema->object([
+                'connection_id' => $schema->integer(),
+                'name' => $schema->string(),
+                'kind' => $schema->string()->description('calendar or tasks.'),
+                'account' => $schema->string(),
+            ])),
+            'count' => $schema->integer(),
+            'hint' => $schema->string(),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [];

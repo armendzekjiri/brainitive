@@ -52,6 +52,23 @@ class ListBoardsTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'project' => $schema->string(),
+            'boards' => $schema->array()->items($schema->object([
+                'name' => $schema->string(),
+                'slug' => $schema->string(),
+                'description' => $schema->string(),
+                'items_count' => $schema->integer(),
+            ])),
+            'count' => $schema->integer(),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

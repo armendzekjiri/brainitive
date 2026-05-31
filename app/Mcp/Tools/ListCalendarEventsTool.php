@@ -59,6 +59,19 @@ class ListCalendarEventsTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'from' => $schema->string(),
+            'to' => $schema->string(),
+            'events' => $schema->array()->items(\App\Support\Mcp\CalendarFormatter::eventSchema($schema)),
+            'count' => $schema->integer(),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

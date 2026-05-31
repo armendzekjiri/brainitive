@@ -52,6 +52,23 @@ class ListProjectsTool extends Tool
     /**
      * @return array<string, JsonSchema>
      */
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return [
+            'workspace' => $schema->string(),
+            'projects' => $schema->array()->items($schema->object([
+                'name' => $schema->string(),
+                'slug' => $schema->string(),
+                'key' => $schema->string(),
+                'description' => $schema->string(),
+            ])),
+            'count' => $schema->integer(),
+        ];
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [
