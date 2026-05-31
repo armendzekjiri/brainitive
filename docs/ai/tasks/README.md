@@ -43,5 +43,6 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Fix SQLite Migration Blockers](./fix-sqlite-safe-migrations.md) | done |
 | [Subtask / parent implementation](./2026-02-26-subtask-parent-implementation.md) | shipped |
 | [Board cards profile images](./2026-02-26-board-cards-profile-images.md) | shipped |
