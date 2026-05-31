@@ -70,6 +70,15 @@ connect Google under Calendar in Brainitive.
 TXT)]
 class BrainitiveServer extends Server
 {
+    // Return every tool in a single tools/list page. Some MCP clients (e.g.
+    // ChatGPT connectors) don't follow the `nextCursor` pagination, so a tool
+    // on page 2 (default page size 15) would be invisible to them — which made
+    // write tools like create_board_item look "missing". Lift the limits well
+    // above the tool count so the whole catalogue is returned at once.
+    public int $defaultPaginationLength = 200;
+
+    public int $maxPaginationLength = 200;
+
     protected array $tools = [
         // Navigation (read-only)
         ListWorkspacesTool::class,
