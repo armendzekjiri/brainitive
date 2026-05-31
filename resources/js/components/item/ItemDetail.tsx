@@ -651,7 +651,6 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                             placeholder="Add a description…"
                             editable={true}
                             minHeight="160px"
-                            maxHeight="460px"
                             contentKey={`${item.id}-edit-${editorKey}`}
                             workspaceSlug={workspace.slug}
                             itemTitle={titleValue}
@@ -676,7 +675,6 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                                 editable={false}
                                 showToolbar={false}
                                 minHeight="40px"
-                                maxHeight="460px"
                                 className="border-0 bg-transparent rounded-none shadow-none"
                                 contentKey={`${item.id}-view-${editorKey}`}
                             />
