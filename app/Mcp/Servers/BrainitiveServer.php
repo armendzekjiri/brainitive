@@ -4,9 +4,11 @@ namespace App\Mcp\Servers;
 
 use App\Mcp\Tools\CreateBoardItemTool;
 use App\Mcp\Tools\CreateBookmarkItemTool;
+use App\Mcp\Tools\CreateBookmarkTool;
 use App\Mcp\Tools\CreateCalendarEventTool;
 use App\Mcp\Tools\CreateGoogleTaskTool;
 use App\Mcp\Tools\CreatePageTool;
+use App\Mcp\Tools\CreateSnippetCollectionTool;
 use App\Mcp\Tools\CreateSnippetTool;
 use App\Mcp\Tools\CreateTaskTool;
 use App\Mcp\Tools\DeleteCalendarEventTool;
@@ -30,6 +32,7 @@ use App\Mcp\Tools\SearchTool;
 use App\Mcp\Tools\UpdateCalendarEventTool;
 use App\Mcp\Tools\UpdateGoogleTaskTool;
 use App\Mcp\Tools\UpdatePageTool;
+use App\Mcp\Tools\UpdateSnippetTool;
 use App\Mcp\Tools\UpdateTaskTool;
 use Laravel\Mcp\Server;
 use Laravel\Mcp\Server\Attributes\Instructions;
@@ -104,9 +107,12 @@ class BrainitiveServer extends Server
         MoveBoardItemTool::class,
         // Snippets
         ListSnippetsTool::class,
+        CreateSnippetCollectionTool::class,
         CreateSnippetTool::class,
+        UpdateSnippetTool::class,
         // Bookmarks
         ListBookmarksTool::class,
+        CreateBookmarkTool::class,
         CreateBookmarkItemTool::class,
         // Google Calendar + Google Tasks (personal; for planning the week)
         ListCalendarConnectionsTool::class,
