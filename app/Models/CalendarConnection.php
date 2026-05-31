@@ -14,6 +14,7 @@ class CalendarConnection extends Model
     protected $fillable = [
         'user_id',
         'provider',
+        'kind',
         'account_email',
         'account_name',
         'external_calendar_id',

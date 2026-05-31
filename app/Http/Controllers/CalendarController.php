@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Services\GoogleCalendarService;
+use App\Services\GoogleTasksService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -41,7 +42,7 @@ class CalendarController extends Controller
             ->all();
     }
 
-    public function index(Request $request, GoogleCalendarService $googleService): Response
+    public function index(Request $request, GoogleCalendarService $googleService, GoogleTasksService $tasksService): Response
     {
         $view = $request->get('view', 'month');
         $date = Carbon::parse($request->get('date', now()->toDateString()));
@@ -250,9 +251,16 @@ class CalendarController extends Controller
 
         if (in_array('google', $sourceFilter, true)) {
             foreach ($activeConnections->where('provider', 'google') as $conn) {
-                $googleEvents = $googleService->listEvents($conn, $rangeStart, $rangeEnd);
-                foreach ($googleEvents as $ge) {
-                    $events[] = $this->mapGoogleEvent($conn, $ge);
+                if ($conn->kind === 'tasks') {
+                    $googleTasks = $tasksService->listTasks($conn, $rangeStart, $rangeEnd);
+                    foreach ($googleTasks as $gt) {
+                        $events[] = $this->mapGoogleTask($conn, $gt);
+                    }
+                } else {
+                    $googleEvents = $googleService->listEvents($conn, $rangeStart, $rangeEnd);
+                    foreach ($googleEvents as $ge) {
+                        $events[] = $this->mapGoogleEvent($conn, $ge);
+                    }
                 }
             }
         }
@@ -314,6 +322,7 @@ class CalendarController extends Controller
             'connections' => $connections->map(fn ($c) => [
                 'id' => $c->id,
                 'provider' => $c->provider,
+                'kind' => $c->kind,
                 'account_email' => $c->account_email,
                 'account_name' => $c->account_name,
                 'external_calendar_id' => $c->external_calendar_id,
@@ -329,6 +338,53 @@ class CalendarController extends Controller
                 'connections' => $connectionFilter,
             ],
         ]);
+    }
+
+    /** Convert a Google Tasks task into our normalized CalendarEvent shape. */
+    private function mapGoogleTask(CalendarConnection $conn, array $gt): array
+    {
+        $dueRaw = $gt['due'] ?? null;
+        // Google Tasks `due` is RFC3339. If it ends in T00:00:00.000Z and the
+        // user explicitly set "no time", we treat it as all-day. But if there's
+        // a real time, we use it.
+        $startDate = null;
+        $startTime = null;
+        if ($dueRaw) {
+            $dt = Carbon::parse($dueRaw);
+            $startDate = $dt->toDateString();
+            // Heuristic: tasks set without a time-of-day get sent as UTC midnight
+            // by our buildDueField. Anything else is a real time.
+            if (! ($dt->format('H:i:s') === '00:00:00' && $dt->timezoneName === 'UTC')) {
+                $startTime = $dt->format('H:i');
+            }
+        }
+
+        return [
+            'id' => $gt['id'],
+            'type' => 'google_task',
+            'key' => '',
+            'title' => $gt['title'] ?? '(untitled task)',
+            'start_date' => $startDate,
+            'start_time' => $startTime,
+            'due_date' => $startDate,
+            'due_time' => $startTime,
+            'is_completed' => ($gt['status'] ?? null) === 'completed',
+            'color' => '#0E83DC',
+            'assignee' => null,
+            'project' => null,
+            'source' => [
+                'type' => 'google',
+                'id' => $conn->id,
+                'name' => $conn->external_calendar_name,
+                'slug' => $conn->external_calendar_id,
+            ],
+            'href_params' => [],
+            'item_type' => null,
+            'priority' => null,
+            'external_url' => $gt['selfLink'] ?? null,
+            'connection_id' => $conn->id,
+            'account_email' => $conn->account_email,
+        ];
     }
 
     /** Convert a Google Calendar API event into our normalized CalendarEvent shape. */

@@ -127,6 +127,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('{connection}/events/{eventId}', 'showEvent')->name('calendar.connections.events.show')->where('eventId', '[A-Za-z0-9_-]+');
         Route::patch('{connection}/events/{eventId}', 'updateEvent')->name('calendar.connections.events.update')->where('eventId', '[A-Za-z0-9_-]+');
         Route::delete('{connection}/events/{eventId}', 'deleteEvent')->name('calendar.connections.events.destroy')->where('eventId', '[A-Za-z0-9_-]+');
+
+        Route::post('{connection}/tasks', 'createTask')->name('calendar.connections.tasks.create');
+        Route::get('{connection}/tasks/{taskId}', 'showTask')->name('calendar.connections.tasks.show')->where('taskId', '[A-Za-z0-9_-]+');
+        Route::patch('{connection}/tasks/{taskId}', 'updateTask')->name('calendar.connections.tasks.update')->where('taskId', '[A-Za-z0-9_-]+');
+        Route::delete('{connection}/tasks/{taskId}', 'deleteTask')->name('calendar.connections.tasks.destroy')->where('taskId', '[A-Za-z0-9_-]+');
     });
 
     // Workspaces

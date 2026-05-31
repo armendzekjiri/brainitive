@@ -568,6 +568,7 @@ export interface TicketAttachment {
 export interface CalendarConnectionRow {
     id: number;
     provider: string;
+    kind: 'calendar' | 'tasks';
     account_email: string;
     account_name: string | null;
     external_calendar_id: string;
@@ -578,7 +579,7 @@ export interface CalendarConnectionRow {
 
 export interface CalendarEvent {
     id: number | string;
-    type: 'board_item' | 'task_list_item' | 'google_event';
+    type: 'board_item' | 'task_list_item' | 'google_event' | 'google_task';
     key: string;
     title: string;
     start_date: string | null;

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CalendarConnection;
 use App\Services\GoogleCalendarService;
+use App\Services\GoogleTasksService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,7 @@ class CalendarConnectionController extends Controller
     private const GOOGLE_SCOPES = [
         'https://www.googleapis.com/auth/calendar',
         'https://www.googleapis.com/auth/calendar.events',
+        'https://www.googleapis.com/auth/tasks',
         'openid',
         'email',
         'profile',
@@ -92,6 +94,21 @@ class CalendarConnectionController extends Controller
             ->values()
             ->all();
 
+        // Same token also gives us the user's Google Tasks lists.
+        $taskLists = [];
+        $tasksResp = Http::withToken($accessToken)
+            ->acceptJson()
+            ->get('https://tasks.googleapis.com/tasks/v1/users/@me/lists');
+        if ($tasksResp->successful()) {
+            $taskLists = collect($tasksResp->json('items', []))
+                ->map(fn ($l) => [
+                    'id' => $l['id'],
+                    'title' => $l['title'] ?? $l['id'],
+                ])
+                ->values()
+                ->all();
+        }
+
         $request->session()->put('calendar_connect_pending', [
             'provider' => 'google',
             'account_email' => $googleUser->getEmail(),
@@ -100,12 +117,13 @@ class CalendarConnectionController extends Controller
             'refresh_token' => $refreshToken,
             'expires_in' => $expiresIn,
             'calendars' => $calendars,
+            'task_lists' => $taskLists,
         ]);
 
         return redirect()->route('calendar.index', ['picking' => 'google']);
     }
 
-    /** Return the pending picker state (calendar list) for the UI. */
+    /** Return the pending picker state (calendars + task lists) for the UI. */
     public function pendingPicker(Request $request): JsonResponse
     {
         $pending = $request->session()->get('calendar_connect_pending');
@@ -117,17 +135,20 @@ class CalendarConnectionController extends Controller
                 'provider' => $pending['provider'],
                 'account_email' => $pending['account_email'],
                 'account_name' => $pending['account_name'],
-                'calendars' => $pending['calendars'],
+                'calendars' => $pending['calendars'] ?? [],
+                'task_lists' => $pending['task_lists'] ?? [],
             ],
         ]);
     }
 
-    /** Create a CalendarConnection from the pending picker state. */
+    /** Create CalendarConnection rows for each chosen calendar AND task list. */
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
-            'external_calendar_ids' => 'required|array|min:1',
+            'external_calendar_ids' => 'nullable|array',
             'external_calendar_ids.*' => 'string',
+            'external_task_list_ids' => 'nullable|array',
+            'external_task_list_ids.*' => 'string',
         ]);
 
         $pending = $request->session()->get('calendar_connect_pending');
@@ -135,34 +156,66 @@ class CalendarConnectionController extends Controller
             return redirect()->route('calendar.index')->with('status', 'Connection state expired. Please connect again.');
         }
 
-        $calendarsById = collect($pending['calendars'])->keyBy('id');
+        $tokenFields = [
+            'account_name' => $pending['account_name'],
+            'access_token' => $pending['access_token'],
+            'refresh_token' => $pending['refresh_token'],
+            'token_expires_at' => now()->addSeconds($pending['expires_in'] - 60),
+            'is_active' => true,
+        ];
 
-        foreach ($validated['external_calendar_ids'] as $calId) {
+        $calendarsById = collect($pending['calendars'] ?? [])->keyBy('id');
+        foreach ((array) ($validated['external_calendar_ids'] ?? []) as $calId) {
             $cal = $calendarsById->get($calId);
             if (! $cal) continue;
-
             CalendarConnection::updateOrCreate(
                 [
                     'user_id' => Auth::id(),
                     'provider' => $pending['provider'],
+                    'kind' => 'calendar',
                     'account_email' => $pending['account_email'],
                     'external_calendar_id' => $cal['id'],
                 ],
-                [
-                    'account_name' => $pending['account_name'],
+                array_merge($tokenFields, [
                     'external_calendar_name' => $cal['summary'],
                     'external_calendar_color' => $cal['backgroundColor'],
-                    'access_token' => $pending['access_token'],
-                    'refresh_token' => $pending['refresh_token'],
-                    'token_expires_at' => now()->addSeconds($pending['expires_in'] - 60),
-                    'is_active' => true,
-                ],
+                ]),
             );
         }
 
+        $tasksById = collect($pending['task_lists'] ?? [])->keyBy('id');
+        foreach ((array) ($validated['external_task_list_ids'] ?? []) as $listId) {
+            $list = $tasksById->get($listId);
+            if (! $list) continue;
+            CalendarConnection::updateOrCreate(
+                [
+                    'user_id' => Auth::id(),
+                    'provider' => $pending['provider'],
+                    'kind' => 'tasks',
+                    'account_email' => $pending['account_email'],
+                    'external_calendar_id' => $list['id'],
+                ],
+                array_merge($tokenFields, [
+                    'external_calendar_name' => $list['title'],
+                    'external_calendar_color' => null,
+                ]),
+            );
+        }
+
+        // When the same Google account is reconnected with a refreshed scope,
+        // propagate the new tokens to all of that account's existing rows so
+        // refresh-token rotation stays in sync.
+        CalendarConnection::where('user_id', Auth::id())
+            ->where('account_email', $pending['account_email'])
+            ->update([
+                'access_token' => $pending['access_token'],
+                'refresh_token' => $pending['refresh_token'],
+                'token_expires_at' => now()->addSeconds($pending['expires_in'] - 60),
+            ]);
+
         $request->session()->forget('calendar_connect_pending');
 
-        return redirect()->route('calendar.index')->with('status', 'Calendars connected.');
+        return redirect()->route('calendar.index')->with('status', 'Connected.');
     }
 
     /** Toggle a connection's active state. */
@@ -218,6 +271,56 @@ class CalendarConnectionController extends Controller
         $service->deleteEvent($connection, $eventId);
         return back();
     }
+
+    // ── Google Tasks endpoints ──────────────────────────────────────────
+
+    /** Fetch a single Google Task with full details. */
+    public function showTask(Request $request, CalendarConnection $connection, string $taskId, GoogleTasksService $service): JsonResponse
+    {
+        abort_unless($connection->user_id === Auth::id() && $connection->kind === 'tasks', 403);
+        $task = $service->getTask($connection, $taskId);
+        if (! $task) return response()->json(['error' => 'Task not found'], 404);
+        return response()->json(['task' => $task]);
+    }
+
+    /** Create a task on a tasks list (called from QuickCreate). */
+    public function createTask(Request $request, CalendarConnection $connection, GoogleTasksService $service): RedirectResponse
+    {
+        abort_unless($connection->user_id === Auth::id() && $connection->kind === 'tasks', 403);
+        $validated = $request->validate([
+            'title' => 'required|string|max:1024',
+            'date' => 'required|date_format:Y-m-d',
+            'time' => 'nullable|date_format:H:i',
+            'description' => 'nullable|string|max:8000',
+            'timezone' => 'nullable|string|max:64',
+        ]);
+        $service->createTask($connection, $validated);
+        return back();
+    }
+
+    public function updateTask(Request $request, CalendarConnection $connection, string $taskId, GoogleTasksService $service): RedirectResponse
+    {
+        abort_unless($connection->user_id === Auth::id() && $connection->kind === 'tasks', 403);
+        $validated = $request->validate([
+            'title' => 'sometimes|string|max:1024',
+            'description' => 'sometimes|nullable|string|max:8000',
+            'date' => 'sometimes|nullable|date_format:Y-m-d',
+            'time' => 'sometimes|nullable|date_format:H:i',
+            'completed' => 'sometimes|boolean',
+            'timezone' => 'nullable|string|max:64',
+        ]);
+        $service->updateTask($connection, $taskId, $validated);
+        return back();
+    }
+
+    public function deleteTask(Request $request, CalendarConnection $connection, string $taskId, GoogleTasksService $service): RedirectResponse
+    {
+        abort_unless($connection->user_id === Auth::id() && $connection->kind === 'tasks', 403);
+        $service->deleteTask($connection, $taskId);
+        return back();
+    }
+
+    // ── Google Calendar event endpoints ─────────────────────────────────
 
     /** Create an event on a specific Google calendar (called from QuickCreate). */
     public function createEvent(Request $request, CalendarConnection $connection, GoogleCalendarService $service): RedirectResponse

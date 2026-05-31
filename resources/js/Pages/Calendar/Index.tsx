@@ -355,7 +355,7 @@ function EventChip({
     multiDay?: boolean;
     /** When true (time-grid usage), the chip fills its parent's height. */
     fill?: boolean;
-    onOpenGoogle?: (eventId: string, connectionId: number) => void;
+    onOpenGoogle?: (eventId: string, connectionId: number, kind: 'event' | 'task') => void;
 }) {
     const { base: color } = statusColor(event);
     const timeLabel = event.start_time && event.due_time
@@ -366,7 +366,8 @@ function EventChip({
                 ? formatTime(event.start_time)
                 : null;
 
-    const isGoogle = event.type === 'google_event';
+    const isGoogle = event.type === 'google_event' || event.type === 'google_task';
+    const googleKind: 'event' | 'task' = event.type === 'google_task' ? 'task' : 'event';
 
     const sharedDragProps = {
         'data-event': 'true' as const,
@@ -394,13 +395,15 @@ function EventChip({
     const inner = (
         <>
             {!multiDay && <span className="w-[3px] self-stretch shrink-0 rounded-full" style={{ background: color }} />}
-            {event.type === 'google_event' && (
+            {(event.type === 'google_event' || event.type === 'google_task') && (
                 <span
                     className="size-3.5 rounded-sm grid place-items-center shrink-0 text-[8px] font-bold text-white"
                     style={{ background: event.color || '#4285F4' }}
-                    title={event.source?.name ? `Google: ${event.source.name}` : 'Google Calendar'}
+                    title={event.source?.name
+                        ? `${event.type === 'google_task' ? 'Google Tasks' : 'Google Calendar'}: ${event.source.name}`
+                        : event.type === 'google_task' ? 'Google Tasks' : 'Google Calendar'}
                 >
-                    G
+                    {event.type === 'google_task' ? '✓' : 'G'}
                 </span>
             )}
             <span className={cn('min-w-0 flex-1 flex flex-col gap-0.5', !fill && 'flex-row items-center')}>
@@ -419,7 +422,7 @@ function EventChip({
         return (
             <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); onOpenGoogle(String(event.id), event.connection_id!); }}
+                onClick={(e) => { e.stopPropagation(); onOpenGoogle(String(event.id), event.connection_id!, googleKind); }}
                 {...sharedDragProps}
             >
                 {inner}
@@ -453,7 +456,10 @@ function QuickCreateModal({
     const [projectId, setProjectId] = useState<number | null>(defaultProject?.id ?? null);
     const [boardId, setBoardId] = useState<number | null>(defaultProject?.boards[0]?.id ?? null);
     const [taskListId, setTaskListId] = useState<number | null>(defaultProject?.task_lists[0]?.id ?? null);
-    const [connectionId, setConnectionId] = useState<number | null>(connections[0]?.id ?? null);
+    const calendarConns = useMemo(() => connections.filter((c) => c.kind === 'calendar'), [connections]);
+    const taskConns = useMemo(() => connections.filter((c) => c.kind === 'tasks'), [connections]);
+    const [googleKind, setGoogleKind] = useState<'event' | 'task'>('event');
+    const [connectionId, setConnectionId] = useState<number | null>(calendarConns[0]?.id ?? null);
     const [dateInput, setDateInput] = useState('');
     const [timeInput, setTimeInput] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -473,15 +479,25 @@ function QuickCreateModal({
             if (firstProject.boards.length === 0 && firstProject.task_lists.length > 0) setType('list');
             else setType('board');
         }
-        setConnectionId(connections[0]?.id ?? null);
-    }, [state, accessibleProjects, connections]);
+        // Default to event if any calendar connection exists; else task.
+        if (calendarConns.length > 0) {
+            setGoogleKind('event');
+            setConnectionId(calendarConns[0].id);
+        } else if (taskConns.length > 0) {
+            setGoogleKind('task');
+            setConnectionId(taskConns[0].id);
+        } else {
+            setConnectionId(null);
+        }
+    }, [state, accessibleProjects, calendarConns, taskConns]);
 
     const project = useMemo(() => accessibleProjects.find((p) => p.id === projectId) ?? null, [accessibleProjects, projectId]);
 
+    const hasGoogleSource = (googleKind === 'task' ? taskConns.length : calendarConns.length) > 0;
     const canSubmit = title.trim() && dateInput && (
         (type === 'board' && project && boardId)
         || (type === 'list' && project && taskListId)
-        || (type === 'google' && connectionId)
+        || (type === 'google' && connectionId && hasGoogleSource)
     );
 
     const submit = (e: React.FormEvent) => {
@@ -494,8 +510,11 @@ function QuickCreateModal({
             if (!conn) { setSubmitting(false); return; }
             const payload: Record<string, any> = { title: title.trim(), date: dateInput, timezone: browserTimezone() };
             if (timeInput) payload.time = timeInput;
+            const routeName = googleKind === 'task'
+                ? 'calendar.connections.tasks.create'
+                : 'calendar.connections.events.create';
             router.post(
-                route('calendar.connections.events.create', conn.id),
+                route(routeName, conn.id),
                 payload,
                 {
                     preserveScroll: true,
@@ -605,7 +624,7 @@ function QuickCreateModal({
                                 connections.length === 0 && 'opacity-40 cursor-not-allowed',
                             )}
                         >
-                            Calendar
+                            Google
                         </button>
                     </div>
 
@@ -621,25 +640,53 @@ function QuickCreateModal({
                         />
                     </div>
 
-                    {/* Google calendar picker */}
+                    {/* Google: event vs task sub-toggle, then calendar/list picker */}
                     {type === 'google' && (
-                        <div className="space-y-1.5">
-                            <Label>Calendar</Label>
-                            <Select value={connectionId ? String(connectionId) : ''} onValueChange={(v) => setConnectionId(parseInt(v, 10))}>
-                                <SelectTrigger><SelectValue placeholder="Select calendar…" /></SelectTrigger>
-                                <SelectContent>
-                                    {connections.map((c) => (
-                                        <SelectItem key={c.id} value={String(c.id)}>
-                                            <span className="flex items-center gap-2">
-                                                <span className="size-2 rounded-full" style={{ background: c.external_calendar_color || '#4285F4' }} />
-                                                {c.external_calendar_name}
-                                                <span className="text-[10px] text-muted-foreground">· {c.account_email}</span>
-                                            </span>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                        <>
+                            <div className="inline-flex w-full p-[3px] bg-secondary border border-border rounded-md gap-[1px]">
+                                <button
+                                    type="button"
+                                    onClick={() => { setGoogleKind('event'); setConnectionId(calendarConns[0]?.id ?? null); }}
+                                    disabled={calendarConns.length === 0}
+                                    className={cn(
+                                        'flex-1 h-8 px-3 text-xs font-semibold rounded-[5px] transition-colors',
+                                        googleKind === 'event' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                                        calendarConns.length === 0 && 'opacity-40 cursor-not-allowed',
+                                    )}
+                                >
+                                    Event
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setGoogleKind('task'); setConnectionId(taskConns[0]?.id ?? null); }}
+                                    disabled={taskConns.length === 0}
+                                    className={cn(
+                                        'flex-1 h-8 px-3 text-xs font-semibold rounded-[5px] transition-colors',
+                                        googleKind === 'task' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                                        taskConns.length === 0 && 'opacity-40 cursor-not-allowed',
+                                    )}
+                                >
+                                    Task
+                                </button>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>{googleKind === 'task' ? 'Task list' : 'Calendar'}</Label>
+                                <Select value={connectionId ? String(connectionId) : ''} onValueChange={(v) => setConnectionId(parseInt(v, 10))}>
+                                    <SelectTrigger><SelectValue placeholder={`Select ${googleKind === 'task' ? 'list' : 'calendar'}…`} /></SelectTrigger>
+                                    <SelectContent>
+                                        {(googleKind === 'task' ? taskConns : calendarConns).map((c) => (
+                                            <SelectItem key={c.id} value={String(c.id)}>
+                                                <span className="flex items-center gap-2">
+                                                    <span className="size-2 rounded-full" style={{ background: c.external_calendar_color || '#4285F4' }} />
+                                                    {c.external_calendar_name}
+                                                    <span className="text-[10px] text-muted-foreground">· {c.account_email}</span>
+                                                </span>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </>
                     )}
 
                     {/* Project (Brainitive only) */}
@@ -777,7 +824,7 @@ function TimedEvent({
     laneIdx: number;
     /** Total number of side-by-side lanes for this overlap group. */
     laneCount: number;
-    onOpenGoogle?: (eventId: string, connectionId: number) => void;
+    onOpenGoogle?: (eventId: string, connectionId: number, kind: 'event' | 'task') => void;
 }) {
     const [drag, setDrag] = useState<{ top: number; height: number } | null>(null);
     const resizing = drag !== null;
@@ -925,7 +972,7 @@ function layoutLanes(items: { startMins: number; endMins: number }[]): { laneIdx
 }
 
 // ── Month view ───────────────────────────────────────────────────────────
-function MonthView({ events, date, onQuickCreate, onOpenGoogle }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenGoogle: (eventId: string, connectionId: number) => void }) {
+function MonthView({ events, date, onQuickCreate, onOpenGoogle }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenGoogle: (eventId: string, connectionId: number, kind: "event" | "task") => void }) {
     const d = parseISO(date);
     const year = d.getFullYear();
     const month = d.getMonth();
@@ -1039,7 +1086,7 @@ function TimeGrid({
     timedByCol: Map<string, CalendarEvent[]>;
     dateKey: string;
     onQuickCreate: (s: NonNullable<QuickCreateState>) => void;
-    onOpenGoogle: (eventId: string, connectionId: number) => void;
+    onOpenGoogle: (eventId: string, connectionId: number, kind: 'event' | 'task') => void;
 }) {
     const today = isoDate(new Date());
     const now = useNow();
@@ -1214,7 +1261,7 @@ function TimeGrid({
 }
 
 // ── Week view ────────────────────────────────────────────────────────────
-function WeekView({ events, date, onQuickCreate, onOpenGoogle }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenGoogle: (eventId: string, connectionId: number) => void }) {
+function WeekView({ events, date, onQuickCreate, onOpenGoogle }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenGoogle: (eventId: string, connectionId: number, kind: "event" | "task") => void }) {
     const d = parseISO(date);
     const dayOfWeek = (d.getDay() + 6) % 7;
     const monday = new Date(d);
@@ -1242,7 +1289,7 @@ function WeekView({ events, date, onQuickCreate, onOpenGoogle }: { events: Calen
 }
 
 // ── Day view ─────────────────────────────────────────────────────────────
-function DayView({ events, date, onQuickCreate, onOpenGoogle }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenGoogle: (eventId: string, connectionId: number) => void }) {
+function DayView({ events, date, onQuickCreate, onOpenGoogle }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenGoogle: (eventId: string, connectionId: number, kind: "event" | "task") => void }) {
     const d = parseISO(date);
     const iso = isoDate(d);
     const dayName = d.toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -1440,12 +1487,159 @@ function GoogleEventDialog({
     );
 }
 
+// ── Google task editor dialog ────────────────────────────────────────────
+type GoogleTaskDetails = {
+    id: string;
+    title?: string;
+    notes?: string;
+    due?: string;
+    status?: 'needsAction' | 'completed';
+    completed?: string;
+};
+
+function GoogleTaskDialog({
+    taskId, connectionId, onClose,
+}: {
+    taskId: string | null;
+    connectionId: number | null;
+    onClose: () => void;
+}) {
+    const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [title, setTitle] = useState('');
+    const [notes, setNotes] = useState('');
+    const [dueDate, setDueDate] = useState('');
+    const [dueTime, setDueTime] = useState('');
+    const [completed, setCompleted] = useState(false);
+
+    const open = !!taskId && !!connectionId;
+
+    useEffect(() => {
+        if (!open || !taskId || !connectionId) return;
+        setLoading(true);
+        fetch(route('calendar.connections.tasks.show', [connectionId, taskId]), { credentials: 'same-origin' })
+            .then((r) => r.json())
+            .then((data) => {
+                const t: GoogleTaskDetails = data.task;
+                setTitle(t?.title || '');
+                setNotes(t?.notes || '');
+                setCompleted(t?.status === 'completed');
+                if (t?.due) {
+                    const d = new Date(t.due);
+                    const y = d.getFullYear();
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    setDueDate(`${y}-${m}-${day}`);
+                    const hh = String(d.getHours()).padStart(2, '0');
+                    const mm = String(d.getMinutes()).padStart(2, '0');
+                    // If exactly 00:00 UTC, treat as "no time"
+                    const utc = new Date(t.due);
+                    if (utc.getUTCHours() === 0 && utc.getUTCMinutes() === 0) {
+                        setDueTime('');
+                    } else {
+                        setDueTime(`${hh}:${mm}`);
+                    }
+                } else {
+                    setDueDate('');
+                    setDueTime('');
+                }
+                setLoading(false);
+            })
+            .catch(() => setLoading(false));
+    }, [taskId, connectionId, open]);
+
+    if (!open) return null;
+
+    const save = () => {
+        if (!taskId || !connectionId) return;
+        setSaving(true);
+        const payload: Record<string, any> = {
+            title,
+            description: notes,
+            completed,
+            timezone: browserTimezone(),
+            date: dueDate || null,
+            time: dueTime || null,
+        };
+        router.patch(route('calendar.connections.tasks.update', [connectionId, taskId]), payload, {
+            preserveScroll: true,
+            onSuccess: () => { setSaving(false); onClose(); },
+            onError: () => setSaving(false),
+        });
+    };
+
+    const remove = () => {
+        if (!taskId || !connectionId) return;
+        if (!window.confirm('Delete this task?')) return;
+        router.delete(route('calendar.connections.tasks.destroy', [connectionId, taskId]), {
+            preserveScroll: true,
+            onSuccess: () => onClose(),
+        });
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Edit Google task</DialogTitle>
+                    <DialogDescription>Changes are saved directly to Google Tasks (and visible in Google Assistant).</DialogDescription>
+                </DialogHeader>
+                {loading ? (
+                    <p className="text-sm text-muted-foreground py-8 text-center">Loading…</p>
+                ) : (
+                    <div className="space-y-4">
+                        <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" checked={completed} onChange={(e) => setCompleted(e.target.checked)} />
+                            Completed
+                        </label>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="gt-title">Title</Label>
+                            <Input id="gt-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="gt-notes">Notes</Label>
+                            <textarea
+                                id="gt-notes"
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
+                                rows={4}
+                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                placeholder="Notes…"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="gt-date">Due date</Label>
+                                <Input id="gt-date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="gt-time">Due time</Label>
+                                <Input id="gt-time" type="time" value={dueTime} onChange={(e) => setDueTime(e.target.value)} />
+                            </div>
+                        </div>
+                    </div>
+                )}
+                <div className="flex items-center justify-between pt-2">
+                    <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={remove} disabled={loading || saving}>
+                        <Trash2 className="size-3.5 mr-1.5" />Delete
+                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+                        <Button onClick={save} disabled={loading || saving || !title.trim()}>{saving ? 'Saving…' : 'Save'}</Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 // ── Connections menu (Add calendar / Manage) ─────────────────────────────
 type PickerData = {
     provider: string;
     account_email: string;
     account_name: string | null;
     calendars: { id: string; summary: string; backgroundColor: string | null; primary: boolean; access_role: string }[];
+    task_lists: { id: string; title: string }[];
 };
 
 function ConnectionsMenu({ connections }: { connections: CalendarConnectionRow[] }) {
@@ -1488,7 +1682,10 @@ function ConnectionsMenu({ connections }: { connections: CalendarConnectionRow[]
                             <div key={c.id} className="flex items-center gap-2 px-2 py-2 rounded-md hover:bg-muted/50">
                                 <span className="size-3 rounded-full shrink-0" style={{ background: c.external_calendar_color || '#4285F4' }} />
                                 <div className="min-w-0 flex-1">
-                                    <div className="text-sm font-medium truncate">{c.external_calendar_name}</div>
+                                    <div className="text-sm font-medium truncate flex items-center gap-1.5">
+                                        {c.external_calendar_name}
+                                        <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground px-1 py-0.5 rounded bg-muted">{c.kind === 'tasks' ? 'Tasks' : 'Calendar'}</span>
+                                    </div>
                                     <div className="text-[11px] text-muted-foreground truncate">{c.account_email}</div>
                                 </div>
                                 <Button
@@ -1514,22 +1711,29 @@ function ConnectionsMenu({ connections }: { connections: CalendarConnectionRow[]
 
 // ── Calendar picker dialog (after OAuth) ─────────────────────────────────
 function CalendarPickerDialog({ data, onClose }: { data: PickerData | null; onClose: () => void }) {
-    const [selected, setSelected] = useState<string[]>([]);
+    const [selectedCalendars, setSelectedCalendars] = useState<string[]>([]);
+    const [selectedLists, setSelectedLists] = useState<string[]>([]);
     useEffect(() => {
         if (data) {
             const primary = data.calendars.find((c) => c.primary)?.id;
-            setSelected(primary ? [primary] : []);
+            setSelectedCalendars(primary ? [primary] : []);
+            // Auto-select the default task list (first one — Google always orders default first)
+            setSelectedLists(data.task_lists?.[0] ? [data.task_lists[0].id] : []);
         }
     }, [data]);
 
     if (!data) return null;
 
+    const totalPicked = selectedCalendars.length + selectedLists.length;
+
     const submit = () => {
-        if (selected.length === 0) return;
-        router.post(route('calendar.connections.store'), { external_calendar_ids: selected }, {
+        if (totalPicked === 0) return;
+        router.post(route('calendar.connections.store'), {
+            external_calendar_ids: selectedCalendars,
+            external_task_list_ids: selectedLists,
+        }, {
             preserveScroll: true,
             onSuccess: () => {
-                // Clean the ?picking=... query param
                 window.history.replaceState({}, '', route('calendar.index'));
                 onClose();
             },
@@ -1540,35 +1744,68 @@ function CalendarPickerDialog({ data, onClose }: { data: PickerData | null; onCl
         <Dialog open={!!data} onOpenChange={(o) => { if (!o) onClose(); }}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Choose calendars to add</DialogTitle>
+                    <DialogTitle>Choose what to add</DialogTitle>
                     <DialogDescription>
-                        Pick which of <strong>{data.account_email}</strong>'s calendars to show on Brainitive.
+                        Pick which of <strong>{data.account_email}</strong>'s calendars and task lists to show on Brainitive.
                     </DialogDescription>
                 </DialogHeader>
-                <div className="space-y-1 max-h-72 overflow-y-auto">
-                    {data.calendars.map((c) => {
-                        const active = selected.includes(c.id);
-                        return (
-                            <button
-                                key={c.id}
-                                type="button"
-                                onClick={() => setSelected(active ? selected.filter((s) => s !== c.id) : [...selected, c.id])}
-                                className={cn(
-                                    'flex items-center gap-2 w-full px-2.5 py-2 rounded-md text-sm transition-colors',
-                                    active ? 'bg-primary/10' : 'hover:bg-muted',
-                                )}
-                            >
-                                <span className="size-3 rounded-full shrink-0" style={{ background: c.backgroundColor || '#4285F4' }} />
-                                <span className="flex-1 text-left truncate">{c.summary}</span>
-                                {c.primary && <span className="text-[10px] text-muted-foreground">primary</span>}
-                                {active && <Check className="size-4 text-primary shrink-0" />}
-                            </button>
-                        );
-                    })}
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                    {data.calendars.length > 0 && (
+                        <div>
+                            <p className="px-1 mb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Calendars</p>
+                            <div className="space-y-1">
+                                {data.calendars.map((c) => {
+                                    const active = selectedCalendars.includes(c.id);
+                                    return (
+                                        <button
+                                            key={c.id}
+                                            type="button"
+                                            onClick={() => setSelectedCalendars(active ? selectedCalendars.filter((s) => s !== c.id) : [...selectedCalendars, c.id])}
+                                            className={cn(
+                                                'flex items-center gap-2 w-full px-2.5 py-2 rounded-md text-sm transition-colors',
+                                                active ? 'bg-primary/10' : 'hover:bg-muted',
+                                            )}
+                                        >
+                                            <span className="size-3 rounded-full shrink-0" style={{ background: c.backgroundColor || '#4285F4' }} />
+                                            <span className="flex-1 text-left truncate">{c.summary}</span>
+                                            {c.primary && <span className="text-[10px] text-muted-foreground">primary</span>}
+                                            {active && <Check className="size-4 text-primary shrink-0" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                    {data.task_lists.length > 0 && (
+                        <div>
+                            <p className="px-1 mb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Task lists</p>
+                            <div className="space-y-1">
+                                {data.task_lists.map((l) => {
+                                    const active = selectedLists.includes(l.id);
+                                    return (
+                                        <button
+                                            key={l.id}
+                                            type="button"
+                                            onClick={() => setSelectedLists(active ? selectedLists.filter((s) => s !== l.id) : [...selectedLists, l.id])}
+                                            className={cn(
+                                                'flex items-center gap-2 w-full px-2.5 py-2 rounded-md text-sm transition-colors',
+                                                active ? 'bg-primary/10' : 'hover:bg-muted',
+                                            )}
+                                        >
+                                            <span className="size-3 rounded-sm shrink-0 border-2 border-current" />
+                                            <span className="flex-1 text-left truncate">{l.title}</span>
+                                            <span className="text-[10px] text-muted-foreground">tasks</span>
+                                            {active && <Check className="size-4 text-primary shrink-0" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                     <Button variant="outline" onClick={onClose}>Cancel</Button>
-                    <Button onClick={submit} disabled={selected.length === 0}>Add {selected.length} calendar{selected.length === 1 ? '' : 's'}</Button>
+                    <Button onClick={submit} disabled={totalPicked === 0}>Add {totalPicked}</Button>
                 </div>
             </DialogContent>
         </Dialog>
@@ -1581,7 +1818,11 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
     const [quickCreate, setQuickCreate] = useState<QuickCreateState>(null);
     const [pickerData, setPickerData] = useState<PickerData | null>(null);
     const [googleEvent, setGoogleEvent] = useState<{ id: string; connectionId: number } | null>(null);
-    const openGoogle = (id: string, connectionId: number) => setGoogleEvent({ id, connectionId });
+    const [googleTask, setGoogleTask] = useState<{ id: string; connectionId: number } | null>(null);
+    const openGoogle = (id: string, connectionId: number, kind: 'event' | 'task') => {
+        if (kind === 'task') setGoogleTask({ id, connectionId });
+        else setGoogleEvent({ id, connectionId });
+    };
 
     // If the URL has ?picking=google, fetch the pending session state and show picker.
     useEffect(() => {
@@ -1663,6 +1904,12 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
                     eventId={googleEvent?.id ?? null}
                     connectionId={googleEvent?.connectionId ?? null}
                     onClose={() => setGoogleEvent(null)}
+                />
+
+                <GoogleTaskDialog
+                    taskId={googleTask?.id ?? null}
+                    connectionId={googleTask?.connectionId ?? null}
+                    onClose={() => setGoogleTask(null)}
                 />
             </div>
         </AppLayout>
