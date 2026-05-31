@@ -27,8 +27,11 @@ class UpdateBoardItemTool extends Tool
             'item_id' => 'required|integer',
             'title' => 'sometimes|string|max:255',
             'description' => 'sometimes|nullable|string',
+            'start_date' => 'sometimes|nullable|date_format:Y-m-d',
+            'start_time' => 'sometimes|nullable|date_format:H:i',
             'due_date' => 'sometimes|nullable|date_format:Y-m-d',
             'due_time' => 'sometimes|nullable|date_format:H:i',
+            'assignee' => 'sometimes|nullable|string|max:255',
         ]);
 
         $user = $request->user();
@@ -64,15 +67,28 @@ class UpdateBoardItemTool extends Tool
                 ? PageContentConverter::markdownToHtml($validated['description'])
                 : null;
         }
+        if (array_key_exists('start_date', $validated)) {
+            $changes['start_date'] = $validated['start_date'];
+        }
+        if (array_key_exists('start_time', $validated)) {
+            $changes['start_time'] = $validated['start_time'];
+        }
         if (array_key_exists('due_date', $validated)) {
             $changes['due_date'] = $validated['due_date'];
         }
         if (array_key_exists('due_time', $validated)) {
             $changes['due_time'] = $validated['due_time'];
         }
+        if (array_key_exists('assignee', $validated)) {
+            try {
+                $changes['assigned_to'] = $this->resolveAssigneeId($user, $project, $validated['assignee']);
+            } catch (AuthorizationException $e) {
+                return Response::error($e->getMessage());
+            }
+        }
 
         if (empty($changes)) {
-            return Response::error('Provide at least one field to update (title, description, due_date or due_time).');
+            return Response::error('Provide at least one field to update (title, description, start/due dates or assignee).');
         }
 
         $item->update($changes);
@@ -108,8 +124,11 @@ class UpdateBoardItemTool extends Tool
             'item_id' => $schema->integer()->description('The item id (from get_board).')->required(),
             'title' => $schema->string()->description('New title.'),
             'description' => $schema->string()->description('New card body as Markdown.'),
+            'start_date' => $schema->string()->description('New start date YYYY-MM-DD (empty to clear).'),
+            'start_time' => $schema->string()->description('New start time HH:MM (24h).'),
             'due_date' => $schema->string()->description('New due date YYYY-MM-DD (empty to clear).'),
             'due_time' => $schema->string()->description('New due time HH:MM (24h).'),
+            'assignee' => $schema->string()->description('Reassign: "me", a member email, or empty to unassign.'),
         ];
     }
 }
