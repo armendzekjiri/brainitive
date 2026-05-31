@@ -1,0 +1,98 @@
+<?php
+
+namespace App\Mcp\Tools;
+
+use App\Mcp\Tools\Concerns\InteractsWithBrainitive;
+use App\Support\Mcp\PageContentConverter;
+use App\Support\Mcp\ResourceLocator;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Laravel\Mcp\Request;
+use Laravel\Mcp\Response;
+use Laravel\Mcp\ResponseFactory;
+use Laravel\Mcp\Server\Attributes\Description;
+use Laravel\Mcp\Server\Tool;
+
+#[Description('Update an existing page: rename it and/or change its body. Body is given as Markdown. Use mode "replace" to overwrite the whole document or "append" to add the Markdown to the end. Identify the page by uuid.')]
+class UpdatePageTool extends Tool
+{
+    use InteractsWithBrainitive;
+
+    public function handle(Request $request): Response|ResponseFactory
+    {
+        $validated = $request->validate([
+            'workspace' => 'required|string',
+            'project' => 'required|string',
+            'page_uuid' => 'required|string',
+            'title' => 'nullable|string|max:255',
+            'markdown' => 'nullable|string',
+            'mode' => 'nullable|in:replace,append',
+        ]);
+
+        if (empty($validated['title']) && ! isset($validated['markdown'])) {
+            return Response::error('Provide a new title and/or markdown to update.');
+        }
+
+        $user = $request->user();
+
+        try {
+            $project = $this->projectForUser($user, $validated['workspace'], $validated['project']);
+        } catch (AuthorizationException $e) {
+            return Response::error($e->getMessage());
+        }
+
+        $page = $project->allPages()->where('uuid', $validated['page_uuid'])->first();
+        if (! $page) {
+            return Response::error('No page found with that uuid in this project.');
+        }
+        if ($page->is_whiteboard) {
+            return Response::error('Whiteboard pages cannot be edited via Markdown.');
+        }
+
+        $changes = ['last_edited_by' => $user->id];
+
+        if (! empty($validated['title'])) {
+            $changes['name'] = $validated['title'];
+        }
+
+        if (isset($validated['markdown'])) {
+            $incoming = PageContentConverter::markdownToDoc($validated['markdown']);
+
+            if (($validated['mode'] ?? 'replace') === 'append') {
+                $existing = is_array($page->content) ? ($page->content['content'] ?? []) : [];
+                $incoming['content'] = array_merge($existing, $incoming['content']);
+            }
+
+            // Preserve any embedded excalidraw data the editor keeps alongside content.
+            $current = $page->content ?? [];
+            if (is_array($current) && ! empty($current['excalidrawEmbeds'])) {
+                $incoming['excalidrawEmbeds'] = $current['excalidrawEmbeds'];
+            }
+
+            $changes['content'] = $incoming;
+        }
+
+        $page->update($changes);
+
+        return Response::structured([
+            'updated' => true,
+            'page_uuid' => $page->uuid,
+            'location' => ResourceLocator::locate($page->fresh()),
+        ]);
+    }
+
+    /**
+     * @return array<string, JsonSchema>
+     */
+    public function schema(JsonSchema $schema): array
+    {
+        return [
+            'workspace' => $schema->string()->description('The workspace slug.')->required(),
+            'project' => $schema->string()->description('The project slug.')->required(),
+            'page_uuid' => $schema->string()->description('The page uuid to update.')->required(),
+            'title' => $schema->string()->description('Optional new title.'),
+            'markdown' => $schema->string()->description('Optional new body as Markdown.'),
+            'mode' => $schema->string()->enum(['replace', 'append'])->description('How to apply markdown: replace the whole body (default) or append to the end.')->default('replace'),
+        ];
+    }
+}

@@ -29,15 +29,17 @@ class CliController extends Controller
         $user = Auth::user();
 
         // Revoke any previous CLI tokens so there is only ever one active.
-        // Wrapped in try/catch in case the personal_access_tokens table has not
-        // been migrated yet on this environment.
+        // Wrapped in try/catch in case the OAuth tables have not been migrated
+        // yet on this environment.
         try {
-            $user->tokens()->where('name', 'brainitive-cli')->delete();
+            $user->tokens()->where('name', 'brainitive-cli')->get()->each->revoke();
         } catch (\Exception) {
-            // Table missing — will be created after `php artisan migrate`
+            // Tables missing — will be created after `php artisan migrate`
         }
 
-        $token = $user->createToken('brainitive-cli')->plainTextToken;
+        // Passport personal access token (Bearer). Validated by the `api`
+        // guard (config/auth.php) — the same guard the MCP server uses.
+        $token = $user->createToken('brainitive-cli')->accessToken;
 
         return response()->json([
             'token' => $token,
@@ -56,7 +58,7 @@ class CliController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        $request->user()->currentAccessToken()?->revoke();
 
         return response()->json(['message' => 'Logged out.']);
     }

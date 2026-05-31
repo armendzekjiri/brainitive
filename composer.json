@@ -10,6 +10,8 @@
         "inertiajs/inertia-laravel": "^2.0",
         "laravel-notification-channels/webpush": "^11.0",
         "laravel/framework": "^12.0",
+        "laravel/mcp": "^0.7.2",
+        "laravel/passport": "^13.0",
         "laravel/sanctum": "^4.0",
         "laravel/socialite": "^5.24",
         "laravel/tinker": "^2.10.1",
