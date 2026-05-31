@@ -4,12 +4,13 @@ namespace App\Notifications;
 
 use App\Models\Page;
 use App\Models\User;
+use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 
 class PageUpdatedNotification extends Notification
 {
-    use Queueable;
+    use Queueable, SendsWebPush;
 
     public function __construct(
         public readonly Page $page,
@@ -18,7 +19,22 @@ class PageUpdatedNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        return ['database'];
+        return $this->withWebPush($notifiable, ['database']);
+    }
+
+    public function toWebPush(object $notifiable, $notification)
+    {
+        $workspace = $this->page->project?->workspace;
+        $project   = $this->page->project;
+        $url = $workspace && $project
+            ? route('pages.show', [$workspace->slug, $project->slug, $this->page->uuid])
+            : '/';
+
+        return $this->webPush(
+            "Page updated: {$this->page->name}",
+            "{$this->actor->name} edited this page",
+            $url,
+        );
     }
 
     public function toDatabase(object $notifiable): array

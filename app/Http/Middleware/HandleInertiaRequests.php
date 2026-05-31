@@ -181,6 +181,10 @@ class HandleInertiaRequests extends Middleware
                 ? (is_object($request->route('page')) ? $request->route('page')->uuid : $request->route('page'))
                 : null,
             'unreadNotificationsCount' => fn () => $user ? $user->unreadNotifications()->count() : 0,
+            'push' => [
+                'vapidPublicKey' => config('webpush.vapid.public_key'),
+                'subscribed' => fn () => $user ? $user->pushSubscriptions()->exists() : false,
+            ],
             'onboarding' => fn () => $user ? $this->onboardingProps($user) : null,
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),

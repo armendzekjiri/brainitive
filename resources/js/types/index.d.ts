@@ -353,6 +353,11 @@ export type PageProps<
     priorities?: ItemPriority[];
     /** Unread notification count shared by HandleInertiaRequests middleware */
     unreadNotificationsCount?: number;
+    /** Browser push config shared by HandleInertiaRequests middleware */
+    push?: {
+        vapidPublicKey: string | null;
+        subscribed: boolean;
+    };
     /** Onboarding state + computed setup checklist progress (shared by HandleInertiaRequests) */
     onboarding?: OnboardingState | null;
 };

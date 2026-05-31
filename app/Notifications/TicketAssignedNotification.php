@@ -4,12 +4,13 @@ namespace App\Notifications;
 
 use App\Models\Ticket;
 use App\Models\User;
+use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 
 class TicketAssignedNotification extends Notification
 {
-    use Queueable;
+    use Queueable, SendsWebPush;
 
     public function __construct(
         public readonly Ticket $ticket,
@@ -21,7 +22,21 @@ class TicketAssignedNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        return ['database', 'mail'];
+        return $this->withWebPush($notifiable, ['database', 'mail']);
+    }
+
+    public function toWebPush(object $notifiable, $notification)
+    {
+        $helpdesk = $this->ticket->helpdesk;
+        $project = $helpdesk->project;
+        $workspace = $project->workspace;
+        $url = route('tickets.show', [$workspace->slug, $project->slug, $helpdesk->slug, $this->ticket->id]);
+
+        return $this->webPush(
+            "Ticket {$this->ticket->key} assigned to you",
+            "{$this->actor->name}: {$this->ticket->subject}",
+            $url,
+        );
     }
 
     /**

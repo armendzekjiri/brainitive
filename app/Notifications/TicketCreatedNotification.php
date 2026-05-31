@@ -5,12 +5,13 @@ namespace App\Notifications;
 use App\Models\Ticket;
 use App\Models\TicketContact;
 use App\Models\User;
+use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 
 class TicketCreatedNotification extends Notification
 {
-    use Queueable;
+    use Queueable, SendsWebPush;
 
     public function __construct(
         public readonly Ticket $ticket,
@@ -23,11 +24,29 @@ class TicketCreatedNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        // For contacts, send email only; for users, send database + email
+        // For contacts, send email only; for users, send database + email + push
         if ($notifiable instanceof \App\Models\TicketContact) {
             return ['mail'];
         }
-        return ['database', 'mail'];
+        return $this->withWebPush($notifiable, ['database', 'mail']);
+    }
+
+    public function toWebPush(object $notifiable, $notification)
+    {
+        $helpdesk = $this->ticket->helpdesk;
+        $project = $helpdesk->project;
+        $workspace = $project->workspace;
+        $url = route('tickets.show', [$workspace->slug, $project->slug, $helpdesk->slug, $this->ticket->id]);
+
+        $sourceName = $this->source instanceof User
+            ? $this->source->name
+            : ($this->source instanceof TicketContact ? ($this->source->name ?: $this->source->email) : 'Someone');
+
+        return $this->webPush(
+            "New ticket {$this->ticket->key}",
+            "{$sourceName}: {$this->ticket->subject}",
+            $url,
+        );
     }
 
     /**
