@@ -30,8 +30,11 @@ class CreateBoardItemTool extends Tool
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'column_id' => 'nullable|integer',
+            'start_date' => 'nullable|date_format:Y-m-d',
+            'start_time' => 'nullable|date_format:H:i',
             'due_date' => 'nullable|date_format:Y-m-d',
             'due_time' => 'nullable|date_format:H:i',
+            'assignee' => 'nullable|string|max:255',
         ]);
 
         $user = $request->user();
@@ -62,6 +65,12 @@ class CreateBoardItemTool extends Tool
             return Response::error('No valid column found on this board. Call get_board to see column ids.');
         }
 
+        try {
+            $assigneeId = $this->resolveAssigneeId($user, $project, $validated['assignee'] ?? null);
+        } catch (AuthorizationException $e) {
+            return Response::error($e->getMessage());
+        }
+
         $maxPosition = Item::where('column_id', $column->id)->max('position') ?? 0;
 
         $item = $board->items()->create([
@@ -77,6 +86,9 @@ class CreateBoardItemTool extends Tool
             'item_type_id' => ItemType::where('is_default', true)->first()?->id,
             'priority_id' => ItemPriority::where('is_default', true)->first()?->id,
             'key' => $project->getNextItemKey(),
+            'assigned_to' => $assigneeId,
+            'start_date' => $validated['start_date'] ?? null,
+            'start_time' => $validated['start_time'] ?? null,
             'due_date' => $validated['due_date'] ?? null,
             'due_time' => $validated['due_time'] ?? null,
             'created_by' => $user->id,
@@ -89,6 +101,8 @@ class CreateBoardItemTool extends Tool
             'item_id' => $item->id,
             'item_key' => $item->key,
             'column' => $column->name,
+            'assignee' => $item->assignee?->name,
+            'due_date' => $item->due_date?->format('Y-m-d'),
             'location' => ResourceLocator::locate($item),
         ]);
     }
@@ -103,6 +117,8 @@ class CreateBoardItemTool extends Tool
             'item_id' => $schema->integer(),
             'item_key' => $schema->string()->description('Human key, e.g. PROJ-12.'),
             'column' => $schema->string(),
+            'assignee' => $schema->string(),
+            'due_date' => $schema->string(),
             'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
         ];
     }
@@ -119,8 +135,11 @@ class CreateBoardItemTool extends Tool
             'title' => $schema->string()->description('The card title.')->required(),
             'description' => $schema->string()->description('Optional card body as Markdown (converted to the editor format automatically).'),
             'column_id' => $schema->integer()->description('Optional target column id (from get_board). Defaults to the first column.'),
+            'start_date' => $schema->string()->description('Optional start date YYYY-MM-DD.'),
+            'start_time' => $schema->string()->description('Optional start time HH:MM (24h).'),
             'due_date' => $schema->string()->description('Optional due date YYYY-MM-DD.'),
             'due_time' => $schema->string()->description('Optional due time HH:MM (24h).'),
+            'assignee' => $schema->string()->description('Assign the card: pass "me" for yourself, or a workspace member\'s email (see list_project_members).'),
         ];
     }
 }

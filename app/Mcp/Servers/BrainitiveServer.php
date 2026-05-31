@@ -25,6 +25,7 @@ use App\Mcp\Tools\ListCalendarConnectionsTool;
 use App\Mcp\Tools\ListCalendarEventsTool;
 use App\Mcp\Tools\ListGoogleTasksTool;
 use App\Mcp\Tools\ListPagesTool;
+use App\Mcp\Tools\ListProjectMembersTool;
 use App\Mcp\Tools\ListProjectsTool;
 use App\Mcp\Tools\ListSnippetsTool;
 use App\Mcp\Tools\ListTaskListsTool;
@@ -90,6 +91,7 @@ class BrainitiveServer extends Server
         ListWorkspacesTool::class,
         ListProjectsTool::class,
         GetProjectTool::class,
+        ListProjectMembersTool::class,
         // Cross-content search (ChatGPT deep-research contract)
         SearchTool::class,
         FetchTool::class,

@@ -65,4 +65,30 @@ trait InteractsWithBrainitive
             throw new AuthorizationException($response->message() ?: 'This action is not allowed for your account.');
         }
     }
+
+    /**
+     * Resolve an assignee reference to a user id. Accepts the literal "me"
+     * (the signed-in user) or the email of a member of the project's workspace.
+     * Returns null for an empty reference.
+     *
+     * @throws AuthorizationException
+     */
+    protected function resolveAssigneeId(Authenticatable $user, Project $project, ?string $assignee): ?int
+    {
+        $assignee = $assignee !== null ? trim($assignee) : null;
+        if ($assignee === null || $assignee === '') {
+            return null;
+        }
+
+        if (strtolower($assignee) === 'me') {
+            return $user->id;
+        }
+
+        $member = $project->workspace->users()->where('email', $assignee)->first();
+        if (! $member) {
+            throw new AuthorizationException("No workspace member found with email \"{$assignee}\". Use list_project_members to see who can be assigned, or pass \"me\".");
+        }
+
+        return $member->id;
+    }
 }
