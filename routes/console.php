@@ -12,3 +12,8 @@ Artisan::command('inspire', function () {
 Schedule::command('app:send-calendar-reminders')
     ->everyFiveMinutes()
     ->withoutOverlapping();
+
+// Push bell + browser reminders for board / task-list items reaching their start time.
+Schedule::command('app:send-item-reminders')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();

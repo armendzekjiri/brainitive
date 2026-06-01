@@ -24,7 +24,8 @@ interface NotificationData {
     context_url?: string;
     page_name?: string;
     page_url?: string;
-    actor_name: string;
+    when_label?: string;
+    actor_name?: string;
     actor_avatar?: string;
 }
 
@@ -196,15 +197,33 @@ export function NotificationsDropdown() {
                                     >
                                         {/* Avatar / Icon */}
                                         <div className="size-8 rounded-full bg-muted flex items-center justify-center shrink-0 text-xs font-medium uppercase overflow-hidden border">
-                                            {d.actor_avatar
-                                                ? <img src={d.actor_avatar} alt={d.actor_name} className="size-full object-cover" />
-                                                : d.actor_name?.charAt(0) ?? '?'
+                                            {d.type === 'item_reminder'
+                                                ? <Bell className="size-4 text-muted-foreground" />
+                                                : d.actor_avatar
+                                                    ? <img src={d.actor_avatar} alt={d.actor_name} className="size-full object-cover" />
+                                                    : d.actor_name?.charAt(0) ?? '?'
                                             }
                                         </div>
 
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm leading-snug">
+                                                {d.type === 'item_reminder' ? (
+                                                    <>
+                                                        <a
+                                                            href={d.item_url}
+                                                            className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            onClick={() => { if (isUnread) markRead(n.id); }}
+                                                        >
+                                                            {d.item_key}
+                                                            <ExternalLink className="size-2.5" />
+                                                        </a>
+                                                        {' '}{d.when_label}
+                                                    </>
+                                                ) : (
                                                 <span className="font-medium">{d.actor_name}</span>
+                                                )}
                                                 {d.type === 'mentioned' && (
                                                     <>
                                                         {' mentioned you '}
@@ -238,7 +257,7 @@ export function NotificationsDropdown() {
                                                         </a>
                                                     </>
                                                 )}
-                                                {d.type !== 'mentioned' && d.type !== 'page_updated' && (
+                                                {d.type !== 'mentioned' && d.type !== 'page_updated' && d.type !== 'item_reminder' && (
                                                     <>
                                                         {d.type === 'item_assigned' ? ' assigned you to ' : ' moved '}
                                                         <a
