@@ -28,7 +28,16 @@ import {
     CreditCard,
     ShieldCheck,
     Scale,
-    Cookie,
+    ListChecks,
+    CalendarDays,
+    Briefcase,
+    Code2,
+    Eye,
+    CircleUser,
+    Bot,
+    KeyRound,
+    Search,
+    type LucideIcon,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { Button } from '@/components/ui/button';
@@ -117,90 +126,164 @@ export default function Welcome({
         return () => window.removeEventListener('scroll', onScroll);
     }, []);
 
-    const features = [
+    const featureGroups: {
+        title: string;
+        tagline: string;
+        icon: LucideIcon;
+        color: string;
+        items: { icon: LucideIcon; title: string; description: string }[];
+    }[] = [
         {
+            title: 'Plan & organize',
+            tagline: 'Keep every team, project, and task moving.',
             icon: LayoutDashboard,
-            title: 'Workspaces',
-            description:
-                'Organize teams and projects in dedicated workspaces with fine-grained roles and permissions.',
             color: '#0E83DC',
+            items: [
+                {
+                    icon: LayoutDashboard,
+                    title: 'Workspaces',
+                    description:
+                        'Group teams and projects into dedicated workspaces with their own members.',
+                },
+                {
+                    icon: FolderKanban,
+                    title: 'Boards & Kanban',
+                    description:
+                        'Drag-and-drop boards with labels, priorities, subtasks, attachments, and comments.',
+                },
+                {
+                    icon: ListChecks,
+                    title: 'Task lists',
+                    description:
+                        'Lightweight checklists for the work that doesn’t need a full board.',
+                },
+                {
+                    icon: CalendarDays,
+                    title: 'Calendar sync',
+                    description:
+                        'Connect Google Calendar and Tasks, see your schedule, and reschedule in place.',
+                },
+                {
+                    icon: Briefcase,
+                    title: 'My Work',
+                    description:
+                        'One view of everything assigned to you, across all workspaces and projects.',
+                },
+            ],
         },
         {
-            icon: FolderKanban,
-            title: 'Projects & Boards',
-            description:
-                'Kanban boards with drag-and-drop, labels, priorities, file attachments, and threaded comments.',
-            color: '#69A748',
-        },
-        {
+            title: 'Create & write',
+            tagline: 'Documents, diagrams, and reusable content.',
             icon: FileText,
-            title: 'Wiki & Docs',
-            description:
-                'Tree-based pages with rich content, embeds, and diagrams. Publish internally or publicly.',
-            color: '#0E83DC',
-        },
-        {
-            icon: PenLine,
-            title: 'Rich Editors',
-            description:
-                'Powerful editors with tables, code blocks, math, slash commands, and keyboard shortcuts.',
-            color: '#485E72',
-        },
-        {
-            icon: Palette,
-            title: 'Excalidraw',
-            description:
-                'Whiteboard sketches and diagrams embedded right in your docs. Draw, collaborate, export.',
             color: '#69A748',
+            items: [
+                {
+                    icon: FileText,
+                    title: 'Wiki & docs',
+                    description:
+                        'Tree-organized pages with rich content. Keep them as drafts or publish.',
+                },
+                {
+                    icon: PenLine,
+                    title: 'Rich editors',
+                    description:
+                        'Tables, code blocks, math, embeds, and slash commands at your fingertips.',
+                },
+                {
+                    icon: Palette,
+                    title: 'Whiteboards',
+                    description:
+                        'Sketch and diagram with Excalidraw, embedded right inside your pages.',
+                },
+                {
+                    icon: Code2,
+                    title: 'Snippets',
+                    description:
+                        'Reusable text and code snippets with search — quick-insert anywhere.',
+                },
+                {
+                    icon: Bookmark,
+                    title: 'Bookmarks',
+                    description:
+                        'Save links and resources into collections, with previews fetched for you.',
+                },
+            ],
         },
         {
+            title: 'Collaborate & share',
+            tagline: 'Bring the right people in, control what they see.',
             icon: Users,
-            title: 'Team Collaboration',
-            description:
-                'Admin, editor, and viewer roles per workspace. The right people get the right access.',
-            color: '#0E83DC',
-        },
-        {
-            icon: Share2,
-            title: 'Publish & Share',
-            description:
-                'Control visibility per page — publish for internal use or generate public links.',
-            color: '#69A748',
-        },
-        {
-            icon: Bookmark,
-            title: 'Bookmarks',
-            description:
-                'Save and organize links, resources, and references. Share bookmark collections with your team.',
-            color: '#0E83DC',
-        },
-        {
-            icon: Layers,
-            title: 'Snippets',
-            description:
-                'Reusable text and code snippets with labels and search. Quick-insert into pages and items.',
-            color: '#69A748',
-        },
-        {
-            icon: LifeBuoy,
-            title: 'Portal support',
-            description:
-                'Embeddable helpdesk and support portal. Let customers submit tickets and track replies from your site.',
             color: '#485E72',
+            items: [
+                {
+                    icon: Users,
+                    title: 'Roles & permissions',
+                    description:
+                        'Admin, editor, and viewer roles so the right people get the right access.',
+                },
+                {
+                    icon: Eye,
+                    title: 'Watchers',
+                    description:
+                        'Follow items, pages, lists, and tickets to stay notified of every change.',
+                },
+                {
+                    icon: Share2,
+                    title: 'Publish & share',
+                    description:
+                        'Keep content internal or generate public links for pages, snippets, and bookmarks.',
+                },
+                {
+                    icon: LifeBuoy,
+                    title: 'Helpdesk portal',
+                    description:
+                        'An embeddable support widget and portal for customer tickets and replies.',
+                },
+                {
+                    icon: CircleUser,
+                    title: 'Profiles & avatars',
+                    description:
+                        'Profile photos for members, shown on cards, comments, and assignments.',
+                },
+            ],
         },
         {
-            icon: Bell,
-            title: 'Notifications',
-            description:
-                'In-app notifications for assignments, replies, and updates. Stay in the loop without leaving the app.',
+            title: 'Connect & automate',
+            tagline: 'Plug in AI, stay in the loop, sign in your way.',
+            icon: Bot,
             color: '#0E83DC',
-        },
-        {
-            icon: Sparkles,
-            title: 'AI assist',
-            description:
-                'Connect your preferred AI provider for content rewriting and suggestions in descriptions and docs.',
-            color: '#69A748',
+            items: [
+                {
+                    icon: Bot,
+                    title: 'AI agents (MCP)',
+                    description:
+                        'Connect ChatGPT or Claude over MCP to read and update your workspace safely.',
+                },
+                {
+                    icon: Sparkles,
+                    title: 'In-app AI',
+                    description:
+                        'Bring your own AI provider for writing and suggestions inside docs and items.',
+                },
+                {
+                    icon: Bell,
+                    title: 'Notifications & push',
+                    description:
+                        'In-app alerts plus web push for assignments, replies, and updates.',
+                },
+                {
+                    icon: KeyRound,
+                    title: 'Social login',
+                    description:
+                        'Sign in with email, Google, or GitHub — whatever your team prefers.',
+                },
+                {
+                    icon: Search,
+                    title: 'Search & install',
+                    description:
+                        'Search across everything, and install Brainitive as an app on any device.',
+                },
+            ],
         },
     ];
 
@@ -633,39 +716,70 @@ export default function Welcome({
                                 Features
                             </div>
                             <h2 className="text-3xl sm:text-4xl font-bold text-[#485E72] dark:text-slate-100 mb-4">
-                                Everything you need to ship
+                                Everything you need, in one place
                             </h2>
                             <p className="text-[#485E72]/60 dark:text-slate-400 max-w-xl mx-auto text-lg">
-                                Workspaces, Kanban boards, wiki pages, and rich editors
-                                &mdash; all in a single product.
+                                Plan, write, collaborate, and connect &mdash; from Kanban
+                                boards and wiki pages to calendar sync and AI agents.
                             </p>
                         </RevealSection>
 
-                        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                            {features.map((feature, i) => (
-                                <RevealSection
-                                    key={feature.title}
-                                    delay={i * 80}
-                                >
-                                    <div className="group h-full rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm p-6 transition-all duration-300 hover:bg-card hover:shadow-xl hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20 hover:border-border/80 hover:-translate-y-1">
+                        <div className="space-y-14 sm:space-y-16">
+                            {featureGroups.map((group) => (
+                                <RevealSection key={group.title}>
+                                    {/* Group header */}
+                                    <div className="flex items-center gap-3 mb-6">
                                         <div
-                                            className="flex h-12 w-12 items-center justify-center rounded-xl mb-5 transition-transform group-hover:scale-110"
+                                            className="flex h-10 w-10 items-center justify-center rounded-xl shrink-0"
                                             style={{
-                                                backgroundColor: `${feature.color}12`,
-                                                color: feature.color,
+                                                backgroundColor: `${group.color}14`,
+                                                color: group.color,
                                             }}
                                         >
-                                            <feature.icon
+                                            <group.icon
                                                 className="h-5 w-5"
                                                 strokeWidth={1.8}
                                             />
                                         </div>
-                                        <h3 className="font-bold text-[#485E72] dark:text-slate-100 mb-2 text-base">
-                                            {feature.title}
-                                        </h3>
-                                        <p className="text-sm leading-relaxed text-[#485E72]/60 dark:text-slate-400">
-                                            {feature.description}
-                                        </p>
+                                        <div>
+                                            <h3 className="text-lg sm:text-xl font-bold text-[#485E72] dark:text-slate-100 leading-tight">
+                                                {group.title}
+                                            </h3>
+                                            <p className="text-sm text-[#485E72]/60 dark:text-slate-400">
+                                                {group.tagline}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Group items */}
+                                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {group.items.map((item) => (
+                                            <div
+                                                key={item.title}
+                                                className="group/item h-full rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm p-5 transition-all duration-300 hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20 hover:border-border/80 hover:-translate-y-0.5"
+                                            >
+                                                <div className="flex items-center gap-3 mb-2.5">
+                                                    <div
+                                                        className="flex h-9 w-9 items-center justify-center rounded-lg shrink-0 transition-transform group-hover/item:scale-110"
+                                                        style={{
+                                                            backgroundColor: `${group.color}12`,
+                                                            color: group.color,
+                                                        }}
+                                                    >
+                                                        <item.icon
+                                                            className="h-4 w-4"
+                                                            strokeWidth={1.8}
+                                                        />
+                                                    </div>
+                                                    <h4 className="font-bold text-[#485E72] dark:text-slate-100 text-[15px] leading-tight">
+                                                        {item.title}
+                                                    </h4>
+                                                </div>
+                                                <p className="text-sm leading-relaxed text-[#485E72]/60 dark:text-slate-400">
+                                                    {item.description}
+                                                </p>
+                                            </div>
+                                        ))}
                                     </div>
                                 </RevealSection>
                             ))}
