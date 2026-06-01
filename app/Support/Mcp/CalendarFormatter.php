@@ -20,16 +20,18 @@ class CalendarFormatter
         $end = $event['end'] ?? [];
         $allDay = isset($start['date']);
 
+        // Coerce every optional string to '' (never null) so strict MCP clients
+        // that validate the output schema don't reject the whole response.
         return [
-            'event_id' => $event['id'] ?? null,
+            'event_id' => $event['id'] ?? '',
             'title' => $event['summary'] ?? '(no title)',
             'all_day' => $allDay,
-            'start' => $start['dateTime'] ?? $start['date'] ?? null,
-            'end' => $end['dateTime'] ?? $end['date'] ?? null,
-            'description' => $event['description'] ?? null,
-            'location' => $event['location'] ?? null,
-            'link' => $event['htmlLink'] ?? null,
-            'calendar' => $connection?->external_calendar_name,
+            'start' => $start['dateTime'] ?? $start['date'] ?? '',
+            'end' => $end['dateTime'] ?? $end['date'] ?? '',
+            'description' => $event['description'] ?? '',
+            'location' => $event['location'] ?? '',
+            'link' => $event['htmlLink'] ?? '',
+            'calendar' => $connection?->external_calendar_name ?? '',
             'connection_id' => $connection?->id,
         ];
     }
@@ -47,7 +49,7 @@ class CalendarFormatter
             'location' => $schema->string(),
             'link' => $schema->string()->description('Link to open the event in Google Calendar.'),
             'calendar' => $schema->string(),
-            'connection_id' => $schema->integer(),
+            'connection_id' => $schema->integer()->nullable(),
         ]);
     }
 
@@ -61,7 +63,7 @@ class CalendarFormatter
             'due' => $schema->string()->description('RFC3339 due date, if set.'),
             'completed' => $schema->boolean(),
             'list' => $schema->string(),
-            'connection_id' => $schema->integer(),
+            'connection_id' => $schema->integer()->nullable(),
         ]);
     }
 
@@ -72,12 +74,12 @@ class CalendarFormatter
     public static function task(array $task, ?CalendarConnection $connection = null): array
     {
         return [
-            'task_id' => $task['id'] ?? null,
+            'task_id' => $task['id'] ?? '',
             'title' => $task['title'] ?? '(no title)',
-            'notes' => $task['notes'] ?? null,
-            'due' => $task['due'] ?? null,
+            'notes' => $task['notes'] ?? '',
+            'due' => $task['due'] ?? '',
             'completed' => ($task['status'] ?? null) === 'completed',
-            'list' => $connection?->external_calendar_name,
+            'list' => $connection?->external_calendar_name ?? '',
             'connection_id' => $connection?->id,
         ];
     }

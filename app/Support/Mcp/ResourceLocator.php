@@ -23,7 +23,7 @@ use Illuminate\Database\Eloquent\Model;
 class ResourceLocator
 {
     /**
-     * @return array{type: string, title: string, workspace: ?string, project: ?string, breadcrumb: string, url: string}
+     * @return array{type: string, title: string, workspace: string, project: string, breadcrumb: string, url: string}
      */
     public static function locate(Model $model): array
     {
@@ -163,7 +163,7 @@ class ResourceLocator
     }
 
     /**
-     * @return array{type: string, title: string, workspace: ?string, project: ?string, breadcrumb: string, url: string}
+     * @return array{type: string, title: string, workspace: string, project: string, breadcrumb: string, url: string}
      */
     private static function build(string $type, string $title, ?Workspace $workspace, ?Project $project, string $url, ?string $extra = null): array
     {
@@ -177,8 +177,9 @@ class ResourceLocator
         return [
             'type' => $type,
             'title' => $title,
-            'workspace' => $workspace?->name,
-            'project' => $project?->name,
+            // '' (never null) so strict MCP clients accept the string schema.
+            'workspace' => $workspace?->name ?? '',
+            'project' => $project?->name ?? '',
             'breadcrumb' => implode(' / ', $crumbs),
             'url' => $url,
         ];

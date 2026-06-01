@@ -23,7 +23,7 @@ class ListWorkspacesTool extends Tool
                 'name' => $ws->name,
                 'slug' => $ws->slug,
                 'projects_count' => $ws->projects_count,
-                'role' => $ws->pivot->role ?? null,
+                'role' => $ws->pivot->role ?? '',
             ])
             ->values()
             ->all();

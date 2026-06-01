@@ -44,7 +44,7 @@ class GetPageTool extends Tool
             return Response::structured([
                 'title' => $page->name,
                 'type' => 'whiteboard',
-                'markdown' => null,
+                'markdown' => '',
                 'note' => 'This is an Excalidraw whiteboard page; its visual content cannot be represented as Markdown.',
                 'location' => ResourceLocator::locate($page),
             ]);
@@ -53,7 +53,7 @@ class GetPageTool extends Tool
         return Response::structured([
             'title' => $page->name,
             'type' => $page->type,
-            'markdown' => PageContentConverter::htmlToMarkdown(PageContentConverter::pageContentToHtml($page->content)),
+            'markdown' => PageContentConverter::htmlToMarkdown(PageContentConverter::pageContentToHtml($page->content)) ?? '',
             'location' => ResourceLocator::locate($page),
         ]);
     }
@@ -66,7 +66,7 @@ class GetPageTool extends Tool
         return [
             'title' => $schema->string(),
             'type' => $schema->string(),
-            'markdown' => $schema->string()->description('Page body as Markdown (null for whiteboards).'),
+            'markdown' => $schema->string()->description('Page body as Markdown (empty for whiteboards).'),
             'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
         ];
     }

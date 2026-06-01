@@ -45,8 +45,8 @@ class GetTaskListTool extends Tool
                 'id' => $i->id,
                 'title' => $i->title,
                 'status' => $i->status,
-                'due_date' => $i->due_date?->format('Y-m-d'),
-                'recurrence' => $i->recurrence,
+                'due_date' => $i->due_date?->format('Y-m-d') ?? '',
+                'recurrence' => $i->recurrence ?? '',
             ])
             ->all();
 

@@ -45,8 +45,8 @@ class SearchTool extends Tool
                 $results[] = [
                     'id' => $row['type'].':'.$row['id'],
                     'title' => $row['title'],
-                    'url' => $row['url'] ?? null,
-                    'subtitle' => $row['subtitle'] ?? null,
+                    'url' => $row['url'] ?? '',
+                    'subtitle' => $row['subtitle'] ?? '',
                 ];
             }
         }
