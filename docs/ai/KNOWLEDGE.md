@@ -26,6 +26,15 @@ tracker.
 - `2026_02_23_153119_extend_bookmarks_icon_for_url` uses MySQL `MODIFY` syntax with no
   SQLite branch. SQLite ignores varchar length, so this can be safely faked locally.
 
+### Web push silently never delivers without VAPID keys
+`config/webpush.php` reads `VAPID_SUBJECT` / `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` from the
+env. If they're unset (the default `.env` ships them blank), the Inertia `push.vapidPublicKey`
+prop is empty so **no browser can ever subscribe**, and the server can't sign payloads — so
+*all* browser notifications silently fail with no error. Generate keys once with
+`php artisan webpush:vapid` (writes the two keys to `.env`) and set `VAPID_SUBJECT` (a
+`mailto:` or URL) manually — the command does **not** write the subject. Then `php artisan
+config:clear`. The in-app bell (database channel) is unaffected by VAPID.
+
 ### Email verification blocks login in dev
 Registration requires email verification. With the default `MAIL_MAILER=log`, the
 verification email is written to `storage/logs/`. To bypass during development:

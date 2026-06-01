@@ -106,14 +106,17 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Model:** `CalendarConnection` (per-user, OAuth via Socialite — *not* workspace-scoped)
 - **Controllers:** `CalendarController` (app view, reschedule), `CalendarConnectionController` (connect/redirect/callback, events & tasks CRUD)
 - **Services:** `app/Services/GoogleCalendarService.php`, `app/Services/GoogleTasksService.php`
-- **Console:** `SendCalendarReminders.php` + `CalendarReminderNotification`
+- **Console:** `SendCalendarReminders.php` + `CalendarReminderNotification` (Google events/tasks, push-only);
+  `SendItemReminders.php` + `ItemReminderNotification` (board/task-list items reaching their
+  `start_time` → bell **+** push; assignee only; dedup via `sent_item_reminders`). Both scheduled
+  every 5 min in `routes/console.php`.
 - **Routes:** `calendar/connections/...` controller group in `web.php`
 - **Pages:** `Pages/Calendar/`
 
 ### MyWork, Search, Notifications, Files
 - **MyWork:** `MyWorkController` → `Pages/MyWork/` — cross-workspace "assigned to me" dashboard
 - **Search:** `SearchController` (invokable) → `/search`
-- **Notifications:** `NotificationController` (DB-backed list + unread count + mark read) → `Pages/Notifications/`; delivery = `database` + optional `WebPushChannel`. Push subscriptions via `PushSubscriptionController`. See the [add-notification skill](./skills/add-notification.md).
+- **Notifications:** `NotificationController` (DB-backed list + unread count + mark read) → `Pages/Notifications/`; delivery = `database` + optional `WebPushChannel`. Push subscriptions via `PushSubscriptionController`. See the [add-notification skill](./skills/add-notification.md). **Web push requires `VAPID_*` keys in `.env`** — without them the frontend can't subscribe and nothing is ever delivered (see [`KNOWLEDGE.md`](./KNOWLEDGE.md)).
 - **Files:** `FileController` — `/upload/image`, `/upload/document` (public disk, UUID names)
 
 ### AI integrations — MCP server & in-app AI
