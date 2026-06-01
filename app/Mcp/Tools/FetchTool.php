@@ -65,9 +65,9 @@ class FetchTool extends Tool
 
         return Response::structured([
             'id' => $validated['id'],
-            'title' => $title,
-            'text' => $text,
-            'url' => ResourceLocator::locate($model)['url'] ?? null,
+            'title' => $title ?? '',
+            'text' => $text ?? '',
+            'url' => ResourceLocator::locate($model)['url'] ?? '',
             'metadata' => ['type' => $type],
         ]);
     }

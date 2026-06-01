@@ -36,8 +36,8 @@ class ListProjectsTool extends Tool
             ->map(fn ($p) => [
                 'name' => $p->name,
                 'slug' => $p->slug,
-                'key' => $p->key,
-                'description' => $p->description,
+                'key' => $p->key ?? '',
+                'description' => $p->description ?? '',
             ])
             ->values()
             ->all();

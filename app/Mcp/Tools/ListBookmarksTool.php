@@ -38,7 +38,7 @@ class ListBookmarksTool extends Tool
             ->map(fn ($b) => [
                 'name' => $b->name,
                 'slug' => $b->slug,
-                'description' => $b->description,
+                'description' => $b->description ?? '',
                 'items_count' => $b->items_count,
             ])
             ->values()

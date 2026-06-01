@@ -73,7 +73,13 @@ class CreateWidgetTool extends Tool
   `slug`; pages by `uuid`; tasks/board items by numeric id (read the parent first).
 - **Every write returns a `location`** via `ResourceLocator::locate($model)` so the client can
   tell the user *where* it created the thing + the URL. Mirror it in `outputSchema()`.
-- **Page bodies** are Markdown in, converted by `app/Support/Mcp/PageContentConverter`.
+- **Never return `null` for a `string`/`integer` output field.** Strict MCP clients (e.g.
+  OpenClaw) validate `Response::structured(...)` against `outputSchema()` and reject the *whole*
+  response if a declared `string` comes back `null` (ChatGPT/Claude silently tolerate it). For
+  any value that can be null — model attributes, `?->` chains, `?? null`, `?->format(...)` —
+  coerce to `''` (e.g. `$item->due_date?->format('Y-m-d') ?? ''`). If the field is a genuinely
+  nullable **integer** (no sensible empty value, e.g. `parent_id`), mark the schema
+  `$schema->integer()->nullable()` instead.
 - Calendar tools (personal Google data) use `ResolvesCalendarConnections` + always take an
   IANA timezone on writes.
 - `#[Description]` is the model-facing doc — make it precise; that's how the AI picks the tool.

@@ -49,7 +49,7 @@ class GetProjectTool extends Tool
 
         return Response::structured([
             'project' => $project->name,
-            'key' => $project->key,
+            'key' => $project->key ?? '',
             'pages' => $pages,
             'boards' => $boards,
             'task_lists' => $taskLists,

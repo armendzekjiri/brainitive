@@ -47,9 +47,9 @@ class GetBoardTool extends Tool
                 'name' => $col->name,
                 'items' => $items->where('column_id', $col->id)->map(fn ($i) => [
                     'id' => $i->id,
-                    'key' => $i->key,
+                    'key' => $i->key ?? '',
                     'title' => $i->title,
-                    'due_date' => $i->due_date?->format('Y-m-d'),
+                    'due_date' => $i->due_date?->format('Y-m-d') ?? '',
                 ])->values()->all(),
             ])
             ->all();

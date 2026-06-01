@@ -99,10 +99,10 @@ class CreateBoardItemTool extends Tool
         return Response::structured([
             'created' => true,
             'item_id' => $item->id,
-            'item_key' => $item->key,
+            'item_key' => $item->key ?? '',
             'column' => $column->name,
-            'assignee' => $item->assignee?->name,
-            'due_date' => $item->due_date?->format('Y-m-d'),
+            'assignee' => $item->assignee?->name ?? '',
+            'due_date' => $item->due_date?->format('Y-m-d') ?? '',
             'location' => ResourceLocator::locate($item),
         ]);
     }

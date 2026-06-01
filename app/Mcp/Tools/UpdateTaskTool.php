@@ -80,7 +80,7 @@ class UpdateTaskTool extends Tool
             'task_id' => $item->id,
             'status' => $item->status,
             'recurrence_rolled_forward' => $bounced,
-            'next_due_date' => $bounced ? $item->due_date?->format('Y-m-d') : null,
+            'next_due_date' => $bounced ? ($item->due_date?->format('Y-m-d') ?? '') : '',
             'location' => ResourceLocator::locate($item),
         ]);
     }

@@ -95,7 +95,7 @@ class UpdateBoardItemTool extends Tool
 
         return Response::structured([
             'updated' => true,
-            'item_key' => $item->key,
+            'item_key' => $item->key ?? '',
             'location' => ResourceLocator::locate($item->fresh()),
         ]);
     }

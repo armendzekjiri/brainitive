@@ -61,7 +61,7 @@ class ListPagesTool extends Tool
                 'uuid' => $schema->string(),
                 'name' => $schema->string(),
                 'type' => $schema->string()->description('page or folder.'),
-                'parent_id' => $schema->integer(),
+                'parent_id' => $schema->integer()->nullable()->description('Parent page id, or null for a root page.'),
             ])),
             'count' => $schema->integer(),
         ];
