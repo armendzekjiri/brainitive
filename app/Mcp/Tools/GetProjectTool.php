@@ -32,6 +32,7 @@ class GetProjectTool extends Tool
         }
 
         $pages = $project->pages()
+            ->visibleTo($user)
             ->get(['uuid', 'name', 'type', 'icon'])
             ->map(fn ($p) => ['uuid' => $p->uuid, 'name' => $p->name, 'type' => $p->type])
             ->all();

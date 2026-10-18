@@ -238,9 +238,32 @@ through `app/Support/Mcp/PageContentConverter`.
 
 ---
 
+## Page workflow (draft → publish → versions)
+
+Pages work like Confluence. Keep these rules when touching pages:
+
+- **Never write `content` of a published page directly from an editing flow.** Go through
+  `Page::saveDraft()` (fills `draft_*` on published pages, `content` on unpublished ones),
+  then `publishChanges()` to make it live. Anything that changes the live version of a
+  published page must record a version (`recordVersion()`), like the MCP `update-page` tool.
+- **Every page listing uses `->visibleTo($user)`** — tree, sidebar (`HandleInertiaRequests`),
+  project page, dashboards, search, MCP. Unpublished pages are author + admin only.
+- **Authorize with `PagePolicy`** (`view` / `update` / `delete`, `create` with
+  `[Page::class, $project]`). Don't hand-roll role checks.
+- Autosave is JSON (`PUT pages.draft.save`) with `base_revision`; a mismatch returns `409` —
+  the client must show it, never retry silently. Pass `force` only after the user chose
+  "Keep mine".
+- `draft_content` / `draft_name` / `draft_icon` are `$hidden` on the model; only
+  `PageController::show()` reveals them to editors.
+- Presence is a cache-backed heartbeat (`pages.presence`, `usePagePresence`), not websockets
+  — Reverb/Echo aren't installed.
+
 ## Testing
 
 - PHPUnit 11; base `tests/TestCase.php`. Feature tests use `RefreshDatabase` + factories +
   `actingAs($user)`. Test names: `test_user_can_create_board()`.
 - Cover: every policy method, CRUD, validation rejects bad data, authz denies unauthorized
   users, soft deletes, unique slug + uuid generation.
+- Page tests share the role matrix in `tests/Feature/Pages/InteractsWithPages.php`
+  (author / editor / viewer / admin / outsider). Factories: `Workspace`, `Project`, `Page`
+  (`published()`, `folder()`), `PageVersion`.

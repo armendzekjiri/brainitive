@@ -119,16 +119,16 @@ class ProjectController extends Controller
                 $query->orderBy('position');
             },
             'creator:id,name,avatar',
-            'pages' => function ($query) {
-                $query->orderByRaw("CASE type WHEN 'folder' THEN 0 ELSE 1 END")->orderBy('position');
+            'pages' => function ($query) use ($request) {
+                $query->visibleTo($request->user())->orderByRaw("CASE type WHEN 'folder' THEN 0 ELSE 1 END")->orderBy('position');
             },
             'helpdesks' => function ($query) {
                 $query->orderBy('created_at', 'desc');
             },
         ]);
 
-        $project->pages->load(['children' => function ($query) {
-            $query->orderByRaw("CASE type WHEN 'folder' THEN 0 ELSE 1 END")->orderBy('position');
+        $project->pages->load(['children' => function ($query) use ($request) {
+            $query->visibleTo($request->user())->orderByRaw("CASE type WHEN 'folder' THEN 0 ELSE 1 END")->orderBy('position');
         }]);
 
         return Inertia::render('Projects/Show', [
@@ -337,16 +337,16 @@ class ProjectController extends Controller
 
         $members = $project->users()
             ->select('users.id', 'users.name', 'users.email', 'users.avatar')
-            ->when($query, fn ($q) => $q->whereRaw('LOWER(users.name) LIKE ?', ['%' . strtolower($query) . '%']))
+            ->when($query, fn ($q) => $q->whereRaw('LOWER(users.name) LIKE ?', ['%'.strtolower($query).'%']))
             ->withPivot('role')
             ->limit($limit)
             ->get()
             ->map(fn ($u) => [
-                'id'             => $u->id,
-                'name'           => $u->name,
-                'email'          => $u->email,
+                'id' => $u->id,
+                'name' => $u->name,
+                'email' => $u->email,
                 'avatar_display' => $u->avatar_display,
-                'role'           => $u->pivot->role,
+                'role' => $u->pivot->role,
             ]);
 
         return response()->json($members);

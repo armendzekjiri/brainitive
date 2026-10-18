@@ -161,6 +161,7 @@ class SearchController extends Controller
             ->join('projects', 'pages.project_id', '=', 'projects.id')
             ->whereIn('projects.workspace_id', $workspaceIds)
             ->where('pages.type', 'page')
+            ->visibleTo($user)
             ->where(function ($query) use ($term) {
                 $query->where('pages.name', 'like', $term);
             })

@@ -85,3 +85,17 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 
 - Lexical/Tiptap/Editor.js all store content as JSON in a `content` column. When adding a
   feature that reads page content, check which editor produced it before parsing.
+- **Eloquent relations serialize in snake_case.** `$page->load('lastEditor')` reaches React
+  as `page.last_editor`, not `page.lastEditor` (the old page header read `lastEditor` and
+  never showed a name). Same for `draftEditor` → `draft_editor`.
+- **Published page = two states.** `content`/`name`/`icon` are what readers see;
+  `draft_*` is the shared unpublished draft. `updated_at` moves on every autosave, so for
+  "last changed" on a published page use the newest `page_versions.created_at`
+  (`last_published_at` prop), not `updated_at`.
+- **Whiteboard (Excalidraw) pages bypass the draft.** `saveExcalidraw` still writes the live
+  `content` directly; only document pages have draft/publish separation so far.
+- **Tests that send real notifications fail without GMP/BCMath** — `minishlink/web-push`
+  raises an `ErrorException` warning. Use `Notification::fake()` in feature tests.
+- **Repo-wide `pint --test` is red on untouched legacy files** (old migrations,
+  notifications, BoardController…). Gate your change with `pint --dirty`; clean up legacy
+  files in a dedicated chore branch.

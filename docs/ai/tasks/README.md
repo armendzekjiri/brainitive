@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Pages: Confluence-style draft / publish workflow](./feat-page-draft-publish-workflow.md) | done |
 | [Doc editor: Outline / Evernote-style writing](./feat-doc-editor-outline-style.md) | done |
 | [Better AI Agent Documentation](./chore-brai-41-ai-agent-docs.md) | done |
 | [Subtask / parent implementation](./2026-02-26-subtask-parent-implementation.md) | shipped |

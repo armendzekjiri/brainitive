@@ -13,7 +13,6 @@ use App\Notifications\WorkspaceInvitationNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -176,6 +175,7 @@ class WorkspaceController extends Controller
 
         $documents = Page::whereIn('project_id', $projectIds)
             ->where('type', 'page')
+            ->visibleTo($request->user())
             ->with('project:id,slug,name,color')
             ->orderByDesc('updated_at')
             ->limit(6)
@@ -252,6 +252,7 @@ class WorkspaceController extends Controller
         $recentPages = \App\Models\Page::query()
             ->where('last_edited_by', $user->id)
             ->whereIn('project_id', $workspaceProjectIds)
+            ->visibleTo($request->user())
             ->with(['project:id,name,slug,workspace_id'])
             ->latest('updated_at')
             ->limit(10)

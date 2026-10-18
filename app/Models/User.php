@@ -184,6 +184,26 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
     }
 
     /**
+     * IDs of projects the user administers: project admin, or admin/owner of the workspace.
+     *
+     * @return array<int, int>
+     */
+    public function adminProjectIds(): array
+    {
+        $workspaceIds = $this->workspaces()
+            ->wherePivot('role', 'admin')
+            ->pluck('workspaces.id')
+            ->merge(Workspace::where('owner_id', $this->id)->pluck('id'));
+
+        return Project::whereIn('workspace_id', $workspaceIds)
+            ->pluck('id')
+            ->merge($this->projects()->wherePivot('role', 'admin')->pluck('projects.id'))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
      * Get items created by this user.
      */
     public function createdItems(): HasMany

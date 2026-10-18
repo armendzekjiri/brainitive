@@ -57,7 +57,7 @@ class FetchTool extends Tool
             return Response::error('No content found for that id.');
         }
 
-        if (! $this->userCanAccess($model, $type, $workspaceIds)) {
+        if (! $this->userCanAccess($model, $type, $workspaceIds) || ($type === 'page' && $user->cannot('view', $model))) {
             return Response::error('You do not have access to that content.');
         }
 

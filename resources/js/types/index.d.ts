@@ -320,9 +320,47 @@ export interface Page {
     parent?: Page;
     children?: Page[];
     creator?: User;
-    lastEditor?: User;
+    last_editor?: User | null;
+    /** Unpublished changes of a published page — only sent to users who can edit. */
+    draft_content?: Record<string, unknown> | null;
+    draft_name?: string | null;
+    draft_icon?: string | null;
+    draft_updated_at?: string | null;
+    draft_editor?: Pick<User, 'id' | 'name'> | null;
+    edit_revision?: number;
+    current_version?: number;
+    /** When the live version last changed (newest version), sent by pages.show. */
+    last_published_at?: string | null;
     created_at: string;
     updated_at: string;
+}
+
+export interface PageVersionSummary {
+    version: number;
+    name: string;
+    icon?: string | null;
+    message?: string | null;
+    author?: Pick<User, 'id' | 'name' | 'avatar'> | null;
+    created_at: string;
+}
+
+export interface PageVersionDetail extends PageVersionSummary {
+    content?: Record<string, unknown> | null;
+}
+
+/** Response of the draft autosave and presence endpoints. */
+export interface PageDraftState {
+    edit_revision: number;
+    has_unpublished_changes: boolean;
+    draft_updated_at: string | null;
+    draft_updated_by: Pick<User, 'id' | 'name'> | null;
+}
+
+export interface PagePresenceUser {
+    id: number;
+    name: string;
+    avatar?: string | null;
+    editing: boolean;
 }
 
 export type PageProps<
