@@ -229,6 +229,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('boards/{board:slug}/items', [BoardController::class, 'storeItem'])->name('boards.items.store');
             Route::post('boards/{board:slug}/items/{item}/duplicate', [BoardController::class, 'duplicateItem'])->name('boards.items.duplicate');
             Route::get('boards/{board:slug}/items/{item}', [BoardController::class, 'showItem'])->name('boards.items.show');
+            Route::get('boards/{board:slug}/items/{item}/details', [BoardController::class, 'itemDetails'])->name('boards.items.details');
+            Route::post('boards/{board:slug}/items/{item}/work-logs', [BoardController::class, 'logWork'])->name('boards.items.work-logs.store');
             Route::patch('boards/{board:slug}/items/{item}/move', [BoardController::class, 'moveItem'])->name('boards.items.move');
             Route::patch('boards/{board:slug}/items/{item}', [BoardController::class, 'updateItem'])->name('boards.items.update');
             Route::post('boards/{board:slug}/items/{item}/watch', [BoardController::class, 'toggleWatch'])->name('boards.items.watch');

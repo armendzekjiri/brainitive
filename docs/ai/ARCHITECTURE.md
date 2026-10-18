@@ -62,7 +62,10 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 
 ### Kanban — Boards, Columns, Items
 - **Models:** `Board`, `BoardColumn`, `Item`, `ItemType`, `ItemPriority`, `ItemLink`, `Label`, `Comment`, `Attachment`
-- **Controller:** `BoardController` (fat — boards, columns, items, reorder, move, watch, links, comments, attachments)
+- **Controller:** `BoardController` (fat — boards, columns, items, reorder, move, watch, links, comments, attachments, `itemDetails` JSON, `logWork`)
+- **History:** `App\Observers\ItemObserver` (`#[ObservedBy]` on `Item`) writes `activity_logs` for every model change; the controller logs labels / comments / links / attachments / work logs. Read via `Item::activities()` → `boards.items.details`.
+- **Payload:** board + full-item pages load card data only (`withCardData()`: counts instead of comments/attachments); `ItemDetail` fetches comments, attachments and history from `boards.items.details` when an item opens.
+- **Board UI extras:** WIP limit per column (soft, header `n/limit`), quick filters + all filters mirrored in the URL (`?q=&assignee=&status=&labels=&priority=&type=&quick=`), time tracking (`original_estimate` / `time_spent` in minutes, Jira durations: 1d = 8h, 1w = 5d).
 - **Policies:** `BoardPolicy`, `ItemPolicy`
 - **Routes:** `boards/{board:slug}/...` under `projects/{project}` in `web.php`
 - **Pages:** `Pages/Boards/`, `Pages/Items/`

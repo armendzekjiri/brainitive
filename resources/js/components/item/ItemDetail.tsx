@@ -11,14 +11,16 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import {
     CheckSquare, Link2, Plus, X, Paperclip, Upload, Eye, Download, Trash2,
     MessageSquare, Reply, Pencil, Check, File, FileImage, FileText, FileSpreadsheet,
-    FileArchive, FileCode, FileType,
+    FileArchive, FileCode, FileType, History, Clock, Loader2,
 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { formatDuration } from '@/lib/duration';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { ItemTypeIcon } from '@/components/ItemTypeIcon';
 import { LabelChip, PriorityIndicator, AssigneeAvatar, itemAccentColor } from '@/components/board/ItemPrimitives';
 import {
     Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User,
-    Label as LabelType, Comment, Attachment,
+    Label as LabelType, Comment, Attachment, ItemHistoryEntry,
 } from '@/types';
 
 // ── Minimal item shape used by the "Link issue" picker ───────────────────────
@@ -257,6 +259,7 @@ export function useItemDetail(args: UseItemDetailArgs) {
     const [priorityId, setPriorityId] = useState(item?.priority_id?.toString() || '');
     const [parentId, setParentId] = useState(item?.parent_id?.toString() || '');
     const [storyPoints, setStoryPoints] = useState(item?.story_points?.toString() || '');
+    const [originalEstimate, setOriginalEstimate] = useState(item?.original_estimate ? formatDuration(item.original_estimate) : '');
     const [startDate, setStartDate] = useState(item?.start_date?.toString().split('T')[0] || '');
     const [startTime, setStartTime] = useState(item?.start_time?.substring(0, 5) || '');
     const [dueDate, setDueDate] = useState(item?.due_date?.toString().split('T')[0] || '');
@@ -273,10 +276,12 @@ export function useItemDetail(args: UseItemDetailArgs) {
     // File preview
     const [filePreview, setFilePreview] = useState<{ url: string; title: string; previewType: PreviewType } | null>(null);
 
+    // The full item page sends comments/attachments for the first paint; the board popup
+    // doesn't (they're fetched lazily) — never show the previous item's while loading.
     useEffect(() => {
-        if (item?.comments) setLocalComments(item.comments);
-        if (item?.attachments) setLocalAttachments(item.attachments);
-    }, [item?.comments, item?.attachments]);
+        setLocalComments(item?.comments ?? []);
+        setLocalAttachments(item?.attachments ?? []);
+    }, [item?.id, item?.comments, item?.attachments]);
 
     useEffect(() => {
         if (item) {
@@ -289,6 +294,7 @@ export function useItemDetail(args: UseItemDetailArgs) {
             setPriorityId(item.priority_id?.toString() || '');
             setParentId(item.parent_id?.toString() || '');
             setStoryPoints(item.story_points?.toString() || '');
+            setOriginalEstimate(item.original_estimate ? formatDuration(item.original_estimate) : '');
             setStartDate(item.start_date?.toString().split('T')[0] || '');
             setStartTime(item.start_time?.substring(0, 5) || '');
             setDueDate(item.due_date?.toString().split('T')[0] || '');
@@ -328,6 +334,71 @@ export function useItemDetail(args: UseItemDetailArgs) {
         () => allBoardItems.filter((i) => !i.parent_id && i.id !== item?.id),
         [allBoardItems, item?.id],
     );
+
+    // ── Lazy details: comments, attachments and history come from their own endpoint ──
+    const [history, setHistory] = useState<ItemHistoryEntry[]>([]);
+    const [detailsLoading, setDetailsLoading] = useState(false);
+    const [timeSpent, setTimeSpent] = useState(item?.time_spent ?? 0);
+    const currentItemIdRef = useRef(item?.id);
+    currentItemIdRef.current = item?.id;
+
+    const refreshDetails = useCallback(() => {
+        if (!item) return;
+        const itemId = item.id;
+        setDetailsLoading(true);
+        window.axios
+            .get(route('boards.items.details', [workspace.slug, project.slug, board.slug, itemId]))
+            .then(({ data }: { data: { comments: Comment[]; attachments: Attachment[]; history: ItemHistoryEntry[]; time_spent: number } }) => {
+                // Ignore answers for an item the user already navigated away from
+                if (currentItemIdRef.current !== itemId) return;
+                setLocalComments(data.comments);
+                setLocalAttachments(data.attachments);
+                setHistory(data.history);
+                setTimeSpent(data.time_spent ?? 0);
+            })
+            .catch(() => { /* keep what we have; the board itself still works */ })
+            .finally(() => setDetailsLoading(false));
+    }, [workspace.slug, project.slug, board.slug, item?.id]);
+
+    // Re-fetch whenever the board reload shows this item changed (comment, upload, edit, …)
+    const detailsKey = [
+        live?.id, live?.updated_at, live?.comments_count, live?.attachments_count,
+        (live?.labels ?? []).map((l) => l.id).join(','),
+        (live?.outgoing_links ?? []).length, (live?.incoming_links ?? []).length,
+    ].join('|');
+    useEffect(() => {
+        if (!item) {
+            setHistory([]);
+            return;
+        }
+        refreshDetails();
+    }, [detailsKey]);
+
+    // ── Time tracking ─────────────────────────────────────────────────────
+    const [logWorkOpen, setLogWorkOpen] = useState(false);
+    const [logWorkTime, setLogWorkTime] = useState('');
+    const [logWorkNote, setLogWorkNote] = useState('');
+    const [logWorkError, setLogWorkError] = useState<string | null>(null);
+    const [isLoggingWork, setIsLoggingWork] = useState(false);
+
+    const handleLogWork = () => {
+        if (!item || !logWorkTime.trim()) return;
+        setIsLoggingWork(true);
+        setLogWorkError(null);
+        router.post(route('boards.items.work-logs.store', [workspace.slug, project.slug, board.slug, item.id]), {
+            time: logWorkTime.trim(),
+            note: logWorkNote.trim() || null,
+        }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setLogWorkOpen(false);
+                setLogWorkTime('');
+                setLogWorkNote('');
+            },
+            onError: (errors) => setLogWorkError(errors.time ?? 'Could not log work.'),
+            onFinish: () => setIsLoggingWork(false),
+        });
+    };
     const subtaskTypeId = itemTypes.find((t) => t.slug === 'subtask')?.id;
 
     // ── Linked issues ──────────────────────────────────────────────────────
@@ -563,7 +634,7 @@ export function useItemDetail(args: UseItemDetailArgs) {
         handleEditorChange, startEditDescription, saveDescription, cancelDescription, handleCheckboxToggle,
         // properties
         columnId, assignedTo, itemTypeId, setItemTypeId, priorityId, setPriorityId,
-        parentId, setParentId, storyPoints, setStoryPoints,
+        parentId, setParentId, storyPoints, setStoryPoints, originalEstimate, setOriginalEstimate,
         startDate, setStartDate, startTime, setStartTime,
         dueDate, setDueDate, dueTime, setDueTime,
         setAssignedTo, handleMoveToColumn,
@@ -586,10 +657,140 @@ export function useItemDetail(args: UseItemDetailArgs) {
         watcherIds, toggleWatcher,
         // file preview
         filePreview, setFilePreview,
+        // history + time tracking
+        history, detailsLoading, timeSpent,
+        logWorkOpen, setLogWorkOpen, logWorkTime, setLogWorkTime, logWorkNote, setLogWorkNote,
+        logWorkError, isLoggingWork, handleLogWork,
     };
 }
 
 export type ItemDetail = ReturnType<typeof useItemDetail>;
+
+// ── History ──────────────────────────────────────────────────────────────────
+const HISTORY_FIELD_LABELS: Record<string, string> = {
+    title: 'Title',
+    description: 'Description',
+    board_id: 'Board',
+    column_id: 'Status',
+    assigned_to: 'Assignee',
+    priority_id: 'Priority',
+    item_type_id: 'Type',
+    parent_id: 'Parent',
+    story_points: 'Story points',
+    original_estimate: 'Estimate',
+    start_date: 'Start date',
+    start_time: 'Start time',
+    due_date: 'Due date',
+    due_time: 'Due time',
+};
+
+const LINK_TYPE_LABELS: Record<string, string> = {
+    blocks: 'blocks',
+    is_blocked_by: 'is blocked by',
+    duplicates: 'duplicates',
+    is_duplicated_by: 'is duplicated by',
+    relates_to: 'relates to',
+    clones: 'clones',
+    is_cloned_by: 'is cloned by',
+};
+
+function HistoryValue({ value }: { value: unknown }) {
+    if (value === null || value === undefined || value === '') {
+        return <span className="italic text-muted-foreground">None</span>;
+    }
+    return <span className="font-medium text-foreground">{String(value)}</span>;
+}
+
+/** What happened, in words — e.g. "changed Status: To Do → In Progress". */
+function HistoryEntryBody({ entry }: { entry: ItemHistoryEntry }) {
+    const meta = entry.metadata ?? {};
+    switch (entry.action) {
+        case 'created':
+            return <span>created the issue</span>;
+        case 'commented':
+            return (
+                <span>
+                    {meta.reply ? 'replied' : 'commented'}
+                    {meta.excerpt ? <>: <span className="text-foreground/80">“{String(meta.excerpt)}”</span></> : null}
+                </span>
+            );
+        case 'linked':
+            return <span>linked <HistoryValue value={meta.item} /> ({LINK_TYPE_LABELS[String(meta.link_type)] ?? String(meta.link_type)})</span>;
+        case 'unlinked':
+            return <span>removed the link to <HistoryValue value={meta.item} /></span>;
+        case 'attachment_added':
+            return <span>attached <HistoryValue value={meta.name} /></span>;
+        case 'attachment_removed':
+            return <span>removed the attachment <HistoryValue value={meta.name} /></span>;
+        case 'work_logged':
+            return (
+                <span>
+                    logged <HistoryValue value={formatDuration(Number(meta.minutes))} />
+                    {meta.note ? <> — <span className="text-foreground/80">{String(meta.note)}</span></> : null}
+                </span>
+            );
+        case 'labels_changed': {
+            const labels = entry.changes?.labels ?? {};
+            return (
+                <span>
+                    {labels.added?.length ? <>added label{labels.added.length > 1 ? 's' : ''} <HistoryValue value={labels.added.join(', ')} /></> : null}
+                    {labels.added?.length && labels.removed?.length ? ' and ' : null}
+                    {labels.removed?.length ? <>removed label{labels.removed.length > 1 ? 's' : ''} <HistoryValue value={labels.removed.join(', ')} /></> : null}
+                </span>
+            );
+        }
+        default: {
+            const changes = Object.entries(entry.changes ?? {});
+            return (
+                <div className="space-y-0.5">
+                    {changes.map(([field, change]) => (
+                        <div key={field}>
+                            {change.changed ? (
+                                <>updated the <span className="font-medium text-foreground">{HISTORY_FIELD_LABELS[field] ?? field}</span></>
+                            ) : (
+                                <>
+                                    changed <span className="font-medium text-foreground">{HISTORY_FIELD_LABELS[field] ?? field}</span>:{' '}
+                                    <HistoryValue value={change.from} /> <span className="text-muted-foreground">→</span> <HistoryValue value={change.to} />
+                                </>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+    }
+}
+
+function ItemHistoryList({ history, loading }: { history: ItemHistoryEntry[]; loading: boolean }) {
+    if (history.length === 0) {
+        return (
+            <p className="text-sm text-muted-foreground py-2 flex items-center gap-2">
+                {loading ? <><Loader2 className="size-3.5 animate-spin" /> Loading history…</> : 'No history yet.'}
+            </p>
+        );
+    }
+    return (
+        <ol className="space-y-4">
+            {history.map((entry) => (
+                <li key={entry.id} className="flex gap-3 text-sm">
+                    <Avatar className="size-7 shrink-0">
+                        {entry.user?.avatar && <AvatarImage src={entry.user.avatar} />}
+                        <AvatarFallback className="text-[10px] bg-muted">{entry.user?.name?.charAt(0) ?? '?'}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1 text-muted-foreground leading-relaxed">
+                        <div className="flex flex-wrap items-baseline gap-x-1.5">
+                            <span className="font-medium text-foreground">{entry.user?.name ?? 'System'}</span>
+                            <HistoryEntryBody entry={entry} />
+                        </div>
+                        <time className="text-xs text-muted-foreground/80" title={new Date(entry.created_at).toLocaleString()}>
+                            {formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}
+                        </time>
+                    </div>
+                </li>
+            ))}
+        </ol>
+    );
+}
 
 // ── Main content column ──────────────────────────────────────────────────────
 export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: string }) {
@@ -604,8 +805,9 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
         localAttachments, isUploading, fileInputRef, handleFileUpload, handleDeleteAttachment, setFilePreview,
         comment, setComment, commentEditorKey, setCommentEditorKey, commentActive, setCommentActive,
         localComments, replyingTo, replyText, setReplyText, replyEditorKey,
-        handlePostComment, handleReply, cancelReply,
+        handlePostComment, handleReply, cancelReply, history, detailsLoading,
     } = d;
+    const [activityTab, setActivityTab] = useState<'comments' | 'history'>('comments');
     if (!item) return null;
 
     return (
@@ -893,14 +1095,39 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                 )}
             </section>
 
-            {/* Activity / Comments */}
+            {/* Activity: Comments | History (like Jira) */}
             <section className="py-5 border-t border-border/60">
-                <h2 className="text-sm font-semibold flex items-center gap-2 mb-5">
-                    <MessageSquare className="size-4 text-muted-foreground" />
-                    Activity
-                    {localComments.length > 0 && <span className="text-xs font-normal text-muted-foreground">({localComments.length})</span>}
-                </h2>
+                <div className="flex items-center gap-4 mb-5">
+                    <h2 className="text-sm font-semibold">Activity</h2>
+                    <div className="flex items-center gap-1 rounded-md bg-muted/60 p-0.5 text-xs" role="tablist">
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected={activityTab === 'comments'}
+                            onClick={() => setActivityTab('comments')}
+                            className={cn('flex items-center gap-1.5 rounded px-2.5 py-1 transition-colors', activityTab === 'comments' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}
+                        >
+                            <MessageSquare className="size-3.5" />
+                            Comments
+                            {localComments.length > 0 && <span className="text-muted-foreground">{localComments.length}</span>}
+                        </button>
+                        <button
+                            type="button"
+                            role="tab"
+                            aria-selected={activityTab === 'history'}
+                            onClick={() => setActivityTab('history')}
+                            className={cn('flex items-center gap-1.5 rounded px-2.5 py-1 transition-colors', activityTab === 'history' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}
+                        >
+                            <History className="size-3.5" />
+                            History
+                        </button>
+                    </div>
+                </div>
 
+                {activityTab === 'history' ? (
+                    <ItemHistoryList history={history} loading={detailsLoading} />
+                ) : (
+                <>
                 <div className="flex gap-3 mb-6">
                     <Avatar className="size-8 shrink-0 mt-2">
                         <AvatarFallback className="text-xs bg-primary text-primary-foreground">U</AvatarFallback>
@@ -950,6 +1177,8 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                         ))}
                     </div>
                 )}
+                </>
+                )}
             </section>
         </div>
     );
@@ -962,6 +1191,9 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
         columnId, handleMoveToColumn, assignedTo, setAssignedTo, saveProp,
         itemTypeId, setItemTypeId, parentId, setParentId, priorityId, setPriorityId,
         storyPoints, setStoryPoints, startDate, setStartDate, startTime, setStartTime, dueDate, setDueDate, dueTime, setDueTime,
+        originalEstimate, setOriginalEstimate, timeSpent,
+        logWorkOpen, setLogWorkOpen, logWorkTime, setLogWorkTime, logWorkNote, setLogWorkNote,
+        logWorkError, isLoggingWork, handleLogWork,
         rootItemsForParent, watcherIds, toggleWatcher,
         selectedLabels, labelSearch, setLabelSearch, labelPopoverOpen, setLabelPopoverOpen,
         newLabelName, setNewLabelName, filteredLabels, toggleLabel, handleCreateLabel,
@@ -1086,6 +1318,80 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                 <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Points</span>
                 <div className="flex-1 px-2 -ml-2">
                     <Input type="number" min="0" value={storyPoints} onChange={(e) => setStoryPoints(e.target.value)} onBlur={() => saveProp({ story_points: storyPoints || null })} className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md" placeholder="None" />
+                </div>
+            </div>
+
+            {/* Original estimate (Jira-style duration: 2h, 1d 4h) */}
+            <div className="flex items-center min-h-[40px] py-1">
+                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Estimate</span>
+                <div className="flex-1 px-2 -ml-2">
+                    <Input
+                        value={originalEstimate}
+                        onChange={(e) => setOriginalEstimate(e.target.value)}
+                        onBlur={() => {
+                            const current = live?.original_estimate ? formatDuration(live.original_estimate) : '';
+                            if (originalEstimate.trim() !== current) saveProp({ original_estimate: originalEstimate.trim() || null });
+                        }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                        className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
+                        placeholder="e.g. 2h, 1d 4h"
+                    />
+                </div>
+            </div>
+
+            {/* Time tracking: logged vs. estimate + Log work */}
+            <div className="flex items-start min-h-[40px] py-2">
+                <span className="w-[40%] shrink-0 text-xs text-muted-foreground pt-0.5">Time tracking</span>
+                <div className="flex-1 min-w-0 space-y-1.5">
+                    {(() => {
+                        const estimate = live?.original_estimate ?? 0;
+                        const spent = timeSpent;
+                        const overrun = estimate > 0 && spent > estimate;
+                        const percent = estimate > 0 ? Math.min(100, Math.round((spent / estimate) * 100)) : spent > 0 ? 100 : 0;
+                        return (
+                            <>
+                                <div className="h-1.5 rounded-full bg-muted overflow-hidden" title={`${percent}%`}>
+                                    <div className={cn('h-full rounded-full transition-all', overrun ? 'bg-amber-500' : 'bg-primary')} style={{ width: `${percent}%` }} />
+                                </div>
+                                <div className="flex flex-wrap gap-x-2 text-[11px] text-muted-foreground">
+                                    <span className="whitespace-nowrap">{spent > 0 ? `${formatDuration(spent)} logged` : 'No time logged'}</span>
+                                    {estimate > 0 && (
+                                        <span className={cn('whitespace-nowrap', overrun && 'text-amber-600 dark:text-amber-400')}>
+                                            · {overrun ? `${formatDuration(spent - estimate)} over` : `${formatDuration(estimate - spent)} left`}
+                                        </span>
+                                    )}
+                                </div>
+                            </>
+                        );
+                    })()}
+                    <Popover open={logWorkOpen} onOpenChange={setLogWorkOpen}>
+                        <PopoverTrigger asChild>
+                            <button type="button" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                                <Clock className="size-3.5" /> Log work
+                            </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72 p-3" align="start">
+                            <form className="space-y-2.5" onSubmit={(e) => { e.preventDefault(); handleLogWork(); }}>
+                                <div className="space-y-1">
+                                    <Label htmlFor="log-work-time" className="text-xs">Time spent</Label>
+                                    <Input id="log-work-time" value={logWorkTime} onChange={(e) => setLogWorkTime(e.target.value)} placeholder="e.g. 45m, 1h 30m, 1d" autoFocus />
+                                    <p className="text-[11px] text-muted-foreground">1d = 8h · 1w = 5d</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <Label htmlFor="log-work-note" className="text-xs">What did you work on? (optional)</Label>
+                                    <Input id="log-work-note" value={logWorkNote} onChange={(e) => setLogWorkNote(e.target.value)} maxLength={255} />
+                                </div>
+                                {logWorkError && <p className="text-xs text-destructive">{logWorkError}</p>}
+                                <div className="flex justify-end gap-2">
+                                    <Button type="button" size="sm" variant="outline" onClick={() => setLogWorkOpen(false)}>Cancel</Button>
+                                    <Button type="submit" size="sm" disabled={isLoggingWork || !logWorkTime.trim()}>
+                                        {isLoggingWork && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}
+                                        Log
+                                    </Button>
+                                </div>
+                            </form>
+                        </PopoverContent>
+                    </Popover>
                 </div>
             </div>
 

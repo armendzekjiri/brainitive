@@ -258,8 +258,11 @@ class WorkspaceController extends Controller
             ->limit(10)
             ->get(['id', 'uuid', 'name', 'icon', 'project_id', 'status', 'updated_at']);
 
+        // Only activity on this workspace's items — the log spans every workspace
         $activityLogs = \App\Models\ActivityLog::query()
             ->where('user_id', $user->id)
+            ->where('loggable_type', \App\Models\Item::class)
+            ->whereIn('loggable_id', \App\Models\Item::whereIn('project_id', $workspaceProjectIds)->select('id'))
             ->latest()
             ->limit(20)
             ->get(['id', 'loggable_type', 'loggable_id', 'action', 'changes', 'metadata', 'created_at']);
