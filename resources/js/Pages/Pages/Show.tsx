@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, useForm, router, Link, usePage } from '@inertiajs/react';
-import { PageProps, Workspace, Project, Page as PageType, User } from '@/types';
+import { PageProps, Workspace, Project, Page as PageType, PageDraftState, User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -64,9 +64,19 @@ import {
     FileCode,
     Printer,
     PanelTop,
+    Lock,
+    AlertTriangle,
+    Loader2,
+    History,
+    MessageSquareText,
+    Undo2,
+    RefreshCw,
 } from 'lucide-react';
 import TurndownService from 'turndown';
-import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallback, Suspense, lazy } from 'react';
+import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallback, useMemo, Suspense, lazy } from 'react';
+import { usePagePresence } from '@/hooks/usePagePresence';
+import { PageHistoryDialog } from '@/components/page/PageHistoryDialog';
+import { Textarea } from '@/components/ui/textarea';
 
 // Lazy-load emoji-mart to prevent customElements.define() firing at module load time
 // (breaks Vite HMR with "already defined" error which silently kills onChange).
@@ -99,10 +109,10 @@ interface Props extends PageProps {
         uuid: string;
         status: 'draft' | 'published' | 'archived';
         published_at?: string;
-        lastEditor?: User;
         watchers?: User[];
     };
     breadcrumbs: { id: number; name: string; slug: string; uuid: string; type: string }[];
+    can: { update: boolean; delete: boolean; create: boolean };
 }
 
 // Detect if page content is Excalidraw (full-page whiteboard)
@@ -688,7 +698,9 @@ const EXPORT_HTML_STYLES = `
   @media print{@page{margin:20mm 25mm}body{max-width:none;padding:0}}
 `;
 
-export default function PageShow({ workspace, project, page, breadcrumbs }: Props) {
+type DraftChanges = { content?: string; name?: string; icon?: string };
+
+export default function PageShow({ workspace, project, page, breadcrumbs, can }: Props) {
     // New whiteboards: redirect straight to the Excalidraw editor.
     // We arrive here (pages.show?new=1) because Inertia can't follow a redirect
     // to a non-Inertia blade view directly from a form post.
@@ -700,10 +712,27 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
         }
     }, [page.uuid]);
 
+    const routeParams = useMemo(
+        () => [workspace.slug, project.slug, page.uuid] as [string, string, string],
+        [workspace.slug, project.slug, page.uuid],
+    );
+    const isPublished = page.status === 'published';
+    const isDocument = page.type === 'page' && !isExcalidrawPage(page.content);
+
+    // What the editor works on: the shared draft of a published page, or the page itself
+    const editSource = isPublished && page.draft_updated_at
+        ? { content: page.draft_content ?? page.content, name: page.draft_name || page.name, icon: page.draft_icon ?? page.icon }
+        : { content: page.content, name: page.name, icon: page.icon };
+
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
     const [addSubpageOpen, setAddSubpageOpen] = useState(false);
+    const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
+    const [changeNoteDialogOpen, setChangeNoteDialogOpen] = useState(false);
+    const [historyOpen, setHistoryOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [isPublishing, setIsPublishing] = useState(false);
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
     const [headings, setHeadings] = useState<TocHeading[]>([]);
     const [isFullWidth, setIsFullWidth] = useState(() => {
@@ -714,59 +743,194 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
         try { return localStorage.getItem('page-formatting-toolbar') === 'true'; } catch { return false; }
     });
     const [isScrolled, setIsScrolled] = useState(false);
+
+    // Confluence-style editing: never-published pages open in the editor; published pages
+    // open for reading and collect edits in a shared draft until "Update"
+    const [isEditing, setIsEditing] = useState(() => can.update && page.status === 'draft');
+    const [hasDraft, setHasDraft] = useState(isPublished && !!page.draft_updated_at);
+    const [draftEditor, setDraftEditor] = useState(page.draft_editor ?? null);
+    const [draftUpdatedAt, setDraftUpdatedAt] = useState(page.draft_updated_at ?? null);
+    const [conflict, setConflict] = useState<{ name: string | null } | null>(null);
+    const [remoteChange, setRemoteChange] = useState<{ name: string | null } | null>(null);
+    const [notifyWatchers, setNotifyWatchers] = useState(true);
+    const [changeNote, setChangeNote] = useState('');
+    const [editorKey, setEditorKey] = useState(0);
+    const [formData, setFormData] = useState({ name: editSource.name, icon: editSource.icon || '📄' });
+
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const contentPanelRef = useRef<HTMLDivElement>(null);
+    const revisionRef = useRef(page.edit_revision ?? 0);
+    const pendingChangesRef = useRef<DraftChanges>({});
+    const savePromiseRef = useRef<Promise<void> | null>(null);
+    const conflictRef = useRef(false);
+    const isEditingRef = useRef(isEditing);
+    isEditingRef.current = isEditing;
+    // Latest editor HTML (exports + Update); starts from the saved content
+    const currentHtmlRef = useRef<string | null>(extractHtmlContent(editSource.content as any));
 
     // Watchers
     const currentUser = usePage<PageProps>().props.auth.user;
     const isWatching = page.watchers?.some(w => w.id === currentUser.id) ?? false;
+    const otherWatcherCount = page.watchers?.filter(w => w.id !== currentUser.id).length ?? 0;
 
     const toggleWatch = () => {
         router.post(
-            route('pages.watch', [workspace.slug, project.slug, page.uuid]),
-            { user_id: currentUser.id, watch: !isWatching },
+            route('pages.watch', routeParams),
+            { watch: !isWatching },
             { preserveScroll: true }
         );
     };
 
-    // Explicit update — saves content AND notifies watchers
-    const handleExplicitUpdate = () => {
-        router.put(
-            route('pages.explicit-update', [workspace.slug, project.slug, page.uuid]),
-            { content: JSON.stringify({ type: 'lexical', html: currentHtmlRef.current ?? '' }) },
-            { preserveScroll: true, preserveState: true }
-        );
-    };
+    const applyDraftState = useCallback((state: PageDraftState) => {
+        revisionRef.current = state.edit_revision;
+        setHasDraft(state.has_unpublished_changes);
+        setDraftEditor(state.draft_updated_by);
+        setDraftUpdatedAt(state.draft_updated_at);
+    }, []);
 
-    // Ref to hold latest HTML content for the explicit update
-    // Initialise with the current saved content so Update never sends an empty string
-    // even if onChange hasn't fired yet (e.g. user clicks Edit → Update immediately).
-    const currentHtmlRef = useRef<string | null>(extractHtmlContent(page.content as any));
+    // Send queued changes; saves run one after another so revisions stay in order
+    const flushSave = useCallback((force = false): Promise<void> => {
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        const changes = pendingChangesRef.current;
+        if (Object.keys(changes).length === 0) {
+            return savePromiseRef.current ?? Promise.resolve();
+        }
+        pendingChangesRef.current = {};
+        const previous = savePromiseRef.current;
 
-    // Edit mode state - published pages start in view mode
-    const [isEditing, setIsEditing] = useState(page.status !== 'published');
+        const run = (async () => {
+            await previous?.catch(() => {});
+            setIsSaving(true);
+            try {
+                const { data } = await window.axios.put(route('pages.draft.save', routeParams), {
+                    ...changes,
+                    base_revision: revisionRef.current,
+                    force,
+                });
+                applyDraftState(data);
+                setLastSaved(new Date());
+                setSaveError(null);
+                if (force) {
+                    conflictRef.current = false;
+                    setConflict(null);
+                    setRemoteChange(null);
+                }
+            } catch (error: any) {
+                // Keep the changes so they can be retried / forced
+                pendingChangesRef.current = { ...changes, ...pendingChangesRef.current };
+                if (error?.response?.status === 409) {
+                    conflictRef.current = true;
+                    setConflict({ name: error.response.data?.conflict?.updated_by?.name ?? null });
+                } else {
+                    setSaveError('Not saved — check your connection');
+                }
+            } finally {
+                setIsSaving(false);
+            }
+        })();
 
-    // Local state for form data
-    const [formData, setFormData] = useState({
-        name: page.name,
-        icon: page.icon || '📄',
+        savePromiseRef.current = run;
+        return run;
+    }, [routeParams, applyDraftState]);
+
+    const queueSave = useCallback((changes: DraftChanges, immediate = false) => {
+        pendingChangesRef.current = { ...pendingChangesRef.current, ...changes };
+        if (conflictRef.current) return;
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        if (immediate) {
+            flushSave();
+            return;
+        }
+        // Debounce - wait 1 second after the last change
+        saveTimeoutRef.current = setTimeout(() => {
+            // Defer auto-save if a Lexical menu (like Mentions or Slash command) is currently open
+            if (document.querySelector('[data-lexical-menu="true"]')) {
+                queueSave({});
+                return;
+            }
+            flushSave();
+        }, 1000);
+    }, [flushSave]);
+
+    // Who else is here — and did someone else save while we were looking?
+    const presentUsers = usePagePresence(route('pages.presence', routeParams), isEditing, (state) => {
+        const savedByOther = state.draft_updated_by && state.draft_updated_by.id !== currentUser.id;
+        if (state.edit_revision > revisionRef.current && savedByOther && !conflictRef.current) {
+            setRemoteChange({ name: state.draft_updated_by?.name ?? null });
+        }
     });
 
+    const reloadLatest = () => {
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        pendingChangesRef.current = {};
+        conflictRef.current = false;
+        setConflict(null);
+        setRemoteChange(null);
+        // Force the props effect to take the server state
+        revisionRef.current = -1;
+        router.reload({ only: ['page'] });
+    };
+
+    // Sync with fresh props (after Update, Discard, Restore, reload, …)
+    const hasSyncedRef = useRef(false);
+    useEffect(() => {
+        if (!hasSyncedRef.current) {
+            hasSyncedRef.current = true;
+            return;
+        }
+        const serverRevision = page.edit_revision ?? 0;
+        const changedElsewhere = serverRevision !== revisionRef.current;
+        revisionRef.current = serverRevision;
+        setHasDraft(isPublished && !!page.draft_updated_at);
+        setDraftEditor(page.draft_editor ?? null);
+        setDraftUpdatedAt(page.draft_updated_at ?? null);
+        // Don't yank the editor away while typing unless the server state really moved on
+        if (!isEditingRef.current || changedElsewhere) {
+            setFormData({ name: editSource.name, icon: editSource.icon || '📄' });
+            currentHtmlRef.current = extractHtmlContent(editSource.content as any);
+            setEditorKey((key) => key + 1);
+        }
+    }, [page.uuid, page.edit_revision, page.status, page.draft_updated_at]);
+
+    useEffect(() => {
+        setIsEditing(can.update && page.status === 'draft');
+    }, [page.uuid, page.status]);
+
+    // Save what's left when leaving; warn if a save could still be lost
+    useEffect(() => {
+        const beforeUnload = (event: BeforeUnloadEvent) => {
+            if (Object.keys(pendingChangesRef.current).length > 0) {
+                flushSave();
+                event.preventDefault();
+            }
+        };
+        window.addEventListener('beforeunload', beforeUnload);
+        return () => {
+            window.removeEventListener('beforeunload', beforeUnload);
+            if (!conflictRef.current) flushSave();
+        };
+    }, [flushSave]);
+
     const getExportHtml = useCallback(() =>
-        currentHtmlRef.current ?? extractHtmlContent(page.content as any) ?? '',
-    [page.content]);
+        (isEditing ? currentHtmlRef.current : null) ?? extractHtmlContent(page.content as any) ?? '',
+    [page.content, isEditing]);
+
+    const exportTitle = (isEditing ? formData.name : page.name) || 'Untitled';
 
     const handleExportHtml = useCallback(() => {
         const html = getExportHtml();
-        const title = formData.name || 'Untitled';
+        const title = exportTitle;
         const safe = title.replace(/[<>"'&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '&': '&amp;' }[c]!));
         const full = `<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n<title>${safe}</title>\n<style>${EXPORT_HTML_STYLES}</style>\n</head>\n<body>\n<h1>${safe}</h1>\n${html}\n</body>\n</html>`;
         downloadBlob(`${title}.html`, full, 'text/html');
-    }, [formData.name, getExportHtml]);
+    }, [exportTitle, getExportHtml]);
 
     const handleExportMarkdown = useCallback(() => {
         const html = getExportHtml();
-        const title = formData.name || 'Untitled';
+        const title = exportTitle;
         const td = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-' });
         td.addRule('strikethrough', {
             filter: ['del', 's'],
@@ -774,11 +938,11 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
         });
         const md = `# ${title}\n\n${td.turndown(html)}`;
         downloadBlob(`${title}.md`, md, 'text/markdown');
-    }, [formData.name, getExportHtml]);
+    }, [exportTitle, getExportHtml]);
 
     const handleExportPdf = useCallback(() => {
         const html = getExportHtml();
-        const title = formData.name || 'Untitled';
+        const title = exportTitle;
         const safe = title.replace(/[<>"'&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '&': '&amp;' }[c]!));
         const win = window.open('', '_blank');
         if (!win) return;
@@ -787,37 +951,19 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
             `<body><h1>${safe}</h1>${html}<script>window.onload=function(){window.print();window.onafterprint=function(){window.close();};};<\/script></body></html>`
         );
         win.document.close();
-    }, [formData.name, getExportHtml]);
-
-
-    // Update formData and editing state when page prop changes
-    useEffect(() => {
-        setFormData({
-            name: page.name,
-            icon: page.icon || '📄',
-        });
-        // Reset to view mode if page is published
-        setIsEditing(page.status !== 'published');
-    }, [page.uuid, page.status]);
+    }, [exportTitle, getExportHtml]);
 
     const handleUpdateName = (name: string) => {
         setFormData(prev => ({ ...prev, name }));
-        router.put(route('pages.update', [workspace.slug, project.slug, page.uuid]), {
-            name,
-        }, {
-            preserveScroll: true,
-            preserveState: true,
-        });
+        queueSave({ name }, true);
+        // Unpublished pages are renamed directly — refresh the sidebar tree once saved
+        if (!isPublished) savePromiseRef.current?.then(() => router.reload({ only: ['currentWorkspace'] }));
     };
 
     const handleUpdateIcon = (icon: string) => {
         setFormData(prev => ({ ...prev, icon }));
-        router.put(route('pages.update', [workspace.slug, project.slug, page.uuid]), {
-            icon,
-        }, {
-            preserveScroll: true,
-            preserveState: true,
-        });
+        queueSave({ icon }, true);
+        if (!isPublished) savePromiseRef.current?.then(() => router.reload({ only: ['currentWorkspace'] }));
     };
 
     // Debounced content save - receives HTML string from RichLexicalEditor
@@ -827,73 +973,98 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
         // Those spurious calls carry empty or partially-loaded HTML.
         if (!isEditing) return;
 
-        currentHtmlRef.current = html;  // track latest for explicit update
-        setIsSaving(true);
+        currentHtmlRef.current = html;
+        queueSave({ content: JSON.stringify({ type: 'lexical', html }) });
+    }, [isEditing, queueSave]);
 
-        // Clear any existing timeout
+    /** Hand everything typed so far to a publish request (instead of a separate autosave). */
+    const takePendingChanges = async (): Promise<DraftChanges> => {
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
         }
+        await savePromiseRef.current?.catch(() => {});
+        const pending = pendingChangesRef.current;
+        pendingChangesRef.current = {};
+        return pending;
+    };
 
-        // Debounce save - wait 1 second after last change
-        saveTimeoutRef.current = setTimeout(() => {
-            // Defer auto-save if a Lexical menu (like Mentions or Slash command) is currently open
-            if (document.querySelector('[data-lexical-menu="true"]')) {
-                handleUpdateContent(html);
-                return;
-            }
+    const restorePending = (pending: DraftChanges) => {
+        pendingChangesRef.current = { ...pending, ...pendingChangesRef.current };
+    };
 
-            router.put(route('pages.update', [workspace.slug, project.slug, page.uuid]), {
-                content: JSON.stringify({ type: 'lexical', html }),
-            }, {
-                preserveScroll: true,
-                preserveState: true,
-                onSuccess: () => {
-                    setIsSaving(false);
-                    setLastSaved(new Date());
-                },
-                onError: () => {
-                    setIsSaving(false);
-                },
-            });
-        }, 1000);
-    }, [workspace.slug, project.slug, page.uuid, isEditing]);
+    // Unpublished pages save their pending edits first; publish takes the stored content
+    const handlePublish = async () => {
+        setIsPublishing(true);
+        await flushSave();
+        if (conflictRef.current) {
+            setIsPublishing(false);
+            return;
+        }
+        router.post(route('pages.publish', routeParams), {}, {
+            preserveScroll: true,
+            onFinish: () => setIsPublishing(false),
+        });
+    };
 
-    // Cleanup timeout on unmount
-    useEffect(() => {
-        return () => {
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-            }
-        };
-    }, []);
-
-    const handlePublish = () => {
-        router.post(route('pages.publish', [workspace.slug, project.slug, page.uuid]), {}, {
+    const handlePublishChanges = async (message?: string) => {
+        setIsPublishing(true);
+        const pending = await takePendingChanges();
+        router.put(route('pages.publish-changes', routeParams), {
+            ...pending,
+            message: message || null,
+            notify: notifyWatchers,
+            base_revision: revisionRef.current,
+        }, {
             preserveScroll: true,
             onSuccess: () => {
-                setIsEditing(false); // Switch to view mode after publishing
+                setChangeNoteDialogOpen(false);
+                setChangeNote('');
+                setIsEditing(false);
+            },
+            onError: (errors) => {
+                restorePending(pending);
+                if (errors.page) {
+                    conflictRef.current = true;
+                    setConflict({ name: null });
+                }
+            },
+            onFinish: () => setIsPublishing(false),
+        });
+    };
+
+    const handleCloseEditor = async () => {
+        await flushSave();
+        setIsEditing(false);
+        router.reload({ only: ['page'] });
+    };
+
+    const handleDiscard = async () => {
+        await takePendingChanges();
+        router.delete(route('pages.draft.discard', routeParams), {
+            preserveScroll: true,
+            onSuccess: () => {
+                setDiscardDialogOpen(false);
+                setIsEditing(false);
             },
         });
     };
 
-    const handleUnpublish = () => {
-        router.post(route('pages.unpublish', [workspace.slug, project.slug, page.uuid]), {}, {
+    const handleUnpublish = async () => {
+        await flushSave();
+        router.post(route('pages.unpublish', routeParams), {}, {
             preserveScroll: true,
-            onSuccess: () => {
-                setIsEditing(true); // Switch to edit mode after unpublishing
-            },
         });
     };
 
     const handleArchive = () => {
-        router.post(route('pages.archive', [workspace.slug, project.slug, page.uuid]), {}, {
+        router.post(route('pages.archive', routeParams), {}, {
             preserveScroll: true,
         });
     };
 
     const handleDuplicate = (withSubpages: boolean = false) => {
-        router.post(route('pages.duplicate', [workspace.slug, project.slug, page.uuid]), {
+        router.post(route('pages.duplicate', routeParams), {
             with_subpages: withSubpages
         }, {
             preserveScroll: true,
@@ -910,19 +1081,32 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
     };
 
     const handleDelete = () => {
-        router.delete(route('pages.destroy', [workspace.slug, project.slug, page.uuid]));
+        router.delete(route('pages.destroy', routeParams));
     };
 
     const getStatusBadge = () => {
         switch (page.status) {
             case 'published':
-                return <Badge variant="outline" className="border-brand-green/25 bg-brand-green/5 text-brand-green hover:bg-brand-green/10"><Globe className="size-3 mr-1" /> Published</Badge>;
+                return (
+                    <Badge
+                        variant="outline"
+                        className="cursor-pointer border-brand-green/25 bg-brand-green/5 text-brand-green hover:bg-brand-green/10"
+                        onClick={() => setHistoryOpen(true)}
+                        title="Page history"
+                    >
+                        <Globe className="size-3 mr-1" /> Published{page.current_version ? ` · v${page.current_version}` : ''}
+                    </Badge>
+                );
             case 'archived':
                 return <Badge variant="secondary" className="bg-muted/70 text-muted-foreground"><Archive className="size-3 mr-1" /> Archived</Badge>;
             default:
-                return <Badge variant="outline" className="border-border/70 bg-background text-muted-foreground"><FileEdit className="size-3 mr-1" /> Draft</Badge>;
+                return <Badge variant="outline" className="border-border/70 bg-background text-muted-foreground" title="Only you and admins can see this page until it's published"><Lock className="size-3 mr-1" /> Draft</Badge>;
         }
     };
+
+    const displayName = isEditing ? formData.name : page.name;
+    const displayIcon = (isEditing ? formData.icon : page.icon) || '📄';
+    const otherEditors = presentUsers.filter((user) => user.editing);
 
     return (
         <AppLayout>
@@ -935,7 +1119,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                     <div className="px-5 py-2.5">
                         <div className="flex items-center justify-between gap-4">
                             {/* Breadcrumbs */}
-                            <Breadcrumb>
+                            <Breadcrumb className="min-w-0">
                                 <BreadcrumbList>
                                     <BreadcrumbItem>
                                         <BreadcrumbLink asChild>
@@ -965,26 +1149,51 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                             </Breadcrumb>
 
                             {/* Actions */}
-                            <div className="flex items-center gap-1.5">
-                                {/* Save Status - only show when editing */}
-                                {isEditing && isSaving && (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                                {/* Who else is on the page */}
+                                {presentUsers.length > 0 && (
+                                    <div
+                                        className="flex -space-x-1.5 mr-1"
+                                        title={presentUsers.map((user) => `${user.name}${user.editing ? ' (editing)' : ''}`).join(', ')}
+                                    >
+                                        {presentUsers.slice(0, 4).map((user) => (
+                                            <Avatar key={user.id} className={cn('size-6 border-2 border-card', user.editing && 'ring-2 ring-primary/60')}>
+                                                <AvatarFallback className="text-[10px] bg-muted">{user.name.charAt(0)}</AvatarFallback>
+                                            </Avatar>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Save status - only show when editing */}
+                                {isEditing && saveError && (
+                                    <span className="text-xs text-destructive flex items-center gap-1 px-1">
+                                        <AlertTriangle className="size-3" />
+                                        {saveError}
+                                    </span>
+                                )}
+                                {isEditing && !saveError && isSaving && (
                                     <span className="text-xs text-muted-foreground flex items-center gap-1 px-1">
                                         <Save className="size-3 animate-pulse" />
-                                        Saving...
+                                        Saving…
                                     </span>
                                 )}
-                                {isEditing && !isSaving && lastSaved && (
+                                {isEditing && !saveError && !isSaving && lastSaved && (
                                     <span className="text-xs text-muted-foreground flex items-center gap-1 px-1">
                                         <Check className="size-3 text-brand-green" />
-                                        Saved
+                                        {isPublished ? 'Draft saved' : 'Saved'}
                                     </span>
                                 )}
 
-                                {/* Status Badge */}
+                                {/* Status */}
                                 {getStatusBadge()}
+                                {hasDraft && can.update && (
+                                    <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400">
+                                        Unpublished changes
+                                    </Badge>
+                                )}
 
                                 {/* Watch / Watching button */}
-                                {page.type === 'page' && (
+                                {page.type === 'page' && !isEditing && (
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -999,40 +1208,48 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                     </Button>
                                 )}
 
-                                {/* Edit Button - show when in view mode and page is published */}
-                                {!isEditing && page.status === 'published' && page.type === 'page' && (
-                                    <Button size="sm" variant="ghost" className="h-8 px-2.5" onClick={() => setIsEditing(true)}>
+                                {/* Edit — published pages open for reading */}
+                                {!isEditing && can.update && isPublished && isDocument && (
+                                    <Button size="sm" variant={hasDraft ? 'default' : 'ghost'} className="h-8 px-2.5" onClick={() => setIsEditing(true)}>
                                         <Pencil className="size-4 mr-1.5" />
-                                        Edit
+                                        {hasDraft ? 'Continue editing' : 'Edit'}
                                     </Button>
                                 )}
 
-                                {/* Publish Button - show when editing a draft */}
+                                {/* Publish — first publish of a draft */}
                                 {isEditing && page.status === 'draft' && page.type === 'page' && (
-                                    <Button size="sm" onClick={handlePublish}>
-                                        <Globe className="size-4 mr-1.5" />
+                                    <Button size="sm" onClick={handlePublish} disabled={isPublishing}>
+                                        {isPublishing ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Globe className="size-4 mr-1.5" />}
                                         Publish
                                     </Button>
                                 )}
 
-                                {/* Publish Button - show when editing a published page */}
-                                {isEditing && page.status === 'published' && page.type === 'page' && (
+                                {/* Editing a published page: Close keeps the draft, Update publishes it */}
+                                {isEditing && isPublished && page.type === 'page' && (
                                     <>
-                                        <Button size="sm" variant="ghost" className="h-8 px-2.5" onClick={() => setIsEditing(false)}>
-                                            <Eye className="size-4 mr-1.5" />
-                                            Done
+                                        <Button size="sm" variant="ghost" className="h-8 px-2.5" onClick={handleCloseEditor} title="Close the editor — your changes stay saved as a draft">
+                                            Close
                                         </Button>
-                                        <Button size="sm" onClick={handleExplicitUpdate}>
-                                            <Globe className="size-4 mr-1.5" />
+                                        {otherWatcherCount > 0 && (
+                                            <label className="hidden lg:flex items-center gap-1.5 px-1.5 text-xs text-muted-foreground cursor-pointer select-none" title="Send a notification to the people watching this page">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={notifyWatchers}
+                                                    onChange={(e) => setNotifyWatchers(e.target.checked)}
+                                                    className="size-3.5 rounded border-border accent-[hsl(var(--primary))]"
+                                                />
+                                                Notify watchers
+                                            </label>
+                                        )}
+                                        <Button size="sm" onClick={() => handlePublishChanges()} disabled={isPublishing || !!conflict}>
+                                            {isPublishing ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Globe className="size-4 mr-1.5" />}
                                             Update
                                         </Button>
                                     </>
                                 )}
 
-                                {/* Unpublish in dropdown for published pages */}
-
                                 {/* Formatting toolbar toggle */}
-                                {isEditing && page.type === 'page' && !isExcalidrawPage(page.content) && (
+                                {isEditing && isDocument && (
                                     <Button
                                         variant="ghost"
                                         size="icon"
@@ -1069,29 +1286,54 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                             <MoreHorizontal className="size-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" className="w-52">
-                                        {page.status === 'published' && (
-                                            <DropdownMenuItem onClick={handleUnpublish}>
-                                                <FileEdit className="size-4 mr-2" />
-                                                Unpublish (to Draft)
+                                    <DropdownMenuContent align="end" className="w-56">
+                                        {page.type === 'page' && (
+                                            <DropdownMenuItem onClick={() => setHistoryOpen(true)}>
+                                                <History className="size-4 mr-2" />
+                                                Page history
                                             </DropdownMenuItem>
                                         )}
-                                        {page.status !== 'archived' && (
-                                            <DropdownMenuItem onClick={handleArchive}>
-                                                <Archive className="size-4 mr-2" />
-                                                Archive
+                                        {isEditing && isPublished && (
+                                            <DropdownMenuItem onClick={() => setChangeNoteDialogOpen(true)}>
+                                                <MessageSquareText className="size-4 mr-2" />
+                                                Update with change note…
                                             </DropdownMenuItem>
                                         )}
-                                        {page.status === 'archived' && (
-                                            <DropdownMenuItem onClick={handleUnpublish}>
-                                                <FileEdit className="size-4 mr-2" />
-                                                Restore to Draft
+                                        {can.update && hasDraft && (
+                                            <DropdownMenuItem onClick={() => setDiscardDialogOpen(true)}>
+                                                <Undo2 className="size-4 mr-2" />
+                                                Discard unpublished changes
                                             </DropdownMenuItem>
                                         )}
-                                        <DropdownMenuItem onClick={triggerDuplicate}>
-                                            <Files className="size-4 mr-2" />
-                                            Duplicate
-                                        </DropdownMenuItem>
+                                        {can.update && (
+                                            <>
+                                                <DropdownMenuSeparator />
+                                                {isPublished && (
+                                                    <DropdownMenuItem onClick={handleUnpublish}>
+                                                        <FileEdit className="size-4 mr-2" />
+                                                        Unpublish (back to draft)
+                                                    </DropdownMenuItem>
+                                                )}
+                                                {page.status !== 'archived' && (
+                                                    <DropdownMenuItem onClick={handleArchive}>
+                                                        <Archive className="size-4 mr-2" />
+                                                        Archive
+                                                    </DropdownMenuItem>
+                                                )}
+                                                {page.status === 'archived' && (
+                                                    <DropdownMenuItem onClick={handleUnpublish}>
+                                                        <FileEdit className="size-4 mr-2" />
+                                                        Restore to Draft
+                                                    </DropdownMenuItem>
+                                                )}
+                                            </>
+                                        )}
+                                        {can.create && (
+                                            <DropdownMenuItem onClick={triggerDuplicate}>
+                                                <Files className="size-4 mr-2" />
+                                                Duplicate
+                                            </DropdownMenuItem>
+                                        )}
                                         <DropdownMenuSeparator />
                                         <DropdownMenuLabel className="text-xs text-muted-foreground font-normal px-2 py-1">Export</DropdownMenuLabel>
                                         <DropdownMenuItem onClick={handleExportMarkdown}>
@@ -1106,14 +1348,18 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                             <Printer className="size-4 mr-2" />
                                             Export as PDF
                                         </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem
-                                            className="text-destructive focus:text-destructive"
-                                            onClick={() => setDeleteDialogOpen(true)}
-                                        >
-                                            <Trash2 className="size-4 mr-2" />
-                                            Delete
-                                        </DropdownMenuItem>
+                                        {can.delete && (
+                                            <>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                    className="text-destructive focus:text-destructive"
+                                                    onClick={() => setDeleteDialogOpen(true)}
+                                                >
+                                                    <Trash2 className="size-4 mr-2" />
+                                                    Delete
+                                                </DropdownMenuItem>
+                                            </>
+                                        )}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </div>
@@ -1135,26 +1381,74 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                             !isFullWidth && "max-w-[54rem]",
                             isFullWidth && "max-w-none xl:px-24"
                         )}>
+                            {/* Concurrent edits — never overwrite silently */}
+                            {conflict && (
+                                <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+                                    <AlertTriangle className="size-4 text-destructive shrink-0" />
+                                    <span className="flex-1 min-w-[16rem]">
+                                        <strong>{conflict.name ?? 'Someone else'}</strong> changed this page while you were editing. Your latest changes aren't saved yet.
+                                    </span>
+                                    <Button size="sm" variant="outline" onClick={reloadLatest}>Load their version</Button>
+                                    <Button size="sm" variant="destructive" onClick={() => flushSave(true)}>Keep mine</Button>
+                                </div>
+                            )}
+                            {!conflict && remoteChange && (
+                                <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+                                    <RefreshCw className="size-4 text-muted-foreground shrink-0" />
+                                    <span className="flex-1 min-w-[16rem]">
+                                        <strong>{remoteChange.name ?? 'Someone'}</strong> saved changes to this page{isEditing ? ' — reload before you continue, or your next save will conflict.' : '.'}
+                                    </span>
+                                    <Button size="sm" variant="outline" onClick={reloadLatest}>Reload</Button>
+                                </div>
+                            )}
+                            {/* Readers see the live version; editors are told a draft is waiting */}
+                            {!isEditing && hasDraft && can.update && (
+                                <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm">
+                                    <FileEdit className="size-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                                    <span className="flex-1 min-w-[16rem]">
+                                        Unpublished changes{draftEditor ? <> by <strong>{draftEditor.name}</strong></> : null}
+                                        {draftUpdatedAt ? ` · ${formatRelativeTime(draftUpdatedAt)}` : ''}. Readers still see the published version.
+                                    </span>
+                                    <Button size="sm" variant="outline" onClick={() => setDiscardDialogOpen(true)}>Discard</Button>
+                                    <Button size="sm" onClick={() => setIsEditing(true)}>Continue editing</Button>
+                                </div>
+                            )}
+
                             {/* Icon, title and meta */}
                             <div className="mb-6">
                                 <div className="mb-3">
                                     {isEditing ? (
                                         <PageIconPicker value={formData.icon} onChange={handleUpdateIcon} />
                                     ) : (
-                                        (formData.icon?.startsWith('data:') || formData.icon?.startsWith('http') || formData.icon?.startsWith('/'))
-                                            ? <img src={formData.icon} className="size-12 rounded-lg object-cover" alt="icon" />
-                                            : <span className="block text-5xl leading-none">{formData.icon || '📄'}</span>
+                                        (displayIcon.startsWith('data:') || displayIcon.startsWith('http') || displayIcon.startsWith('/'))
+                                            ? <img src={displayIcon} className="size-12 rounded-lg object-cover" alt="icon" />
+                                            : <span className="block text-5xl leading-none">{displayIcon}</span>
                                     )}
                                 </div>
                                 {isEditing ? (
                                     <PageTitleInput title={formData.name} onSave={handleUpdateName} />
                                 ) : (
-                                    <h1 className={PAGE_TITLE_CLASS}>{formData.name || 'Untitled'}</h1>
+                                    <h1 className={PAGE_TITLE_CLASS}>{displayName || 'Untitled'}</h1>
                                 )}
                                 <div className="flex items-center gap-x-1.5 gap-y-1 mt-3 text-sm text-muted-foreground flex-wrap">
-                                    <span title={new Date(page.updated_at).toLocaleString()}>
-                                        {page.lastEditor ? `${page.lastEditor.name} updated` : 'Updated'} {formatRelativeTime(page.updated_at)}
-                                    </span>
+                                    {isEditing && isPublished && (
+                                        <>
+                                            <span className="font-medium text-foreground/80">Editing draft</span>
+                                            <span>— readers see version {page.current_version ?? 1} until you update</span>
+                                            {otherEditors.length > 0 && (
+                                                <span className="text-primary">· {otherEditors.map((user) => user.name).join(', ')} {otherEditors.length === 1 ? 'is' : 'are'} editing too</span>
+                                            )}
+                                            <span aria-hidden className="text-muted-foreground/50">·</span>
+                                        </>
+                                    )}
+                                    {(() => {
+                                        const changedAt = isPublished ? (page.last_published_at ?? page.published_at ?? page.updated_at) : page.updated_at;
+                                        return (
+                                            <span title={new Date(changedAt).toLocaleString()}>
+                                                {page.last_editor ? `${page.last_editor.name} updated` : 'Updated'} {formatRelativeTime(changedAt)}
+                                            </span>
+                                        );
+                                    })()}
                                     {page.creator && (
                                         <>
                                             <span aria-hidden className="text-muted-foreground/50">·</span>
@@ -1195,13 +1489,13 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                         <ExcalidrawViewMode pageUuid={page.uuid} content={page.content} />
                                         <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between gap-3">
                                             <span className="text-sm text-muted-foreground">View mode · pan and zoom freely</span>
-                                            <a
+                                            {can.update && <a
                                                 href={route('pages.excalidraw', [workspace.slug, project.slug, page.uuid])}
                                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
                                             >
                                                 <PencilRuler className="size-4" />
                                                 Open whiteboard
-                                            </a>
+                                            </a>}
                                         </div>
                                     </div>
                                 </div>
@@ -1210,15 +1504,15 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                             {/* Page Content - RichLexicalEditor (documents only; Excalidraw pages use preview above) */}
                             {page.type === 'page' && !isExcalidrawPage(page.content) && (
                                 <RichLexicalEditor
-                                    key={`${page.uuid}-${isEditing}`}
-                                    content={extractHtmlContent(page.content as any)}
+                                    key={`${page.uuid}-${isEditing}-${editorKey}`}
+                                    content={extractHtmlContent((isEditing ? editSource.content : page.content) as any)}
                                     onChange={handleUpdateContent}
                                     editable={isEditing}
                                     placeholder="Start writing, or press / for commands…"
                                     showToolbar={isEditing && showFormattingToolbar}
                                     minHeight="400px"
                                     workspaceSlug={workspace.slug}
-                                    contentKey={`page-${page.uuid}-${isEditing}`}
+                                    contentKey={`page-${page.uuid}-${isEditing}-${editorKey}`}
                                     onHeadingsChange={setHeadings}
                                     className="border-0 rounded-none shadow-none bg-transparent overflow-visible"
                                     documentMode
@@ -1226,7 +1520,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                     stickyTopOffset={0}
                                     projectId={project.id}
                                     mentionContextType="page"
-                                    mentionContextTitle={page.name}
+                                    mentionContextTitle={displayName}
                                     mentionContextUrl={route('pages.show', [workspace.slug, project.slug, page.uuid])}
                                 />
                             )}
@@ -1238,15 +1532,17 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                         <h2 className="text-lg font-semibold">
                                             {page.type === 'folder' ? 'Contents' : 'Subpages'}
                                         </h2>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => setAddSubpageOpen(true)}
-                                            className="gap-1.5"
-                                        >
-                                            <Plus className="size-4" />
-                                            Add
-                                        </Button>
+                                        {can.create && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => setAddSubpageOpen(true)}
+                                                className="gap-1.5"
+                                            >
+                                                <Plus className="size-4" />
+                                                Add
+                                            </Button>
+                                        )}
                                     </div>
 
                                     {page.children && page.children.length > 0 ? (
@@ -1269,10 +1565,12 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                             <p className="text-muted-foreground mb-4">
                                                 Add pages or folders to organize your content.
                                             </p>
-                                            <Button onClick={() => setAddSubpageOpen(true)} className="gap-1.5">
-                                                <Plus className="size-4" />
-                                                Add Subpage
-                                            </Button>
+                                            {can.create && (
+                                                <Button onClick={() => setAddSubpageOpen(true)} className="gap-1.5">
+                                                    <Plus className="size-4" />
+                                                    Add Subpage
+                                                </Button>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -1350,6 +1648,89 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                 project={project}
                 parentId={page.id}
             />
+
+            {/* Discard unpublished changes */}
+            <AlertDialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Discard unpublished changes?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            The page goes back to version {page.current_version ?? 1}, the one readers see now.
+                            {draftEditor && draftEditor.id !== currentUser.id && (
+                                <span className="block mt-2 font-medium">These changes were made by {draftEditor.name}.</span>
+                            )}
+                            {' '}This can't be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Keep editing</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleDiscard}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Discard changes
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Update with a change note (shown in the page history) */}
+            <Dialog open={changeNoteDialogOpen} onOpenChange={setChangeNoteDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Update page</DialogTitle>
+                        <DialogDescription>
+                            Publishes your changes as version {(page.current_version ?? 1) + 1}. The note appears in the page history.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form
+                        className="space-y-4"
+                        onSubmit={(e) => { e.preventDefault(); handlePublishChanges(changeNote.trim()); }}
+                    >
+                        <div className="space-y-2">
+                            <Label htmlFor="change-note">What changed?</Label>
+                            <Textarea
+                                id="change-note"
+                                value={changeNote}
+                                onChange={(e) => setChangeNote(e.target.value)}
+                                maxLength={255}
+                                rows={3}
+                                placeholder="e.g. Added the rollback steps"
+                                autoFocus
+                            />
+                        </div>
+                        {otherWatcherCount > 0 && (
+                            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                                <input
+                                    type="checkbox"
+                                    checked={notifyWatchers}
+                                    onChange={(e) => setNotifyWatchers(e.target.checked)}
+                                    className="size-4 rounded border-border accent-[hsl(var(--primary))]"
+                                />
+                                Notify {otherWatcherCount} {otherWatcherCount === 1 ? 'watcher' : 'watchers'}
+                            </label>
+                        )}
+                        <div className="flex justify-end gap-2">
+                            <Button type="button" variant="outline" onClick={() => setChangeNoteDialogOpen(false)}>Cancel</Button>
+                            <Button type="submit" disabled={isPublishing}>
+                                {isPublishing && <Loader2 className="size-4 mr-1.5 animate-spin" />}
+                                Update
+                            </Button>
+                        </div>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {page.type === 'page' && (
+                <PageHistoryDialog
+                    open={historyOpen}
+                    onOpenChange={setHistoryOpen}
+                    routeParams={routeParams}
+                    canRestore={can.update}
+                    isPublished={isPublished}
+                    hasUnpublishedChanges={hasDraft}
+                />
+            )}
         </AppLayout>
     );
 }

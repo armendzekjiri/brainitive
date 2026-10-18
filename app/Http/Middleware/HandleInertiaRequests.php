@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Page;
+use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -75,12 +76,12 @@ class HandleInertiaRequests extends Middleware
      *
      * @param  int  $depth  Remaining nesting levels (e.g. 7 allows 8 levels: root + 7 nested).
      */
-    private static function pageTreeRecursive(int $depth = 7): \Closure
+    private static function pageTreeRecursive(User $user, int $depth = 7): \Closure
     {
-        return function ($query) use ($depth) {
-            $query->orderBy('type', 'desc')->orderBy('position');
+        return function ($query) use ($user, $depth) {
+            $query->visibleTo($user)->orderBy('type', 'desc')->orderBy('position');
             if ($depth > 0) {
-                $query->with(['children' => self::pageTreeRecursive($depth - 1)]);
+                $query->with(['children' => self::pageTreeRecursive($user, $depth - 1)]);
             }
         };
     }
@@ -106,11 +107,11 @@ class HandleInertiaRequests extends Middleware
         );
     }
 
-    private function sidebarWorkspace(string $workspaceSlug): ?Workspace
+    private function sidebarWorkspace(string $workspaceSlug, User $user): ?Workspace
     {
         return Workspace::where('slug', $workspaceSlug)
             ->withCount('projects')
-            ->with(['projects' => function ($query) {
+            ->with(['projects' => function ($query) use ($user) {
                 $query->with([
                     'boards' => function ($q) {
                         $q->select('id', 'project_id', 'name', 'slug', 'type')
@@ -127,8 +128,9 @@ class HandleInertiaRequests extends Middleware
                         $q->select('id', 'project_id', 'name', 'slug', 'description', 'position')
                             ->orderBy('position');
                     },
-                    'pages' => function ($q) {
-                        $q->with(['children' => self::pageTreeRecursive(7)])
+                    'pages' => function ($q) use ($user) {
+                        $q->visibleTo($user)
+                            ->with(['children' => self::pageTreeRecursive($user, 7)])
                             ->orderBy('type', 'desc')
                             ->orderBy('position');
                     },
@@ -172,7 +174,7 @@ class HandleInertiaRequests extends Middleware
             }
 
             if ($workspaceSlug) {
-                $currentWorkspace = $this->sidebarWorkspace($workspaceSlug);
+                $currentWorkspace = $this->sidebarWorkspace($workspaceSlug, $user);
 
                 // Only show projects the user has access to (workspace admin sees all; others only assigned projects)
                 if ($currentWorkspace && $user) {

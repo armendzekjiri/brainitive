@@ -69,9 +69,11 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - Items have a parent/subtask relationship (see `tasks/2026-02-26-subtask-parent-implementation.md`).
 
 ### Pages — wiki / docs / whiteboard
-- **Models:** `Page` (self-referential tree, `uuid`-bound), `PageStickyNote` (per-user, per-URL)
-- **Controllers:** `PageController` (CRUD, tree, reorder, publish/unpublish, archive, duplicate, excalidraw save), `PageStickyNoteController`
-- **Routes:** `pages/...` under `projects/{project}`; sticky notes under `/api/page-sticky-notes`
+- **Models:** `Page` (self-referential tree, `uuid`-bound; workflow methods `saveDraft` / `publish` / `publishChanges` / `discardDraft` / `unpublish` / `restoreVersion`; `visibleTo($user)` scope), `PageVersion` (immutable snapshot per publish), `PageStickyNote` (per-user, per-URL)
+- **Policy:** `PagePolicy` — view (unpublished = author + admins; folders always), create/update (workspace admin, project admin/editor), delete (admins or author)
+- **Controllers:** `PageController` (CRUD, tree, reorder, draft autosave / discard, publish / publish-changes, unpublish, archive, duplicate, presence heartbeat, excalidraw save), `PageVersionController` (history list / show / restore), `PageStickyNoteController`
+- **Routes:** `pages/...` under `projects/{project}` (`pages.draft.save|discard`, `pages.publish-changes`, `pages.presence`, `pages.versions.*`); sticky notes under `/api/page-sticky-notes`
+- **Workflow:** Confluence-style draft → publish → versions; see [`CONVENTIONS.md`](./CONVENTIONS.md#page-workflow-draft--publish--versions)
 - **Pages (UI):** `Pages/Pages/`
 - **Editors:** Editor.js / Tiptap / Lexical / Excalidraw — all in `resources/js/components/editor/`; content stored as JSON in `content`. Whiteboard pages use `excalidraw-editor.blade.php` + the `excalidraw-build/` bundle. See [`CONVENTIONS.md`](./CONVENTIONS.md#rich-text-editors--excalidraw).
 

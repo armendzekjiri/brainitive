@@ -41,12 +41,18 @@ class UpdatePageTool extends Tool
             return Response::error($e->getMessage());
         }
 
-        $page = $project->allPages()->where('uuid', $validated['page_uuid'])->first();
+        $page = $project->allPages()->visibleTo($user)->where('uuid', $validated['page_uuid'])->first();
         if (! $page) {
             return Response::error('No page found with that uuid in this project.');
         }
         if ($page->is_whiteboard) {
             return Response::error('Whiteboard pages cannot be edited via Markdown.');
+        }
+
+        try {
+            $this->authorizeFor($user, 'update', $page);
+        } catch (AuthorizationException $e) {
+            return Response::error($e->getMessage());
         }
 
         $changes = ['last_edited_by' => $user->id];
@@ -66,7 +72,14 @@ class UpdatePageTool extends Tool
             $changes['content'] = PageContentConverter::htmlToPageContent($html);
         }
 
-        $page->update($changes);
+        // Published pages change for readers here, so keep the edit in the version history
+        if ($page->isPublished()) {
+            $page->discardDraft();
+            $page->update($changes);
+            $page->recordVersion($user, 'Edited via MCP');
+        } else {
+            $page->update($changes);
+        }
 
         return Response::structured([
             'updated' => true,

@@ -32,6 +32,7 @@ class ListPagesTool extends Tool
         }
 
         $pages = $project->allPages()
+            ->visibleTo($user)
             ->orderBy('parent_id')
             ->orderBy('position')
             ->get(['uuid', 'name', 'type', 'parent_id'])

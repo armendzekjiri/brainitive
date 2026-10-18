@@ -8,9 +8,10 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\MentionNotification;
 use App\Notifications\PageUpdatedNotification;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
@@ -21,6 +22,8 @@ class PageController extends Controller
      */
     public function store(Request $request, Workspace $workspace, Project $project)
     {
+        $this->authorize('create', [Page::class, $project]);
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'type' => 'required|in:page,folder',
@@ -74,17 +77,38 @@ class PageController extends Controller
     /**
      * Display the specified page.
      */
-    public function show(Workspace $workspace, Project $project, Page $page)
+    public function show(Request $request, Workspace $workspace, Project $project, Page $page)
     {
-        $page->load(['parent', 'children' => function ($query) {
-            $query->orderBy('type', 'desc')->orderBy('position');
-        }, 'creator', 'lastEditor', 'watchers']);
+        $this->authorize('view', $page);
+
+        $user = $request->user();
+
+        $page->load(['parent', 'children' => function ($query) use ($user) {
+            $query->visibleTo($user)->orderBy('type', 'desc')->orderBy('position');
+        }, 'creator', 'lastEditor', 'draftEditor', 'watchers']);
+
+        $canUpdate = $user->can('update', $page);
+
+        // Readers care about when the live version changed, not about draft autosaves
+        $page->setAttribute('last_published_at', $page->versions()->value('created_at'));
+
+        // Unpublished changes are shared between editors only; readers get the live page
+        if ($canUpdate) {
+            $page->makeVisible(['draft_content', 'draft_name', 'draft_icon']);
+        } else {
+            $page->makeHidden(['draft_updated_by', 'draftEditor']);
+        }
 
         return Inertia::render('Pages/Show', [
             'workspace' => $workspace,
             'project' => $project,
             'page' => $page,
             'breadcrumbs' => $page->path,
+            'can' => [
+                'update' => $canUpdate,
+                'delete' => $user->can('delete', $page),
+                'create' => $user->can('create', [Page::class, $project]),
+            ],
         ]);
     }
 
@@ -94,6 +118,8 @@ class PageController extends Controller
      */
     public function excalidrawEditor(Request $request, Workspace $workspace, Project $project, Page $page)
     {
+        $this->authorize('update', $page);
+
         $isEmbed = $request->boolean('embed');
         $diagramId = $request->query('diagram_id', '');
         $blockId = $request->query('block_id', '');
@@ -126,10 +152,10 @@ class PageController extends Controller
         if ($isEmbed) {
             $saveUrl = route('pages.excalidraw.embed.save', [$workspace->slug, $project->slug, $page->uuid]);
             $returnUrl = route('pages.show', [$workspace->slug, $project->slug, $page->uuid])
-                . '?from=excalidraw_embed&block_id=' . urlencode($blockId) . '&diagram_id=' . urlencode($diagramId);
+                .'?from=excalidraw_embed&block_id='.urlencode($blockId).'&diagram_id='.urlencode($diagramId);
         } else {
             $saveUrl = route('pages.excalidraw.save', [$workspace->slug, $project->slug, $page->uuid]);
-            $returnUrl = route('pages.show', [$workspace->slug, $project->slug, $page->uuid]) . '?from=excalidraw';
+            $returnUrl = route('pages.show', [$workspace->slug, $project->slug, $page->uuid]).'?from=excalidraw';
         }
 
         $excalidrawConfig = [
@@ -157,6 +183,8 @@ class PageController extends Controller
      */
     public function saveExcalidraw(Request $request, Workspace $workspace, Project $project, Page $page)
     {
+        $this->authorize('update', $page);
+
         $validated = $request->validate([
             'diagram_data' => 'required',
             'image' => 'nullable|image|mimes:png|max:10240',
@@ -183,7 +211,7 @@ class PageController extends Controller
                 'excalidraw-previews',
                 'public'
             );
-            $content['previewImageUrl'] = asset('storage/' . $path);
+            $content['previewImageUrl'] = asset('storage/'.$path);
         } elseif (is_array($page->content ?? null) && ! empty(($page->content ?? [])['previewImageUrl'])) {
             $content['previewImageUrl'] = $page->content['previewImageUrl'];
         }
@@ -201,6 +229,8 @@ class PageController extends Controller
      */
     public function saveExcalidrawEmbed(Request $request, Workspace $workspace, Project $project, Page $page)
     {
+        $this->authorize('update', $page);
+
         $validated = $request->validate([
             'diagram_data' => 'required',
             'diagram_id' => 'required|string|max:255',
@@ -231,10 +261,10 @@ class PageController extends Controller
         ];
 
         $path = $request->file('image')->store(
-            'excalidraw-embeds/' . $page->id,
+            'excalidraw-embeds/'.$page->id,
             'public'
         );
-        $imageUrl = asset('storage/' . $path);
+        $imageUrl = asset('storage/'.$path);
 
         $page->update([
             'content' => $content,
@@ -249,28 +279,26 @@ class PageController extends Controller
     }
 
     /**
-     * Update the specified page.
+     * Update page metadata (name, icon, parent). Content edits go through saveDraft() so
+     * a published page never changes for readers before "Update".
      */
     public function update(Request $request, Workspace $workspace, Project $project, Page $page)
     {
+        $this->authorize('update', $page);
+
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'icon' => 'nullable|string|max:2000000',
             'content' => 'nullable',
-            'parent_id' => 'nullable|exists:pages,id',
-            'status' => 'sometimes|in:draft,published,archived',
+            'parent_id' => [
+                'nullable',
+                Rule::exists('pages', 'id')->where('project_id', $project->id),
+            ],
         ]);
 
-        // Handle content - it can be a string (JSON) or an array
-        if (isset($validated['content'])) {
-            $newContent = is_string($validated['content']) ? json_decode($validated['content'], true) : $validated['content'];
-            if (is_array($newContent)) {
-                $current = $page->content ?? [];
-                if (is_array($current) && ! empty($current['excalidrawEmbeds'])) {
-                    $newContent['excalidrawEmbeds'] = $current['excalidrawEmbeds'];
-                }
-                $validated['content'] = $newContent;
-            }
+        if (array_key_exists('content', $validated)) {
+            $page->saveDraft($request->user(), ['content' => $this->decodeContent($validated['content'])]);
+            unset($validated['content']);
         }
 
         // Prevent moving a folder into its own descendant
@@ -281,10 +309,9 @@ class PageController extends Controller
             }
         }
 
-        // Track who last edited
-        $validated['last_edited_by'] = Auth::id();
-
-        $page->update($validated);
+        if ($validated !== []) {
+            $page->update($validated + ['last_edited_by' => Auth::id()]);
+        }
 
         if ($request->wantsJson()) {
             return response()->json($page);
@@ -294,28 +321,153 @@ class PageController extends Controller
     }
 
     /**
-     * Publish a page.
+     * Autosave from the editor (JSON). Rejects with 409 when someone else saved since the
+     * revision the client started from, unless the client chose to overwrite.
      */
-    public function publish(Workspace $workspace, Project $project, Page $page)
+    public function saveDraft(Request $request, Workspace $workspace, Project $project, Page $page): JsonResponse
     {
-        $page->update([
-            'status' => 'published',
-            'published_at' => now(),
-            'last_edited_by' => Auth::id(),
+        $this->authorize('update', $page);
+
+        $validated = $request->validate([
+            'content' => 'sometimes|nullable',
+            'name' => 'sometimes|required|string|max:255',
+            'icon' => 'sometimes|nullable|string|max:2000000',
+            'base_revision' => 'nullable|integer|min:0',
+            'force' => 'boolean',
         ]);
 
-        return back()->with('success', 'Page published successfully.');
+        if ($conflict = $this->draftConflict($page, $validated)) {
+            return $conflict;
+        }
+
+        $page->saveDraft($request->user(), $this->draftChanges($validated));
+
+        return response()->json($this->draftState($page->fresh()));
+    }
+
+    /**
+     * Drop the unpublished changes of a published page.
+     */
+    public function discardDraft(Workspace $workspace, Project $project, Page $page)
+    {
+        $this->authorize('update', $page);
+
+        $page->discardDraft();
+
+        return back()->with('success', 'Unpublished changes discarded.');
+    }
+
+    /**
+     * Heartbeat for "who's here": records the caller and returns the others on the page plus
+     * the current revision, so editors notice concurrent saves without websockets.
+     */
+    public function presence(Request $request, Workspace $workspace, Project $project, Page $page): JsonResponse
+    {
+        $this->authorize('view', $page);
+
+        $validated = $request->validate(['editing' => 'boolean', 'leave' => 'boolean']);
+        $user = $request->user();
+        $key = "page-presence:{$page->id}";
+        $now = now()->timestamp;
+
+        $present = collect(Cache::get($key, []))
+            ->filter(fn (array $entry) => $now - $entry['seen'] < self::PRESENCE_TTL_SECONDS)
+            ->except($user->id);
+
+        if (! ($validated['leave'] ?? false)) {
+            $present->put($user->id, [
+                'id' => $user->id,
+                'name' => $user->name,
+                'avatar' => $user->avatar,
+                'editing' => (bool) ($validated['editing'] ?? false),
+                'seen' => $now,
+            ]);
+        }
+
+        Cache::put($key, $present->all(), self::PRESENCE_TTL_SECONDS * 2);
+
+        return response()->json([
+            'users' => $present->except($user->id)->values()->map(fn (array $entry) => collect($entry)->except('seen'))->all(),
+        ] + $this->draftState($page->fresh()));
+    }
+
+    /**
+     * Publish a page.
+     */
+    public function publish(Request $request, Workspace $workspace, Project $project, Page $page)
+    {
+        $this->authorize('update', $page);
+
+        $validated = $request->validate(['message' => 'nullable|string|max:255']);
+
+        if ($page->isPublished()) {
+            return $this->publishChanges($request, $workspace, $project, $page);
+        }
+
+        $page->publish($request->user(), $validated['message'] ?? null);
+
+        return back()->with('success', 'Page published.');
+    }
+
+    /**
+     * "Update" on a published page: saves the editor's latest state, makes the unpublished
+     * changes live as a new version and (optionally) tells the watchers.
+     */
+    public function publishChanges(Request $request, Workspace $workspace, Project $project, Page $page)
+    {
+        $this->authorize('update', $page);
+
+        $validated = $request->validate([
+            'content' => 'sometimes|nullable',
+            'name' => 'sometimes|required|string|max:255',
+            'icon' => 'sometimes|nullable|string|max:2000000',
+            'message' => 'nullable|string|max:255',
+            'notify' => 'boolean',
+            'base_revision' => 'nullable|integer|min:0',
+            'force' => 'boolean',
+        ]);
+
+        if (! $page->isPublished()) {
+            return back()->withErrors(['page' => 'Only published pages can be updated. Publish the page first.']);
+        }
+
+        if ($this->draftConflict($page, $validated)) {
+            return back()->withErrors(['page' => 'Someone else changed this page while you were editing. Reload to see their changes.']);
+        }
+
+        $user = $request->user();
+        $changes = $this->draftChanges($validated);
+        if ($changes !== []) {
+            $page->saveDraft($user, $changes);
+        }
+
+        if (! $page->hasUnpublishedChanges()) {
+            return back()->with('success', 'No changes to publish.');
+        }
+
+        $version = $page->publishChanges($user, $validated['message'] ?? null);
+
+        if ($validated['notify'] ?? true) {
+            $page->load('watchers');
+            foreach ($page->watchers as $watcher) {
+                if ($watcher->id === $user->id) {
+                    continue;
+                }
+                $watcher->notify(new PageUpdatedNotification($page, $user));
+            }
+        }
+
+        return back()->with('success', "Page updated to version {$version->version}.");
     }
 
     /**
      * Unpublish a page (set to draft).
      */
-    public function unpublish(Workspace $workspace, Project $project, Page $page)
+    public function unpublish(Request $request, Workspace $workspace, Project $project, Page $page)
     {
-        $page->update([
-            'status' => 'draft',
-            'last_edited_by' => Auth::id(),
-        ]);
+        $this->authorize('update', $page);
+
+        $page->unpublish($request->user());
 
         return back()->with('success', 'Page unpublished.');
     }
@@ -325,6 +477,8 @@ class PageController extends Controller
      */
     public function archive(Workspace $workspace, Project $project, Page $page)
     {
+        $this->authorize('update', $page);
+
         $page->update([
             'status' => 'archived',
             'last_edited_by' => Auth::id(),
@@ -338,6 +492,8 @@ class PageController extends Controller
      */
     public function destroy(Workspace $workspace, Project $project, Page $page)
     {
+        $this->authorize('delete', $page);
+
         $parentId = $page->parent_id;
         $page->delete();
 
@@ -357,11 +513,13 @@ class PageController extends Controller
      */
     public function reorder(Request $request, Workspace $workspace, Project $project)
     {
+        $this->authorize('create', [Page::class, $project]);
+
         $validated = $request->validate([
             'pages' => 'required|array',
-            'pages.*.id' => 'required|exists:pages,id',
+            'pages.*.id' => ['required', Rule::exists('pages', 'id')->where('project_id', $project->id)],
             'pages.*.position' => 'required|integer|min:0',
-            'pages.*.parent_id' => 'nullable|exists:pages,id',
+            'pages.*.parent_id' => ['nullable', Rule::exists('pages', 'id')->where('project_id', $project->id)],
         ]);
 
         foreach ($validated['pages'] as $pageData) {
@@ -379,11 +537,16 @@ class PageController extends Controller
     /**
      * Get pages tree for sidebar.
      */
-    public function tree(Workspace $workspace, Project $project)
+    public function tree(Request $request, Workspace $workspace, Project $project)
     {
+        $this->authorize('view', $project);
+
+        $user = $request->user();
+
         $pages = $project->pages()
-            ->with(['children' => function ($query) {
-                $query->orderBy('type', 'desc')->orderBy('position');
+            ->visibleTo($user)
+            ->with(['children' => function ($query) use ($user) {
+                $query->visibleTo($user)->orderBy('type', 'desc')->orderBy('position');
             }])
             ->orderBy('type', 'desc')
             ->orderBy('position')
@@ -397,12 +560,14 @@ class PageController extends Controller
      */
     public function toggleWatch(Request $request, Workspace $workspace, Project $project, Page $page)
     {
+        $this->authorize('view', $page);
+
         $validated = $request->validate([
-            'user_id' => 'required|exists:users,id',
-            'watch'   => 'required|boolean',
+            'watch' => 'required|boolean',
         ]);
 
-        $user = User::findOrFail($validated['user_id']);
+        // Users can only (un)watch for themselves
+        $user = $request->user();
 
         if ($validated['watch']) {
             $page->addWatcher($user);
@@ -411,27 +576,6 @@ class PageController extends Controller
         }
 
         return back();
-    }
-
-    /**
-     * Explicit update — same as update() but also notifies watchers.
-     * Called when the user clicks the "Update" button (as opposed to autosave).
-     */
-    public function explicitUpdate(Request $request, Workspace $workspace, Project $project, Page $page)
-    {
-        // Reuse the same update logic
-        $this->update($request, $workspace, $project, $page);
-
-        // Notify watchers
-        $page->load('watchers');
-        $actorId = $request->user()->id;
-
-        foreach ($page->watchers as $watcher) {
-            if ($watcher->id === $actorId) continue;
-            $watcher->notify(new PageUpdatedNotification($page, $request->user()));
-        }
-
-        return back()->with('success', 'Page updated.');
     }
 
     /**
@@ -446,6 +590,7 @@ class PageController extends Controller
             }
             $current = $current->parent;
         }
+
         return false;
     }
 
@@ -462,33 +607,33 @@ class PageController extends Controller
 
         // 1. Lexical JSON / escaped format: "userId":123 or \"userId\":123 or "userId\":\"123"
         preg_match_all('/"userId"(?:\\\\)?"?\s*:\s*(?:\\\\)?"?(\d+)/', $content, $jsonMatches);
-        
+
         // 2. Regular HTML format: data-mention-user-id="123"
         preg_match_all('/data-mention-user-id="(\d+)"/', $content, $htmlMatches);
 
         // 3. Fallback escaped HTML: data-mention-user-id\":\"123\"
         preg_match_all('/data-mention-user-id(?:\\\\)?"\s*:\s*(?:\\\\)?"?(\d+)/', $content, $escapedMatches);
-        
+
         $userIds = array_unique(array_merge(
             $jsonMatches[1] ?? [],
-            $htmlMatches[1] ?? [], 
+            $htmlMatches[1] ?? [],
             $escapedMatches[1] ?? []
         ));
-        
+
         \Log::info('Page processMentions extraction results', [
             'json_count' => count($jsonMatches[1] ?? []),
             'html_count' => count($htmlMatches[1] ?? []),
             'escaped_count' => count($escapedMatches[1] ?? []),
-            'final_ids' => $userIds
+            'final_ids' => $userIds,
         ]);
 
         if (empty($userIds)) {
             return;
         }
-        
+
         $workspace = $page->project->workspace;
         $project = $page->project;
-        
+
         $pageUrl = route('pages.show', [$workspace->slug, $project->slug, $page->uuid]);
 
         foreach ($userIds as $userId) {
@@ -514,7 +659,8 @@ class PageController extends Controller
      */
     public function duplicate(Request $request, Workspace $workspace, Project $project, Page $page)
     {
-        $this->authorize('create', Page::class);
+        $this->authorize('view', $page);
+        $this->authorize('create', [Page::class, $project]);
 
         $validated = $request->validate([
             'with_subpages' => 'boolean',
@@ -543,10 +689,17 @@ class PageController extends Controller
             'updated_at',
             'position',
             'parent_id',
+            'draft_content',
+            'draft_name',
+            'draft_icon',
+            'draft_updated_at',
+            'draft_updated_by',
+            'edit_revision',
+            'current_version',
         ]);
 
         if ($isRoot) {
-            $newPage->name = 'Copy of ' . $page->name;
+            $newPage->name = 'Copy of '.$page->name;
         }
 
         $newPage->status = 'draft';
@@ -557,11 +710,88 @@ class PageController extends Controller
         $newPage->save();
 
         if ($withSubpages) {
-            foreach ($page->children as $childPage) {
+            $children = $page->children()->visibleTo(User::findOrFail($userId))->get();
+            foreach ($children as $childPage) {
                 $this->performPageDuplication($childPage, $userId, true, false, $newPage->id);
             }
         }
 
         return $newPage;
+    }
+
+    /**
+     * Presence entries older than this are considered gone.
+     */
+    private const PRESENCE_TTL_SECONDS = 45;
+
+    /**
+     * Content arrives as a JSON string from the editor or as an array from API clients.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function decodeContent(mixed $content): ?array
+    {
+        $decoded = is_string($content) ? json_decode($content, true) : $content;
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     * @return array{content?: array<string, mixed>|null, name?: string, icon?: string|null}
+     */
+    private function draftChanges(array $validated): array
+    {
+        $changes = [];
+        if (array_key_exists('content', $validated)) {
+            $changes['content'] = $this->decodeContent($validated['content']);
+        }
+        if (isset($validated['name'])) {
+            $changes['name'] = $validated['name'];
+        }
+        if (array_key_exists('icon', $validated)) {
+            $changes['icon'] = $validated['icon'];
+        }
+
+        return $changes;
+    }
+
+    /**
+     * 409 response when the page moved past the client's base revision (and no force).
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function draftConflict(Page $page, array $validated): ?JsonResponse
+    {
+        $baseRevision = $validated['base_revision'] ?? null;
+        if ($baseRevision === null || ($validated['force'] ?? false) || (int) $baseRevision === $page->edit_revision) {
+            return null;
+        }
+
+        $editor = $page->isPublished() ? $page->draftEditor : $page->lastEditor;
+
+        return response()->json([
+            'message' => 'This page was changed by someone else while you were editing.',
+            'conflict' => [
+                'edit_revision' => $page->edit_revision,
+                'updated_by' => $editor?->only(['id', 'name']),
+                'updated_at' => ($page->draft_updated_at ?? $page->updated_at)?->toIso8601String(),
+            ],
+        ], 409);
+    }
+
+    /**
+     * @return array{edit_revision: int, has_unpublished_changes: bool, draft_updated_at: string|null, draft_updated_by: array{id: int, name: string}|null}
+     */
+    private function draftState(Page $page): array
+    {
+        $editor = $page->isPublished() ? $page->draftEditor : $page->lastEditor;
+
+        return [
+            'edit_revision' => $page->edit_revision,
+            'has_unpublished_changes' => $page->hasUnpublishedChanges(),
+            'draft_updated_at' => ($page->draft_updated_at ?? $page->updated_at)?->toIso8601String(),
+            'draft_updated_by' => $editor?->only(['id', 'name']),
+        ];
     }
 }

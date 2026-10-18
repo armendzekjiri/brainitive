@@ -34,7 +34,7 @@ class GetPageTool extends Tool
             return Response::error($e->getMessage());
         }
 
-        $page = $project->allPages()->where('uuid', $validated['page_uuid'])->first();
+        $page = $project->allPages()->visibleTo($user)->where('uuid', $validated['page_uuid'])->first();
 
         if (! $page) {
             return Response::error('No page found with that uuid in this project.');
