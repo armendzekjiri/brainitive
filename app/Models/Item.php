@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Observers\ItemObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
+#[ObservedBy([ItemObserver::class])]
 class Item extends Model
 {
     use HasFactory, SoftDeletes;
@@ -222,7 +225,8 @@ class Item extends Model
     {
         return $this->hasMany(ActivityLog::class, 'loggable_id')
             ->where('loggable_type', self::class)
-            ->orderByDesc('created_at');
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
     }
 
     /**
@@ -240,9 +244,62 @@ class Item extends Model
         ]);
 
         // If moving out of done column, clear completed_at
-        if ($wasInDoneColumn && !$isNowInDoneColumn) {
+        if ($wasInDoneColumn && ! $isNowInDoneColumn) {
             $this->update(['completed_at' => null]);
         }
+    }
+
+    /** Working-day / week length used by durations, as in Jira (1d = 8h, 1w = 5d). */
+    public const MINUTES_PER_DAY = 8 * 60;
+
+    public const MINUTES_PER_WEEK = 5 * self::MINUTES_PER_DAY;
+
+    /**
+     * Parse a Jira-style duration ("1w 2d 3h 30m", "1.5h", "90") into minutes.
+     * A bare number is minutes. Returns null when the input isn't a duration.
+     */
+    public static function parseDuration(?string $input): ?int
+    {
+        $input = strtolower(trim((string) $input));
+        if ($input === '') {
+            return null;
+        }
+        if (preg_match('/^\d+$/', $input)) {
+            return (int) $input;
+        }
+        if (! preg_match('/^(\s*\d+(?:[.,]\d+)?\s*[wdhm]\s*)+$/', $input)) {
+            return null;
+        }
+
+        $unitMinutes = ['w' => self::MINUTES_PER_WEEK, 'd' => self::MINUTES_PER_DAY, 'h' => 60, 'm' => 1];
+        preg_match_all('/(\d+(?:[.,]\d+)?)\s*([wdhm])/', $input, $parts, PREG_SET_ORDER);
+
+        $minutes = 0.0;
+        foreach ($parts as [, $amount, $unit]) {
+            $minutes += (float) str_replace(',', '.', $amount) * $unitMinutes[$unit];
+        }
+
+        return (int) round($minutes);
+    }
+
+    /**
+     * Format minutes as a Jira-style duration ("1d 2h 30m").
+     */
+    public static function formatDuration(int $minutes): string
+    {
+        if ($minutes <= 0) {
+            return '0m';
+        }
+
+        $parts = [];
+        foreach (['w' => self::MINUTES_PER_WEEK, 'd' => self::MINUTES_PER_DAY, 'h' => 60, 'm' => 1] as $unit => $size) {
+            if ($minutes >= $size) {
+                $parts[] = intdiv($minutes, $size).$unit;
+                $minutes %= $size;
+            }
+        }
+
+        return implode(' ', $parts);
     }
 
     /**
@@ -266,7 +323,7 @@ class Item extends Model
      */
     public function isOverdue(): bool
     {
-        if (!$this->due_date || $this->isCompleted()) {
+        if (! $this->due_date || $this->isCompleted()) {
             return false;
         }
 

@@ -223,6 +223,10 @@ export interface Item {
     comments_count?: number;
     attachments?: Attachment[];
     attachments_count?: number;
+    /** Minutes. */
+    original_estimate?: number | null;
+    /** Minutes. */
+    time_spent?: number;
     created_at: string;
     updated_at: string;
 }
@@ -651,4 +655,15 @@ export interface CalendarEvent {
     /** Google events: which connection (and therefore which Google calendar) the event came from. */
     connection_id?: number | null;
     account_email?: string | null;
+}
+
+/** One entry of an item's history (activity_logs), see App\Observers\ItemObserver. */
+export interface ItemHistoryEntry {
+    id: number;
+    action: 'created' | 'updated' | 'moved' | 'assigned' | 'unassigned' | 'labels_changed' | 'commented'
+        | 'linked' | 'unlinked' | 'attachment_added' | 'attachment_removed' | 'work_logged' | string;
+    user?: Pick<User, 'id' | 'name' | 'avatar'> | null;
+    changes?: Record<string, { from?: unknown; to?: unknown; changed?: boolean; added?: string[]; removed?: string[] }> | null;
+    metadata?: Record<string, unknown> | null;
+    created_at: string;
 }

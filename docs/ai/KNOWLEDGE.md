@@ -85,6 +85,12 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 
 - Lexical/Tiptap/Editor.js all store content as JSON in a `content` column. When adding a
   feature that reads page content, check which editor produced it before parsing.
+- **`activity_logs` spans all workspaces.** Anything listing a user's activity must scope it
+  (e.g. `memberProfile` limits it to items of the current workspace's projects).
+- **Board payload is slim on purpose.** Cards don't carry `comments` / `attachments` any
+  more — read `comments_count` / `attachments_count`, and fetch details from
+  `boards.items.details`. The card badge used `comments_count` before it was ever loaded,
+  so it never showed.
 - **Eloquent relations serialize in snake_case.** `$page->load('lastEditor')` reaches React
   as `page.last_editor`, not `page.lastEditor` (the old page header read `lastEditor` and
   never showed a name). Same for `draftEditor` → `draft_editor`.

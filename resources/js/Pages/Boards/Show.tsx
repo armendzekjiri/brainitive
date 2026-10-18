@@ -99,6 +99,7 @@ import {
     Eye,
     Link2,
     SlidersHorizontal,
+    Ban,
 } from 'lucide-react';
 import { useState, useRef, useEffect, DragEvent, FormEvent, useCallback, useMemo } from 'react';
 import { Link } from '@inertiajs/react';
@@ -534,6 +535,94 @@ function CreateItemDialog({
 }
 
 // Column Component — redesigned
+// ── Board filters: URL-backed + quick filters ───────────────────────────────
+type QuickFilter = 'recent' | 'due' | 'blocked';
+const QUICK_FILTERS: QuickFilter[] = ['recent', 'due', 'blocked'];
+const RECENTLY_UPDATED_DAYS = 7;
+const DUE_SOON_DAYS = 3;
+
+interface BoardFilters {
+    q: string;
+    assignee: string;
+    status: number[];
+    labels: number[];
+    priority: number[];
+    type: number[];
+    quick: QuickFilter[];
+}
+
+const parseIds = (value: string | null): number[] =>
+    (value ?? '').split(',').map(Number).filter((n) => Number.isInteger(n) && n > 0);
+
+function readBoardFilters(): BoardFilters {
+    const params = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search);
+    return {
+        q: params.get('q') ?? '',
+        assignee: params.get('assignee') ?? 'any',
+        status: parseIds(params.get('status')),
+        labels: parseIds(params.get('labels')),
+        priority: parseIds(params.get('priority')),
+        type: parseIds(params.get('type')),
+        quick: (params.get('quick') ?? '').split(',').filter((f): f is QuickFilter => (QUICK_FILTERS as string[]).includes(f)),
+    };
+}
+
+/** Mirror the filters into the query string without an Inertia visit (keeps other params). */
+function writeBoardFilters(filters: BoardFilters) {
+    const url = new URL(window.location.href);
+    const set = (key: string, value: string) => (value ? url.searchParams.set(key, value) : url.searchParams.delete(key));
+    set('q', filters.q.trim());
+    set('assignee', filters.assignee === 'any' ? '' : filters.assignee);
+    set('status', filters.status.join(','));
+    set('labels', filters.labels.join(','));
+    set('priority', filters.priority.join(','));
+    set('type', filters.type.join(','));
+    set('quick', filters.quick.join(','));
+    if (url.href !== window.location.href) {
+        window.history.replaceState(window.history.state, '', url.href);
+    }
+}
+
+function isBlocked(item: Item): boolean {
+    return (item.outgoing_links ?? []).some((link) => link.link_type === 'is_blocked_by')
+        || (item.incoming_links ?? []).some((link) => link.link_type === 'blocks');
+}
+
+function matchesQuickFilter(item: Item, filter: QuickFilter): boolean {
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    switch (filter) {
+        case 'recent':
+            return now - new Date(item.updated_at).getTime() <= RECENTLY_UPDATED_DAYS * day;
+        case 'due': {
+            if (!item.due_date || item.completed_at) return false;
+            const due = new Date(String(item.due_date).split('T')[0] + 'T23:59:59').getTime();
+            return due - now <= DUE_SOON_DAYS * day;
+        }
+        case 'blocked':
+            return isBlocked(item);
+    }
+}
+
+function QuickFilterChip({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            aria-pressed={active}
+            className={cn(
+                'inline-flex items-center gap-1.5 h-[26px] px-[9px] rounded-full text-xs font-medium border transition-colors whitespace-nowrap',
+                active
+                    ? 'bg-primary/10 border-primary/40 text-primary'
+                    : 'bg-card border-border text-muted-foreground hover:bg-secondary hover:text-foreground',
+            )}
+        >
+            {icon}
+            {label}
+        </button>
+    );
+}
+
 function BoardColumnComponent({
     column,
     workspace,
@@ -548,8 +637,11 @@ function BoardColumnComponent({
     onDragOver,
     onDrop,
     isDragOver,
+    totalItemCount,
 }: {
     column: BoardColumn & { items: Item[] };
+    /** Cards in the column before filters — what the WIP limit counts. */
+    totalItemCount: number;
     workspace: Workspace;
     project: Project;
     board: Board;
@@ -564,6 +656,22 @@ function BoardColumnComponent({
     isDragOver: boolean;
 }) {
     const columnColor = column.color || '#94a3b8';
+    const wipLimit = column.wip_limit ?? null;
+    const isOverWip = wipLimit !== null && wipLimit > 0 && totalItemCount > wipLimit;
+    const isAtWip = wipLimit !== null && wipLimit > 0 && totalItemCount === wipLimit;
+    const [wipDialogOpen, setWipDialogOpen] = useState(false);
+    const [wipValue, setWipValue] = useState(wipLimit ? String(wipLimit) : '');
+    const settingsUrl = route('boards.edit', [workspace.slug, project.slug, board.slug]);
+
+    const saveWipLimit = (e: FormEvent) => {
+        e.preventDefault();
+        router.put(route('boards.columns.update', [workspace.slug, project.slug, board.slug, column.id]), {
+            name: column.name,
+            color: column.color,
+            is_done_column: column.is_done_column,
+            wip_limit: wipValue.trim() === '' ? null : Number(wipValue),
+        }, { preserveScroll: true, onSuccess: () => setWipDialogOpen(false) });
+    };
 
     // Nest subtasks under their parent when both live in this column.
     const items = column.items ?? [];
@@ -585,6 +693,7 @@ function BoardColumnComponent({
             className={cn(
                 'flex-shrink-0 w-[282px] h-full min-h-0 flex flex-col rounded-[10px] border border-border bg-secondary/50 dark:bg-secondary/30 transition-colors',
                 isDragOver && 'ring-2 ring-primary/40',
+                isOverWip && 'border-destructive/50 bg-destructive/[0.04] dark:bg-destructive/[0.08]',
             )}
             onDragOver={(e) => onDragOver(e, column)}
             onDrop={(e) => onDrop(e, column)}
@@ -596,9 +705,17 @@ function BoardColumnComponent({
                     <h3 className="text-xs font-bold tracking-[0.02em] uppercase text-foreground m-0 whitespace-nowrap">
                         {column.name}
                     </h3>
-                    <span className="text-[11px] font-semibold text-muted-foreground px-[7px] py-[1px] rounded-full bg-card border border-border">
-                        {column.items?.length || 0}
+                    <span
+                        className={cn(
+                            'text-[11px] font-semibold text-muted-foreground px-[7px] py-[1px] rounded-full bg-card border border-border',
+                            isAtWip && 'text-amber-700 border-amber-500/40 dark:text-amber-400',
+                            isOverWip && 'text-destructive border-destructive/50 bg-destructive/10',
+                        )}
+                        title={wipLimit ? `${totalItemCount} of max. ${wipLimit} cards (WIP limit)` : undefined}
+                    >
+                        {wipLimit ? `${totalItemCount}/${wipLimit}` : column.items?.length || 0}
                     </span>
+                    {isOverWip && <span className="text-[10px] font-semibold uppercase tracking-wide text-destructive">Over limit</span>}
                 </div>
                 <div className="flex items-center gap-[2px]">
                     <button className="size-6 grid place-items-center rounded-[5px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
@@ -611,14 +728,39 @@ function BoardColumnComponent({
                             </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <DropdownMenuItem>Edit column</DropdownMenuItem>
-                            <DropdownMenuItem>Set WIP limit</DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive">Delete column</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setWipDialogOpen(true)}>
+                                {wipLimit ? `WIP limit: ${wipLimit}` : 'Set WIP limit'}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                                <Link href={settingsUrl}>Edit columns…</Link>
+                            </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
             </header>
+
+            <Dialog open={wipDialogOpen} onOpenChange={setWipDialogOpen}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>WIP limit for {column.name}</DialogTitle>
+                        <DialogDescription>
+                            Maximum number of cards in this column. The column turns red when it has more — moving cards stays possible.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={saveWipLimit} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor={`wip-${column.id}`}>Max. cards</Label>
+                            <Input id={`wip-${column.id}`} type="number" min={0} value={wipValue} onChange={(e) => setWipValue(e.target.value)} placeholder="No limit" autoFocus />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            {wipLimit !== null && (
+                                <Button type="button" variant="ghost" onClick={() => setWipValue('')}>Remove limit</Button>
+                            )}
+                            <Button type="submit">Save</Button>
+                        </div>
+                    </form>
+                </DialogContent>
+            </Dialog>
 
             {/* Items */}
             <ScrollArea className="flex-1 min-h-0">
@@ -1580,18 +1722,36 @@ export default function BoardsShow({
     const [editingItem, setEditingItem] = useState<Item | null>(null);
     const [draggedItem, setDraggedItem] = useState<Item | null>(null);
     const [dragOverColumn, setDragOverColumn] = useState<number | null>(null);
-    const [searchQuery, setSearchQuery] = useState('');
+    // Filters live in the URL so a filtered board can be shared or bookmarked
+    const initialFilters = useMemo(readBoardFilters, []);
+    const [searchQuery, setSearchQuery] = useState(initialFilters.q);
     const [currentView, setCurrentView] = useState<'kanban' | 'list' | 'gantt' | 'calendar'>('kanban');
     const [calendarDate, setCalendarDate] = useState(new Date());
     const [filterOpen, setFilterOpen] = useState(false);
-    const [assigneeFilter, setAssigneeFilter] = useState<string>('any');
+    const [assigneeFilter, setAssigneeFilter] = useState<string>(initialFilters.assignee);
     const [assigneePopoverOpen, setAssigneePopoverOpen] = useState(false);
     const [assigneeSearch, setAssigneeSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState<number[]>([]);
-    const [labelFilter, setLabelFilter] = useState<number[]>([]);
-    const [priorityFilter, setPriorityFilter] = useState<number[]>([]);
-    const [typeFilter, setTypeFilter] = useState<number[]>([]);
+    const [statusFilter, setStatusFilter] = useState<number[]>(initialFilters.status);
+    const [labelFilter, setLabelFilter] = useState<number[]>(initialFilters.labels);
+    const [priorityFilter, setPriorityFilter] = useState<number[]>(initialFilters.priority);
+    const [typeFilter, setTypeFilter] = useState<number[]>(initialFilters.type);
+    const [quickFilters, setQuickFilters] = useState<QuickFilter[]>(initialFilters.quick);
     const currentUserId = auth.user?.id;
+
+    useEffect(() => {
+        writeBoardFilters({
+            q: searchQuery,
+            assignee: assigneeFilter,
+            status: statusFilter,
+            labels: labelFilter,
+            priority: priorityFilter,
+            type: typeFilter,
+            quick: quickFilters,
+        });
+    }, [searchQuery, assigneeFilter, statusFilter, labelFilter, priorityFilter, typeFilter, quickFilters]);
+
+    const toggleQuickFilter = (filter: QuickFilter) =>
+        setQuickFilters((current) => current.includes(filter) ? current.filter((f) => f !== filter) : [...current, filter]);
 
     const activeFiltersCount = useMemo(
         () =>
@@ -1599,8 +1759,9 @@ export default function BoardsShow({
             (statusFilter.length ? 1 : 0) +
             (labelFilter.length ? 1 : 0) +
             (priorityFilter.length ? 1 : 0) +
-            (typeFilter.length ? 1 : 0),
-        [assigneeFilter, statusFilter.length, labelFilter.length, priorityFilter.length, typeFilter.length],
+            (typeFilter.length ? 1 : 0) +
+            quickFilters.length,
+        [assigneeFilter, statusFilter.length, labelFilter.length, priorityFilter.length, typeFilter.length, quickFilters.length],
     );
 
     // Persist board view preference per project so user sees same view next time
@@ -1698,7 +1859,8 @@ export default function BoardsShow({
                     return false;
                 }
 
-                return true;
+                // Quick filters (all selected must match)
+                return quickFilters.every((filter) => matchesQuickFilter(item, filter));
             }) || [],
     }));
 
@@ -1779,6 +1941,34 @@ export default function BoardsShow({
                         })}
                     </div>
 
+                    {/* Quick filters (Jira-style chips) */}
+                    <div className="flex items-center gap-1 ml-2">
+                        <QuickFilterChip
+                            active={assigneeFilter === 'me'}
+                            onClick={() => setAssigneeFilter(assigneeFilter === 'me' ? 'any' : 'me')}
+                            icon={<UserIcon className="size-[11px]" />}
+                            label="Only my issues"
+                        />
+                        <QuickFilterChip
+                            active={quickFilters.includes('recent')}
+                            onClick={() => toggleQuickFilter('recent')}
+                            icon={<Clock className="size-[11px]" />}
+                            label="Recently updated"
+                        />
+                        <QuickFilterChip
+                            active={quickFilters.includes('due')}
+                            onClick={() => toggleQuickFilter('due')}
+                            icon={<CalendarDays className="size-[11px]" />}
+                            label="Due soon"
+                        />
+                        <QuickFilterChip
+                            active={quickFilters.includes('blocked')}
+                            onClick={() => toggleQuickFilter('blocked')}
+                            icon={<Ban className="size-[11px]" />}
+                            label="Blocked"
+                        />
+                    </div>
+
                     {/* push search + filter to the right */}
                     <div className="flex-1" />
 
@@ -1824,6 +2014,7 @@ export default function BoardsShow({
                                                 setLabelFilter([]);
                                                 setPriorityFilter([]);
                                                 setTypeFilter([]);
+                                                setQuickFilters([]);
                                             }}
                                         >
                                             Clear all
@@ -2153,6 +2344,7 @@ export default function BoardsShow({
                                     onDragOver={handleDragOver}
                                     onDrop={handleDrop}
                                     isDragOver={dragOverColumn === column.id}
+                                    totalItemCount={board.columns.find((c) => c.id === column.id)?.items?.length ?? 0}
                                 />
                             ))}
 

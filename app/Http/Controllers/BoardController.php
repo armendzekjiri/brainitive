@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
+use App\Models\Attachment;
 use App\Models\Board;
 use App\Models\BoardColumn;
 use App\Models\Item;
@@ -9,12 +11,13 @@ use App\Models\ItemLink;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Project;
-use App\Models\Workspace;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -37,7 +40,7 @@ class BoardController extends Controller
         $counter = 1;
 
         while ($project->boards()->where('slug', $slug)->exists()) {
-            $slug = $originalSlug . '-' . $counter++;
+            $slug = $originalSlug.'-'.$counter++;
         }
 
         $board = $project->boards()->create([
@@ -58,46 +61,15 @@ class BoardController extends Controller
     {
         $this->authorize('view', $board);
 
+        // Cards only carry what the board renders; comments, attachments and history are
+        // loaded on demand by itemDetails() when an item is opened.
         $board->load([
             'columns' => function ($query) {
                 $query->orderBy('position')->with([
-                    'items' => function ($q) {
-                        $q->orderBy('position')
-                            ->withCount('children')
-                            ->with([
-                                'assignee:id,name,email,avatar',
-                                'itemType',
-                                'priority',
-                                'labels',
-                                'parent:id,key,title,board_id',
-                                'watchers:id,name,email,avatar',
-                                'outgoingLinks.targetItem:id,key,title,board_id',
-                                'outgoingLinks.targetItem.board:id,name,slug',
-                                'incomingLinks.sourceItem:id,key,title,board_id',
-                                'incomingLinks.sourceItem.board:id,name,slug',
-                                'attachments' => function ($a) {
-                                    $a->with('user:id,name,email')->orderBy('created_at', 'desc');
-                                },
-                                'comments' => function ($c) {
-                                    $c->whereNull('parent_id')
-                                        ->with(['user:id,name,email', 'replies'])
-                                        ->orderBy('created_at', 'desc');
-                                }
-                            ]);
-                    }
+                    'items' => fn ($q) => $this->withCardData($q),
                 ]);
             },
         ]);
-
-        // Add URLs to attachments
-        foreach ($board->columns as $column) {
-            foreach ($column->items as $item) {
-                foreach ($item->attachments as $attachment) {
-                    $attachment->url = asset('storage/' . $attachment->path);
-                    $attachment->formatted_size = $attachment->formatted_size;
-                }
-            }
-        }
 
         $itemTypes = ItemType::forProject($project)->orderBy('id')->get();
         if ($itemTypes->isEmpty()) {
@@ -111,9 +83,9 @@ class BoardController extends Controller
         $projectItems = Item::whereHas('board', function ($q) use ($project) {
             $q->where('project_id', $project->id);
         })->select('id', 'key', 'title', 'board_id')
-          ->with('board:id,name,slug')
-          ->orderBy('key')
-          ->get();
+            ->with('board:id,name,slug')
+            ->orderBy('key')
+            ->get();
 
         return Inertia::render('Boards/Show', [
             'workspace' => $workspace,
@@ -307,17 +279,19 @@ class BoardController extends Controller
             'parent_id' => [
                 'nullable',
                 'exists:items,id',
-                function ($attribute, $value, $fail) use ($board, $subtaskTypeId, $request) {
+                function ($attribute, $value, $fail) use ($board) {
                     if ($value === null) {
                         return;
                     }
                     $parent = Item::find($value);
                     if (! $parent || $parent->board_id !== $board->id) {
                         $fail('Parent task must be on the same board.');
+
                         return;
                     }
                     if ($parent->parent_id !== null) {
                         $fail('Parent task must be a root task.');
+
                         return;
                     }
                 },
@@ -352,7 +326,7 @@ class BoardController extends Controller
         ]);
 
         // Sync labels if provided
-        if (!empty($validated['label_ids'])) {
+        if (! empty($validated['label_ids'])) {
             $validLabels = $project->labels()->whereIn('id', $validated['label_ids'])->pluck('id');
             $item->labels()->sync($validLabels);
         }
@@ -367,7 +341,7 @@ class BoardController extends Controller
         }
 
         // Process mentions inside description on item creation
-        if (!empty($validated['description'])) {
+        if (! empty($validated['description'])) {
             $this->processMentions($validated['description'], $item, $request->user());
         }
 
@@ -388,6 +362,71 @@ class BoardController extends Controller
             ->get();
 
         return response()->json($items);
+    }
+
+    /**
+     * Comments, attachments and history of one item (JSON), fetched when it is opened.
+     */
+    public function itemDetails(Workspace $workspace, Project $project, Board $board, Item $item): JsonResponse
+    {
+        $this->authorize('view', $item);
+
+        $comments = $item->comments()
+            ->whereNull('parent_id')
+            ->with(['user:id,name,email,avatar', 'replies'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        $attachments = $item->attachments()
+            ->with('user:id,name,email')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->each(function (Attachment $attachment) {
+                $attachment->url = asset('storage/'.$attachment->path);
+                $attachment->formatted_size = $attachment->formatted_size;
+            });
+
+        $history = $item->activities()
+            ->with('user:id,name,avatar')
+            ->limit(self::HISTORY_LIMIT)
+            ->get(['id', 'user_id', 'action', 'changes', 'metadata', 'created_at']);
+
+        return response()->json([
+            'comments' => $comments,
+            'attachments' => $attachments,
+            'history' => $history,
+            'time_spent' => $item->time_spent,
+            'original_estimate' => $item->original_estimate,
+        ]);
+    }
+
+    /**
+     * Log time worked on an item ("1h 30m"), Jira-style.
+     */
+    public function logWork(Request $request, Workspace $workspace, Project $project, Board $board, Item $item)
+    {
+        $this->authorize('update', $item);
+
+        $validated = $request->validate([
+            'time' => ['required', 'string', 'max:50', function ($attribute, $value, $fail) {
+                $minutes = Item::parseDuration($value);
+                if ($minutes === null || $minutes < 1 || $minutes > Item::MINUTES_PER_WEEK) {
+                    $fail('Use a duration like 45m, 1h 30m, 2h or 1d (max. 1w per entry).');
+                }
+            }],
+            'note' => 'nullable|string|max:255',
+        ]);
+
+        $minutes = Item::parseDuration($validated['time']);
+        $item->increment('time_spent', $minutes);
+
+        ActivityLog::log($item, 'work_logged', null, [
+            'minutes' => $minutes,
+            'total_minutes' => $item->time_spent,
+            'note' => $validated['note'] ?? null,
+        ]);
+
+        return back()->with('success', 'Work logged: '.Item::formatDuration($minutes).'.');
     }
 
     /**
@@ -422,7 +461,7 @@ class BoardController extends Controller
 
         // Add URLs to attachments
         foreach ($item->attachments as $attachment) {
-            $attachment->url = asset('storage/' . $attachment->path);
+            $attachment->url = asset('storage/'.$attachment->path);
         }
 
         $itemTypes = ItemType::forProject($project)->get();
@@ -433,49 +472,17 @@ class BoardController extends Controller
         // Columns WITH their items + relations, mirroring BoardController::show, so the
         // item popup/full page can derive subtasks, parent options and a live copy.
         $columns = $board->columns()->orderBy('position')->with([
-            'items' => function ($q) {
-                $q->orderBy('position')
-                    ->withCount('children')
-                    ->with([
-                        'assignee:id,name,email,avatar',
-                        'itemType',
-                        'priority',
-                        'labels',
-                        'parent:id,key,title,board_id',
-                        'watchers:id,name,email,avatar',
-                        'outgoingLinks.targetItem:id,key,title,board_id',
-                        'outgoingLinks.targetItem.board:id,name,slug',
-                        'incomingLinks.sourceItem:id,key,title,board_id',
-                        'incomingLinks.sourceItem.board:id,name,slug',
-                        'attachments' => function ($a) {
-                            $a->with('user:id,name,email')->orderBy('created_at', 'desc');
-                        },
-                        'comments' => function ($c) {
-                            $c->whereNull('parent_id')
-                                ->with(['user:id,name,email', 'replies'])
-                                ->orderBy('created_at', 'desc');
-                        },
-                    ]);
-            },
+            'items' => fn ($q) => $this->withCardData($q),
         ])->get();
 
-        foreach ($columns as $column) {
-            foreach ($column->items as $colItem) {
-                foreach ($colItem->attachments as $attachment) {
-                    $attachment->url = asset('storage/' . $attachment->path);
-                    $attachment->formatted_size = $attachment->formatted_size;
-                }
-            }
-        }
-
         // Get all items in the project for linking (excluding current item)
-        $projectItems = Item::whereHas('board', function($q) use ($project) {
+        $projectItems = Item::whereHas('board', function ($q) use ($project) {
             $q->where('project_id', $project->id);
         })->where('id', '!=', $item->id)
-          ->select('id', 'key', 'title', 'board_id')
-          ->with('board:id,name,slug')
-          ->orderBy('key')
-          ->get();
+            ->select('id', 'key', 'title', 'board_id')
+            ->with('board:id,name,slug')
+            ->orderBy('key')
+            ->get();
 
         // Get all boards in the project for move-to-board
         $projectBoards = $project->boards()
@@ -507,7 +514,7 @@ class BoardController extends Controller
 
         $validated = $request->validate([
             'column_id' => 'required|exists:board_columns,id',
-            'position'  => 'required|integer|min:0',
+            'position' => 'required|integer|min:0',
         ]);
 
         $oldColumn = $item->column;
@@ -522,7 +529,9 @@ class BoardController extends Controller
 
             foreach ($item->watchers as $watcher) {
                 // Don't notify the person who performed the move
-                if ($watcher->id === $actorId) continue;
+                if ($watcher->id === $actorId) {
+                    continue;
+                }
 
                 $watcher->notify(new ItemStatusChangedNotification(
                     item: $item,
@@ -579,6 +588,11 @@ class BoardController extends Controller
             'due_date' => 'nullable|date',
             'due_time' => 'nullable|date_format:H:i',
             'story_points' => 'nullable|integer|min:0',
+            'original_estimate' => ['nullable', 'string', 'max:50', function ($attribute, $value, $fail) {
+                if (Item::parseDuration($value) === null) {
+                    $fail('Use a duration like 45m, 1h 30m, 2h or 1d.');
+                }
+            }],
             'parent_id' => [
                 'nullable',
                 'exists:items,id',
@@ -588,15 +602,18 @@ class BoardController extends Controller
                     }
                     if ((int) $value === $item->id) {
                         $fail('An item cannot be its own parent.');
+
                         return;
                     }
                     $parent = Item::find($value);
                     if (! $parent || $parent->board_id !== $board->id) {
                         $fail('Parent task must be on the same board.');
+
                         return;
                     }
                     if ($parent->parent_id !== null) {
                         $fail('Parent task must be a root task.');
+
                         return;
                     }
                     // No cycle: walk parent chain from candidate; must not reach current item
@@ -608,6 +625,7 @@ class BoardController extends Controller
                         }
                         if ($current->id === $item->id) {
                             $fail('Parent would create a circular reference.');
+
                             return;
                         }
                     }
@@ -624,6 +642,12 @@ class BoardController extends Controller
             }
         }
 
+        if (array_key_exists('original_estimate', $validated)) {
+            $validated['original_estimate'] = $validated['original_estimate'] === null
+                ? null
+                : Item::parseDuration($validated['original_estimate']);
+        }
+
         $oldAssigneeId = $item->assigned_to;
 
         $item->update($validated);
@@ -631,8 +655,8 @@ class BoardController extends Controller
         // Notify new assignee if changed
         $newAssigneeId = $item->assigned_to;
         if (
-            $newAssigneeId 
-            && $newAssigneeId !== $oldAssigneeId 
+            $newAssigneeId
+            && $newAssigneeId !== $oldAssigneeId
             && $newAssigneeId !== $request->user()->id
         ) {
             $assignee = User::find($newAssigneeId);
@@ -684,7 +708,7 @@ class BoardController extends Controller
         ]);
 
         if ($isRootModifier) {
-            $newItem->title = 'Copy of ' . $originalItem->title;
+            $newItem->title = 'Copy of '.$originalItem->title;
         }
 
         $newItem->key = $project->getNextItemKey();
@@ -692,7 +716,7 @@ class BoardController extends Controller
         $newItem->created_by = $userId;
         $newItem->reporter_id = $userId;
         $newItem->parent_id = $parentId;
-        
+
         // Find next position in column
         $maxPosition = Item::where('column_id', $originalItem->column_id)->max('position') ?? 0;
         $newItem->position = $maxPosition + 1;
@@ -744,6 +768,12 @@ class BoardController extends Controller
             'parent_id' => $validated['parent_id'] ?? null,
         ]);
 
+        ActivityLog::log($item, 'commented', null, [
+            'comment_id' => $comment->id,
+            'reply' => $comment->parent_id !== null,
+            'excerpt' => Str::limit(trim(strip_tags($validated['body'])), 120),
+        ]);
+
         // Process mentions in comment
         $this->processMentions($validated['body'], $item, $request->user());
 
@@ -764,7 +794,17 @@ class BoardController extends Controller
 
         // Ensure labels belong to the project
         $validLabels = $project->labels()->whereIn('id', $validated['labels'] ?? [])->pluck('id');
-        $item->labels()->sync($validLabels);
+        $result = $item->labels()->sync($validLabels);
+
+        if ($result['attached'] !== [] || $result['detached'] !== []) {
+            $names = $project->labels()->whereIn('id', array_merge($result['attached'], $result['detached']))->pluck('name', 'id');
+            ActivityLog::log($item, 'labels_changed', [
+                'labels' => [
+                    'added' => collect($result['attached'])->map(fn ($id) => $names[$id] ?? "#{$id}")->values()->all(),
+                    'removed' => collect($result['detached'])->map(fn ($id) => $names[$id] ?? "#{$id}")->values()->all(),
+                ],
+            ]);
+        }
 
         return back()->with('success', 'Labels updated successfully.');
     }
@@ -796,11 +836,16 @@ class BoardController extends Controller
             return back()->withErrors(['target_item_id' => 'This link already exists.']);
         }
 
-        ItemLink::create([
+        $link = ItemLink::create([
             'source_item_id' => $item->id,
             'target_item_id' => $validated['target_item_id'],
             'link_type' => $validated['link_type'],
             'created_by' => $request->user()->id,
+        ]);
+
+        ActivityLog::log($item, 'linked', null, [
+            'link_type' => $link->link_type,
+            'item' => $link->targetItem?->key,
         ]);
 
         return back()->with('success', 'Item link created successfully.');
@@ -817,6 +862,12 @@ class BoardController extends Controller
         if ($link->source_item_id !== $item->id && $link->target_item_id !== $item->id) {
             abort(404);
         }
+
+        $otherItem = $link->source_item_id === $item->id ? $link->targetItem : $link->sourceItem;
+        ActivityLog::log($item, 'unlinked', null, [
+            'link_type' => $link->source_item_id === $item->id ? $link->link_type : (ItemLink::LINK_TYPES[$link->link_type] ?? $link->link_type),
+            'item' => $otherItem?->key,
+        ]);
 
         $link->delete();
 
@@ -841,13 +892,13 @@ class BoardController extends Controller
         $this->authorize('view', $targetBoard);
 
         // Get target column - either specified or first column of target board
-        if (!empty($validated['target_column_id'])) {
+        if (! empty($validated['target_column_id'])) {
             $targetColumn = BoardColumn::where('id', $validated['target_column_id'])
                 ->where('board_id', $targetBoard->id)
                 ->firstOrFail();
         } else {
             $targetColumn = $targetBoard->columns()->orderBy('position')->first();
-            if (!$targetColumn) {
+            if (! $targetColumn) {
                 return back()->withErrors(['target_board_id' => 'Target board has no columns.']);
             }
         }
@@ -875,8 +926,8 @@ class BoardController extends Controller
         ]);
 
         $file = $request->file('file');
-        $filename = uniqid() . '_' . $file->getClientOriginalName();
-        $path = $file->storeAs('attachments/' . $item->id, $filename, 'public');
+        $filename = uniqid().'_'.$file->getClientOriginalName();
+        $path = $file->storeAs('attachments/'.$item->id, $filename, 'public');
 
         $attachment = $item->attachments()->create([
             'user_id' => $request->user()->id,
@@ -888,7 +939,9 @@ class BoardController extends Controller
         ]);
 
         // Add URL for response
-        $attachment->url = asset('storage/' . $path);
+        $attachment->url = asset('storage/'.$path);
+
+        ActivityLog::log($item, 'attachment_added', null, ['name' => $attachment->original_filename]);
 
         return back()->with('success', 'Attachment uploaded successfully.');
     }
@@ -908,6 +961,8 @@ class BoardController extends Controller
         // Delete file from storage
         \Storage::disk('public')->delete($attachment->path);
 
+        ActivityLog::log($item, 'attachment_removed', null, ['name' => $attachment->original_filename]);
+
         $attachment->delete();
 
         return back()->with('success', 'Attachment deleted successfully.');
@@ -926,24 +981,24 @@ class BoardController extends Controller
 
         // 1. Regular HTML format: data-mention-user-id="123"
         preg_match_all('/data-mention-user-id="(\d+)"/', $content, $htmlMatches);
-        
+
         // 2. Lexical JSON / escaped format: "userId":123 or \"userId\":123 or "userId\":\"123"
         preg_match_all('/"userId"(?:\\\\)?"?\s*:\s*(?:\\\\)?"?(\d+)/', $content, $jsonMatches);
 
         // 3. Fallback escaped HTML: data-mention-user-id\":\"123\"
         preg_match_all('/data-mention-user-id(?:\\\\)?"\s*:\s*(?:\\\\)?"?(\d+)/', $content, $escapedMatches);
-        
+
         $userIds = array_unique(array_merge(
-            $htmlMatches[1] ?? [], 
+            $htmlMatches[1] ?? [],
             $jsonMatches[1] ?? [],
             $escapedMatches[1] ?? []
         ));
-        
+
         \Log::info('processMentions extraction results', [
             'html_count' => count($htmlMatches[1] ?? []),
             'json_count' => count($jsonMatches[1] ?? []),
             'escaped_count' => count($escapedMatches[1] ?? []),
-            'final_ids' => $userIds
+            'final_ids' => $userIds,
         ]);
 
         if (empty($userIds)) {
@@ -953,7 +1008,7 @@ class BoardController extends Controller
         $workspace = $item->board->project->workspace;
         $project = $item->board->project;
         $board = $item->board;
-        
+
         $itemUrl = route('boards.items.show', [$workspace->slug, $project->slug, $board->slug, $item->id]);
 
         foreach ($userIds as $userId) {
@@ -966,11 +1021,40 @@ class BoardController extends Controller
             if ($user && $user->hasProjectAccess($project)) {
                 $user->notify(new MentionNotification(
                     contextType: 'issue',
-                    contextTitle: $item->key . ' - ' . $item->title,
+                    contextTitle: $item->key.' - '.$item->title,
                     contextUrl: $itemUrl,
                     actor: $actor
                 ));
             }
         }
+    }
+
+    /**
+     * Newest history entries returned per item.
+     */
+    private const HISTORY_LIMIT = 200;
+
+    /**
+     * What a card on the board (and the item popup's "live" copy) needs — no comment or
+     * attachment bodies, just their counts.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<Item>|\Illuminate\Database\Eloquent\Relations\HasMany<Item, BoardColumn>  $query
+     */
+    private function withCardData($query)
+    {
+        return $query->orderBy('position')
+            ->withCount(['children', 'comments', 'attachments'])
+            ->with([
+                'assignee:id,name,email,avatar',
+                'itemType',
+                'priority',
+                'labels',
+                'parent:id,key,title,board_id',
+                'watchers:id,name,email,avatar',
+                'outgoingLinks.targetItem:id,key,title,board_id',
+                'outgoingLinks.targetItem.board:id,name,slug',
+                'incomingLinks.sourceItem:id,key,title,board_id',
+                'incomingLinks.sourceItem.board:id,name,slug',
+            ]);
     }
 }

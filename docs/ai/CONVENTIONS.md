@@ -258,12 +258,28 @@ Pages work like Confluence. Keep these rules when touching pages:
 - Presence is a cache-backed heartbeat (`pages.presence`, `usePagePresence`), not websockets
   — Reverb/Echo aren't installed.
 
+## Item history (activity log)
+
+- Changes to `Item` columns are logged automatically by `ItemObserver` — don't log them by
+  hand. New tracked field → add it to `ItemObserver::TRACKED_FIELDS` (with the model used to
+  resolve its display value) and a label in `HISTORY_FIELD_LABELS` (`ItemDetail.tsx`).
+- Changes that aren't a model update (pivot syncs, related rows) need an explicit
+  `ActivityLog::log($item, '<action>', $changes, $metadata)` in the controller; add the
+  action to `ItemHistoryEntry` and `HistoryEntryBody`.
+- Store **display values** (names, keys, formatted durations) in the log, not ids — the
+  history must stay readable after renames and deletes.
+- Bulk position updates use the query builder on purpose (no events → no history noise).
+- Durations: parse/format with `Item::parseDuration()` / `Item::formatDuration()` (PHP) and
+  `lib/duration.ts` (TS) — keep both in sync.
+
 ## Testing
 
 - PHPUnit 11; base `tests/TestCase.php`. Feature tests use `RefreshDatabase` + factories +
   `actingAs($user)`. Test names: `test_user_can_create_board()`.
 - Cover: every policy method, CRUD, validation rejects bad data, authz denies unauthorized
   users, soft deletes, unique slug + uuid generation.
+- Board tests share `tests/Feature/Boards/InteractsWithBoards.php` (editor / viewer /
+  outsider, board with To Do / In Progress / Done). Factories: `Board`, `Item`.
 - Page tests share the role matrix in `tests/Feature/Pages/InteractsWithPages.php`
   (author / editor / viewer / admin / outsider). Factories: `Workspace`, `Project`, `Page`
   (`published()`, `folder()`), `PageVersion`.
