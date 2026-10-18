@@ -38,7 +38,6 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import {
     MoreHorizontal,
@@ -46,8 +45,6 @@ import {
     Folder,
     Plus,
     Trash2,
-    Clock,
-    User as UserIcon,
     ChevronRight,
     Globe,
     FileEdit,
@@ -62,11 +59,11 @@ import {
     Minimize2,
     Bell,
     BellRing,
-    Users,
     Files,
     FileDown,
     FileCode,
     Printer,
+    PanelTop,
 } from 'lucide-react';
 import TurndownService from 'turndown';
 import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallback, Suspense, lazy } from 'react';
@@ -184,7 +181,7 @@ function PageIconPicker({ value, onChange }: { value: string; onChange: (val: st
             <button
                 type="button"
                 onClick={() => setOpen(true)}
-                className="group relative size-14 flex items-center justify-center text-5xl hover:bg-accent rounded-xl transition-colors"
+                className="group relative -ml-1.5 size-14 flex items-center justify-center text-5xl hover:bg-accent rounded-xl transition-colors"
                 title="Change icon"
             >
                 {isImage
@@ -277,67 +274,79 @@ function PageIconPicker({ value, onChange }: { value: string; onChange: (val: st
     );
 }
 
-// Page Title Editor
-function PageTitleEditor({
+const PAGE_TITLE_CLASS = 'text-[2.25rem] font-bold leading-[1.2] tracking-[-0.02em] md:text-[2.5rem]';
+
+// Page title — edited in place like Outline; Enter jumps into the body
+function PageTitleInput({
     title,
     onSave
 }: {
     title: string;
     onSave: (title: string) => void;
 }) {
-    const [editing, setEditing] = useState(false);
     const [value, setValue] = useState(title);
-    const inputRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => {
-        if (editing && inputRef.current) {
-            inputRef.current.focus();
-            inputRef.current.select();
-        }
-    }, [editing]);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const discardRef = useRef(false);
 
     useEffect(() => {
         setValue(title);
     }, [title]);
 
+    // Grow with the content so long titles wrap instead of scrolling
+    useEffect(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.style.height = 'auto';
+        el.style.height = `${el.scrollHeight}px`;
+    }, [value]);
+
     const handleSave = () => {
-        if (value.trim() && value !== title) {
-            onSave(value.trim());
+        const trimmed = value.trim();
+        if (!discardRef.current && trimmed && trimmed !== title) {
+            onSave(trimmed);
         } else {
             setValue(title);
         }
-        setEditing(false);
+        discardRef.current = false;
     };
 
-    if (editing) {
-        return (
-            <input
-                ref={inputRef}
-                type="text"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                onBlur={handleSave}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSave();
-                    if (e.key === 'Escape') {
-                        setValue(title);
-                        setEditing(false);
-                    }
-                }}
-                className="w-full border-none bg-transparent text-[2rem] font-semibold leading-tight tracking-normal outline-none placeholder:text-muted-foreground/50 focus:ring-0 md:text-[2.35rem]"
-                placeholder="Untitled"
-            />
-        );
-    }
-
     return (
-        <h1
-            onClick={() => setEditing(true)}
-            className="cursor-text rounded-md px-1 -mx-1 text-[2rem] font-semibold leading-tight tracking-normal transition-colors hover:bg-accent/50 md:text-[2.35rem]"
-        >
-            {title || 'Untitled'}
-        </h1>
+        <textarea
+            ref={textareaRef}
+            rows={1}
+            value={value}
+            onChange={(e) => setValue(e.target.value.replace(/\n/g, ' '))}
+            onBlur={handleSave}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                    document.querySelector<HTMLElement>('.lexical-editor-content')?.focus();
+                }
+                if (e.key === 'Escape') {
+                    discardRef.current = true;
+                    e.currentTarget.blur();
+                }
+            }}
+            className={cn(PAGE_TITLE_CLASS, 'block w-full resize-none overflow-hidden border-none bg-transparent p-0 outline-none placeholder:text-muted-foreground/40 focus:ring-0')}
+            placeholder="Untitled"
+            aria-label="Page title"
+        />
     );
+}
+
+const relativeTimeFormat = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+
+/** "3 hours ago", "yesterday", … — falls back to a date after a month. */
+function formatRelativeTime(value: string): string {
+    const date = new Date(value);
+    const seconds = Math.round((date.getTime() - Date.now()) / 1000);
+    const abs = Math.abs(seconds);
+    if (abs < 60) return 'just now';
+    if (abs < 3600) return relativeTimeFormat.format(Math.round(seconds / 60), 'minute');
+    if (abs < 86400) return relativeTimeFormat.format(Math.round(seconds / 3600), 'hour');
+    if (abs < 86400 * 30) return relativeTimeFormat.format(Math.round(seconds / 86400), 'day');
+    return date.toLocaleDateString();
 }
 
 // Child Page Card
@@ -700,6 +709,11 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
     const [isFullWidth, setIsFullWidth] = useState(() => {
         try { return localStorage.getItem(`page-full-width-${page.uuid}`) === 'true'; } catch { return false; }
     });
+    // Classic formatting toolbar is opt-in; the floating selection toolbar covers everyday formatting
+    const [showFormattingToolbar, setShowFormattingToolbar] = useState(() => {
+        try { return localStorage.getItem('page-formatting-toolbar') === 'true'; } catch { return false; }
+    });
+    const [isScrolled, setIsScrolled] = useState(false);
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const contentPanelRef = useRef<HTMLDivElement>(null);
 
@@ -914,11 +928,11 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
         <AppLayout>
             <Head title={`${page.name} - ${project.name}`} />
 
-            <div className="h-full flex flex-col bg-background">
+            <div className="h-full flex flex-col bg-card">
 
                 {/* Breadcrumb bar — always visible, outside the scroll panels */}
-                <div className="shrink-0 border-b border-border/60 bg-background/95 backdrop-blur z-10">
-                    <div className={cn("mx-auto px-5 py-2.5", !isFullWidth && "max-w-[1120px]")}>
+                <div className={cn("shrink-0 border-b bg-card/95 backdrop-blur z-10 transition-colors", isScrolled ? "border-border/60" : "border-transparent")}>
+                    <div className="px-5 py-2.5">
                         <div className="flex items-center justify-between gap-4">
                             {/* Breadcrumbs */}
                             <Breadcrumb>
@@ -1017,6 +1031,23 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
 
                                 {/* Unpublish in dropdown for published pages */}
 
+                                {/* Formatting toolbar toggle */}
+                                {isEditing && page.type === 'page' && !isExcalidrawPage(page.content) && (
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className={cn("size-8", showFormattingToolbar && "bg-accent text-foreground")}
+                                        title={showFormattingToolbar ? 'Hide formatting toolbar' : 'Show formatting toolbar'}
+                                        onClick={() => {
+                                            const next = !showFormattingToolbar;
+                                            setShowFormattingToolbar(next);
+                                            try { localStorage.setItem('page-formatting-toolbar', String(next)); } catch { }
+                                        }}
+                                    >
+                                        <PanelTop className="size-4" />
+                                    </Button>
+                                )}
+
                                 {/* Full-width toggle */}
                                 <Button
                                     variant="ghost"
@@ -1094,58 +1125,55 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                 <div className="flex-1 overflow-hidden flex">
 
                     {/* Page content panel */}
-                    <div ref={contentPanelRef} className="flex-1 overflow-y-auto bg-card text-card-foreground">
+                    <div
+                        ref={contentPanelRef}
+                        className="flex-1 overflow-y-auto bg-card text-card-foreground"
+                        onScroll={(e) => setIsScrolled(e.currentTarget.scrollTop > 4)}
+                    >
                         <div className={cn(
-                            "mx-auto px-5 pt-8 pb-12",
-                            !isFullWidth && "max-w-[920px]",
-                            isFullWidth && "max-w-none xl:px-12"
+                            "mx-auto px-6 pt-12 pb-24 md:px-16",
+                            !isFullWidth && "max-w-[54rem]",
+                            isFullWidth && "max-w-none xl:px-24"
                         )}>
-                            {/* Icon and Title */}
-                            <div className="mb-7">
-                                <div className="flex items-start gap-3">
+                            {/* Icon, title and meta */}
+                            <div className="mb-6">
+                                <div className="mb-3">
                                     {isEditing ? (
                                         <PageIconPicker value={formData.icon} onChange={handleUpdateIcon} />
                                     ) : (
                                         (formData.icon?.startsWith('data:') || formData.icon?.startsWith('http') || formData.icon?.startsWith('/'))
-                                            ? <img src={formData.icon} className="mt-1 size-10 rounded-md object-cover" alt="icon" />
-                                            : <span className="mt-0.5 text-4xl leading-none">{formData.icon || '📄'}</span>
-                                    )}
-                                    {isEditing ? (
-                                        <PageTitleEditor title={formData.name} onSave={handleUpdateName} />
-                                    ) : (
-                                        <h1 className="text-[2rem] font-semibold leading-tight tracking-normal md:text-[2.35rem]">{formData.name || 'Untitled'}</h1>
+                                            ? <img src={formData.icon} className="size-12 rounded-lg object-cover" alt="icon" />
+                                            : <span className="block text-5xl leading-none">{formData.icon || '📄'}</span>
                                     )}
                                 </div>
-                                <div className="flex items-center gap-x-3 gap-y-1.5 mt-3 text-[13px] text-muted-foreground flex-wrap">
+                                {isEditing ? (
+                                    <PageTitleInput title={formData.name} onSave={handleUpdateName} />
+                                ) : (
+                                    <h1 className={PAGE_TITLE_CLASS}>{formData.name || 'Untitled'}</h1>
+                                )}
+                                <div className="flex items-center gap-x-1.5 gap-y-1 mt-3 text-sm text-muted-foreground flex-wrap">
+                                    <span title={new Date(page.updated_at).toLocaleString()}>
+                                        {page.lastEditor ? `${page.lastEditor.name} updated` : 'Updated'} {formatRelativeTime(page.updated_at)}
+                                    </span>
                                     {page.creator && (
-                                        <div className="flex items-center gap-1.5">
-                                            <UserIcon className="size-3.5" />
+                                        <>
+                                            <span aria-hidden className="text-muted-foreground/50">·</span>
                                             <span>Created by {page.creator.name}</span>
-                                        </div>
+                                        </>
                                     )}
-                                    {page.lastEditor && (
-                                        <div className="flex items-center gap-1.5">
-                                            <UserIcon className="size-3.5" />
-                                            <span>Last edited by {page.lastEditor.name}</span>
-                                        </div>
-                                    )}
-                                    <div className="flex items-center gap-1.5">
-                                        <Clock className="size-3.5" />
-                                        <span>Updated {new Date(page.updated_at).toLocaleDateString()}</span>
-                                    </div>
                                     {page.published_at && page.status === 'published' && (
-                                        <div className="flex items-center gap-1.5">
-                                            <Globe className="size-3.5" />
-                                            <span>Published {new Date(page.published_at).toLocaleDateString()}</span>
-                                        </div>
+                                        <>
+                                            <span aria-hidden className="text-muted-foreground/50">·</span>
+                                            <span title={new Date(page.published_at).toLocaleString()}>Published {formatRelativeTime(page.published_at)}</span>
+                                        </>
                                     )}
                                     {/* Watcher avatars */}
                                     {(page.watchers?.length ?? 0) > 0 && (
-                                        <div className="flex items-center gap-1.5">
-                                            <Users className="size-3.5" />
-                                            <div className="flex -space-x-1.5 overflow-hidden">
+                                        <>
+                                            <span aria-hidden className="text-muted-foreground/50">·</span>
+                                            <div className="flex -space-x-1.5 overflow-hidden" title={`Watching: ${(page.watchers ?? []).map(w => w.name).join(', ')}`}>
                                                 {(page.watchers ?? []).slice(0, 5).map(w => (
-                                                    <Avatar key={w.id} className="size-5 border-2 border-background" title={w.name}>
+                                                    <Avatar key={w.id} className="size-5 border-2 border-background">
                                                         <AvatarFallback className="text-[9px] bg-muted">{w.name.charAt(0)}</AvatarFallback>
                                                     </Avatar>
                                                 ))}
@@ -1155,12 +1183,10 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                                     </div>
                                                 )}
                                             </div>
-                                        </div>
+                                        </>
                                     )}
                                 </div>
                             </div>
-
-                            <Separator className="mb-3 bg-border/50" />
 
                             {/* Whiteboard page: embedded view-mode canvas + open editor button */}
                             {page.type === 'page' && isExcalidrawPage(page.content) && (
@@ -1188,8 +1214,8 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
                                     content={extractHtmlContent(page.content as any)}
                                     onChange={handleUpdateContent}
                                     editable={isEditing}
-                                    placeholder="Click here and start writing, or press / for commands..."
-                                    showToolbar={isEditing}
+                                    placeholder="Start writing, or press / for commands…"
+                                    showToolbar={isEditing && showFormattingToolbar}
                                     minHeight="400px"
                                     workspaceSlug={workspace.slug}
                                     contentKey={`page-${page.uuid}-${isEditing}`}
@@ -1256,7 +1282,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs }: Prop
 
                     {/* TOC panel — own scroll, naturally aligned next to content */}
                     {page.type === 'page' && !isExcalidrawPage(page.content) && headings.length > 0 && (
-                        <div className="hidden xl:flex w-64 shrink-0 flex-col border-l border-border/60 bg-background overflow-y-auto overflow-x-hidden px-5 pt-8">
+                        <div className="hidden xl:flex w-64 shrink-0 flex-col bg-card overflow-y-auto overflow-x-hidden px-5 pt-14">
                             <PageTableOfContents
                                 headings={headings}
                                 headerOffset={0}

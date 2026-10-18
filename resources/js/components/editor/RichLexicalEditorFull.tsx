@@ -46,6 +46,9 @@ import {
     $getNearestNodeFromDOMNode,
     PASTE_COMMAND,
     $insertNodes,
+    SELECTION_CHANGE_COMMAND,
+    $setSelection,
+    LexicalEditor,
 } from 'lexical';
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
 import {
@@ -156,6 +159,7 @@ import {
     Briefcase,
     SmilePlus,
     Lightbulb,
+    Highlighter,
 } from 'lucide-react';
 
 // Import custom nodes
@@ -1849,6 +1853,286 @@ function DraggableBlockPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
 
     return <>{handles}</>;
 }
+
+type BlockType = 'paragraph' | 'h1' | 'h2' | 'h3' | 'quote' | 'code' | 'bullet' | 'number' | 'check';
+
+/** Convert the blocks in the current selection to the given block type. */
+function applyBlockType(editor: LexicalEditor, type: string) {
+    editor.update(() => {
+        const sel = $getSelection();
+        if (!$isRangeSelection(sel)) return;
+        switch (type) {
+            case 'paragraph': $setBlocksType(sel, () => $createParagraphNode()); break;
+            case 'h1': case 'h2': case 'h3':
+                $setBlocksType(sel, () => $createHeadingNode(type as 'h1' | 'h2' | 'h3')); break;
+            case 'quote': $setBlocksType(sel, () => $createQuoteNode()); break;
+            case 'code': $setBlocksType(sel, () => $createCodeNode()); break;
+            case 'bullet': editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined); break;
+            case 'number': editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined); break;
+            case 'check': editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined); break;
+        }
+    }, { discrete: true });
+}
+
+/** Block type of the top-level element that holds the selection anchor. */
+function $getSelectionBlockType(selection: RangeSelection): BlockType {
+    const anchorNode = selection.anchor.getNode();
+    const element = anchorNode.getKey() === 'root' ? anchorNode : anchorNode.getTopLevelElementOrThrow();
+    if ($isHeadingNode(element)) {
+        const tag = element.getTag();
+        return tag === 'h1' || tag === 'h2' || tag === 'h3' ? tag : 'paragraph';
+    }
+    if ($isListNode(element)) {
+        const parentList = $getNearestNodeOfType<ListNode>(anchorNode, ListNode);
+        const listType = (parentList ?? element).getListType();
+        return listType === 'bullet' ? 'bullet' : listType === 'number' ? 'number' : 'check';
+    }
+    if ($isCodeNode(element)) return 'code';
+    if ($isQuoteNode(element)) return 'quote';
+    return 'paragraph';
+}
+
+const HIGHLIGHT_COLOR = 'rgba(250, 204, 21, 0.4)';
+
+// Defined at module level so buttons keep their identity across re-renders (clicks aren't lost)
+function FloatingToolbarButton({ active, title, onClick, children }: { active?: boolean; title: string; onClick: () => void; children: React.ReactNode }) {
+    return (
+        <button
+            type="button"
+            title={title}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onClick}
+            className={cn(
+                'h-8 min-w-8 px-1.5 flex items-center justify-center rounded-md text-popover-foreground/80 hover:bg-accent hover:text-foreground transition-colors',
+                active && 'bg-accent text-primary',
+            )}
+        >
+            {children}
+        </button>
+    );
+}
+
+function FloatingToolbarDivider() {
+    return <div className="w-px h-5 bg-border mx-1 shrink-0" />;
+}
+
+// Floating format toolbar — Outline/Evernote-style bubble shown above a text selection
+function FloatingFormatToolbarPlugin() {
+    const [editor] = useLexicalComposerContext();
+    const [position, setPosition] = useState<{ top: number; bottom: number; left: number } | null>(null);
+    const [formats, setFormats] = useState({ bold: false, italic: false, strikethrough: false, code: false, link: false, highlight: false });
+    const [blockType, setBlockType] = useState<BlockType>('paragraph');
+    const [isLinkMode, setIsLinkMode] = useState(false);
+    const [linkUrl, setLinkUrl] = useState('');
+    const isLinkModeRef = useRef(false);
+    const isPointerDownRef = useRef(false);
+    const savedSelectionRef = useRef<RangeSelection | null>(null);
+    const toolbarRef = useRef<HTMLDivElement>(null);
+
+    const closeLinkMode = useCallback(() => {
+        isLinkModeRef.current = false;
+        setIsLinkMode(false);
+        setLinkUrl('');
+    }, []);
+
+    const $updatePosition = useCallback(() => {
+        if (isLinkModeRef.current) return;
+        const selection = $getSelection();
+        const nativeSelection = window.getSelection();
+        const rootElement = editor.getRootElement();
+        if (
+            isPointerDownRef.current ||
+            !$isRangeSelection(selection) ||
+            selection.isCollapsed() ||
+            selection.getTextContent().trim() === '' ||
+            !nativeSelection ||
+            nativeSelection.rangeCount === 0 ||
+            !rootElement ||
+            !rootElement.contains(nativeSelection.anchorNode)
+        ) {
+            setPosition(null);
+            return;
+        }
+        const type = $getSelectionBlockType(selection);
+        if (type === 'code') {
+            setPosition(null);
+            return;
+        }
+        const node = selection.anchor.getNode();
+        setFormats({
+            bold: selection.hasFormat('bold'),
+            italic: selection.hasFormat('italic'),
+            strikethrough: selection.hasFormat('strikethrough'),
+            code: selection.hasFormat('code'),
+            link: $isLinkNode(node) || $isLinkNode(node.getParent()),
+            highlight: $getSelectionStyleValueForProperty(selection, 'background-color', '') !== '',
+        });
+        setBlockType(type);
+        const rect = nativeSelection.getRangeAt(0).getBoundingClientRect();
+        setPosition({ top: rect.top, bottom: rect.bottom, left: rect.left + rect.width / 2 });
+    }, [editor]);
+
+    useEffect(() => {
+        const readPosition = () => editor.getEditorState().read(() => $updatePosition());
+        const rootElement = editor.getRootElement();
+        // Hide while the user is still dragging a selection, show on release
+        const onPointerDown = (e: PointerEvent) => {
+            if (toolbarRef.current?.contains(e.target as Node)) return;
+            isPointerDownRef.current = true;
+            if (isLinkModeRef.current) closeLinkMode();
+            setPosition(null);
+        };
+        const onPointerUp = () => {
+            if (!isPointerDownRef.current) return;
+            isPointerDownRef.current = false;
+            setTimeout(readPosition, 0);
+        };
+        rootElement?.addEventListener('pointerdown', onPointerDown);
+        document.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('scroll', readPosition, true);
+        window.addEventListener('resize', readPosition);
+        const removeUpdate = editor.registerUpdateListener(({ editorState }) => editorState.read(() => $updatePosition()));
+        const removeSelection = editor.registerCommand(SELECTION_CHANGE_COMMAND, () => {
+            $updatePosition();
+            return false;
+        }, COMMAND_PRIORITY_LOW);
+        return () => {
+            rootElement?.removeEventListener('pointerdown', onPointerDown);
+            document.removeEventListener('pointerup', onPointerUp);
+            window.removeEventListener('scroll', readPosition, true);
+            window.removeEventListener('resize', readPosition);
+            removeUpdate();
+            removeSelection();
+        };
+    }, [editor, $updatePosition, closeLinkMode]);
+
+    if (!position) return null;
+
+    const toggleBlock = (type: BlockType) => applyBlockType(editor, blockType === type ? 'paragraph' : type);
+
+    const toggleHighlight = () => {
+        editor.update(() => {
+            const sel = $getSelection();
+            if ($isRangeSelection(sel)) $patchStyleText(sel, { 'background-color': formats.highlight ? null : HIGHLIGHT_COLOR });
+        });
+    };
+
+    const openLinkMode = () => {
+        if (formats.link) {
+            editor.dispatchCommand(TOGGLE_LINK_COMMAND, null);
+            return;
+        }
+        editor.getEditorState().read(() => {
+            const sel = $getSelection();
+            savedSelectionRef.current = $isRangeSelection(sel) ? sel.clone() : null;
+        });
+        isLinkModeRef.current = true;
+        setIsLinkMode(true);
+    };
+
+    const applyLink = () => {
+        const url = linkUrl.trim();
+        editor.update(() => {
+            if (savedSelectionRef.current) $setSelection(savedSelectionRef.current.clone());
+        });
+        if (url) editor.dispatchCommand(TOGGLE_LINK_COMMAND, /^[a-z][a-z0-9+.-]*:|^\/|^#/i.test(url) ? url : `https://${url}`);
+        closeLinkMode();
+        editor.focus();
+    };
+
+    // Place above the selection; flip below when there is no room at the top
+    const TOOLBAR_HEIGHT = 40;
+    const top = position.top - TOOLBAR_HEIGHT - 8 < 8 ? position.bottom + 8 : position.top - TOOLBAR_HEIGHT - 8;
+    const left = Math.min(Math.max(position.left, 190), window.innerWidth - 190);
+
+
+    return createPortal(
+        <div
+            ref={toolbarRef}
+            data-lexical-menu={isLinkMode ? 'true' : undefined}
+            className="fixed z-[210] flex items-center gap-0.5 rounded-lg border bg-popover p-1 shadow-lg animate-in fade-in-0 zoom-in-95 duration-100"
+            style={{ top, left, height: TOOLBAR_HEIGHT, transform: 'translateX(-50%)' }}
+        >
+            {isLinkMode ? (
+                <div className="flex items-center gap-1 px-1">
+                    <Link className="size-4 text-muted-foreground shrink-0" />
+                    <input
+                        autoFocus
+                        value={linkUrl}
+                        onChange={(e) => setLinkUrl(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); applyLink(); }
+                            if (e.key === 'Escape') { e.preventDefault(); closeLinkMode(); editor.focus(); }
+                        }}
+                        placeholder="Paste or type a link…"
+                        className="w-64 h-7 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                    />
+                    <FloatingToolbarButton title="Apply link" onClick={applyLink}><Check className="size-4" /></FloatingToolbarButton>
+                    <FloatingToolbarButton title="Cancel" onClick={() => { closeLinkMode(); editor.focus(); }}><X className="size-4" /></FloatingToolbarButton>
+                </div>
+            ) : (
+                <>
+                    <FloatingToolbarButton title="Bold (Ctrl+B)" active={formats.bold} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold')}><Bold className="size-4" /></FloatingToolbarButton>
+                    <FloatingToolbarButton title="Italic (Ctrl+I)" active={formats.italic} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic')}><Italic className="size-4" /></FloatingToolbarButton>
+                    <FloatingToolbarButton title="Strikethrough" active={formats.strikethrough} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'strikethrough')}><Strikethrough className="size-4" /></FloatingToolbarButton>
+                    <FloatingToolbarButton title="Highlight" active={formats.highlight} onClick={toggleHighlight}><Highlighter className="size-4" /></FloatingToolbarButton>
+                    <FloatingToolbarButton title="Inline code" active={formats.code} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'code')}><Code className="size-4" /></FloatingToolbarButton>
+                    <FloatingToolbarDivider />
+                    <FloatingToolbarButton title="Heading 1" active={blockType === 'h1'} onClick={() => toggleBlock('h1')}><Heading1 className="size-4" /></FloatingToolbarButton>
+                    <FloatingToolbarButton title="Heading 2" active={blockType === 'h2'} onClick={() => toggleBlock('h2')}><Heading2 className="size-4" /></FloatingToolbarButton>
+                    <FloatingToolbarButton title="Heading 3" active={blockType === 'h3'} onClick={() => toggleBlock('h3')}><Heading3 className="size-4" /></FloatingToolbarButton>
+                    <FloatingToolbarButton title="Quote" active={blockType === 'quote'} onClick={() => toggleBlock('quote')}><QuoteIcon className="size-4" /></FloatingToolbarButton>
+                    <FloatingToolbarButton title="Checklist" active={blockType === 'check'} onClick={() => toggleBlock('check')}><ListChecks className="size-4" /></FloatingToolbarButton>
+                    <FloatingToolbarDivider />
+                    <FloatingToolbarButton title={formats.link ? 'Remove link' : 'Link'} active={formats.link} onClick={openLinkMode}><Link className="size-4" /></FloatingToolbarButton>
+                </>
+            )}
+        </div>,
+        document.body
+    );
+}
+
+// Shows a "Type / for commands" hint on the focused empty paragraph (styled via .lexical-doc)
+function EmptyBlockPlaceholderPlugin({ text }: { text: string }) {
+    const [editor] = useLexicalComposerContext();
+
+    useEffect(() => {
+        let current: HTMLElement | null = null;
+        const clear = () => {
+            if (!current) return;
+            current.classList.remove('is-empty-block');
+            current.removeAttribute('data-placeholder');
+            current = null;
+        };
+        const removeUpdate = editor.registerUpdateListener(({ editorState }) => {
+            editorState.read(() => {
+                let next: HTMLElement | null = null;
+                const selection = $getSelection();
+                // A lone empty paragraph is covered by the editor's own placeholder
+                if ($isRangeSelection(selection) && selection.isCollapsed() && $getRoot().getChildrenSize() > 1) {
+                    const block = selection.anchor.getNode().getTopLevelElement();
+                    if (block && $isParagraphNode(block) && block.getChildrenSize() === 0) {
+                        next = editor.getElementByKey(block.getKey());
+                    }
+                }
+                if (next === current) return;
+                clear();
+                if (next) {
+                    next.classList.add('is-empty-block');
+                    next.setAttribute('data-placeholder', text);
+                    current = next;
+                }
+            });
+        });
+        return () => {
+            removeUpdate();
+            clear();
+        };
+    }, [editor, text]);
+
+    return null;
+}
+
 // Context so toolbar (e.g. AI Replace) can notify parent of content changes for save
 const RichLexicalOnChangeContext = createContext<((html: string) => void) | null>(null);
 
@@ -1869,6 +2153,7 @@ function ToolbarPlugin({
     projectName,
     stickyToolbar = false,
     stickyTopOffset = 52,
+    documentMode = false,
 }: {
     showToolbar?: boolean;
     workspaceSlug?: string;
@@ -1876,6 +2161,7 @@ function ToolbarPlugin({
     projectName?: string;
     stickyToolbar?: boolean;
     stickyTopOffset?: number;
+    documentMode?: boolean;
 }) {
     const [editor] = useLexicalComposerContext();
     const onChangeFromContext = useContext(RichLexicalOnChangeContext);
@@ -1994,19 +2280,7 @@ function ToolbarPlugin({
 
             const anchorNode = selection.anchor.getNode();
             const element = anchorNode.getKey() === 'root' ? anchorNode : anchorNode.getTopLevelElementOrThrow();
-            if ($isHeadingNode(element)) {
-                setBlockType(element.getTag());
-            } else if ($isListNode(element)) {
-                const parentList = $getNearestNodeOfType<ListNode>(anchorNode, ListNode);
-                const listType = (parentList ?? element).getListType();
-                setBlockType(listType === 'bullet' ? 'bullet' : listType === 'number' ? 'number' : 'check');
-            } else if ($isCodeNode(element)) {
-                setBlockType('code');
-            } else if ($isQuoteNode(element)) {
-                setBlockType('quote');
-            } else {
-                setBlockType('paragraph');
-            }
+            setBlockType($isHeadingNode(element) ? element.getTag() : $getSelectionBlockType(selection));
             if ('getFormatType' in element) {
                 setElementFormat((element as any).getFormatType() || 'left');
             }
@@ -2019,21 +2293,8 @@ function ToolbarPlugin({
         });
     }, [editor, updateToolbar]);
 
-    const applyBlockType = (type: string) => {
-        editor.update(() => {
-            const sel = $getSelection();
-            if (!$isRangeSelection(sel)) return;
-            switch (type) {
-                case 'paragraph': $setBlocksType(sel, () => $createParagraphNode()); break;
-                case 'h1': case 'h2': case 'h3':
-                    $setBlocksType(sel, () => $createHeadingNode(type as 'h1' | 'h2' | 'h3')); break;
-                case 'quote': $setBlocksType(sel, () => $createQuoteNode()); break;
-                case 'code': $setBlocksType(sel, () => $createCodeNode()); break;
-                case 'bullet': editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined); break;
-                case 'number': editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined); break;
-                case 'check': editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined); break;
-            }
-        }, { discrete: true });
+    const applyToolbarBlockType = (type: string) => {
+        applyBlockType(editor, type);
         setShowBlockMenu(false);
     };
 
@@ -2069,6 +2330,7 @@ function ToolbarPlugin({
                 className={cn(
                     "flex items-center gap-0.5 px-1.5 py-1 border-b bg-muted/30 flex-wrap min-h-[40px]",
                     stickyToolbar && "sticky z-[9] bg-background/95 backdrop-blur shadow-sm",
+                    documentMode && "mb-3 rounded-lg border bg-background/95 shadow-sm",
                 )}
                 style={stickyToolbar ? { top: stickyTopOffset } : undefined}
             >
@@ -2097,7 +2359,7 @@ function ToolbarPlugin({
                         {BLOCK_TYPE_OPTIONS.map(bt => (
                             <button key={bt.value} type="button"
                                 className={cn('w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted text-left', blockType === bt.value && 'bg-muted font-medium')}
-                                onClick={() => applyBlockType(bt.value)}
+                                onClick={() => applyToolbarBlockType(bt.value)}
                             >
                                 {bt.icon} {bt.label}
                             </button>
@@ -3060,7 +3322,7 @@ export function RichLexicalEditor({
         <LexicalComposer initialConfig={initialConfig}>
             <RichLexicalOnChangeContext.Provider value={onChange}>
                 <div className={cn("border rounded-lg overflow-hidden bg-white dark:bg-card", documentMode && "bg-transparent dark:bg-transparent", className)}>
-                    <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} projectName={projectName} stickyToolbar={stickyToolbar} stickyTopOffset={stickyTopOffset} />
+                    <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} projectName={projectName} stickyToolbar={stickyToolbar} stickyTopOffset={stickyTopOffset} documentMode={documentMode} />
                     <div
                         className={cn("relative", maxHeight && "overflow-y-auto")}
                         style={maxHeight ? { maxHeight } : undefined}
@@ -3073,25 +3335,15 @@ export function RichLexicalEditor({
                                         "lexical-editor-content outline-none p-4 text-sm prose prose-sm max-w-none",
                                         editable && "pl-16",
                                         !editable && "cursor-default",
-                                        documentMode && [
-                                            "px-0 py-3 text-[15px] leading-7 text-foreground",
-                                            "prose-slate dark:prose-invert prose-headings:tracking-normal prose-headings:text-foreground",
-                                            "prose-h1:text-[1.75rem] prose-h1:leading-tight prose-h1:font-semibold prose-h1:mt-8 prose-h1:mb-3",
-                                            "prose-h2:text-[1.45rem] prose-h2:leading-snug prose-h2:font-semibold prose-h2:mt-8 prose-h2:mb-2.5",
-                                            "prose-h3:text-[1.18rem] prose-h3:leading-snug prose-h3:font-semibold prose-h3:mt-6 prose-h3:mb-2",
-                                            "prose-p:my-2 prose-li:my-1 prose-ul:my-3 prose-ol:my-3",
-                                            "prose-a:text-primary prose-blockquote:my-4 prose-blockquote:border-l-2 prose-blockquote:border-primary/35 prose-blockquote:pl-4 prose-blockquote:not-italic prose-blockquote:text-muted-foreground",
-                                            "prose-code:rounded prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[0.9em] prose-code:font-medium prose-code:before:content-none prose-code:after:content-none",
-                                            editable ? "px-3 pl-3 sm:px-4 sm:pl-4" : "px-0"
-                                        ]
+                                        // Typography for documents lives in .lexical-doc (resources/css/app.css)
+                                        documentMode && "lexical-doc px-0 pl-0 py-2 prose-slate dark:prose-invert"
                                     )}
                                     style={{ minHeight, fontFamily: 'Inter, sans-serif' }}
                                     aria-placeholder={placeholder}
                                     placeholder={
                                         <div className={cn(
                                             "absolute top-4 left-16 text-muted-foreground pointer-events-none text-sm",
-                                            documentMode && "top-3 text-[15px]",
-                                            documentMode && (editable ? "left-3 sm:left-4" : "left-0")
+                                            documentMode && "top-2 left-0 text-base leading-[1.7] text-muted-foreground/60"
                                         )}>
                                             {placeholder}
                                         </div>
@@ -3111,6 +3363,8 @@ export function RichLexicalEditor({
                     <MarkdownShortcutPlugin transformers={TRANSFORMERS} />
                     <MarkdownPastePlugin />
                     <SlashCommandsPlugin />
+                    {documentMode && editable && <FloatingFormatToolbarPlugin />}
+                    {documentMode && editable && <EmptyBlockPlaceholderPlugin text="Type / for commands" />}
                     <CommandsPlugin />
                     <CodeHighlightPlugin />
                     {projectId && editable && <MentionsPlugin projectId={projectId} contextUrl={mentionContextUrl} contextTitle={mentionContextTitle} contextType={mentionContextType} />}

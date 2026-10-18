@@ -226,6 +226,16 @@ column (cast `array`):
 When reading page content, check which editor produced it before parsing. MCP writes go
 through `app/Support/Mcp/PageContentConverter`.
 
+**Document mode (pages).** `Pages/Pages/Show.tsx` renders `RichLexicalEditor` with
+`documentMode` — an Outline/Evernote-style writing surface:
+- Typography lives in one scoped block, `.lexical-doc` in `resources/css/app.css` (two-class
+  selectors so it beats both the Lexical `theme` utilities and `.prose`). Change document
+  styling there — don't add `prose-*` modifiers to the `ContentEditable`.
+- Formatting is on demand: `FloatingFormatToolbarPlugin` (bubble above a selection) and
+  `EmptyBlockPlaceholderPlugin` ("Type / for commands") are on in `documentMode` + editable.
+  The classic `ToolbarPlugin` is opt-in via the header toggle (`localStorage`
+  `page-formatting-toolbar`). Block conversions go through the shared `applyBlockType()`.
+
 ---
 
 ## Testing
