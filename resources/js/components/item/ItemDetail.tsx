@@ -11,13 +11,13 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import {
     CheckSquare, Link2, Plus, X, Paperclip, Upload, Eye, Download, Trash2,
     MessageSquare, Reply, Pencil, Check, File, FileImage, FileText, FileSpreadsheet,
-    FileArchive, FileCode, FileType, History, Clock, Loader2,
+    FileArchive, FileCode, FileType, History, Clock, Loader2, ChevronDown, ListChecks,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { formatDuration } from '@/lib/duration';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { ItemTypeIcon } from '@/components/ItemTypeIcon';
-import { LabelChip, PriorityIndicator, AssigneeAvatar, itemAccentColor } from '@/components/board/ItemPrimitives';
+import { LabelChip, PriorityIndicator, AssigneeAvatar, itemAccentColor, statusCategory, STATUS_CATEGORY_CLASSES } from '@/components/board/ItemPrimitives';
 import {
     Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User,
     Label as LabelType, Comment, Attachment, ItemHistoryEntry,
@@ -761,17 +761,60 @@ function HistoryEntryBody({ entry }: { entry: ItemHistoryEntry }) {
     }
 }
 
-function ItemHistoryList({ history, loading }: { history: ItemHistoryEntry[]; loading: boolean }) {
+function ItemHistoryList({ history, loading, emptyText = 'No history yet.' }: { history: ItemHistoryEntry[]; loading: boolean; emptyText?: string }) {
     if (history.length === 0) {
         return (
             <p className="text-sm text-muted-foreground py-2 flex items-center gap-2">
-                {loading ? <><Loader2 className="size-3.5 animate-spin" /> Loading history…</> : 'No history yet.'}
+                {loading ? <><Loader2 className="size-3.5 animate-spin" /> Loading history…</> : emptyText}
             </p>
         );
     }
     return (
         <ol className="space-y-4">
-            {history.map((entry) => (
+            {history.map((entry) => <HistoryRow key={entry.id} entry={entry} />)}
+        </ol>
+    );
+}
+
+/** "All": comments and history in one timeline, newest first. */
+function ItemActivityAll({ comments, history, loading }: { comments: Comment[]; history: ItemHistoryEntry[]; loading: boolean }) {
+    const events = [
+        ...comments.map((comment) => ({ kind: 'comment' as const, at: comment.created_at, comment })),
+        ...history.map((entry) => ({ kind: 'history' as const, at: entry.created_at, entry })),
+    ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+    if (events.length === 0) {
+        return (
+            <p className="text-sm text-muted-foreground py-2 flex items-center gap-2">
+                {loading ? <><Loader2 className="size-3.5 animate-spin" /> Loading…</> : 'No activity yet.'}
+            </p>
+        );
+    }
+    return (
+        <ol className="space-y-4">
+            {events.map((event) => event.kind === 'history'
+                ? <HistoryRow key={`h-${event.entry.id}`} entry={event.entry} />
+                : (
+                    <li key={`c-${event.comment.id}`} className="flex gap-3 text-sm">
+                        <Avatar className="size-7 shrink-0">
+                            <AvatarFallback className="text-[10px] bg-muted">{event.comment.user?.name?.charAt(0) ?? '?'}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-baseline gap-x-1.5">
+                                <span className="font-medium text-foreground">{event.comment.user?.name ?? 'Someone'}</span>
+                                <span className="text-muted-foreground">commented</span>
+                                <time className="text-xs text-muted-foreground/80">{formatDistanceToNow(new Date(event.comment.created_at), { addSuffix: true })}</time>
+                            </div>
+                            <div className="mt-1 rounded-md border border-border/70 bg-card px-3 py-2 prose prose-sm max-w-none dark:prose-invert text-foreground" dangerouslySetInnerHTML={{ __html: event.comment.body }} />
+                        </div>
+                    </li>
+                ))}
+        </ol>
+    );
+}
+
+function HistoryRow({ entry }: { entry: ItemHistoryEntry }) {
+    return (
                 <li key={entry.id} className="flex gap-3 text-sm">
                     <Avatar className="size-7 shrink-0">
                         {entry.user?.avatar && <AvatarImage src={entry.user.avatar} />}
@@ -787,8 +830,6 @@ function ItemHistoryList({ history, loading }: { history: ItemHistoryEntry[]; lo
                         </time>
                     </div>
                 </li>
-            ))}
-        </ol>
     );
 }
 
@@ -807,7 +848,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
         localComments, replyingTo, replyText, setReplyText, replyEditorKey,
         handlePostComment, handleReply, cancelReply, history, detailsLoading,
     } = d;
-    const [activityTab, setActivityTab] = useState<'comments' | 'history'>('comments');
+    const [activityTab, setActivityTab] = useState<'all' | 'comments' | 'history' | 'worklog'>('comments');
     if (!item) return null;
 
     return (
@@ -821,7 +862,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                             value={titleDraft}
                             onChange={(e) => setTitleDraft(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') cancelTitle(); }}
-                            className="text-xl font-semibold border-0 border-b-2 border-primary rounded-none px-0 py-1 h-auto focus-visible:ring-0 bg-transparent flex-1 leading-snug"
+                            className="text-2xl font-semibold border-0 border-b-2 border-primary rounded-none px-0 py-1 h-auto focus-visible:ring-0 bg-transparent flex-1 leading-tight"
                             placeholder="Issue title"
                         />
                         <Button size="icon" variant="ghost" className="size-8 text-green-600 hover:text-green-700 hover:bg-green-50 shrink-0" onClick={saveTitle}>
@@ -833,12 +874,37 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                     </div>
                 ) : (
                     <div className="group flex items-center gap-2 cursor-text rounded-md -mx-2 px-2 py-1 hover:bg-muted/60 transition-colors" onClick={startEditTitle}>
-                        <h1 className="text-xl font-semibold text-foreground leading-snug flex-1">
+                        <h1 className="text-2xl font-semibold tracking-[-0.01em] text-foreground leading-tight flex-1">
                             {titleValue || <span className="text-muted-foreground font-normal">Issue title</span>}
                         </h1>
                         <Pencil className="size-3.5 text-muted-foreground/0 group-hover:text-muted-foreground/60 transition-colors shrink-0" />
                     </div>
                 )}
+            </div>
+
+            {/* Quick actions (Jira: Attach · Create subtask · Link issue) */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-2 pb-4">
+                <Button type="button" variant="secondary" size="sm" className="h-8 gap-1.5 rounded-[4px] text-[13px]" onClick={() => fileInputRef.current?.click()}>
+                    <Paperclip className="size-3.5" /> Attach
+                </Button>
+                {subtaskTypeId && !item.parent_id && (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="h-8 gap-1.5 rounded-[4px] text-[13px]"
+                        onClick={() => {
+                            const input = document.getElementById(`subtask-input-${item.id}`) as HTMLInputElement | null;
+                            input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            input?.focus();
+                        }}
+                    >
+                        <ListChecks className="size-3.5" /> Create subtask
+                    </Button>
+                )}
+                <Button type="button" variant="secondary" size="sm" className="h-8 gap-1.5 rounded-[4px] text-[13px]" onClick={() => setLinkDialogOpen(true)}>
+                    <Link2 className="size-3.5" /> Link issue
+                </Button>
             </div>
 
             {/* Description */}
@@ -924,6 +990,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
 
                     <div className="flex items-center gap-2">
                         <Input
+                            id={`subtask-input-${item.id}`}
                             value={newSubtaskTitle}
                             onChange={(e) => setNewSubtaskTitle(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter' && newSubtaskTitle.trim()) { e.preventDefault(); handleCreateSubtask(); } }}
@@ -1099,33 +1166,42 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
             <section className="py-5 border-t border-border/60">
                 <div className="flex items-center gap-4 mb-5">
                     <h2 className="text-sm font-semibold">Activity</h2>
-                    <div className="flex items-center gap-1 rounded-md bg-muted/60 p-0.5 text-xs" role="tablist">
-                        <button
-                            type="button"
-                            role="tab"
-                            aria-selected={activityTab === 'comments'}
-                            onClick={() => setActivityTab('comments')}
-                            className={cn('flex items-center gap-1.5 rounded px-2.5 py-1 transition-colors', activityTab === 'comments' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}
-                        >
-                            <MessageSquare className="size-3.5" />
-                            Comments
-                            {localComments.length > 0 && <span className="text-muted-foreground">{localComments.length}</span>}
-                        </button>
-                        <button
-                            type="button"
-                            role="tab"
-                            aria-selected={activityTab === 'history'}
-                            onClick={() => setActivityTab('history')}
-                            className={cn('flex items-center gap-1.5 rounded px-2.5 py-1 transition-colors', activityTab === 'history' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground')}
-                        >
-                            <History className="size-3.5" />
-                            History
-                        </button>
+                    <div className="flex items-center gap-1 text-[13px]" role="tablist">
+                        {([
+                            ['all', 'All'],
+                            ['comments', `Comments${localComments.length ? ` ${localComments.length}` : ''}`],
+                            ['history', 'History'],
+                            ['worklog', 'Work log'],
+                        ] as const).map(([tab, label]) => (
+                            <button
+                                key={tab}
+                                type="button"
+                                role="tab"
+                                aria-selected={activityTab === tab}
+                                onClick={() => setActivityTab(tab)}
+                                className={cn(
+                                    'h-7 rounded-[4px] px-2.5 font-medium transition-colors',
+                                    activityTab === tab ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                                )}
+                            >
+                                {label}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
-                {activityTab === 'history' ? (
-                    <ItemHistoryList history={history} loading={detailsLoading} />
+                {activityTab === 'history' || activityTab === 'worklog' ? (
+                    <ItemHistoryList
+                        history={activityTab === 'worklog' ? history.filter((entry) => entry.action === 'work_logged') : history}
+                        loading={detailsLoading}
+                        emptyText={activityTab === 'worklog' ? 'No work logged yet.' : undefined}
+                    />
+                ) : activityTab === 'all' ? (
+                    <ItemActivityAll
+                        comments={localComments}
+                        history={history.filter((entry) => entry.action !== 'commented')}
+                        loading={detailsLoading}
+                    />
                 ) : (
                 <>
                 <div className="flex gap-3 mb-6">
@@ -1198,33 +1274,50 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
         selectedLabels, labelSearch, setLabelSearch, labelPopoverOpen, setLabelPopoverOpen,
         newLabelName, setNewLabelName, filteredLabels, toggleLabel, handleCreateLabel,
     } = d;
+    const [detailsOpen, setDetailsOpen] = useState(true);
     if (!item) return null;
 
     const isSubtaskType = itemTypes.some((t) => t.slug === 'subtask' && t.id.toString() === itemTypeId);
+    const currentColumn = columns.find((col) => col.id.toString() === columnId);
+    const category = statusCategory(currentColumn, columns);
 
     return (
-        <div className="space-y-0 divide-y divide-border/50">
-            {/* Status */}
-            <div className="flex items-center min-h-[40px] py-1">
-                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Status</span>
-                <div className="flex-1">
-                    <Select value={columnId} onValueChange={handleMoveToColumn}>
-                        <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md">
-                            <SelectValue placeholder="None" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {columns.map((col) => (
-                                <SelectItem key={col.id} value={col.id.toString()}>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: col.color || '#94a3b8' }} />
-                                        {col.name}
-                                    </div>
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-            </div>
+        <div className="space-y-4">
+            {/* Status — the prominent button at the top, like Jira */}
+            <Select value={columnId} onValueChange={handleMoveToColumn}>
+                <SelectTrigger
+                    className={cn(
+                        'h-8 w-auto max-w-full gap-2 rounded-[4px] border px-3 text-[13px] font-semibold shadow-none transition-colors focus:ring-0 focus:ring-offset-0',
+                        STATUS_CATEGORY_CLASSES[category],
+                    )}
+                    aria-label="Status"
+                >
+                    <SelectValue placeholder="Status">{currentColumn?.name ?? 'Status'}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                    {columns.map((col) => (
+                        <SelectItem key={col.id} value={col.id.toString()}>
+                            <span className={cn('inline-flex items-center h-5 px-1.5 rounded-[3px] border text-[11px] font-bold uppercase tracking-[0.02em]', STATUS_CATEGORY_CLASSES[statusCategory(col, columns)])}>
+                                {col.name}
+                            </span>
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+
+            {/* Details box */}
+            <div className="rounded-md border border-border">
+                <button
+                    type="button"
+                    onClick={() => setDetailsOpen((open) => !open)}
+                    className="flex w-full items-center justify-between px-3 py-2.5 text-[13px] font-semibold text-foreground hover:bg-muted/40 transition-colors rounded-t-md"
+                    aria-expanded={detailsOpen}
+                >
+                    Details
+                    <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', !detailsOpen && '-rotate-90')} />
+                </button>
+                {detailsOpen && (
+        <div className="space-y-0 divide-y divide-border/50 border-t border-border px-3">
 
             {/* Assignee */}
             <div className="flex items-center min-h-[40px] py-1">
@@ -1249,6 +1342,15 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                             ))}
                         </SelectContent>
                     </Select>
+                    {assignedTo !== String(currentUserId) && (
+                        <button
+                            type="button"
+                            onClick={() => { setAssignedTo(String(currentUserId)); saveProp({ assigned_to: currentUserId }); }}
+                            className="block -mt-0.5 mb-1 text-xs text-primary hover:underline"
+                        >
+                            Assign to me
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -1436,18 +1538,6 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                 </div>
             )}
 
-            {/* Created */}
-            <div className="flex items-center min-h-[40px] py-1">
-                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Created</span>
-                <span className="flex-1 text-sm px-2">{new Date(item.created_at).toLocaleDateString()}</span>
-            </div>
-
-            {/* Updated */}
-            <div className="flex items-center min-h-[40px] py-1">
-                <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Updated</span>
-                <span className="flex-1 text-sm px-2">{new Date(item.updated_at).toLocaleDateString()}</span>
-            </div>
-
             {/* Watchers */}
             <div className="flex items-start min-h-[40px] py-1">
                 <span className="w-[40%] shrink-0 text-xs text-muted-foreground pt-2">Watchers</span>
@@ -1523,6 +1613,15 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                     </Popover>
                 </div>
             </div>
+        </div>
+                )}
+            </div>
+
+            <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
+                Created {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
+                <br />
+                Updated {formatDistanceToNow(new Date((live ?? item).updated_at), { addSuffix: true })}
+            </p>
         </div>
     );
 }

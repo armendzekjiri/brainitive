@@ -123,7 +123,6 @@ export default function ItemShow({
                                 </SheetTrigger>
                                 <SheetContent side="right" className="w-[300px] sm:w-[360px] p-0">
                                     <div className="px-5 py-5 h-full overflow-y-auto">
-                                        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</h2>
                                         <ItemDetailSidebar d={d} />
                                     </div>
                                 </SheetContent>
@@ -139,7 +138,6 @@ export default function ItemShow({
                     </div>
                     <div className="hidden lg:block w-[300px] shrink-0 overflow-y-auto border-l bg-background">
                         <div className="px-5 py-5">
-                            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</h2>
                             <ItemDetailSidebar d={d} />
                         </div>
                     </div>

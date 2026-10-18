@@ -258,6 +258,15 @@ Pages work like Confluence. Keep these rules when touching pages:
 - Presence is a cache-backed heartbeat (`pages.presence`, `usePagePresence`), not websockets
   — Reverb/Echo aren't installed.
 
+## Board & issue view design (Jira-style)
+
+- Status colours come from `statusCategory()` in `components/board/ItemPrimitives.tsx`
+  (first column = To Do grey, `is_done_column` = Done green, everything else = In Progress
+  blue). Use `STATUS_CATEGORY_CLASSES` / `StatusLozenge` instead of column colours for status.
+- Cards: summary first, metadata in the footer (type icon + key left; points, priority,
+  assignee right). Keep new card metadata in that footer, not in extra rows.
+- No buttons without handlers — wire them or leave them out.
+
 ## Item history (activity log)
 
 - Changes to `Item` columns are logged automatically by `ItemObserver` — don't log them by
