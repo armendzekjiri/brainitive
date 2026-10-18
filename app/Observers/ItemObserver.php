@@ -8,6 +8,7 @@ use App\Models\BoardColumn;
 use App\Models\Item;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
+use App\Models\Sprint;
 use App\Models\User;
 use Carbon\CarbonInterface;
 
@@ -28,6 +29,7 @@ class ItemObserver
         'description' => null,
         'board_id' => Board::class,
         'column_id' => BoardColumn::class,
+        'sprint_id' => Sprint::class,
         'assigned_to' => User::class,
         'priority_id' => ItemPriority::class,
         'item_type_id' => ItemType::class,

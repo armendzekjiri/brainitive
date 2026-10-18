@@ -223,6 +223,10 @@ export interface Item {
     comments_count?: number;
     attachments?: Attachment[];
     attachments_count?: number;
+    /** Null = backlog (Scrum boards). */
+    sprint_id?: number | null;
+    /** Rank in the backlog / sprint list. */
+    backlog_position?: number;
     /** Minutes. */
     original_estimate?: number | null;
     /** Minutes. */

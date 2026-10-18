@@ -85,6 +85,11 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 
 - Lexical/Tiptap/Editor.js all store content as JSON in a `content` column. When adding a
   feature that reads page content, check which editor produced it before parsing.
+- **Scrum boards hide everything outside the active sprint.** If a Scrum board "looks
+  empty", there's no running sprint — issues live in the backlog. Kanban boards ignore
+  `sprint_id` completely.
+- **Completed sprints keep their own burndown** (`sprints.burndown`), because open issues
+  move to the next sprint on completion and a live recomputation would change history.
 - **`activity_logs` spans all workspaces.** Anything listing a user's activity must scope it
   (e.g. `memberProfile` limits it to items of the current workspace's projects).
 - **Board payload is slim on purpose.** Cards don't carry `comments` / `attachments` any

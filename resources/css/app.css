@@ -654,3 +654,17 @@ html {
   color: hsl(var(--muted-foreground) / 0.55);
   pointer-events: none;
 }
+
+/* ─── Sprint report charts (validated: dataviz validate_palette.js) ───────── */
+/* series-1 = the measured series; reference = de-emphasis grey (guideline / committed) */
+.viz-root {
+  --viz-surface: #ffffff;
+  --viz-series-1: #2a78d6;
+  --viz-reference: #8a8983;
+  --viz-grid: hsl(var(--border));
+}
+.dark .viz-root {
+  --viz-surface: hsl(var(--card));
+  --viz-series-1: #3987e5;
+  --viz-reference: #8f8e88;
+}

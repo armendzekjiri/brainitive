@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
@@ -114,5 +115,26 @@ class Board extends Model
     public function getRouteKeyName(): string
     {
         return 'slug';
+    }
+
+    /**
+     * Sprints of this board (Scrum boards only use them), in planning order.
+     */
+    public function sprints(): HasMany
+    {
+        return $this->hasMany(Sprint::class)->orderBy('position')->orderBy('id');
+    }
+
+    /**
+     * The running sprint, if any (there is at most one per board).
+     */
+    public function activeSprint(): HasOne
+    {
+        return $this->hasOne(Sprint::class)->where('status', Sprint::STATUS_ACTIVE);
+    }
+
+    public function isScrum(): bool
+    {
+        return $this->type === 'scrum';
     }
 }
