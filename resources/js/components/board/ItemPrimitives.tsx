@@ -127,3 +127,32 @@ export function itemAccentColor(item: {
     if (item.priority?.slug) return priorityMeta(item.priority.slug).color;
     return item.item_type?.color ?? null;
 }
+
+// ── Status categories (Jira: To Do grey · In Progress blue · Done green) ─────
+export type StatusCategory = 'todo' | 'in_progress' | 'done';
+
+/** Done columns are "done", the first column is "to do", everything between is "in progress". */
+export function statusCategory(
+    column: { id: number; is_done_column?: boolean; position?: number } | null | undefined,
+    columns: { id: number; position?: number }[] = [],
+): StatusCategory {
+    if (!column) return 'todo';
+    if (column.is_done_column) return 'done';
+    const first = [...columns].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))[0];
+    return first && first.id === column.id ? 'todo' : 'in_progress';
+}
+
+export const STATUS_CATEGORY_CLASSES: Record<StatusCategory, string> = {
+    todo: 'bg-muted text-foreground/80 hover:bg-muted/80 border-border',
+    in_progress: 'bg-primary/10 text-primary hover:bg-primary/15 border-primary/30',
+    done: 'bg-brand-green/10 text-brand-green hover:bg-brand-green/15 border-brand-green/30',
+};
+
+/** Small uppercase status lozenge, e.g. for list rows. */
+export function StatusLozenge({ name, category, className }: { name: string; category: StatusCategory; className?: string }) {
+    return (
+        <span className={cn('inline-flex items-center h-5 px-1.5 rounded-[3px] border text-[11px] font-bold uppercase tracking-[0.02em] whitespace-nowrap', STATUS_CATEGORY_CLASSES[category], className)}>
+            {name}
+        </span>
+    );
+}

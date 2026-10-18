@@ -143,13 +143,11 @@ function ItemCard({
     onDragStart: (e: DragEvent, item: Item) => void;
     onDragEnd: () => void;
 }) {
-    const isDueSoon = item.due_date && (() => {
-        const d = new Date(item.due_date!);
-        const now = new Date();
-        const diff = d.getTime() - now.getTime();
-        return diff < 2 * 86400000;
-    })();
-    const accent = itemAccentColor(item);
+    const dueTime = item.due_date ? new Date(String(item.due_date).split('T')[0] + 'T23:59:59').getTime() : null;
+    const isOverdue = dueTime !== null && dueTime < Date.now();
+    const isDueSoon = dueTime !== null && !isOverdue && dueTime - Date.now() < 2 * 86400000;
+    const isDone = !!item.completed_at;
+    const blocked = isBlocked(item);
     const [assignOpen, setAssignOpen] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const subtaskCount = item.children_count ?? 0;
@@ -170,100 +168,103 @@ function ItemCard({
             onDragEnd={onDragEnd}
             onClick={() => onEdit(item)}
             className={cn(
-                'group relative flex flex-col gap-2 cursor-pointer overflow-hidden',
-                'rounded-xl border border-border/70 bg-card py-2.5 pl-3.5 pr-2.5',
-                'shadow-[0_1px_2px_rgba(20,32,44,0.05)] transition-all duration-150',
-                'hover:-translate-y-px hover:border-border hover:shadow-[0_6px_16px_-6px_rgba(20,32,44,0.22)]',
+                'group relative flex flex-col gap-2 cursor-pointer',
+                'rounded-[4px] bg-card px-3 pt-2.5 pb-2',
+                // Jira-like elevation: hairline outline + 1px drop, a touch more on hover
+                'shadow-[0_1px_1px_rgba(9,30,66,0.25),0_0_1px_rgba(9,30,66,0.31)] dark:shadow-[0_0_0_1px_hsl(var(--border))]',
+                'transition-colors duration-100 hover:bg-secondary/60 dark:hover:bg-secondary/40',
             )}
         >
-            {/* Left accent bar (priority → type) */}
-            <span
-                className="absolute inset-y-0 left-0 w-[3px]"
-                style={{ background: accent ?? 'transparent' }}
-                aria-hidden
-            />
+            {/* Summary */}
+            <h4 className={cn(
+                'm-0 pr-5 text-[14px] font-normal leading-[1.42] text-foreground break-words line-clamp-3',
+                isDone && 'text-muted-foreground',
+            )}>
+                {item.title}
+            </h4>
 
-            {/* Top row: type + key */}
-            <div className="flex items-center gap-2 min-w-0 pr-5">
-                {item.item_type && <TypeBadge type={item.item_type} />}
-                <span className="flex-1" />
-                <span className="font-mono text-[10.5px] text-muted-foreground tracking-tight shrink-0">{item.key}</span>
-            </div>
-
-            {/* Labels */}
-            {item.labels && item.labels.length > 0 && (
+            {/* Parent + labels (lozenges) */}
+            {(item.parent || (item.labels && item.labels.length > 0)) && (
                 <div className="flex items-center gap-1 flex-wrap">
-                    {item.labels.slice(0, 3).map((label) => (
-                        <LabelChip key={label.id} label={label} />
+                    {item.parent && (
+                        <Link
+                            href={route('boards.items.show', [workspace.slug, project.slug, board.slug, item.parent.id])}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center h-5 max-w-[150px] px-1.5 rounded-[3px] bg-primary/10 text-primary text-[11px] font-semibold hover:bg-primary/15"
+                            title={`Parent: ${item.parent.key} ${item.parent.title}`}
+                        >
+                            <span className="truncate">{item.parent.title}</span>
+                        </Link>
+                    )}
+                    {item.labels?.slice(0, 3).map((label) => (
+                        <span key={label.id} className="inline-flex items-center h-5 max-w-[120px] px-1.5 rounded-[3px] bg-muted text-[11px] font-medium text-foreground/75">
+                            <span className="truncate">{label.name}</span>
+                        </span>
                     ))}
-                    {item.labels.length > 3 && (
-                        <span className="text-[10px] text-muted-foreground font-medium">+{item.labels.length - 3}</span>
+                    {(item.labels?.length ?? 0) > 3 && (
+                        <span className="text-[11px] text-muted-foreground font-medium">+{(item.labels?.length ?? 0) - 3}</span>
                     )}
                 </div>
             )}
 
-            {/* Title */}
-            <h4 className="m-0 text-[13px] font-semibold leading-[1.35] tracking-[-0.005em] text-foreground break-words line-clamp-2">
-                {item.title}
-            </h4>
-
-            {/* Parent (subtask link) */}
-            {item.parent && (
-                <Link
-                    href={route('boards.items.show', [workspace.slug, project.slug, board.slug, item.parent.id])}
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-[10px] text-muted-foreground hover:text-primary flex items-center gap-1 -mt-1"
-                >
-                    <ChevronUp className="size-3 shrink-0" />
-                    <span className="font-mono">{item.parent.key}</span>
-                </Link>
+            {/* Due date */}
+            {item.due_date && !isDone && (
+                <span className={cn(
+                    'inline-flex w-fit items-center gap-1 h-5 px-1.5 rounded-[3px] border text-[11px] font-medium',
+                    isOverdue ? 'border-destructive/40 bg-destructive/10 text-destructive'
+                        : isDueSoon ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+                        : 'border-border text-muted-foreground',
+                )}>
+                    <Calendar className="size-3" />
+                    {new Date(item.due_date).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+                </span>
             )}
 
-            {/* Meta row */}
-            <div className="flex items-center gap-2.5 text-[11px] text-muted-foreground">
-                {item.priority && <PriorityIndicator slug={item.priority.slug} />}
-
-                {item.due_date && (
-                    <span className={cn('inline-flex items-center gap-1', isDueSoon && 'text-amber-500 font-semibold')}>
-                        <Calendar className="size-[11px]" />
-                        {new Date(item.due_date).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
-                    </span>
-                )}
-
-                {item.story_points != null && item.story_points > 0 && (
-                    <span className="inline-grid place-items-center min-w-[18px] h-[18px] px-1.5 text-[10px] font-bold rounded-md bg-secondary text-secondary-foreground">
-                        {item.story_points}
-                    </span>
-                )}
-
+            {/* Footer: type + key | points · priority · assignee */}
+            <div className="flex items-center gap-1.5 min-h-[24px]">
+                <ItemTypeIcon type={item.item_type} className="size-4 shrink-0" />
+                <span className={cn('text-[12px] font-semibold text-muted-foreground tracking-tight', isDone && 'line-through')}>
+                    {item.key}
+                </span>
                 {(item.children_count ?? 0) > 0 && (
-                    <span className="inline-flex items-center gap-1">
+                    <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground" title={`${item.children_count} subtask(s)`}>
                         <CheckSquare className="size-3" />
                         {item.children_count}
                     </span>
                 )}
-
                 {(item.comments_count ?? 0) > 0 && (
-                    <span className="inline-flex items-center gap-1">
-                        <MessageSquare className="size-[11px]" />
+                    <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground" title={`${item.comments_count} comment(s)`}>
+                        <MessageSquare className="size-3" />
                         {item.comments_count}
+                    </span>
+                )}
+                {blocked && (
+                    <span className="inline-flex items-center text-destructive" title="Blocked">
+                        <Ban className="size-3.5" />
                     </span>
                 )}
 
                 <span className="flex-1" />
+
+                {item.story_points != null && item.story_points > 0 && (
+                    <span className="inline-grid place-items-center min-w-[20px] h-5 px-1.5 rounded-full bg-muted text-[11px] font-semibold text-foreground/80" title="Story points">
+                        {item.story_points}
+                    </span>
+                )}
+                {item.priority && <PriorityIndicator slug={item.priority.slug} />}
 
                 <Popover open={assignOpen} onOpenChange={setAssignOpen}>
                     <PopoverTrigger asChild onClick={(e) => e.stopPropagation()}>
                         <button
                             type="button"
-                            title={item.assignee ? `Assigned to ${item.assignee.name} — click to change` : 'Assign someone'}
+                            title={item.assignee ? `Assignee: ${item.assignee.name} — click to change` : 'Unassigned — click to assign'}
                             className="rounded-full shrink-0 outline-none transition-opacity hover:opacity-80 focus-visible:ring-2 focus-visible:ring-primary ring-offset-1 ring-offset-card"
                         >
                             {item.assignee ? (
-                                <AssigneeAvatar user={item.assignee} />
+                                <AssigneeAvatar user={item.assignee} size={24} />
                             ) : (
-                                <span className="grid size-[18px] place-items-center rounded-full border border-dashed border-muted-foreground/50 text-muted-foreground/70 transition-colors hover:border-primary hover:text-primary">
-                                    <Plus className="size-3" />
+                                <span className="grid size-6 place-items-center rounded-full bg-muted text-muted-foreground transition-colors hover:text-primary">
+                                    <UserIcon className="size-3.5" />
                                 </span>
                             )}
                         </button>
@@ -379,6 +380,8 @@ function CreateItemDialog({
     board,
     itemTypes,
     rootItems,
+    open,
+    onOpenChange,
 }: {
     column: BoardColumn;
     workspace: Workspace;
@@ -386,8 +389,16 @@ function CreateItemDialog({
     board: Board;
     itemTypes: ItemType[];
     rootItems: Item[];
+    /** Optional: open the dialog from outside (column "+" or the board's Create button). */
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
 }) {
-    const [isCreating, setIsCreating] = useState(false);
+    const [localOpen, setLocalOpen] = useState(false);
+    const isCreating = open ?? localOpen;
+    const setIsCreating = (value: boolean) => {
+        setLocalOpen(value);
+        onOpenChange?.(value);
+    };
     const inputRef = useRef<HTMLInputElement>(null);
     const subtaskTypeId = itemTypes.find((t) => t.slug === 'subtask')?.id?.toString();
     const { data, setData, post, processing, reset } = useForm({
@@ -604,17 +615,17 @@ function matchesQuickFilter(item: Item, filter: QuickFilter): boolean {
     }
 }
 
-function QuickFilterChip({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+function QuickFilterChip({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon?: React.ReactNode; label: string }) {
     return (
         <button
             type="button"
             onClick={onClick}
             aria-pressed={active}
             className={cn(
-                'inline-flex items-center gap-1.5 h-[26px] px-[9px] rounded-full text-xs font-medium border transition-colors whitespace-nowrap',
+                'inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[4px] text-[13px] font-medium transition-colors whitespace-nowrap',
                 active
-                    ? 'bg-primary/10 border-primary/40 text-primary'
-                    : 'bg-card border-border text-muted-foreground hover:bg-secondary hover:text-foreground',
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-foreground/80 hover:bg-secondary',
             )}
         >
             {icon}
@@ -638,8 +649,12 @@ function BoardColumnComponent({
     onDrop,
     isDragOver,
     totalItemCount,
+    createOpen,
+    onCreateOpenChange,
 }: {
     column: BoardColumn & { items: Item[] };
+    createOpen: boolean;
+    onCreateOpenChange: (open: boolean) => void;
     /** Cards in the column before filters — what the WIP limit counts. */
     totalItemCount: number;
     workspace: Workspace;
@@ -691,35 +706,39 @@ function BoardColumnComponent({
     return (
         <section
             className={cn(
-                'flex-shrink-0 w-[282px] h-full min-h-0 flex flex-col rounded-[10px] border border-border bg-secondary/50 dark:bg-secondary/30 transition-colors',
-                isDragOver && 'ring-2 ring-primary/40',
-                isOverWip && 'border-destructive/50 bg-destructive/[0.04] dark:bg-destructive/[0.08]',
+                'flex-shrink-0 w-[272px] h-full min-h-0 flex flex-col rounded-md bg-muted/60 dark:bg-secondary/30 transition-colors',
+                isDragOver && 'bg-primary/[0.07] ring-2 ring-primary/30',
+                isOverWip && 'bg-destructive/[0.08] dark:bg-destructive/[0.12]',
             )}
             onDragOver={(e) => onDragOver(e, column)}
             onDrop={(e) => onDrop(e, column)}
         >
             {/* Column Header */}
-            <header className="flex shrink-0 items-center justify-between px-[10px] py-[9px]">
-                <div className="flex items-center gap-[7px] min-w-0">
-                    <span className="w-2 h-2 rounded-[2px] shrink-0" style={{ background: columnColor }} />
-                    <h3 className="text-xs font-bold tracking-[0.02em] uppercase text-foreground m-0 whitespace-nowrap">
+            <header className="group/col flex shrink-0 items-center justify-between pl-3 pr-1.5 pt-2.5 pb-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                    <h3 className="m-0 truncate text-[12px] font-semibold uppercase tracking-[0.03em] text-muted-foreground" title={column.name}>
                         {column.name}
                     </h3>
                     <span
                         className={cn(
-                            'text-[11px] font-semibold text-muted-foreground px-[7px] py-[1px] rounded-full bg-card border border-border',
-                            isAtWip && 'text-amber-700 border-amber-500/40 dark:text-amber-400',
-                            isOverWip && 'text-destructive border-destructive/50 bg-destructive/10',
+                            'shrink-0 text-[12px] font-semibold text-muted-foreground',
+                            isAtWip && 'text-amber-700 dark:text-amber-400',
+                            isOverWip && 'text-red-600 dark:text-red-400',
                         )}
                         title={wipLimit ? `${totalItemCount} of max. ${wipLimit} cards (WIP limit)` : undefined}
                     >
-                        {wipLimit ? `${totalItemCount}/${wipLimit}` : column.items?.length || 0}
+                        {wipLimit ? `${totalItemCount} / MAX ${wipLimit}` : column.items?.length || 0}
                     </span>
-                    {isOverWip && <span className="text-[10px] font-semibold uppercase tracking-wide text-destructive">Over limit</span>}
+                    {column.is_done_column && <Check className="size-3.5 shrink-0 text-brand-green" aria-label="Done column" />}
                 </div>
-                <div className="flex items-center gap-[2px]">
-                    <button className="size-6 grid place-items-center rounded-[5px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
-                        <Plus className="size-[13px]" />
+                <div className="flex items-center gap-[2px] opacity-60 transition-opacity group-hover/col:opacity-100">
+                    <button
+                        type="button"
+                        onClick={() => onCreateOpenChange(true)}
+                        title={`Create in ${column.name}`}
+                        className="size-6 grid place-items-center rounded-[4px] text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                    >
+                        <Plus className="size-[14px]" />
                     </button>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -764,7 +783,7 @@ function BoardColumnComponent({
 
             {/* Items */}
             <ScrollArea className="flex-1 min-h-0">
-                <div className="flex flex-col gap-2 px-2 pb-3">
+                <div className="flex flex-col gap-1.5 px-1.5 pb-2">
                     {topLevelItems.map((item) => (
                         <ItemCard
                             key={item.id}
@@ -791,6 +810,8 @@ function BoardColumnComponent({
                     board={board}
                     itemTypes={itemTypes}
                     rootItems={rootItems}
+                    open={createOpen}
+                    onOpenChange={onCreateOpenChange}
                 />
             </div>
         </section>
@@ -853,21 +874,28 @@ function ItemEditModal({
                 <DialogContent className="max-w-6xl max-h-[92vh] p-0 gap-0 overflow-hidden [&>button]:hidden" aria-describedby={undefined}>
                     <DialogTitle className="sr-only">Edit {item.key}: {item.title}</DialogTitle>
 
-                    {/* Accent strip (priority → type) — mirrors the board card */}
-                    <span className="h-1 w-full shrink-0" style={{ background: d.accent ?? 'transparent' }} aria-hidden />
 
                     {/* ── Header ─────────────────────────────────────────── */}
                     <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b bg-background shrink-0">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                            <TypeBadge type={item.item_type} />
-                            <span className="font-mono text-xs font-semibold text-primary tracking-wider">{item.key}</span>
-                            {item.column && (
-                                <Badge variant="secondary" className="text-xs">
-                                    <span className="w-1.5 h-1.5 rounded-full mr-1.5 inline-block" style={{ backgroundColor: (item.column as any).color || '#94a3b8' }} />
-                                    {(item.column as any).name}
-                                </Badge>
+                        <nav className="flex items-center gap-1.5 min-w-0 text-[13px] text-muted-foreground" aria-label="Breadcrumb">
+                            <span className="truncate">{project.name}</span>
+                            <span aria-hidden>/</span>
+                            {item.parent && (
+                                <>
+                                    <button type="button" onClick={() => onOpenItem(item.parent as Item)} className="hover:text-foreground hover:underline">
+                                        {item.parent.key}
+                                    </button>
+                                    <span aria-hidden>/</span>
+                                </>
                             )}
-                        </div>
+                            <ItemTypeIcon type={item.item_type} className="size-4 shrink-0" />
+                            <Link
+                                href={route('boards.items.show', [workspace.slug, project.slug, board.slug, item.id])}
+                                className="font-medium text-foreground/80 hover:text-primary hover:underline"
+                            >
+                                {item.key}
+                            </Link>
+                        </nav>
                         <div className="flex items-center gap-1">
                             <Sheet open={detailsSheetOpen} onOpenChange={setDetailsSheetOpen}>
                                 <SheetTrigger asChild>
@@ -877,7 +905,6 @@ function ItemEditModal({
                                 </SheetTrigger>
                                 <SheetContent side="right" className="w-[300px] sm:w-[360px] p-0">
                                     <div className="px-5 py-5 h-full overflow-y-auto">
-                                        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</h2>
                                         <ItemDetailSidebar d={d} />
                                     </div>
                                 </SheetContent>
@@ -899,9 +926,8 @@ function ItemEditModal({
                         <div className="flex-1 overflow-y-auto min-w-0">
                             <ItemDetailMain d={d} />
                         </div>
-                        <div className="hidden lg:block w-[300px] shrink-0 overflow-y-auto border-l bg-background">
+                        <div className="hidden lg:block w-[340px] shrink-0 overflow-y-auto bg-background">
                             <div className="px-5 py-5">
-                                <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Details</h2>
                                 <ItemDetailSidebar d={d} />
                             </div>
                         </div>
@@ -1736,6 +1762,7 @@ export default function BoardsShow({
     const [priorityFilter, setPriorityFilter] = useState<number[]>(initialFilters.priority);
     const [typeFilter, setTypeFilter] = useState<number[]>(initialFilters.type);
     const [quickFilters, setQuickFilters] = useState<QuickFilter[]>(initialFilters.quick);
+    const [createInColumnId, setCreateInColumnId] = useState<number | null>(null);
     const currentUserId = auth.user?.id;
 
     useEffect(() => {
@@ -1875,51 +1902,41 @@ export default function BoardsShow({
             <Head title={`${board.name} - ${project.name}`} />
 
             <div className="flex flex-col h-full overflow-hidden">
-                {/* ─── Board Header ─── */}
-                <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-border/60">
-                    <div className="flex items-center gap-3">
-                        <span className="w-8 h-8 rounded-lg grid place-items-center shrink-0" style={{ background: project.color || '#0E83DC' }}>
-                            <Kanban className="size-[14px] text-white" />
-                        </span>
-                        <div>
-                            <h1 className="text-[17px] font-bold tracking-[-0.012em] leading-[1.1] m-0">{board.name}</h1>
-                            <div className="flex items-center gap-3 mt-1">
-                                <span className="inline-flex items-center gap-[5px] text-[11.5px] text-muted-foreground">
-                                    <span className="w-[7px] h-[7px] rounded-full" style={{ background: project.color || '#0E83DC' }} />
-                                    {project.name}
-                                </span>
-                                <span className="inline-flex items-center gap-[5px] text-[11.5px] text-muted-foreground">
-                                    <UserIcon className="size-3" />
-                                    {projectUsers.length} members
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="inline-flex">
-                            {projectUsers.slice(0, 4).map((u, i) => (
-                                <Avatar key={u.id} className={cn('size-6 ring-2 ring-background', i > 0 && '-ml-1.5')}>
-                                    {u.avatar_display && <AvatarImage src={u.avatar_display} alt={u.name} />}
-                                    <AvatarFallback className="text-[9px] bg-brand-slate text-white font-bold">{u.name.charAt(0)}</AvatarFallback>
-                                </Avatar>
-                            ))}
-                            {projectUsers.length > 4 && (
-                                <div className="size-6 -ml-1.5 rounded-full bg-secondary border border-border ring-2 ring-background grid place-items-center text-[9px] font-semibold text-muted-foreground">
-                                    +{projectUsers.length - 4}
-                                </div>
-                            )}
-                        </div>
-                        <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug])}>
-                            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs"><Settings className="size-[13px]" /></Button>
+                {/* ─── Board Header (Jira-style: breadcrumb, title, view tabs) ─── */}
+                <div className="px-6 pt-4 shrink-0">
+                    <nav className="flex items-center gap-1.5 text-[13px] text-muted-foreground" aria-label="Breadcrumb">
+                        <Link href={route('projects.show', [workspace.slug, project.slug])} className="hover:text-foreground hover:underline">Projects</Link>
+                        <span aria-hidden>/</span>
+                        <Link href={route('projects.show', [workspace.slug, project.slug])} className="inline-flex items-center gap-1.5 hover:text-foreground hover:underline">
+                            <span className="size-4 rounded-[3px] grid place-items-center" style={{ background: project.color || '#0E83DC' }}>
+                                <Kanban className="size-2.5 text-white" />
+                            </span>
+                            {project.name}
                         </Link>
-                        <Button size="sm" className="h-7 gap-1.5 text-xs"><Plus className="size-[13px]" />New card</Button>
+                    </nav>
+                    <div className="flex items-center justify-between gap-4 mt-2">
+                        <h1 className="m-0 text-2xl font-semibold tracking-[-0.01em] text-foreground">{board.name}</h1>
+                        <div className="flex items-center gap-2">
+                            <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug])}>
+                                <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" title="Board settings">
+                                    <Settings className="size-4" />
+                                </Button>
+                            </Link>
+                            <Button
+                                size="sm"
+                                className="h-8 gap-1.5"
+                                onClick={() => {
+                                    const firstColumn = [...board.columns].sort((a, b) => a.position - b.position)[0];
+                                    if (firstColumn) setCreateInColumnId(firstColumn.id);
+                                }}
+                            >
+                                <Plus className="size-4" />Create
+                            </Button>
+                        </div>
                     </div>
-                </div>
 
-                {/* ─── Toolbar ─── */}
-                <div className="flex items-center gap-2 px-5 py-2 border-b border-border/60 flex-wrap">
-                    {/* Views (left) */}
-                    <div className="inline-flex p-[3px] bg-secondary border border-border rounded-[7px] gap-[1px]">
+                    {/* View tabs */}
+                    <div className="flex items-center gap-4 mt-3 border-b border-border" role="tablist">
                         {(['kanban', 'list', 'gantt', 'calendar'] as const).map(v => {
                             const icons = { kanban: Kanban, list: List, gantt: GanttChart, calendar: Calendar };
                             const labels = { kanban: 'Board', list: 'List', gantt: 'Timeline', calendar: 'Calendar' };
@@ -1927,44 +1944,88 @@ export default function BoardsShow({
                             return (
                                 <button
                                     key={v}
+                                    role="tab"
+                                    aria-selected={currentView === v}
                                     onClick={() => setCurrentView(v)}
                                     className={cn(
-                                        'h-[22px] px-[9px] text-[11.5px] font-semibold text-muted-foreground rounded-[5px] inline-flex items-center gap-[5px] transition-colors',
-                                        currentView === v && 'bg-card text-foreground shadow-[0_1px_0_rgba(20,32,44,0.04),0_1px_2px_rgba(0,0,0,0.04)]',
-                                        currentView !== v && 'hover:text-foreground',
+                                        'relative -mb-px inline-flex items-center gap-1.5 pb-2 pt-1 text-[14px] font-medium border-b-2 transition-colors',
+                                        currentView === v
+                                            ? 'border-primary text-primary'
+                                            : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
                                     )}
                                 >
-                                    <Ic className="size-3" />
-                                    <span className="hidden sm:inline">{labels[v]}</span>
+                                    <Ic className="size-3.5" />
+                                    {labels[v]}
                                 </button>
                             );
                         })}
                     </div>
+                </div>
 
-                    {/* Quick filters (Jira-style chips) */}
-                    <div className="flex items-center gap-1 ml-2">
+                {/* ─── Toolbar: search · people · quick filters ─── */}
+                <div className="flex items-center gap-3 px-6 py-3 flex-wrap shrink-0">
+                    <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-[14px] text-muted-foreground" />
+                        <Input
+                            type="search"
+                            placeholder="Search board"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-8 h-8 w-44 text-[13px] bg-card"
+                        />
+                    </div>
+
+                    {/* People: click an avatar to show only their issues */}
+                    <div className="flex items-center">
+                        {projectUsers.slice(0, 6).map((u, i) => {
+                            const active = assigneeFilter === `user-${u.id}` || (assigneeFilter === 'me' && u.id === currentUserId);
+                            return (
+                                <button
+                                    key={u.id}
+                                    type="button"
+                                    onClick={() => setAssigneeFilter(active ? 'any' : `user-${u.id}`)}
+                                    title={active ? `Showing ${u.name}'s issues — click to clear` : `Show ${u.name}'s issues`}
+                                    aria-pressed={active}
+                                    className={cn(
+                                        'relative rounded-full transition-transform hover:-translate-y-0.5 hover:z-10',
+                                        i > 0 && '-ml-1',
+                                        active && 'z-10',
+                                    )}
+                                >
+                                    <Avatar className={cn('size-8 ring-2 ring-background', active && 'ring-primary')}>
+                                        {u.avatar_display && <AvatarImage src={u.avatar_display} alt={u.name} />}
+                                        <AvatarFallback className="text-[11px] bg-brand-slate text-white font-bold">{u.name.charAt(0)}</AvatarFallback>
+                                    </Avatar>
+                                </button>
+                            );
+                        })}
+                        {projectUsers.length > 6 && (
+                            <span className="-ml-1 size-8 rounded-full bg-muted ring-2 ring-background grid place-items-center text-[11px] font-semibold text-muted-foreground">
+                                +{projectUsers.length - 6}
+                            </span>
+                        )}
+                    </div>
+
+                    {/* Quick filters */}
+                    <div className="flex items-center gap-1">
                         <QuickFilterChip
                             active={assigneeFilter === 'me'}
                             onClick={() => setAssigneeFilter(assigneeFilter === 'me' ? 'any' : 'me')}
-                            icon={<UserIcon className="size-[11px]" />}
                             label="Only my issues"
                         />
                         <QuickFilterChip
                             active={quickFilters.includes('recent')}
                             onClick={() => toggleQuickFilter('recent')}
-                            icon={<Clock className="size-[11px]" />}
                             label="Recently updated"
                         />
                         <QuickFilterChip
                             active={quickFilters.includes('due')}
                             onClick={() => toggleQuickFilter('due')}
-                            icon={<CalendarDays className="size-[11px]" />}
                             label="Due soon"
                         />
                         <QuickFilterChip
                             active={quickFilters.includes('blocked')}
                             onClick={() => toggleQuickFilter('blocked')}
-                            icon={<Ban className="size-[11px]" />}
                             label="Blocked"
                         />
                     </div>
@@ -1972,28 +2033,17 @@ export default function BoardsShow({
                     {/* push search + filter to the right */}
                     <div className="flex-1" />
 
-                    {/* Search (right) */}
-                    <div className="relative">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-[13px] text-muted-foreground" />
-                            <Input
-                                type="search"
-                                placeholder="Search…"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-8 h-[26px] w-48 text-xs bg-card border border-border rounded-md"
-                            />
-                        </div>
 
                         {/* Filter */}
                         <Popover open={filterOpen} onOpenChange={setFilterOpen}>
                             <PopoverTrigger asChild>
                                 <button className={cn(
-                                    'inline-flex items-center gap-1.5 h-[26px] px-[9px] rounded-md text-xs font-medium border cursor-pointer transition-colors',
+                                    'inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[4px] text-[13px] font-medium border cursor-pointer transition-colors',
                                     activeFiltersCount > 0
                                         ? 'bg-accent border-transparent text-accent-foreground'
                                         : 'bg-card border-border text-muted-foreground hover:bg-secondary',
                                 )}>
-                                    <Filter className="size-[11px]" />
+                                    <Filter className="size-3.5" />
                                     {activeFiltersCount ? `Filter (${activeFiltersCount})` : 'Filter'}
                                 </button>
                             </PopoverTrigger>
@@ -2319,9 +2369,6 @@ export default function BoardsShow({
                             </PopoverContent>
                         </Popover>
 
-                        <button className="inline-flex items-center gap-1.5 h-[26px] px-[9px] rounded-md text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
-                            <SlidersHorizontal className="size-3" />Sort
-                        </button>
                 </div>
 
                 {/* View Content */}
@@ -2345,6 +2392,8 @@ export default function BoardsShow({
                                     onDrop={handleDrop}
                                     isDragOver={dragOverColumn === column.id}
                                     totalItemCount={board.columns.find((c) => c.id === column.id)?.items?.length ?? 0}
+                                    createOpen={createInColumnId === column.id}
+                                    onCreateOpenChange={(open) => setCreateInColumnId(open ? column.id : null)}
                                 />
                             ))}
 
