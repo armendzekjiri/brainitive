@@ -14,6 +14,24 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.12.0',
+        title: 'Plans: Tom\'s Planner–Style Gantt Charts',
+        tag: 'Major Feature',
+        date: '2026-10-21',
+        items: [
+            'New project module "Plans" next to Boards, Lists and Pages — create as many plans per project as you like, from the sidebar or the project page.',
+            'Spreadsheet on the left (Task, Who, Status, Start, End, Days, Progress, Notes), Gantt timeline on the right; both scroll together and columns can be shown or hidden.',
+            'Draw bars by dragging on the timeline (a click adds one day/week/month), move and resize them, several bars per row; milestones as diamonds; 10 colours, labels and progress.',
+            'Groups and sub-rows with collapse, Tab / Shift+Tab to indent, Alt+↑/↓ to move, drag rows by the number column; group rows show a summary bar and rolled-up dates and progress.',
+            'Dependencies: drag from the dot at the end of a bar onto another bar; links are drawn as arrows and listed in the bar editor.',
+            'Zoom Day / Week / Month / Quarter, today line, weekend shading, week numbers and "Today" button.',
+            'Fast editing: type straight into cells, Enter for the next row, undo/redo, copy/paste and duplicate rows — paste straight from Excel or Google Sheets.',
+            'Templates: Project plan, Product launch, Software release, Marketing campaign, Event planning and Workshop series, laid out from the current week.',
+            'Autosave with conflict guard, version history with preview and restore, CSV import / export (Excel) and Print / PDF.',
+            'Share a read-only link with people outside Brainitive; turn it off or replace it at any time.',
+        ]
+    },
+    {
         version: 'v1.11.0',
         title: 'Whiteboards: Autosave, History, Templates & Issue Cards',
         tag: 'Feature',

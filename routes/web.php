@@ -9,8 +9,10 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PageStickyNoteController;
 use App\Http\Controllers\PageVersionController;
+use App\Http\Controllers\PlanController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\PublicPlanController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SnippetController;
@@ -80,6 +82,7 @@ Route::get('/share/bookmarks/{uuid}', [BookmarkController::class, 'showPublic'])
 
 // Public snippet share views (no auth)
 Route::get('/share/snippets/{uuid}', [SnippetController::class, 'showPublicSnippet'])->name('snippets.public.show');
+Route::get('/share/plans/{token}', [PublicPlanController::class, 'show'])->name('plans.public');
 Route::get('/share/snippet-collections/{uuid}', [SnippetController::class, 'showPublicCollection'])->name('snippet-collections.public.show');
 
 // Embed test page (same-origin; use this URL to verify iframe works)
@@ -254,6 +257,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('boards/{board:slug}/items/{item}/attachments/{attachment}', [BoardController::class, 'destroyAttachment'])->name('boards.items.attachments.destroy');
 
             // Task Lists (nested under projects)
+            Route::post('plans', [PlanController::class, 'store'])->name('plans.store');
+            Route::get('plans/{plan:slug}', [PlanController::class, 'show'])->name('plans.show');
+            Route::patch('plans/{plan:slug}', [PlanController::class, 'update'])->name('plans.update');
+            Route::delete('plans/{plan:slug}', [PlanController::class, 'destroy'])->name('plans.destroy');
+            Route::get('plans/{plan:slug}/document', [PlanController::class, 'document'])->name('plans.document');
+            Route::put('plans/{plan:slug}/document', [PlanController::class, 'save'])->name('plans.save');
+            Route::post('plans/{plan:slug}/duplicate', [PlanController::class, 'duplicate'])->name('plans.duplicate');
+            Route::post('plans/{plan:slug}/share', [PlanController::class, 'share'])->name('plans.share');
+            Route::delete('plans/{plan:slug}/share', [PlanController::class, 'unshare'])->name('plans.unshare');
+            Route::get('plans/{plan:slug}/versions', [PlanController::class, 'versions'])->name('plans.versions.index');
+            Route::get('plans/{plan:slug}/versions/{versionNumber}', [PlanController::class, 'version'])->whereNumber('versionNumber')->name('plans.versions.show');
+            Route::post('plans/{plan:slug}/versions/{versionNumber}/restore', [PlanController::class, 'restore'])->whereNumber('versionNumber')->name('plans.versions.restore');
             Route::post('task-lists', [App\Http\Controllers\TaskListController::class, 'store'])->name('task-lists.store');
             Route::get('task-lists/{taskList:slug}', [App\Http\Controllers\TaskListController::class, 'show'])->name('task-lists.show');
             Route::put('task-lists/{taskList:slug}', [App\Http\Controllers\TaskListController::class, 'update'])->name('task-lists.update');

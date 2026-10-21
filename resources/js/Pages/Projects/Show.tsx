@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, Link, useForm } from '@inertiajs/react';
-import { PageProps, Workspace, Project, Board, TaskList, Page as PageType, Helpdesk } from '@/types';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { PageProps, Workspace, Project, Board, TaskList, Page as PageType, Helpdesk, PlanSummary } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -10,11 +10,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
     LayoutGrid, Plus, Settings, ArrowRight, Kanban, FileText, Folder,
-    ChevronRight, PencilRuler, Headphones, Calendar, Key, Users, List,
+    ChevronRight, PencilRuler, Headphones, Calendar, Key, Users, List, GanttChart,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { useState } from 'react';
+import { cn } from '@/lib/utils';
 
 type PageWithChildren = PageType & { children?: PageWithChildren[] };
 
@@ -23,6 +24,7 @@ interface Props extends PageProps {
     project: Project & {
         boards: Board[];
         task_lists?: TaskList[];
+        plans?: PlanSummary[];
         pages?: PageWithChildren[];
         helpdesks?: Helpdesk[];
         creator?: { id: number; name: string; avatar?: string | null; avatar_display?: string | null };
@@ -34,10 +36,13 @@ export default function ProjectsShow({ workspace, project }: Props) {
     const [createBoardDialogOpen, setCreateBoardDialogOpen] = useState(false);
     const [createHelpdeskDialogOpen, setCreateHelpdeskDialogOpen] = useState(false);
     const [createListDialogOpen, setCreateListDialogOpen] = useState(false);
+    const [createPlanDialogOpen, setCreatePlanDialogOpen] = useState(false);
+    const { planTemplates = [] } = usePage<PageProps>().props;
 
     const boardForm = useForm({ name: '', description: '' });
     const helpdeskForm = useForm({ name: '', description: '' });
     const listForm = useForm({ name: '', description: '' });
+    const planForm = useForm({ name: '', template: 'blank' });
 
     const createBoard = (e: React.FormEvent) => {
         e.preventDefault();
@@ -46,6 +51,10 @@ export default function ProjectsShow({ workspace, project }: Props) {
     const createHelpdesk = (e: React.FormEvent) => {
         e.preventDefault();
         helpdeskForm.post(route('helpdesks.store', [workspace.slug, project.slug]), { onSuccess: () => { setCreateHelpdeskDialogOpen(false); helpdeskForm.reset(); } });
+    };
+    const createPlan = (e: React.FormEvent) => {
+        e.preventDefault();
+        planForm.post(route('plans.store', [workspace.slug, project.slug]), { onSuccess: () => { setCreatePlanDialogOpen(false); planForm.reset(); } });
     };
     const createList = (e: React.FormEvent) => {
         e.preventDefault();
@@ -206,6 +215,36 @@ export default function ProjectsShow({ workspace, project }: Props) {
                         )}
                     </section>
 
+                    {/* Plans */}
+                    <section>
+                        <div className="mb-3 flex items-center justify-between">
+                            <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide"><GanttChart className="size-4" />Plans</h2>
+                            <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs text-muted-foreground" onClick={() => setCreatePlanDialogOpen(true)}><Plus className="size-3.5" />Add</Button>
+                        </div>
+                        {(!project.plans || project.plans.length === 0) ? (
+                            <Card className="border-dashed bg-card/50"><CardContent className="flex flex-col items-center justify-center py-10"><div className="size-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4"><GanttChart className="size-7 text-primary" /></div><p className="text-sm font-medium mb-1">No plans yet</p><p className="text-xs text-muted-foreground mb-4">Plan phases, milestones and who does what on a timeline.</p><Button size="sm" className="gap-2" onClick={() => setCreatePlanDialogOpen(true)}><Plus className="size-4" />Create plan</Button></CardContent></Card>
+                        ) : (
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {project.plans.map((plan) => (
+                                    <Link key={plan.id} href={route('plans.show', [workspace.slug, project.slug, plan.slug])}>
+                                        <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 group">
+                                            <CardContent className="p-4">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl" style={{ background: `${accent}1A` }}><GanttChart className="size-5" style={{ color: accent }} /></div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h3 className="font-semibold truncate group-hover:text-primary transition-colors">{plan.name}</h3>
+                                                        <p className="mt-0.5 text-xs text-muted-foreground truncate">{plan.description || (plan.updated_at ? `Updated ${new Date(plan.updated_at).toLocaleDateString('en', { month: 'short', day: 'numeric' })}` : 'Plan')}</p>
+                                                    </div>
+                                                    <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all mt-0.5" />
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+
                     {/* Helpdesks */}
                     <section>
                         <div className="mb-3 flex items-center justify-between">
@@ -275,6 +314,26 @@ export default function ProjectsShow({ workspace, project }: Props) {
                             <div className="space-y-2"><Label>Helpdesk Name</Label><Input value={helpdeskForm.data.name} onChange={(e) => helpdeskForm.setData('name', e.target.value)} placeholder="e.g., Customer Support" required />{helpdeskForm.errors.name && <p className="text-sm text-destructive">{helpdeskForm.errors.name}</p>}</div>
                             <div className="space-y-2"><Label>Description (optional)</Label><Textarea value={helpdeskForm.data.description} onChange={(e) => helpdeskForm.setData('description', e.target.value)} placeholder="Brief description" /></div>
                             <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setCreateHelpdeskDialogOpen(false)}>Cancel</Button><Button type="submit" disabled={helpdeskForm.processing}>{helpdeskForm.processing ? 'Creating…' : 'Create'}</Button></div>
+                        </form>
+                    </DialogContent>
+                </Dialog>
+                <Dialog open={createPlanDialogOpen} onOpenChange={setCreatePlanDialogOpen}>
+                    <DialogContent className="sm:max-w-lg">
+                        <DialogHeader><DialogTitle>Create Plan</DialogTitle><DialogDescription>A Gantt plan for the big picture: phases, bars, milestones and who does what.</DialogDescription></DialogHeader>
+                        <form onSubmit={createPlan} className="space-y-4 mt-4">
+                            <div className="space-y-2"><Label>Plan Name</Label><Input value={planForm.data.name} onChange={(e) => planForm.setData('name', e.target.value)} placeholder="e.g., Roadmap 2027" required autoFocus />{planForm.errors.name && <p className="text-sm text-destructive">{planForm.errors.name}</p>}</div>
+                            <div className="space-y-2">
+                                <Label>Start from</Label>
+                                <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Template">
+                                    {planTemplates.map((template) => (
+                                        <button key={template.key} type="button" role="radio" aria-checked={planForm.data.template === template.key} onClick={() => planForm.setData('template', template.key)} className={cn('rounded-lg border px-3 py-2 text-left transition-colors hover:border-primary/60', planForm.data.template === template.key && 'border-primary bg-primary/5 ring-1 ring-primary')}>
+                                            <span className="block text-sm font-medium">{template.name}</span>
+                                            <span className="block text-xs text-muted-foreground">{template.description}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setCreatePlanDialogOpen(false)}>Cancel</Button><Button type="submit" disabled={planForm.processing}>{planForm.processing ? 'Creating…' : 'Create'}</Button></div>
                         </form>
                     </DialogContent>
                 </Dialog>

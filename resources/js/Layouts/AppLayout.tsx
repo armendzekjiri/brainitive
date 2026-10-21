@@ -2,7 +2,7 @@ import { Link, router, usePage, useForm } from '@inertiajs/react';
 import axios from 'axios';
 import { Toaster } from 'sonner';
 import React, { PropsWithChildren, useState, useRef, FormEvent, useEffect, useCallback, createContext, useContext } from 'react';
-import { PageProps, Workspace, Project, Board, TaskList, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn, Helpdesk } from '@/types';
+import { PageProps, Workspace, Project, Board, TaskList, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn, Helpdesk, PlanSummary } from '@/types';
 import { cn } from '@/lib/utils';
 import { SearchModal } from '@/components/SearchModal';
 import { CommandPalette, CmdIcon, PaletteCommand } from '@/components/CommandPalette';
@@ -85,6 +85,7 @@ import {
     Moon,
     Sun,
     CalendarDays,
+    GanttChart,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { ThemeMenu } from '@/components/ThemeMenu';
@@ -446,14 +447,15 @@ function ProjectContent({
     onAddItem,
     currentPageUuid,
 }: {
-    project: Project & { boards: Board[]; task_lists?: TaskList[]; pages?: PageType[]; helpdesks?: Helpdesk[] };
+    project: Project & { boards: Board[]; task_lists?: TaskList[]; plans?: PlanSummary[]; pages?: PageType[]; helpdesks?: Helpdesk[] };
     workspace: Workspace;
     onAddItem: (projectId: number, parentId?: number) => void;
     currentPageUuid?: string | null;
 }) {
-    const hasContent = (project.boards && project.boards.length > 0) || (project.task_lists && project.task_lists.length > 0) || (project.pages && project.pages.length > 0) || (project.helpdesks && project.helpdesks.length > 0);
+    const hasContent = (project.boards && project.boards.length > 0) || (project.task_lists && project.task_lists.length > 0) || (project.plans && project.plans.length > 0) || (project.pages && project.pages.length > 0) || (project.helpdesks && project.helpdesks.length > 0);
     const [boardsOpen, setBoardsOpen] = useExpandedState(`project-${project.id}-boards`, true);
     const [listsOpen, setListsOpen] = useExpandedState(`project-${project.id}-lists`, true);
+    const [plansOpen, setPlansOpen] = useExpandedState(`project-${project.id}-plans`, true);
     const [pagesOpen, setPagesOpen] = useExpandedState(`project-${project.id}-pages`, true);
     const [whiteboardsOpen, setWhiteboardsOpen] = useExpandedState(`project-${project.id}-whiteboards`, true);
     const [foldersOpen, setFoldersOpen] = useExpandedState(`project-${project.id}-folders`, true);
@@ -531,10 +533,35 @@ function ProjectContent({
                 </>
             )}
 
+            {/* Plans */}
+            {project.plans && project.plans.length > 0 && (
+                <>
+                    {((project.boards?.length ?? 0) > 0 || (project.task_lists?.length ?? 0) > 0) && <div className="border-t border-border/50 my-1.5" />}
+                    <button
+                        onClick={() => setPlansOpen(!plansOpen)}
+                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
+                    >
+                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${plansOpen ? 'rotate-90' : ''}`} />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Plans</span>
+                    </button>
+                    {plansOpen && project.plans.map((plan) => (
+                        <SidebarMenuItem key={plan.id} className="pl-5">
+                            <Link
+                                href={route('plans.show', [workspace.slug, project.slug, plan.slug])}
+                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                            >
+                                <GanttChart className="size-4 shrink-0" />
+                                <span className="min-w-0 truncate">{plan.name}</span>
+                            </Link>
+                        </SidebarMenuItem>
+                    ))}
+                </>
+            )}
+
             {/* Helpdesk */}
             {project.helpdesks && project.helpdesks.length > 0 && (
                 <>
-                    {((project.boards?.length ?? 0) > 0 || (project.task_lists?.length ?? 0) > 0) && <div className="border-t border-border/50 my-1.5" />}
+                    {((project.boards?.length ?? 0) > 0 || (project.task_lists?.length ?? 0) > 0 || (project.plans?.length ?? 0) > 0) && <div className="border-t border-border/50 my-1.5" />}
                     <button
                         onClick={() => setHelpdesksOpen(!helpdesksOpen)}
                         className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
@@ -652,7 +679,8 @@ interface CreateItemModalProps {
 }
 
 function CreateItemModal({ open, onClose, workspace, project, parentId, parentType = 'project' }: CreateItemModalProps) {
-    const [itemType, setItemType] = useState<'page' | 'board' | 'folder' | 'excalidraw' | 'helpdesk' | 'list' | null>(null);
+    const [itemType, setItemType] = useState<'page' | 'board' | 'folder' | 'excalidraw' | 'helpdesk' | 'list' | 'plan' | null>(null);
+    const { planTemplates = [] } = usePage<PageProps>().props;
 
     const pageForm = useForm({
         name: '',
@@ -682,6 +710,22 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
         name: '',
         description: '',
     });
+
+    const planForm = useForm({
+        name: '',
+        template: 'blank',
+    });
+
+    const handleCreatePlan = (e: FormEvent) => {
+        e.preventDefault();
+        planForm.post(route('plans.store', [workspace.slug, project.slug]), {
+            onSuccess: () => {
+                planForm.reset();
+                setItemType(null);
+                onClose();
+            },
+        });
+    };
 
     const handleCreateList = (e: FormEvent) => {
         e.preventDefault();
@@ -733,15 +777,16 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
         boardForm.reset();
         helpdeskForm.reset();
         listForm.reset();
+        planForm.reset();
         onClose();
     };
 
     return (
         <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className={cn('sm:max-w-md', itemType === 'plan' && 'sm:max-w-lg')}>
                 <DialogHeader>
                     <DialogTitle>
-                        {itemType === null ? 'Create New' : itemType === 'board' ? 'Create Board' : itemType === 'folder' ? 'Create Folder' : itemType === 'excalidraw' ? 'Create Whiteboard' : itemType === 'helpdesk' ? 'Create Helpdesk' : itemType === 'list' ? 'Create List' : 'Create Page'}
+                        {itemType === null ? 'Create New' : itemType === 'board' ? 'Create Board' : itemType === 'folder' ? 'Create Folder' : itemType === 'excalidraw' ? 'Create Whiteboard' : itemType === 'helpdesk' ? 'Create Helpdesk' : itemType === 'list' ? 'Create List' : itemType === 'plan' ? 'Create Plan' : 'Create Page'}
                     </DialogTitle>
                     <DialogDescription>
                         {itemType === null
@@ -752,7 +797,9 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                                     ? 'Create a helpdesk to manage customer support tickets.'
                                     : itemType === 'list'
                                         ? 'Create a task list to track to-dos with due dates and assignees.'
-                                        : `Enter a name for your new ${itemType}`}
+                                        : itemType === 'plan'
+                                            ? 'A Gantt plan for the big picture: phases, bars, milestones and who does what.'
+                                            : `Enter a name for your new ${itemType}`}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -835,6 +882,18 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                                     <List className="size-6" />
                                 </div>
                                 <span className="text-sm font-medium">List</span>
+                            </button>
+                        )}
+                        {parentType === 'project' && (
+                            <button
+                                type="button"
+                                onClick={() => setItemType('plan')}
+                                className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors"
+                            >
+                                <div className="size-12 rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300 flex items-center justify-center">
+                                    <GanttChart className="size-6" />
+                                </div>
+                                <span className="text-sm font-medium">Plan</span>
                             </button>
                         )}
                     </div>
@@ -923,6 +982,50 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                             </Button>
                             <Button type="submit" disabled={listForm.processing}>
                                 {listForm.processing ? 'Creating...' : 'Create List'}
+                            </Button>
+                        </div>
+                    </form>
+                ) : itemType === 'plan' ? (
+                    <form onSubmit={handleCreatePlan} className="space-y-4 py-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="plan-name">Plan Name</Label>
+                            <Input
+                                id="plan-name"
+                                value={planForm.data.name}
+                                onChange={(e) => planForm.setData('name', e.target.value)}
+                                placeholder="e.g., Roadmap 2027, Workshop series"
+                                autoFocus
+                                required
+                            />
+                            {planForm.errors.name && <p className="text-sm text-destructive">{planForm.errors.name}</p>}
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Start from</Label>
+                            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Template">
+                                {planTemplates.map((template) => (
+                                    <button
+                                        key={template.key}
+                                        type="button"
+                                        role="radio"
+                                        aria-checked={planForm.data.template === template.key}
+                                        onClick={() => planForm.setData('template', template.key)}
+                                        className={cn(
+                                            'rounded-lg border px-3 py-2 text-left transition-colors hover:border-primary/60',
+                                            planForm.data.template === template.key && 'border-primary bg-primary/5 ring-1 ring-primary',
+                                        )}
+                                    >
+                                        <span className="block text-sm font-medium">{template.name}</span>
+                                        <span className="block text-xs text-muted-foreground">{template.description}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                            <Button type="button" variant="outline" onClick={() => setItemType(null)}>
+                                Back
+                            </Button>
+                            <Button type="submit" disabled={planForm.processing}>
+                                {planForm.processing ? 'Creating...' : 'Create Plan'}
                             </Button>
                         </div>
                     </form>

@@ -81,6 +81,14 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Pages (UI):** `Pages/Pages/`
 - **Editors:** Editor.js / Tiptap / Lexical / Excalidraw — all in `resources/js/components/editor/`; content stored as JSON in `content`. Whiteboard pages use `excalidraw-editor.blade.php` (autosave, conflict banner, template picker, issues modal) + the `excalidraw-build/` bundle (`src/main.jsx` API, `src/templates.js`, `src/issueCards.js`); read-only canvas = `components/page/ExcalidrawViewMode.tsx`. See [`CONVENTIONS.md`](./CONVENTIONS.md#rich-text-editors--excalidraw).
 
+### Plans — Tom's Planner–style Gantt
+- **Models:** `Plan` (`slug`-bound, several per project; `data` = rows/bars/dependencies JSON, `settings` = zoom/columns, `edit_revision`, `share_token`; `saveDocument` / `restoreVersion` / `recordVersion`), `PlanVersion` (checkpoints)
+- **Support:** `app/Support/Plans/PlanDocument` (validation rules + normalisation), `PlanTemplates` (starting points built from the current week)
+- **Policy:** `PlanPolicy` — same as task lists (members view, editors edit, admins delete)
+- **Controllers:** `PlanController` (store, show, update, save + 409 guard, document, duplicate, destroy, share/unshare, versions/restore), `PublicPlanController` (`/share/plans/{token}`)
+- **Routes:** `plans/...` under `projects/{project}` (`plans.*`), public `plans.public`
+- **Pages (UI):** `Pages/Plans/Show.tsx` (editor, print view on `?print=1`), `Pages/Plans/Public.tsx`; editor in `components/plan/` (`PlanChart`, `usePlanEditor`, `ops`, `dates`, `csv`, dialogs)
+
 ### Task Lists
 - **Models:** `TaskList` (`slug`-bound), `TaskListItem`
 - **Controller:** `TaskListController` (also exposed via CLI — see CLI module)

@@ -110,6 +110,17 @@ export interface TaskList {
     task_lists?: TaskList[];
 }
 
+/** A plan (Gantt planner) as listed in the sidebar / project page. */
+export interface PlanSummary {
+    id: number;
+    project_id: number;
+    name: string;
+    slug: string;
+    description?: string | null;
+    position: number;
+    updated_at?: string;
+}
+
 export interface TaskListItem {
     id: number;
     uuid: string;
@@ -387,6 +398,7 @@ export type PageProps<
         projects: (Project & {
             boards: (Board & { columns?: BoardColumn[] })[];
             task_lists: TaskList[];
+            plans?: PlanSummary[];
             pages: Page[];
             helpdesks?: Helpdesk[];
         })[];
@@ -398,6 +410,7 @@ export type PageProps<
     currentPageUuid?: string | null;
     itemTypes?: ItemType[];
     priorities?: ItemPriority[];
+    planTemplates?: { key: string; name: string; description: string }[];
     /** Unread notification count shared by HandleInertiaRequests middleware */
     unreadNotificationsCount?: number;
     /** Browser push config shared by HandleInertiaRequests middleware */

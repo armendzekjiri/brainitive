@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Plans: Tom's Planner–style Gantt per project](./feat-project-plans.md) | done |
 | [Whiteboards: autosave, history, templates, issue cards](./feat-whiteboard-essentials.md) | done |
 | [Boards: Scrum — sprints, backlog, reports](./feat-board-sprints.md) | done |
 | [Boards: Jira-style design](./feat-board-jira-design.md) | done |
