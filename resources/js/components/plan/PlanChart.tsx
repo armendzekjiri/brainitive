@@ -1,7 +1,8 @@
 import { ClipboardEvent, KeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-    ArrowDown, ArrowUp, CalendarCheck, ChevronDown, ChevronRight, Columns3, Copy, Diamond, Filter, GripVertical,
-    IndentDecrease, IndentIncrease, Keyboard, Palette, Pencil, Plus, Redo2, Rows3, Scissors, Search, StickyNote, Trash2, Undo2, Unlink, X,
+    ArrowDown, ArrowUp, CalendarCheck, ChevronDown, ChevronRight, Columns3, Copy, Diamond, ExternalLink, Filter, GripVertical,
+    IndentDecrease, IndentIncrease, Kanban, Keyboard, Link2, ListPlus, Palette, Pencil, Plus, Redo2, RefreshCw, Rows3, Search, StickyNote,
+    Trash2, Undo2, Unlink, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,9 +21,10 @@ import {
     moveRow, moveRowBy, outdentRows, parentIndex, removeBars, removeDependencies, RowSummary, selectedBlocks, setBar,
     setRowDates, summarize, updateRow, visibleRows,
 } from './ops';
+import { CATEGORY_CLASSES } from './issues';
 import {
-    COLUMN_META, COLUMN_ORDER, DEFAULT_COLOR, newId, PlanBar, PlanColumn, PlanData, PlanDependency, PlanDocument, PlanRow,
-    PlanSettings, PlanStatus, PlanZoom, STATUS_META,
+    COLUMN_META, COLUMN_ORDER, DEFAULT_COLOR, IssueAction, IssueSummary, newId, PlanBar, PlanColumn, PlanData, PlanDependency,
+    PlanDocument, PlanRow, PlanSettings, PlanStatus, PlanZoom, STATUS_META,
 } from './types';
 import type { PlanEditor } from './usePlanEditor';
 
@@ -78,13 +80,17 @@ interface Props {
     showToolbar?: boolean;
     toolbarExtra?: ReactNode;
     className?: string;
+    /** Linked board issues by id (key chip, live status) */
+    issues?: Record<number, IssueSummary>;
+    /** Issue actions on rows; the page owns the dialogs and API calls */
+    onIssueAction?: (action: IssueAction, rowIds: string[]) => void;
 }
 
 /**
  * Tom's Planner–style chart: an outline grid on the left (sticky) and the Gantt timeline on
  * the right, in one scroll container so both scroll together.
  */
-export function PlanChart({ doc, editor, members = [], printMode = false, showToolbar = true, toolbarExtra, className }: Props) {
+export function PlanChart({ doc, editor, members = [], printMode = false, showToolbar = true, toolbarExtra, className, issues = {}, onIssueAction }: Props) {
     const readOnly = !editor;
     const uid = useId().replace(/:/g, '');
     const [localSettings, setLocalSettings] = useState<PlanSettings>(doc.settings);
@@ -459,6 +465,9 @@ export function PlanChart({ doc, editor, members = [], printMode = false, showTo
 
     const isEditable = (rowIndex: number, col: CellKey) => {
         if (readOnly) return false;
+        // Linked rows: status and assignee belong to the issue
+        const linked = rows[rowIndex].itemId;
+        if (linked && (col === 'status' || (col === 'who' && issues[linked]?.assignee))) return false;
         if (col === 'start' || col === 'end' || col === 'duration' || col === 'progress') {
             const s = summaries[rowIndex];
             if (!s?.editableDates) return false;
@@ -761,6 +770,7 @@ export function PlanChart({ doc, editor, members = [], printMode = false, showTo
                 { label: 'Move up', icon: <ArrowUp />, shortcut: 'Alt+↑', onSelect: () => mutate((d) => moveRowBy(d, row.id, -1)) },
                 { label: 'Move down', icon: <ArrowDown />, shortcut: 'Alt+↓', onSelect: () => mutate((d) => moveRowBy(d, row.id, 1)) },
                 'separator',
+                ...issueMenuEntries(row, ids),
                 { label: 'Add milestone', icon: <Diamond />, onSelect: () => addMilestoneTo(row.id) },
                 { label: 'Duplicate', icon: <Copy />, shortcut: 'Ctrl+D', onSelect: () => duplicate(ids) },
                 { label: 'Copy', icon: <Copy />, shortcut: 'Ctrl+C', onSelect: () => { copyRows(); } },
@@ -768,6 +778,19 @@ export function PlanChart({ doc, editor, members = [], printMode = false, showTo
                 { label: ids.length > 1 ? `Delete ${ids.length} rows` : 'Delete row', icon: <Trash2 />, destructive: true, onSelect: () => removeRows(ids) },
             ],
         });
+    };
+
+    const issueMenuEntries = (row: PlanRow, ids: string[]): ContextMenuEntry[] => {
+        if (!onIssueAction) return [];
+        const issue = row.itemId !== undefined ? issues[row.itemId] : undefined;
+        const unlinked = ids.filter((id) => !rows.find((r) => r.id === id)?.itemId);
+        return [
+            ...(issue ? [{ label: `Open ${issue.key}`, icon: <ExternalLink />, onSelect: () => window.open(issue.url, '_blank', 'noopener') }] : []),
+            ...(unlinked.length ? [{ label: unlinked.length > 1 ? `Create ${unlinked.length} issues…` : 'Create issue…', icon: <Kanban />, onSelect: () => onIssueAction('create', unlinked) }] : []),
+            ...(!row.itemId ? [{ label: 'Link to existing issue…', icon: <Link2 />, onSelect: () => onIssueAction('link', [row.id]) }] : []),
+            ...(row.itemId ? [{ label: 'Unlink issue', icon: <Unlink />, onSelect: () => onIssueAction('unlink', ids.filter((id) => rows.find((r) => r.id === id)?.itemId)) }] : []),
+            'separator' as const,
+        ];
     };
 
     const openBarMenu = (event: React.MouseEvent, row: PlanRow, bar: PlanBar) => {
@@ -812,6 +835,7 @@ export function PlanChart({ doc, editor, members = [], printMode = false, showTo
                                 {isCollapsed(row) ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
                             </button>
                         ) : <span className="w-5 shrink-0" />}
+                        {row.itemId !== undefined && (issues[row.itemId] || !readOnly) && <IssueChip issue={issues[row.itemId]} />}
                         <span className={cn('truncate', group && 'font-semibold', !row.name && 'text-muted-foreground/60 italic')}>
                             {row.name || (readOnly ? '' : 'Untitled')}
                         </span>
@@ -821,6 +845,10 @@ export function PlanChart({ doc, editor, members = [], printMode = false, showTo
             case 'who':
                 return <span className="truncate">{row.who}</span>;
             case 'status': {
+                const issue = row.itemId !== undefined ? issues[row.itemId] : undefined;
+                if (issue) {
+                    return <span className={cn('inline-flex max-w-full items-center truncate rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide', CATEGORY_CLASSES[issue.status_category])} title={`Status on ${issue.board ?? 'the board'}`}>{issue.status ?? 'No status'}</span>;
+                }
                 const meta = statusMeta(row.status);
                 return meta ? <span className={cn('inline-flex max-w-full items-center gap-1 truncate rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide', meta.className)}>{meta.label}</span> : null;
             }
@@ -980,6 +1008,31 @@ export function PlanChart({ doc, editor, members = [], printMode = false, showTo
                         <ToolButton label="Redo (Ctrl+Y)" onClick={() => editor?.redo()} disabled={!editor?.canRedo}><Redo2 /></ToolButton>
                         <ToolbarDivider />
                     </div>
+                    {onIssueAction && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground"><Kanban className="size-3.5" />Issues<ChevronDown className="size-3" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-64">
+                                <DropdownMenuItem
+                                    disabled={!actionRows().some((id) => !rows.find((r) => r.id === id)?.itemId)}
+                                    onClick={() => onIssueAction('create', actionRows().filter((id) => !rows.find((r) => r.id === id)?.itemId))}
+                                >
+                                    <Kanban className="mr-2 size-4" />Create issues from selected rows
+                                </DropdownMenuItem>
+                                <DropdownMenuItem disabled={actionRows().length !== 1 || !!rows.find((r) => r.id === actionRows()[0])?.itemId} onClick={() => onIssueAction('link', actionRows())}>
+                                    <Link2 className="mr-2 size-4" />Link selected row to an issue…
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onIssueAction('add', actionRows())}>
+                                    <ListPlus className="mr-2 size-4" />Add issues as rows…
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => onIssueAction('refresh', [])}>
+                                    <RefreshCw className="mr-2 size-4" />Refresh from board
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
                 </>
             )}
 
@@ -1328,6 +1381,28 @@ function ToolButton({ label, onClick, disabled, children }: { label: string; onC
         <Button variant="ghost" size="icon" className="size-8 text-muted-foreground [&_svg]:size-4" title={label} aria-label={label} onClick={onClick} disabled={disabled}>
             {children}
         </Button>
+    );
+}
+
+function IssueChip({ issue }: { issue?: IssueSummary }) {
+    if (!issue) {
+        return <span className="mr-1 shrink-0 rounded border border-dashed px-1 font-mono text-[10px] text-muted-foreground" title="Linked issue not found">issue</span>;
+    }
+    return (
+        <a
+            href={issue.url}
+            target="_blank"
+            rel="noopener"
+            onPointerDown={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            title={`${issue.key} · ${issue.title} — open issue`}
+            className={cn(
+                'mr-1 shrink-0 rounded border px-1 font-mono text-[10px] font-medium leading-[16px] transition-colors hover:border-primary hover:text-primary',
+                issue.status_category === 'done' ? 'text-muted-foreground line-through' : 'text-foreground/80',
+            )}
+        >
+            {issue.key}
+        </a>
     );
 }
 

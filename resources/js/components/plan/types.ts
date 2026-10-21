@@ -23,8 +23,27 @@ export interface PlanRow {
     status?: PlanStatus;
     notes?: string;
     collapsed?: boolean;
+    /** Linked board issue (the issue is the source of truth) */
+    itemId?: number;
     bars: PlanBar[];
 }
+
+/** A board issue as plans see it (see app/Support/Boards/ProjectIssues.php). */
+export interface IssueSummary {
+    id: number;
+    key: string;
+    title: string;
+    status: string | null;
+    status_category: 'todo' | 'in_progress' | 'done';
+    assignee: { id: number; name: string } | null;
+    board: string | null;
+    url: string;
+    start_date: string | null;
+    due_date: string | null;
+    progress: number | null;
+}
+
+export type IssueAction = 'create' | 'link' | 'add' | 'unlink' | 'refresh';
 
 /** Finish-to-start: `to` starts after `from` ends. */
 export interface PlanDependency {
