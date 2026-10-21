@@ -118,6 +118,9 @@ class ProjectController extends Controller
             'taskLists' => function ($query) {
                 $query->orderBy('position');
             },
+            'plans' => function ($query) {
+                $query->select('id', 'project_id', 'name', 'slug', 'description', 'position', 'updated_at')->orderBy('position');
+            },
             'creator:id,name,avatar',
             'pages' => function ($query) use ($request) {
                 $query->visibleTo($request->user())->orderByRaw("CASE type WHEN 'folder' THEN 0 ELSE 1 END")->orderBy('position');

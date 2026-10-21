@@ -7,6 +7,7 @@ use App\Models\ItemType;
 use App\Models\Page;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Plans\PlanTemplates;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -124,6 +125,10 @@ class HandleInertiaRequests extends Middleware
                         $q->select('id', 'project_id', 'name', 'slug', 'position')
                             ->orderBy('position');
                     },
+                    'plans' => function ($q) {
+                        $q->select('id', 'project_id', 'name', 'slug', 'position')
+                            ->orderBy('position');
+                    },
                     'helpdesks' => function ($q) {
                         $q->select('id', 'project_id', 'name', 'slug', 'description', 'position')
                             ->orderBy('position');
@@ -236,6 +241,7 @@ class HandleInertiaRequests extends Middleware
             'currentBoardId' => $currentBoardId,
             'itemTypes' => fn () => $user ? ItemType::orderBy('id')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
             'priorities' => fn () => $user ? ItemPriority::orderBy('order')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
+            'planTemplates' => fn () => $user ? PlanTemplates::all() : [],
             'currentPageUuid' => $request->routeIs('pages.show') && $request->route('page')
                 ? (is_object($request->route('page')) ? $request->route('page')->uuid : $request->route('page'))
                 : null,

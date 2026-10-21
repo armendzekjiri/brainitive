@@ -290,6 +290,25 @@ Pages work like Confluence. Keep these rules when touching pages:
   validator): `--viz-series-1` for the measured series, `--viz-reference` grey for the
   guideline / committed.
 
+## Plans (Gantt planner)
+
+- **One JSON document per plan** (`plans.data` = `{ rows, dependencies }`), edited client-side and
+  saved whole: `PUT plans.save` with `base_revision` (409 on a stale revision unless `force`),
+  1.5 s after the last change. The server validates with `PlanDocument::rules()` and repairs with
+  `PlanDocument::normalize()` (end ≥ start, levels, dangling / duplicate dependencies) — never
+  store client input unnormalised.
+- **Rows are a flat outline**: `level` = indent; a row is a group when the next row is deeper.
+  All outline changes go through the pure functions in `components/plan/ops.ts` (indent,
+  outdent, move, duplicate, delete with sub-rows) so undo/redo stays one snapshot per action.
+- **Dates are Y-m-d strings, inclusive**; the frontend computes with UTC day numbers
+  (`dates.ts`) so time zones never shift a bar. Durations = Mon–Fri working days.
+- View changes (zoom, columns, collapse, grid width) are saved but not undoable
+  (`editor.apply(fn, { history: false })`). A drag is one undo step (`beginGesture` /
+  `endGesture`).
+- History = checkpoints like whiteboards: "Save version", every 30 min while editing, or when
+  another user saved last. The slug never changes on rename (links and share URLs stay valid).
+- Templates live in `PlanTemplates` (PHP) and reach the UI as the shared `planTemplates` prop.
+
 ## Item history (activity log)
 
 - Changes to `Item` columns are logged automatically by `ItemObserver` — don't log them by

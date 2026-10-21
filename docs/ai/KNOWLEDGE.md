@@ -115,3 +115,11 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **Repo-wide `pint --test` is red on untouched legacy files** (old migrations,
   notifications, BoardController…). Gate your change with `pint --dirty`; clean up legacy
   files in a dedicated chore branch.
+- **Plan chart layout = one scroll container.** The grid is `position: sticky; left: 0` inside
+  the same scroller as the timeline, so both scroll together. Anything drawn on the grid
+  must be **opaque** (row tints are painted as `background-image` over `bg-background`),
+  otherwise bars scrolled under the grid shine through.
+- **Plan chart window listeners** are stable wrappers that call the latest handlers through a
+  ref; adding/removing a per-render function leaks listeners after the gesture.
+- **Playwright `page.mouse.click` ignores `modifiers`** — hold Shift with `keyboard.down` when
+  testing multi-select in the harness.

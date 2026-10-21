@@ -48,6 +48,7 @@ class Project extends Model
         if (str_contains($icon, '/') || strlen($icon) > 30) {
             return asset('storage/'.$icon);
         }
+
         return $icon;
     }
 
@@ -111,6 +112,14 @@ class Project extends Model
     public function admins(): BelongsToMany
     {
         return $this->usersWithRole('admin');
+    }
+
+    /**
+     * Get all plans (Gantt planners) in this project.
+     */
+    public function plans(): HasMany
+    {
+        return $this->hasMany(Plan::class)->orderBy('position');
     }
 
     /**
@@ -227,7 +236,7 @@ class Project extends Model
     {
         $this->increment('next_item_number');
 
-        return $this->key . '-' . $this->next_item_number;
+        return $this->key.'-'.$this->next_item_number;
     }
 
     /**
@@ -235,8 +244,9 @@ class Project extends Model
      */
     public function getNextTicketKey(): string
     {
-        $key = $this->key . '-T' . $this->next_ticket_number;
+        $key = $this->key.'-T'.$this->next_ticket_number;
         $this->increment('next_ticket_number');
+
         return $key;
     }
 
