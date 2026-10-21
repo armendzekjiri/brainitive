@@ -14,6 +14,87 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.11.0',
+        title: 'Whiteboards: Autosave, History, Templates & Issue Cards',
+        tag: 'Feature',
+        date: '2026-10-21',
+        items: [
+            'Whiteboards autosave a few seconds after every change; leaving with unsaved changes asks first.',
+            'Conflict guard: if someone else saved the whiteboard meanwhile, a banner lets you load the latest version or overwrite it — no more silent overwrites.',
+            'Whiteboard history: checkpoints on Save / Save & exit and at least every 30 minutes while editing; preview any version read-only and restore it.',
+            'Templates: Retrospective, Roadmap (Now / Next / Later), Brainstorm, User story map, Flowchart and SWOT. The picker opens on every new, empty whiteboard.',
+            'Issue cards: search the project issues and drop them on the board as cards coloured by status, linked to the issue; cards refresh when the whiteboard opens.',
+            'Stickies → issues: select stickies, pick a board and create one issue per sticky (first column, backlog); the stickies turn into live issue cards.',
+        ]
+    },
+    {
+        version: 'v1.10.0',
+        title: 'Scrum: Sprints, Backlog & Reports',
+        tag: 'Major Feature',
+        date: '2026-10-21',
+        items: [
+            'Boards can use sprints (board settings → "Use sprints"); Kanban boards stay as they are.',
+            'Backlog page: active and planned sprints plus the backlog, ranked by drag & drop; create, edit, start and delete sprints.',
+            'Board shows the active sprint with goal, days left and "Complete sprint" — open issues move to the next sprint or the backlog.',
+            'New issues on a Scrum board join the active sprint, like Jira; subtasks always follow their parent.',
+            'Reports: burndown (ideal vs. remaining, by story points or issue count) and velocity (committed vs. completed, last 7 sprints).',
+            'Issue history records sprint changes.',
+        ]
+    },
+    {
+        version: 'v1.9.0',
+        title: 'Jira-Style Board & Issue View',
+        tag: 'Enhancement',
+        date: '2026-10-19',
+        items: [
+            'Board header: breadcrumb, title, settings and a working "Create" button; view tabs Board · List · Timeline · Calendar.',
+            'Toolbar: board search, assignee avatars as one-click filters, quick filters and the filter popover.',
+            'Columns: clean lanes with "IN PROGRESS 3 / MAX 2" counts, done marker and a working "+" to add issues.',
+            'Cards: summary first, parent and label lozenges, due-date lozenge (amber = soon, red = overdue), key, subtasks, comments, story points, priority and assignee.',
+            'Issue view: breadcrumb header, status button coloured by category, quick actions (attach, subtask, link), collapsible details, "Assign to me" and tabs All · Comments · History · Work log.',
+        ]
+    },
+    {
+        version: 'v1.8.0',
+        title: 'Boards: Issue History, WIP Limits & Time Tracking',
+        tag: 'Feature',
+        date: '2026-10-18',
+        items: [
+            'Issue history: every change is logged — created, field changes, moves, assignee, labels, comments, links, attachments and logged work.',
+            'WIP limits are shown on the column header and highlighted when a column is over its limit.',
+            'Time tracking: original estimate, time spent and "Log work" (e.g. 1h 30m) with a progress bar.',
+            'Filters live in the URL, so a filtered board can be shared or bookmarked; quick filters: Only my issues, Recently updated, Due soon / overdue, Blocked.',
+            'Faster boards: comments and attachments load when an issue is opened instead of with the whole board; comment counts now show on cards.',
+        ]
+    },
+    {
+        version: 'v1.7.0',
+        title: 'Pages: Draft, Publish & Version History',
+        tag: 'Major Feature',
+        date: '2026-10-18',
+        items: [
+            'Confluence-style workflow: a published page keeps an autosaved draft — readers see the published version until you click "Update".',
+            'Every publish is a version with an optional change note; view the history, preview any version and restore it.',
+            'Discard draft, unpublish and an optional notification to watchers when you publish changes.',
+            'Conflict guard: if someone else changed the page while you were editing, you get a banner to reload or overwrite.',
+            'See who else is viewing or editing a page.',
+            'Permissions: drafts are only visible to their author and admins; editors can edit, admins and authors can delete.',
+        ]
+    },
+    {
+        version: 'v1.6.0',
+        title: 'Outline-Style Document Editor',
+        tag: 'Enhancement',
+        date: '2026-10-18',
+        items: [
+            'Writing-first page editor in the style of Outline and Evernote: one clean surface and a centred text column.',
+            'Floating format toolbar on text selection: bold, italic, strikethrough, highlight, code, headings, quote, checklist and link.',
+            'The classic toolbar is hidden by default and can be turned back on (remembered per browser).',
+            'Empty lines show "Type / for commands"; the title is edited in place and Enter jumps into the text.',
+            'New document typography: calmer headings, quotes, links and spacing; quieter page header and table of contents.',
+        ]
+    },
+    {
         version: 'v1.5.0',
         title: 'Redesign: Board Cards, Shared Detail, Workspace & Project Home',
         tag: 'Major Release',

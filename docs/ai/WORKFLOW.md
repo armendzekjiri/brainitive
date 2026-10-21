@@ -92,6 +92,13 @@ The four commands above, all green, plus verified in the running app. Plus docs 
 (step 4), `tasks/<branch>.md` marked done, and — when MCP is connected — the Brainitive board
 card moved to **Testing**.
 
+**Version bump + "What's new".** Every user-facing change adds an entry at the top of
+`CHANGELOG` in `resources/js/components/HelpModal.tsx` (shown in the in-app help modal; the
+newest entry *is* the app version). New feature → minor bump (`v1.11.0` → `v1.12.0`), small
+fix → patch (`v1.12.0` → `v1.12.1`). Entry = `version`, short `title`, `tag` (Feature /
+Major Feature / Enhancement / Patch), `date`, and user-facing `items` (what changed for the
+user, not file names).
+
 ## Git & PR conventions
 - Branch off `main`; commit/push only when asked.
 - Conventional commits with scope: `feat(mcp): …`, `fix(helpdesk): …`.
