@@ -377,6 +377,7 @@ export default function BoardsEdit({ workspace, project, board }: Props) {
     const { data, setData, put, processing, errors } = useForm({
         name: board.name,
         description: board.description || '',
+        type: board.type === 'scrum' ? 'scrum' : 'kanban',
     });
 
     const handleDragStart = (e: DragEvent, column: BoardColumn) => {
@@ -503,6 +504,22 @@ export default function BoardsEdit({ workspace, project, board }: Props) {
                                         rows={3}
                                     />
                                 </div>
+
+                                <label className="flex items-start gap-3 rounded-md border border-border p-3 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        className="mt-0.5 size-4 accent-[hsl(var(--primary))]"
+                                        checked={data.type === 'scrum'}
+                                        onChange={(e) => setData('type', e.target.checked ? 'scrum' : 'kanban')}
+                                    />
+                                    <span className="space-y-0.5">
+                                        <span className="block text-sm font-medium">Use sprints (Scrum)</span>
+                                        <span className="block text-xs text-muted-foreground">
+                                            Adds a Backlog and Reports. The board then shows only the active sprint; new cards join it.
+                                        </span>
+                                    </span>
+                                </label>
+                                {errors.type && <p className="text-sm text-destructive">{errors.type}</p>}
 
                                 <div className="flex justify-end">
                                     <Button type="submit" disabled={processing}>

@@ -267,6 +267,18 @@ Pages work like Confluence. Keep these rules when touching pages:
   assignee right). Keep new card metadata in that footer, not in extra rows.
 - No buttons without handlers — wire them or leave them out.
 
+## Sprints (Scrum boards)
+
+- Move issues between sprints/backlog only via `Item::moveToSprint()` — it carries the
+  subtasks along and appends to the target list. Never set `sprint_id` on a subtask alone.
+- Sprint lifecycle goes through `Sprint::start()` / `Sprint::complete()` (they snapshot
+  committed / completed numbers and the final burndown). Don't flip `status` by hand.
+- Burndown/velocity numbers come from `SprintReport`; a sprint without story points burns
+  down by issue count.
+- Report charts use the `.viz-root` colour roles in `app.css` (validated with the dataviz
+  validator): `--viz-series-1` for the measured series, `--viz-reference` grey for the
+  guideline / committed.
+
 ## Item history (activity log)
 
 - Changes to `Item` columns are logged automatically by `ItemObserver` — don't log them by

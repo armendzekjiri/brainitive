@@ -672,6 +672,7 @@ const HISTORY_FIELD_LABELS: Record<string, string> = {
     description: 'Description',
     board_id: 'Board',
     column_id: 'Status',
+    sprint_id: 'Sprint',
     assigned_to: 'Assignee',
     priority_id: 'Priority',
     item_type_id: 'Type',

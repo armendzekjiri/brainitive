@@ -21,6 +21,7 @@ class Item extends Model
         'board_id',
         'project_id',
         'column_id',
+        'sprint_id',
         'parent_id',
         'item_type_id',
         'priority_id',
@@ -32,6 +33,7 @@ class Item extends Model
         'assigned_to',
         'reporter_id',
         'position',
+        'backlog_position',
         'story_points',
         'original_estimate',
         'time_spent',
@@ -246,6 +248,34 @@ class Item extends Model
         // If moving out of done column, clear completed_at
         if ($wasInDoneColumn && ! $isNowInDoneColumn) {
             $this->update(['completed_at' => null]);
+        }
+    }
+
+    public function sprint(): BelongsTo
+    {
+        return $this->belongsTo(Sprint::class);
+    }
+
+    /**
+     * Move this issue (and its subtasks) to a sprint, or to the backlog with null.
+     * Lands at the end of the target list.
+     */
+    public function moveToSprint(?Sprint $sprint): void
+    {
+        $targetId = $sprint?->id;
+        if ($this->sprint_id === $targetId) {
+            return;
+        }
+
+        $last = static::where('board_id', $this->board_id)
+            ->where('sprint_id', $targetId)
+            ->whereNull('parent_id')
+            ->max('backlog_position') ?? 0;
+
+        $this->update(['sprint_id' => $targetId, 'backlog_position' => $last + 1]);
+
+        foreach ($this->children()->get() as $child) {
+            $child->update(['sprint_id' => $targetId]);
         }
     }
 

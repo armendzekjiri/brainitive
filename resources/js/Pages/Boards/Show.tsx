@@ -108,6 +108,8 @@ import { Comment, Attachment } from '@/types';
 import { ItemTypeIcon } from '@/components/ItemTypeIcon';
 import { LabelChip, PriorityIndicator, TypeBadge, AssigneeAvatar, priorityMeta, itemAccentColor } from '@/components/board/ItemPrimitives';
 import { useItemDetail, ItemDetailMain, ItemDetailSidebar, ItemFilePreviewDialog, type ProjectItemLite } from '@/components/item/ItemDetail';
+import { BoardHeader } from '@/components/board/BoardHeader';
+import { ActiveSprintBar, type SprintSummary } from '@/components/board/ActiveSprintBar';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -119,6 +121,9 @@ interface Props extends PageProps {
     projectUsers: User[];
     projectLabels: LabelType[];
     projectItems?: ProjectItemLite[];
+    activeSprint?: SprintSummary | null;
+    plannedSprints?: { id: number; name: string }[];
+    canManageSprints?: boolean;
 }
 
 // Item Card Component — redesigned (utility-first dense kanban)
@@ -1743,6 +1748,9 @@ export default function BoardsShow({
     projectUsers,
     projectLabels,
     projectItems = [],
+    activeSprint = null,
+    plannedSprints = [],
+    canManageSprints = false,
 }: Props) {
     const itemTypes = boardItemTypes;
     const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -1794,8 +1802,10 @@ export default function BoardsShow({
     // Persist board view preference per project so user sees same view next time
     useEffect(() => {
         if (typeof window === 'undefined') return;
+        // ?view= (links from the backlog/reports tabs) wins over the remembered view
+        const fromUrl = new URLSearchParams(window.location.search).get('view');
         const key = `board-view-${project.id}-${board.id}`;
-        const stored = window.localStorage.getItem(key) as 'kanban' | 'list' | 'gantt' | 'calendar' | null;
+        const stored = (fromUrl ?? window.localStorage.getItem(key)) as 'kanban' | 'list' | 'gantt' | 'calendar' | null;
         if (stored && ['kanban', 'list', 'gantt', 'calendar'].includes(stored)) {
             setCurrentView(stored);
         }
@@ -1902,65 +1912,30 @@ export default function BoardsShow({
             <Head title={`${board.name} - ${project.name}`} />
 
             <div className="flex flex-col h-full overflow-hidden">
-                {/* ─── Board Header (Jira-style: breadcrumb, title, view tabs) ─── */}
-                <div className="px-6 pt-4 shrink-0">
-                    <nav className="flex items-center gap-1.5 text-[13px] text-muted-foreground" aria-label="Breadcrumb">
-                        <Link href={route('projects.show', [workspace.slug, project.slug])} className="hover:text-foreground hover:underline">Projects</Link>
-                        <span aria-hidden>/</span>
-                        <Link href={route('projects.show', [workspace.slug, project.slug])} className="inline-flex items-center gap-1.5 hover:text-foreground hover:underline">
-                            <span className="size-4 rounded-[3px] grid place-items-center" style={{ background: project.color || '#0E83DC' }}>
-                                <Kanban className="size-2.5 text-white" />
-                            </span>
-                            {project.name}
-                        </Link>
-                    </nav>
-                    <div className="flex items-center justify-between gap-4 mt-2">
-                        <h1 className="m-0 text-2xl font-semibold tracking-[-0.01em] text-foreground">{board.name}</h1>
-                        <div className="flex items-center gap-2">
-                            <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug])}>
-                                <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" title="Board settings">
-                                    <Settings className="size-4" />
-                                </Button>
-                            </Link>
-                            <Button
-                                size="sm"
-                                className="h-8 gap-1.5"
-                                onClick={() => {
-                                    const firstColumn = [...board.columns].sort((a, b) => a.position - b.position)[0];
-                                    if (firstColumn) setCreateInColumnId(firstColumn.id);
-                                }}
-                            >
-                                <Plus className="size-4" />Create
-                            </Button>
-                        </div>
-                    </div>
+                <BoardHeader
+                    workspace={workspace}
+                    project={project}
+                    board={board}
+                    activeTab={currentView}
+                    onSelectView={setCurrentView}
+                    onCreate={() => {
+                        const firstColumn = [...board.columns].sort((a, b) => a.position - b.position)[0];
+                        if (firstColumn) setCreateInColumnId(firstColumn.id);
+                    }}
+                />
 
-                    {/* View tabs */}
-                    <div className="flex items-center gap-4 mt-3 border-b border-border" role="tablist">
-                        {(['kanban', 'list', 'gantt', 'calendar'] as const).map(v => {
-                            const icons = { kanban: Kanban, list: List, gantt: GanttChart, calendar: Calendar };
-                            const labels = { kanban: 'Board', list: 'List', gantt: 'Timeline', calendar: 'Calendar' };
-                            const Ic = icons[v];
-                            return (
-                                <button
-                                    key={v}
-                                    role="tab"
-                                    aria-selected={currentView === v}
-                                    onClick={() => setCurrentView(v)}
-                                    className={cn(
-                                        'relative -mb-px inline-flex items-center gap-1.5 pb-2 pt-1 text-[14px] font-medium border-b-2 transition-colors',
-                                        currentView === v
-                                            ? 'border-primary text-primary'
-                                            : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
-                                    )}
-                                >
-                                    <Ic className="size-3.5" />
-                                    {labels[v]}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
+                {/* Active sprint bar (Scrum boards) */}
+                {board.type === 'scrum' && (
+                    <ActiveSprintBar
+                        workspace={workspace}
+                        project={project}
+                        board={board}
+                        activeSprint={activeSprint}
+                        plannedSprints={plannedSprints}
+                        canManage={canManageSprints}
+                        openIssueCount={board.columns.filter((c) => !c.is_done_column).reduce((sum, c) => sum + (c.items?.filter((i) => !i.parent_id).length ?? 0), 0)}
+                    />
+                )}
 
                 {/* ─── Toolbar: search · people · quick filters ─── */}
                 <div className="flex items-center gap-3 px-6 py-3 flex-wrap shrink-0">

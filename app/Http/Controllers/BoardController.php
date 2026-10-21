@@ -11,6 +11,7 @@ use App\Models\ItemLink;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Project;
+use App\Models\Sprint;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\ItemAssignedNotification;
@@ -18,6 +19,7 @@ use App\Notifications\ItemStatusChangedNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -61,12 +63,16 @@ class BoardController extends Controller
     {
         $this->authorize('view', $board);
 
+        // Scrum boards show the running sprint only (no sprint running → empty board)
+        $activeSprint = $board->isScrum() ? $board->activeSprint()->first() : null;
+
         // Cards only carry what the board renders; comments, attachments and history are
         // loaded on demand by itemDetails() when an item is opened.
         $board->load([
-            'columns' => function ($query) {
+            'columns' => function ($query) use ($board, $activeSprint) {
                 $query->orderBy('position')->with([
-                    'items' => fn ($q) => $this->withCardData($q),
+                    'items' => fn ($q) => $this->withCardData($q)
+                        ->when($board->isScrum(), fn ($sprintScope) => $sprintScope->where('sprint_id', $activeSprint?->id ?? 0)),
                 ]);
             },
         ]);
@@ -96,6 +102,11 @@ class BoardController extends Controller
             'projectUsers' => $projectUsers,
             'projectLabels' => $projectLabels,
             'projectItems' => $projectItems,
+            'activeSprint' => $activeSprint?->only(['id', 'name', 'goal', 'start_date', 'end_date']),
+            'canManageSprints' => $request->user()->can('update', $board),
+            'plannedSprints' => $board->isScrum()
+                ? $board->sprints()->where('status', Sprint::STATUS_PLANNED)->get(['id', 'name'])
+                : [],
         ]);
     }
 
@@ -129,7 +140,12 @@ class BoardController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
+            'type' => 'sometimes|in:kanban,scrum',
         ]);
+
+        if (($validated['type'] ?? $board->type) === 'kanban' && $board->activeSprint()->exists()) {
+            return back()->withErrors(['type' => 'Complete the active sprint before turning sprints off.']);
+        }
 
         $board->update($validated);
 
@@ -276,6 +292,7 @@ class BoardController extends Controller
             'start_time' => 'nullable|date_format:H:i',
             'label_ids' => 'nullable|array',
             'label_ids.*' => 'exists:labels,id',
+            'sprint_id' => ['nullable', Rule::exists('sprints', 'id')->where('board_id', $board->id)->whereIn('status', [Sprint::STATUS_PLANNED, Sprint::STATUS_ACTIVE])],
             'parent_id' => [
                 'nullable',
                 'exists:items,id',
@@ -306,6 +323,16 @@ class BoardController extends Controller
         // Get the next position in the column
         $maxPosition = Item::where('column_id', $validated['column_id'])->max('position') ?? 0;
 
+        // Sprint: subtasks follow their parent; on a Scrum board a new card joins the running
+        // sprint unless the request says where (null = backlog), like Jira
+        $sprintId = match (true) {
+            ! empty($validated['parent_id']) => Item::find($validated['parent_id'])?->sprint_id,
+            array_key_exists('sprint_id', $validated) => $validated['sprint_id'],
+            $board->isScrum() => $board->activeSprint()->value('id'),
+            default => null,
+        };
+        $backlogPosition = (Item::where('board_id', $board->id)->where('sprint_id', $sprintId)->max('backlog_position') ?? 0) + 1;
+
         $item = $board->items()->create([
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
@@ -323,6 +350,8 @@ class BoardController extends Controller
             'created_by' => $request->user()->id,
             'reporter_id' => $request->user()->id,
             'position' => $maxPosition + 1,
+            'sprint_id' => $sprintId,
+            'backlog_position' => $backlogPosition,
         ]);
 
         // Sync labels if provided

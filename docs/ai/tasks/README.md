@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Boards: Scrum — sprints, backlog, reports](./feat-board-sprints.md) | done |
 | [Boards: Jira-style design](./feat-board-jira-design.md) | done |
 | [Boards: Jira essentials (phase 1)](./feat-board-jira-essentials.md) | done |
 | [Pages: Confluence-style draft / publish workflow](./feat-page-draft-publish-workflow.md) | done |
