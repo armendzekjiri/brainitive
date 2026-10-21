@@ -14,6 +14,7 @@ import {
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
+import { ExcalidrawViewMode } from '@/components/page/ExcalidrawViewMode';
 import { PageVersionDetail, PageVersionSummary } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -24,6 +25,8 @@ interface Props {
     routeParams: [string, string, string];
     canRestore: boolean;
     isPublished: boolean;
+    /** Whiteboards keep autosave checkpoints instead of published versions */
+    isWhiteboard?: boolean;
     hasUnpublishedChanges: boolean;
 }
 
@@ -32,9 +35,10 @@ function formatDateTime(value: string): string {
 }
 
 /**
- * Confluence-style page history: every published version, a read-only preview and restore.
+ * Confluence-style page history: every published version (or whiteboard checkpoint), a
+ * read-only preview and restore.
  */
-export function PageHistoryDialog({ open, onOpenChange, routeParams, canRestore, isPublished, hasUnpublishedChanges }: Props) {
+export function PageHistoryDialog({ open, onOpenChange, routeParams, canRestore, isPublished, isWhiteboard = false, hasUnpublishedChanges }: Props) {
     const [versions, setVersions] = useState<PageVersionSummary[] | null>(null);
     const [currentVersion, setCurrentVersion] = useState(0);
     const [selected, setSelected] = useState<PageVersionDetail | null>(null);
@@ -95,7 +99,11 @@ export function PageHistoryDialog({ open, onOpenChange, routeParams, canRestore,
                             <History className="size-4" />
                             Page history
                         </DialogTitle>
-                        <DialogDescription>Every published version of this page. Restoring one publishes it again as a new version.</DialogDescription>
+                        <DialogDescription>
+                            {isWhiteboard
+                                ? 'Checkpoints of this whiteboard — saved on “Save & exit”, on “Save”, and at least every 30 minutes while editing. Restoring one saves it as a new checkpoint.'
+                                : 'Every published version of this page. Restoring one publishes it again as a new version.'}
+                        </DialogDescription>
                     </DialogHeader>
 
                     <div className="flex flex-1 min-h-0">
@@ -107,7 +115,11 @@ export function PageHistoryDialog({ open, onOpenChange, routeParams, canRestore,
                                 </div>
                             )}
                             {versions?.length === 0 && (
-                                <p className="p-3 text-sm text-muted-foreground">No versions yet. A version is saved each time the page is published.</p>
+                                <p className="p-3 text-sm text-muted-foreground">
+                                    {isWhiteboard
+                                        ? 'No checkpoints yet. One is saved the next time the whiteboard is edited.'
+                                        : 'No versions yet. A version is saved each time the page is published.'}
+                                </p>
                             )}
                             {versions?.map((version) => (
                                 <button
@@ -156,17 +168,28 @@ export function PageHistoryDialog({ open, onOpenChange, routeParams, canRestore,
                                             )}
                                             {selected.name}
                                         </h2>
-                                        <RichLexicalEditor
-                                            key={selected.version}
-                                            content={html}
-                                            onChange={() => {}}
-                                            editable={false}
-                                            showToolbar={false}
-                                            minHeight="200px"
-                                            contentKey={`version-${selected.version}`}
-                                            className="border-0 rounded-none shadow-none bg-transparent overflow-visible"
-                                            documentMode
-                                        />
+                                        {isWhiteboard ? (
+                                            <div className="rounded-lg border overflow-hidden bg-white">
+                                                <ExcalidrawViewMode
+                                                    key={selected.version}
+                                                    id={`excalidraw-version-${routeParams[2]}-${selected.version}`}
+                                                    content={selected.content}
+                                                    height="calc(80vh - 220px)"
+                                                />
+                                            </div>
+                                        ) : (
+                                            <RichLexicalEditor
+                                                key={selected.version}
+                                                content={html}
+                                                onChange={() => {}}
+                                                editable={false}
+                                                showToolbar={false}
+                                                minHeight="200px"
+                                                contentKey={`version-${selected.version}`}
+                                                className="border-0 rounded-none shadow-none bg-transparent overflow-visible"
+                                                documentMode
+                                            />
+                                        )}
                                     </div>
                                 </>
                             ) : (
@@ -184,7 +207,9 @@ export function PageHistoryDialog({ open, onOpenChange, routeParams, canRestore,
                     <AlertDialogHeader>
                         <AlertDialogTitle>Restore version {selected?.version}?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            {isPublished
+                            {isWhiteboard
+                                ? `The whiteboard is replaced with version ${selected?.version} and saved as version ${currentVersion + 1}. The history is kept.`
+                                : isPublished
                                 ? `This publishes version ${selected?.version} again as version ${currentVersion + 1}. The history is kept.`
                                 : `The draft is replaced with the content of version ${selected?.version}.`}
                             {hasUnpublishedChanges && (

@@ -75,11 +75,11 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 ### Pages — wiki / docs / whiteboard
 - **Models:** `Page` (self-referential tree, `uuid`-bound; workflow methods `saveDraft` / `publish` / `publishChanges` / `discardDraft` / `unpublish` / `restoreVersion`; `visibleTo($user)` scope), `PageVersion` (immutable snapshot per publish), `PageStickyNote` (per-user, per-URL)
 - **Policy:** `PagePolicy` — view (unpublished = author + admins; folders always), create/update (workspace admin, project admin/editor), delete (admins or author)
-- **Controllers:** `PageController` (CRUD, tree, reorder, draft autosave / discard, publish / publish-changes, unpublish, archive, duplicate, presence heartbeat, excalidraw save), `PageVersionController` (history list / show / restore), `PageStickyNoteController`
+- **Controllers:** `PageController` (CRUD, tree, reorder, draft autosave / discard, publish / publish-changes, unpublish, archive, duplicate, presence heartbeat, excalidraw save + conflict guard), `PageVersionController` (history list / show / restore), `WhiteboardController` (issue search / refresh for issue cards, stickies → issues), `PageStickyNoteController`
 - **Routes:** `pages/...` under `projects/{project}` (`pages.draft.save|discard`, `pages.publish-changes`, `pages.presence`, `pages.versions.*`); sticky notes under `/api/page-sticky-notes`
 - **Workflow:** Confluence-style draft → publish → versions; see [`CONVENTIONS.md`](./CONVENTIONS.md#page-workflow-draft--publish--versions)
 - **Pages (UI):** `Pages/Pages/`
-- **Editors:** Editor.js / Tiptap / Lexical / Excalidraw — all in `resources/js/components/editor/`; content stored as JSON in `content`. Whiteboard pages use `excalidraw-editor.blade.php` + the `excalidraw-build/` bundle. See [`CONVENTIONS.md`](./CONVENTIONS.md#rich-text-editors--excalidraw).
+- **Editors:** Editor.js / Tiptap / Lexical / Excalidraw — all in `resources/js/components/editor/`; content stored as JSON in `content`. Whiteboard pages use `excalidraw-editor.blade.php` (autosave, conflict banner, template picker, issues modal) + the `excalidraw-build/` bundle (`src/main.jsx` API, `src/templates.js`, `src/issueCards.js`); read-only canvas = `components/page/ExcalidrawViewMode.tsx`. See [`CONVENTIONS.md`](./CONVENTIONS.md#rich-text-editors--excalidraw).
 
 ### Task Lists
 - **Models:** `TaskList` (`slug`-bound), `TaskListItem`

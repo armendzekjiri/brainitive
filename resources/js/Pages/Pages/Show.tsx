@@ -76,6 +76,7 @@ import TurndownService from 'turndown';
 import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallback, useMemo, Suspense, lazy } from 'react';
 import { usePagePresence } from '@/hooks/usePagePresence';
 import { PageHistoryDialog } from '@/components/page/PageHistoryDialog';
+import { ExcalidrawViewMode } from '@/components/page/ExcalidrawViewMode';
 import { Textarea } from '@/components/ui/textarea';
 
 // Lazy-load emoji-mart to prevent customElements.define() firing at module load time
@@ -120,61 +121,6 @@ function isExcalidrawPage(content: unknown): boolean {
     if (!content || typeof content !== 'object') return false;
     const c = content as Record<string, unknown>;
     return c.type === 'excalidraw' || (Array.isArray(c.elements) && c.appState !== undefined);
-}
-
-// Embedded read-only Excalidraw canvas (view mode = can pan/zoom, cannot edit)
-function ExcalidrawViewMode({ pageUuid, content }: { pageUuid: string; content: unknown }) {
-    const containerId = `excalidraw-preview-${pageUuid}`;
-    const containerRef = useRef<HTMLDivElement>(null);
-    const initializedRef = useRef(false);
-
-    useEffect(() => {
-        if (initializedRef.current) return;
-        const c = (content ?? {}) as Record<string, unknown>;
-        const elements = (c.elements ?? []) as object[];
-        const appState = (c.appState ?? {}) as Record<string, unknown>;
-        const files = (c.files ?? {}) as Record<string, unknown>;
-
-        const init = () => {
-            const w = window as unknown as { BrainitiveExcalidraw?: { init: (id: string, opts: object) => void } };
-            if (!w.BrainitiveExcalidraw) return;
-            initializedRef.current = true;
-            w.BrainitiveExcalidraw.init(containerId, {
-                viewModeEnabled: true,
-                zenModeEnabled: true,
-                initialData: { elements, appState: { ...appState, viewModeEnabled: true }, files },
-            });
-        };
-
-        const w = window as unknown as { BrainitiveExcalidraw?: { init: (id: string, opts: object) => void } };
-        if (w.BrainitiveExcalidraw) {
-            init();
-        } else {
-            if (!document.getElementById('excalidraw-preview-css')) {
-                const link = document.createElement('link');
-                link.id = 'excalidraw-preview-css';
-                link.rel = 'stylesheet';
-                link.href = '/js/excalidraw-dist/excalidraw-bundle.css';
-                document.head.appendChild(link);
-            }
-            if (!document.getElementById('excalidraw-preview-js')) {
-                const script = document.createElement('script');
-                script.id = 'excalidraw-preview-js';
-                script.src = '/js/excalidraw-dist/excalidraw-bundle.iife.js';
-                script.onload = init;
-                document.head.appendChild(script);
-            } else {
-                // Script tag exists but may still be loading — poll briefly
-                const poll = setInterval(() => {
-                    if (w.BrainitiveExcalidraw) { clearInterval(poll); init(); }
-                }, 100);
-                setTimeout(() => clearInterval(poll), 10000);
-            }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [containerId]);
-
-    return <div id={containerId} ref={containerRef} style={{ width: '100%', height: 500 }} />;
 }
 
 // Page Icon Picker — full emoji-mart + custom image upload
@@ -708,7 +654,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
         if (!isExcalidrawPage(page.content)) return;
         const params = new URLSearchParams(window.location.search);
         if (params.get('new') === '1') {
-            window.location.href = route('pages.excalidraw', [workspace.slug, project.slug, page.uuid]);
+            window.location.href = route('pages.excalidraw', [workspace.slug, project.slug, page.uuid]) + '?new=1';
         }
     }, [page.uuid]);
 
@@ -729,7 +675,8 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
     const [addSubpageOpen, setAddSubpageOpen] = useState(false);
     const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
     const [changeNoteDialogOpen, setChangeNoteDialogOpen] = useState(false);
-    const [historyOpen, setHistoryOpen] = useState(false);
+    // ?history=1 comes from the whiteboard editor's History button
+    const [historyOpen, setHistoryOpen] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('history') === '1');
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [isPublishing, setIsPublishing] = useState(false);
@@ -1486,7 +1433,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                             {page.type === 'page' && isExcalidrawPage(page.content) && (
                                 <div className="mb-8">
                                     <div className="rounded-lg border border-border overflow-hidden bg-white dark:bg-card">
-                                        <ExcalidrawViewMode pageUuid={page.uuid} content={page.content} />
+                                        <ExcalidrawViewMode key={page.edit_revision} id={`excalidraw-preview-${page.uuid}-${page.edit_revision}`} content={page.content} />
                                         <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between gap-3">
                                             <span className="text-sm text-muted-foreground">View mode · pan and zoom freely</span>
                                             {can.update && <a
@@ -1728,6 +1675,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                     routeParams={routeParams}
                     canRestore={can.update}
                     isPublished={isPublished}
+                    isWhiteboard={isExcalidrawPage(page.content)}
                     hasUnpublishedChanges={hasDraft}
                 />
             )}

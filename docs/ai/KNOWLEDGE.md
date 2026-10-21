@@ -103,8 +103,13 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `draft_*` is the shared unpublished draft. `updated_at` moves on every autosave, so for
   "last changed" on a published page use the newest `page_versions.created_at`
   (`last_published_at` prop), not `updated_at`.
-- **Whiteboard (Excalidraw) pages bypass the draft.** `saveExcalidraw` still writes the live
-  `content` directly; only document pages have draft/publish separation so far.
+- **Whiteboard (Excalidraw) pages bypass the draft.** `saveExcalidraw` writes the live
+  `content` directly (via `Page::saveWhiteboard`), guarded by `edit_revision`; only document
+  pages have draft/publish separation. Whiteboard versions store the full scene incl.
+  embedded image `files` (data URLs) — big boards make big `page_versions` rows.
+- **Issue cards keep their element id when redrawn.** `replaceWithCards` in
+  `excalidraw-build/src/main.jsx` swaps the card with `regenerateIds: false` and copies the
+  arrow bindings, so connectors stay attached. A new card id would orphan the arrows.
 - **Tests that send real notifications fail without GMP/BCMath** — `minishlink/web-push`
   raises an `ErrorException` warning. Use `Notification::fake()` in feature tests.
 - **Repo-wide `pint --test` is red on untouched legacy files** (old migrations,

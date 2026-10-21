@@ -376,9 +376,36 @@ class Page extends Model
             'edit_revision' => $this->edit_revision + 1,
         ] + $this->clearedDraftAttributes())->save();
 
-        return $this->isPublished()
+        // Whiteboards have no draft step — their content is always live, so keep history too
+        return $this->isPublished() || $this->is_whiteboard
             ? $this->recordVersion($user, "Restored from version {$version->version}")
             : null;
+    }
+
+    /** A whiteboard gets a new history entry at most this often while autosaving. */
+    public const WHITEBOARD_VERSION_INTERVAL_MINUTES = 30;
+
+    /**
+     * Save a whiteboard scene (whiteboards are edited live, Miro-style) and keep the history
+     * useful without a version per keystroke: a checkpoint is recorded on an explicit save,
+     * when the newest version is older than the interval, or when someone else saved last.
+     *
+     * @param  array<string, mixed>  $content
+     */
+    public function saveWhiteboard(User $user, array $content, bool $checkpoint = false): ?PageVersion
+    {
+        $this->update([
+            'content' => $content,
+            'last_edited_by' => $user->id,
+            'edit_revision' => $this->edit_revision + 1,
+        ]);
+
+        $latest = $this->versions()->first(['id', 'created_by', 'created_at']);
+        $isStale = $latest === null
+            || $latest->created_at->lt(now()->subMinutes(self::WHITEBOARD_VERSION_INTERVAL_MINUTES))
+            || $latest->created_by !== $user->id;
+
+        return $checkpoint || $isStale ? $this->recordVersion($user) : null;
     }
 
     /**
