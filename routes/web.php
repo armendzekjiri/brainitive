@@ -15,6 +15,7 @@ use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SnippetController;
 use App\Http\Controllers\SprintController;
+use App\Http\Controllers\WhiteboardController;
 use App\Http\Controllers\WorkspaceController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -301,6 +302,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('pages/{page}/excalidraw', [PageController::class, 'excalidrawEditor'])->name('pages.excalidraw');
             Route::post('pages/{page}/excalidraw/save', [PageController::class, 'saveExcalidraw'])->name('pages.excalidraw.save');
             Route::post('pages/{page}/excalidraw-embed/save', [PageController::class, 'saveExcalidrawEmbed'])->name('pages.excalidraw.embed.save');
+            Route::get('pages/{page}/whiteboard/issues', [WhiteboardController::class, 'issues'])->name('pages.whiteboard.issues');
+            Route::post('pages/{page}/whiteboard/issues', [WhiteboardController::class, 'storeIssues'])->name('pages.whiteboard.issues.store');
             Route::put('pages/{page}', [PageController::class, 'update'])->name('pages.update');
             Route::put('pages/{page}/draft', [PageController::class, 'saveDraft'])->name('pages.draft.save');
             Route::delete('pages/{page}/draft', [PageController::class, 'discardDraft'])->name('pages.draft.discard');

@@ -223,6 +223,17 @@ column (cast `array`):
 4. **Excalidraw** — whiteboard pages (`is_whiteboard` appended attr), JSON in page `content`,
    standalone build in `excalidraw-build/`, `excalidraw-editor.blade.php`.
 
+**Whiteboards are edited live** (Miro-style, no draft): the editor autosaves 2.5 s after the
+last change with `base_revision`; a stale revision gets 409 → "Load latest / Overwrite"
+banner (`force`). History = checkpoints via `Page::saveWhiteboard()`: on Save / Save & exit,
+when the newest version is older than `WHITEBOARD_VERSION_INTERVAL_MINUTES`, or when another
+user saved last. Templates are element skeletons in `excalidraw-build/src/templates.js`
+(add one = add an entry to `TEMPLATES`). Issue cards are rectangles with
+`customData.brainitive = 'issue'` + `itemId`, linked to the item; they refresh from
+`pages.whiteboard.issues?ids[]=…` when the editor opens (not realtime). After changing
+anything in `excalidraw-build/src`, run `cd excalidraw-build && npm run build` and commit
+`public/js/excalidraw-dist/`.
+
 When reading page content, check which editor produced it before parsing. MCP writes go
 through `app/Support/Mcp/PageContentConverter`.
 

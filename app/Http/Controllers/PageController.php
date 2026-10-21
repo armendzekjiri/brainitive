@@ -166,6 +166,20 @@ class PageController extends Controller
             'isEmbed' => $isEmbed,
             'diagramId' => $diagramId,
             'blockId' => $blockId,
+            // Conflict guard + autosave for standalone whiteboards (embeds keep the old flow)
+            'editRevision' => $page->edit_revision,
+            'autosave' => ! $isEmbed,
+            'historyUrl' => route('pages.show', [$workspace->slug, $project->slug, $page->uuid]).'?history=1',
+            // A brand-new, empty whiteboard opens the template picker
+            'isNew' => ! $isEmbed && $request->boolean('new') && empty($initialData['elements']),
+            // Issue cards + stickies → issues
+            'issuesUrl' => route('pages.whiteboard.issues', [$workspace->slug, $project->slug, $page->uuid]),
+            'createIssuesUrl' => route('pages.whiteboard.issues.store', [$workspace->slug, $project->slug, $page->uuid]),
+            'boards' => $isEmbed ? [] : $project->boards()->get(['id', 'name', 'project_id'])
+                ->each(fn ($board) => $board->setRelation('project', $project))
+                ->filter(fn ($board) => $request->user()->can('createItems', $board))
+                ->map(fn ($board) => ['id' => $board->id, 'name' => $board->name])
+                ->values(),
         ];
 
         return view('excalidraw-editor', [
@@ -188,7 +202,15 @@ class PageController extends Controller
         $validated = $request->validate([
             'diagram_data' => 'required',
             'image' => 'nullable|image|mimes:png|max:10240',
+            'base_revision' => 'nullable|integer|min:0',
+            'force' => 'boolean',
+            'checkpoint' => 'boolean',
         ]);
+
+        // Someone else saved since this editor loaded → don't overwrite silently
+        if ($conflict = $this->draftConflict($page, $validated)) {
+            return response()->json(['success' => false] + $conflict->getData(true), 409);
+        }
 
         $diagramData = is_string($validated['diagram_data'])
             ? $validated['diagram_data']
@@ -216,12 +238,15 @@ class PageController extends Controller
             $content['previewImageUrl'] = $page->content['previewImageUrl'];
         }
 
-        $page->update([
-            'content' => $content,
-            'last_edited_by' => Auth::id(),
-        ]);
+        // "Save & exit" (sends a preview image) is an explicit checkpoint in the history
+        $version = $page->saveWhiteboard($request->user(), $content, $request->boolean('checkpoint') || $request->hasFile('image'));
 
-        return response()->json(['success' => true, 'previewImageUrl' => $content['previewImageUrl'] ?? null]);
+        return response()->json([
+            'success' => true,
+            'previewImageUrl' => $content['previewImageUrl'] ?? null,
+            'edit_revision' => $page->edit_revision,
+            'version' => $version?->version,
+        ]);
     }
 
     /**
@@ -768,7 +793,7 @@ class PageController extends Controller
             return null;
         }
 
-        $editor = $page->isPublished() ? $page->draftEditor : $page->lastEditor;
+        $editor = $page->isPublished() && ! $page->is_whiteboard ? $page->draftEditor : $page->lastEditor;
 
         return response()->json([
             'message' => 'This page was changed by someone else while you were editing.',
@@ -785,7 +810,7 @@ class PageController extends Controller
      */
     private function draftState(Page $page): array
     {
-        $editor = $page->isPublished() ? $page->draftEditor : $page->lastEditor;
+        $editor = $page->isPublished() && ! $page->is_whiteboard ? $page->draftEditor : $page->lastEditor;
 
         return [
             'edit_revision' => $page->edit_revision,
