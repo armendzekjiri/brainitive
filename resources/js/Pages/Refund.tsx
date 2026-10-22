@@ -8,7 +8,7 @@ const sections = [
         icon: RotateCcw,
         num: '1',
         title: '7-day money-back guarantee',
-        content: 'We offer a full 7-day money-back guarantee on all paid Brainitive Cloud plans (Team and Business). If you are not satisfied with your purchase for any reason, contact us within 7 days of your initial payment and we will issue a full refund — no questions asked. This applies to first-time purchases only.',
+        content: 'Brainitive Cloud is currently free during early access and we do not take any payments, so there is nothing to refund yet. This policy will apply once paid plans are introduced. We offer a full 7-day money-back guarantee on all paid Brainitive Cloud plans (Team and Business). If you are not satisfied with your purchase for any reason, contact us within 7 days of your initial payment and we will issue a full refund — no questions asked. This applies to first-time purchases only.',
         highlight: true,
     },
     {
