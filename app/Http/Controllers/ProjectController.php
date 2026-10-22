@@ -8,8 +8,10 @@ use App\Models\Label;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Projects\ProjectTransfer;
 use App\Support\Uploads;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -143,6 +145,49 @@ class ProjectController extends Controller
     }
 
     /**
+     * What moving the project to another workspace will do (who keeps access, etc.).
+     */
+    public function movePreview(Request $request, Workspace $workspace, Project $project): JsonResponse
+    {
+        $target = $this->moveTarget($request, $workspace, $project);
+
+        return response()->json(ProjectTransfer::preview($project, $target));
+    }
+
+    /**
+     * Move the project with all its content to another workspace the user also administers.
+     */
+    public function move(Request $request, Workspace $workspace, Project $project): RedirectResponse
+    {
+        $target = $this->moveTarget($request, $workspace, $project);
+        $request->validate(['confirm_name' => ['required', 'string', function ($attribute, $value, $fail) use ($project) {
+            if (trim($value) !== $project->name) {
+                $fail('Type the project name exactly to confirm.');
+            }
+        }]]);
+
+        try {
+            $moved = ProjectTransfer::move($project, $target);
+        } catch (\DomainException $e) {
+            return back()->withErrors(['target_workspace_id' => $e->getMessage()]);
+        }
+
+        return redirect()->route('projects.show', [$moved->workspace->slug, $moved->slug])
+            ->with('success', "Moved to {$moved->workspace->name}.");
+    }
+
+    private function moveTarget(Request $request, Workspace $workspace, Project $project): Workspace
+    {
+        abort_unless(ProjectTransfer::canManage($request->user(), $workspace), 403, 'Only admins of this workspace can move its projects.');
+
+        $validated = $request->validate(['target_workspace_id' => 'required|integer']);
+        $target = Workspace::find($validated['target_workspace_id']);
+        abort_unless($target && $target->id !== $workspace->id && ProjectTransfer::canManage($request->user(), $target), 403, 'You need to be an admin of the workspace you move the project to.');
+
+        return $target;
+    }
+
+    /**
      * Show the form for editing the specified project.
      */
     public function edit(Request $request, Workspace $workspace, Project $project): Response
@@ -152,6 +197,9 @@ class ProjectController extends Controller
         $project->load(['labels', 'users' => fn ($q) => $q->select('users.id', 'name', 'email', 'avatar')->withPivot('role')]);
 
         $workspaceUsers = $workspace->users()->get(['users.id', 'name', 'email', 'avatar']);
+        $moveTargets = ProjectTransfer::canManage($request->user(), $workspace)
+            ? ProjectTransfer::targets($request->user(), $project)->map->only(['id', 'name', 'slug'])->values()
+            : [];
         $disabledTypes = $project->disabledItemTypeIds();
         $projectItemTypes = ItemType::forProjectSettings($project)->orderBy('id')->get(['id', 'project_id', 'name', 'slug', 'icon', 'color', 'description', 'is_default', 'is_active'])
             // Default types: "active" means active for this project.
@@ -163,6 +211,7 @@ class ProjectController extends Controller
             'workspaceUsers' => $workspaceUsers,
             'canManageMembers' => $request->user()->can('manageMembers', $project),
             'projectItemTypes' => $projectItemTypes,
+            'moveTargets' => $moveTargets,
         ]);
     }
 
