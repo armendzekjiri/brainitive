@@ -26,4 +26,6 @@ jobs:
           path-to-signatures: signatures/version1/cla.json
           path-to-document: https://github.com/${{ github.repository }}/blob/main/CLA.md
           branch: cla-signatures
-          allowlist: armendzekjiri,dependabot[bot],github-actions[bot]
+          # Maintainer accounts (armendzz = the account behind armendzekjiri@gmail.com commits),
+          # the Claude co-author trailer, and bots don't sign.
+          allowlist: armendzekjiri,armendzz,claude,*[bot]
