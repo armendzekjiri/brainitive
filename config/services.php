@@ -47,4 +47,11 @@ return [
         'redirect' => env('GITHUB_REDIRECT_URI', env('APP_URL').'/login/github/callback'),
     ],
 
+    // Workspace AI endpoints on localhost / private networks (e.g. Ollama next to a
+    // self-hosted instance). Off by default: a workspace admin could otherwise make the
+    // server call internal services.
+    'ai' => [
+        'allow_private_endpoints' => env('AI_ALLOW_PRIVATE_ENDPOINTS', false),
+    ],
+
 ];

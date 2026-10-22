@@ -230,6 +230,17 @@ class Project extends Model
     }
 
     /**
+     * Default (instance-wide) item types this project switched off. Stored per project:
+     * the default types are shared by every workspace, so a project never changes them.
+     *
+     * @return list<int>
+     */
+    public function disabledItemTypeIds(): array
+    {
+        return array_values(array_map('intval', $this->settings['disabled_item_types'] ?? []));
+    }
+
+    /**
      * Get the next item key for this project.
      */
     public function getNextItemKey(): string

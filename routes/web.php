@@ -258,7 +258,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('boards/{board:slug}/items/{item}/watch', [BoardController::class, 'toggleWatch'])->name('boards.items.watch');
             Route::patch('boards/{board:slug}/items/{item}/labels', [BoardController::class, 'updateItemLabels'])->name('boards.items.labels');
             Route::post('boards/{board:slug}/items/{item}/links', [BoardController::class, 'storeItemLink'])->name('boards.items.links.store');
-            Route::delete('boards/{board:slug}/items/{item}/links/{link}', [BoardController::class, 'destroyItemLink'])->name('boards.items.links.destroy');
+            // No Item::links() relation (links are outgoing or incoming); the controller checks the link belongs to the item.
+            Route::delete('boards/{board:slug}/items/{item}/links/{link}', [BoardController::class, 'destroyItemLink'])->name('boards.items.links.destroy')->withoutScopedBindings();
             Route::patch('boards/{board:slug}/items/{item}/move-to-board', [BoardController::class, 'moveItemToBoard'])->name('boards.items.move-to-board');
             Route::delete('boards/{board:slug}/items/{item}', [BoardController::class, 'destroyItem'])->name('boards.items.destroy');
             Route::post('boards/{board:slug}/items/{item}/comments', [BoardController::class, 'storeComment'])->name('boards.items.comments.store');

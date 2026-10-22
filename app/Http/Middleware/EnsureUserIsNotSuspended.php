@@ -16,11 +16,16 @@ class EnsureUserIsNotSuspended
     public function handle(Request $request, Closure $next): Response
     {
         if ($request->user()?->isSuspended()) {
+            $message = 'Your account has been suspended. Contact your administrator.';
+
+            // Token requests (MCP, CLI, browser extension) have no session to end.
+            if (! $request->hasSession()) {
+                return response()->json(['message' => $message], 403);
+            }
+
             Auth::guard('web')->logout();
             $request->session()->invalidate();
             $request->session()->regenerateToken();
-
-            $message = 'Your account has been suspended. Contact your administrator.';
 
             return $request->expectsJson() && ! $request->header('X-Inertia')
                 ? response()->json(['message' => $message], 403)

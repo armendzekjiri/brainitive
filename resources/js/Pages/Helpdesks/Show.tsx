@@ -90,6 +90,7 @@ import {
 import { useState, useRef, useEffect, DragEvent, FormEvent, useCallback, useMemo } from 'react';
 import { Link } from '@inertiajs/react';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
+import { safeHtmlProp } from '@/lib/sanitize';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -876,7 +877,7 @@ function TicketEditModal({
                                             'rounded-lg border bg-muted/30 p-4 text-sm',
                                             'prose prose-sm max-w-none dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-ol:my-2 [&_a]:text-primary'
                                         )}
-                                        dangerouslySetInnerHTML={{ __html: description }}
+                                        dangerouslySetInnerHTML={safeHtmlProp(description)}
                                     />
                                 ) : (
                                     <p className="text-sm text-muted-foreground italic">No message from customer.</p>
@@ -912,7 +913,7 @@ function TicketEditModal({
                                                 <dt className="text-sm font-medium text-muted-foreground shrink-0 sm:w-32">{field.label}</dt>
                                                 <dd className={cn('text-sm text-foreground break-words', isRichText && 'prose prose-sm max-w-none [&_a]:text-primary')}>
                                                     {isRichText && displayValue !== '—' ? (
-                                                        <span dangerouslySetInnerHTML={{ __html: displayValue }} />
+                                                        <span dangerouslySetInnerHTML={safeHtmlProp(displayValue)} />
                                                     ) : (
                                                         displayValue
                                                     )}
@@ -1063,7 +1064,7 @@ function TicketEditModal({
                                                     </div>
                                                     <div
                                                         className="text-sm mt-1 prose prose-sm max-w-none"
-                                                        dangerouslySetInnerHTML={{ __html: reply.body }}
+                                                        dangerouslySetInnerHTML={safeHtmlProp(reply.body)}
                                                     />
                                                 </div>
                                             </div>

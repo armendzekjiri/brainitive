@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\SafeHtml;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,6 +20,18 @@ class TicketReply extends Model
         'body',
         'is_internal_note',
     ];
+
+    /**
+     * Rich text that can come from the public helpdesk: sanitized when written and when
+     * read (rows saved before sanitizing existed).
+     */
+    protected function body(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => SafeHtml::clean($value),
+            set: fn (?string $value) => SafeHtml::clean($value),
+        );
+    }
 
     protected function casts(): array
     {
@@ -82,6 +96,7 @@ class TicketReply extends Model
         if ($this->isFromAgent()) {
             return $this->user?->name ?? 'Agent';
         }
+
         return $this->contact?->name ?? $this->contact?->email ?? 'Customer';
     }
 
@@ -93,6 +108,7 @@ class TicketReply extends Model
         if ($this->isFromAgent()) {
             return $this->user?->email;
         }
+
         return $this->contact?->email;
     }
 }

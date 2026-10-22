@@ -3,9 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Workspace;
+use App\Support\OutboundUrl;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Http;
 
 class AiController extends Controller
 {
@@ -18,14 +19,14 @@ class AiController extends Controller
 
         $validated = $request->validate([
             'ai_endpoint' => 'nullable|url|max:500',
-            'ai_api_key'  => 'nullable|string|max:500',
-            'ai_model'    => 'nullable|string|max:255',
+            'ai_api_key' => 'nullable|string|max:500',
+            'ai_model' => 'nullable|string|max:255',
         ]);
 
         $settings = $workspace->settings ?? [];
 
         $settings['ai_endpoint'] = $validated['ai_endpoint'] ?? null;
-        $settings['ai_model']    = $validated['ai_model'] ?? null;
+        $settings['ai_model'] = $validated['ai_model'] ?? null;
 
         // Encrypt the API key before storing
         if (! empty($validated['ai_api_key'])) {
@@ -53,8 +54,8 @@ class AiController extends Controller
 
         return response()->json([
             'ai_endpoint' => $settings['ai_endpoint'] ?? null,
-            'ai_api_key'  => ! empty($settings['ai_api_key']) ? '••••••••' : null,
-            'ai_model'    => $settings['ai_model'] ?? null,
+            'ai_api_key' => ! empty($settings['ai_api_key']) ? '••••••••' : null,
+            'ai_model' => $settings['ai_model'] ?? null,
             'ai_configured' => ! empty($settings['ai_endpoint']) && ! empty($settings['ai_api_key']),
         ]);
     }
@@ -70,7 +71,7 @@ class AiController extends Controller
         $settings = $workspace->settings ?? [];
 
         $endpoint = $settings['ai_endpoint'] ?? null;
-        $apiKey   = ! empty($settings['ai_api_key'])
+        $apiKey = ! empty($settings['ai_api_key'])
             ? Crypt::decryptString($settings['ai_api_key'])
             : null;
 
@@ -92,24 +93,30 @@ class AiController extends Controller
         try {
             // Normalise endpoint: strip trailing slash, append /v1/models if needed
             $baseUrl = rtrim($endpoint, '/');
-            $modelsUrl = $baseUrl . '/v1/models';
+            $modelsUrl = $baseUrl.'/v1/models';
 
             // Some providers already include /v1 in the endpoint
             if (str_ends_with($baseUrl, '/v1')) {
-                $modelsUrl = $baseUrl . '/models';
+                $modelsUrl = $baseUrl.'/models';
+            }
+
+            $options = OutboundUrl::options($modelsUrl, OutboundUrl::allowPrivateAiEndpoints());
+            if ($options === null) {
+                return response()->json(['success' => false, 'message' => 'This AI endpoint isn’t allowed. Use a public http(s) address; for a server on your own network the instance admin can set AI_ALLOW_PRIVATE_ENDPOINTS=true.'], 422);
             }
 
             $response = Http::timeout(15)
+                ->withOptions($options)
                 ->withHeaders([
-                    'Authorization' => 'Bearer ' . $apiKey,
-                    'Content-Type'  => 'application/json',
+                    'Authorization' => 'Bearer '.$apiKey,
+                    'Content-Type' => 'application/json',
                 ])
                 ->get($modelsUrl);
 
             if (! $response->successful()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to fetch models: ' . $response->status() . ' ' . $response->reason(),
+                    'message' => 'Failed to fetch models: '.$response->status().' '.$response->reason(),
                 ], 422);
             }
 
@@ -124,12 +131,12 @@ class AiController extends Controller
 
             return response()->json([
                 'success' => true,
-                'models'  => $models,
+                'models' => $models,
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Could not connect to AI endpoint: ' . $e->getMessage(),
+                'message' => 'Could not connect to AI endpoint: '.$e->getMessage(),
             ], 422);
         }
     }
@@ -143,20 +150,20 @@ class AiController extends Controller
         $this->authorize('view', $workspace);
 
         $validated = $request->validate([
-            'content'         => 'required|string|max:50000',
-            'instruction'    => 'nullable|string|max:2000',
-            'title'          => 'nullable|string|max:500',
-            'is_selection'   => 'nullable|boolean',
+            'content' => 'required|string|max:50000',
+            'instruction' => 'nullable|string|max:2000',
+            'title' => 'nullable|string|max:500',
+            'is_selection' => 'nullable|boolean',
             'generate_prompt' => 'nullable|boolean',
         ]);
 
         $settings = $workspace->settings ?? [];
 
         $endpoint = $settings['ai_endpoint'] ?? null;
-        $apiKey   = ! empty($settings['ai_api_key'])
+        $apiKey = ! empty($settings['ai_api_key'])
             ? Crypt::decryptString($settings['ai_api_key'])
             : null;
-        $model    = $settings['ai_model'] ?? null;
+        $model = $settings['ai_model'] ?? null;
 
         if (! $endpoint || ! $apiKey || ! $model) {
             return response()->json([
@@ -168,7 +175,7 @@ class AiController extends Controller
         $generatePrompt = $validated['generate_prompt'] ?? false;
 
         if ($generatePrompt) {
-            $systemPrompt = <<<PROMPT
+            $systemPrompt = <<<'PROMPT'
             You are a prompt generator embedded in a Jira-like app.
             
             Your job: transform the user's card text into ONE excellent, copy-paste prompt for a separate AI assistant.
@@ -197,15 +204,15 @@ class AiController extends Controller
                 ?? 'Rewrite the following content to be clearer, more professional, and better structured.';
 
             $systemPrompt = 'You are a professional writing assistant integrated into a project management tool. '
-                . 'Your task is to improve the quality of text content based on the user\'s instruction. '
-                . 'Use rich formatting to make the content more readable and engaging: '
-                . '- Use relevant emojis where appropriate (e.g. ✅, 📌, 🔧, 🚀, 💡, ⚠️, 📝, 🎯) '
-                . '- Use bullet points (<ul><li>) and numbered lists (<ol><li>) to organize information '
-                . '- Use <strong> for emphasis on key terms and <em> for secondary emphasis '
-                . '- Use headings (<h3>, <h4>) when structuring longer content '
-                . '- Use <p> tags to separate paragraphs properly '
-                . 'Always return valid HTML. Do NOT wrap the output in markdown code fences. '
-                . 'Do NOT add any preamble, explanation, or commentary — return ONLY the improved content as HTML.';
+                .'Your task is to improve the quality of text content based on the user\'s instruction. '
+                .'Use rich formatting to make the content more readable and engaging: '
+                .'- Use relevant emojis where appropriate (e.g. ✅, 📌, 🔧, 🚀, 💡, ⚠️, 📝, 🎯) '
+                .'- Use bullet points (<ul><li>) and numbered lists (<ol><li>) to organize information '
+                .'- Use <strong> for emphasis on key terms and <em> for secondary emphasis '
+                .'- Use headings (<h3>, <h4>) when structuring longer content '
+                .'- Use <p> tags to separate paragraphs properly '
+                .'Always return valid HTML. Do NOT wrap the output in markdown code fences. '
+                .'Do NOT add any preamble, explanation, or commentary — return ONLY the improved content as HTML.';
 
             // Prevent translation unless explicitly requested
             if (stripos($instruction, 'translate') === false) {
@@ -214,18 +221,18 @@ class AiController extends Controller
 
             if ($isSelection) {
                 $systemPrompt .= ' The user has selected a specific piece of text from a larger document. '
-                    . 'Improve only that selected portion. Keep the result concise and contextually appropriate.';
+                    .'Improve only that selected portion. Keep the result concise and contextually appropriate.';
             }
 
             // Build the user message with context
-            $userMessage = $instruction . "\n\n";
+            $userMessage = $instruction."\n\n";
 
             if ($title) {
                 $userMessage .= "Context — this is the description for a task/item titled: \"{$title}\"\n\n";
             }
 
             if ($isSelection) {
-                $userMessage .= "Selected text:\n" . $validated['content'];
+                $userMessage .= "Selected text:\n".$validated['content'];
             } else {
                 $userMessage .= $validated['content'];
             }
@@ -233,14 +240,14 @@ class AiController extends Controller
 
         try {
             $baseUrl = rtrim($endpoint, '/');
-            $chatUrl = $baseUrl . '/v1/chat/completions';
+            $chatUrl = $baseUrl.'/v1/chat/completions';
 
             if (str_ends_with($baseUrl, '/v1')) {
-                $chatUrl = $baseUrl . '/chat/completions';
+                $chatUrl = $baseUrl.'/chat/completions';
             }
 
             $payload = [
-                'model'    => $model,
+                'model' => $model,
                 'messages' => [
                     ['role' => 'system', 'content' => $systemPrompt],
                     ['role' => 'user',   'content' => $userMessage],
@@ -248,10 +255,16 @@ class AiController extends Controller
                 'max_completion_tokens' => 4096,
             ];
 
+            $options = OutboundUrl::options($chatUrl, OutboundUrl::allowPrivateAiEndpoints());
+            if ($options === null) {
+                return response()->json(['success' => false, 'message' => 'This AI endpoint isn’t allowed. Use a public http(s) address; for a server on your own network the instance admin can set AI_ALLOW_PRIVATE_ENDPOINTS=true.'], 422);
+            }
+
             $response = Http::timeout(60)
+                ->withOptions($options)
                 ->withHeaders([
-                    'Authorization' => 'Bearer ' . $apiKey,
-                    'Content-Type'  => 'application/json',
+                    'Authorization' => 'Bearer '.$apiKey,
+                    'Content-Type' => 'application/json',
                 ])
                 ->post($chatUrl, $payload);
 
@@ -259,12 +272,12 @@ class AiController extends Controller
                 $body = $response->json();
                 $apiMessage = $body['error']['message'] ?? $body['error']['code'] ?? $body['message'] ?? null;
                 $detail = $apiMessage
-                    ? ' ' . (is_string($apiMessage) ? $apiMessage : json_encode($apiMessage))
-                    : ' (' . $response->body() . ')';
+                    ? ' '.(is_string($apiMessage) ? $apiMessage : json_encode($apiMessage))
+                    : ' ('.$response->body().')';
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'AI request failed: ' . $response->status() . ' ' . $response->reason() . $detail,
+                    'message' => 'AI request failed: '.$response->status().' '.$response->reason().$detail,
                 ], 422);
             }
 
@@ -278,7 +291,7 @@ class AiController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'AI generation failed: ' . $e->getMessage(),
+                'message' => 'AI generation failed: '.$e->getMessage(),
             ], 422);
         }
     }

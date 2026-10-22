@@ -76,6 +76,22 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.16.1',
+        title: 'Security Fixes',
+        tag: 'Patch',
+        date: '2026-10-23',
+        items: [
+            'Helpdesk: a ticket link now opens only that ticket. Submitting a new ticket with someone else’s email no longer gives access to their earlier tickets. Links sent before this update stop working.',
+            'Helpdesk: ticket descriptions, replies and fields are cleaned of scripts before they are stored and shown.',
+            'Uploaded files get safe, server-made file names and can never run as code on the server. Self-hosted: see “Security notes” in docs/self-hosting.md and run php artisan uploads:audit.',
+            'Search, the AI connector and issue links only show issues and docs from projects you are a member of, and never other people’s private bookmark groups.',
+            'Default issue types (Task, Bug…) are switched off per project instead of for every workspace, and can no longer be renamed from a project.',
+            'Link previews and AI endpoints can no longer reach internal network addresses (self-hosted: AI_ALLOW_PRIVATE_ENDPOINTS for a local model).',
+            'CLI: suspended accounts can’t sign in, login is rate-limited, and task changes are checked against their list.',
+            'Fixed: removing a link between two issues failed.',
+        ]
+    },
+    {
         version: 'v1.16.0',
         title: 'Browser Extension',
         tag: 'Feature',

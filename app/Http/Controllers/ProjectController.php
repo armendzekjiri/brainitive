@@ -8,8 +8,10 @@ use App\Models\Label;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Uploads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -150,7 +152,10 @@ class ProjectController extends Controller
         $project->load(['labels', 'users' => fn ($q) => $q->select('users.id', 'name', 'email', 'avatar')->withPivot('role')]);
 
         $workspaceUsers = $workspace->users()->get(['users.id', 'name', 'email', 'avatar']);
-        $projectItemTypes = ItemType::forProjectSettings($project)->orderBy('id')->get(['id', 'project_id', 'name', 'slug', 'icon', 'color', 'description', 'is_default', 'is_active']);
+        $disabledTypes = $project->disabledItemTypeIds();
+        $projectItemTypes = ItemType::forProjectSettings($project)->orderBy('id')->get(['id', 'project_id', 'name', 'slug', 'icon', 'color', 'description', 'is_default', 'is_active'])
+            // Default types: "active" means active for this project.
+            ->each(fn (ItemType $type) => $type->project_id === null && $type->is_active = $type->is_active && ! in_array($type->id, $disabledTypes, true));
 
         return Inertia::render('Projects/Edit', [
             'workspace' => $workspace,
@@ -196,11 +201,11 @@ class ProjectController extends Controller
         }
 
         if ($request->hasFile('icon_image')) {
-            if ($project->icon && \Illuminate\Support\Facades\Storage::disk('public')->exists($project->icon)) {
-                \Illuminate\Support\Facades\Storage::disk('public')->delete($project->icon);
+            if ($project->icon && Storage::disk('public')->exists($project->icon)) {
+                Storage::disk('public')->delete($project->icon);
             }
             $file = $request->file('icon_image');
-            $ext = strtolower($file->getClientOriginalExtension()) === 'jpeg' ? 'jpg' : $file->getClientOriginalExtension();
+            $ext = Uploads::imageExtension($file);
             $path = $file->storeAs('project-icons/'.$project->id, 'icon.'.$ext, 'public');
             $validated['icon'] = $path;
         }
@@ -228,7 +233,7 @@ class ProjectController extends Controller
         ]);
 
         $file = $request->file('icon');
-        $ext = strtolower($file->getClientOriginalExtension()) === 'jpeg' ? 'jpg' : $file->getClientOriginalExtension();
+        $ext = Uploads::imageExtension($file);
         $path = $file->storeAs('project-icons/'.$project->id, 'icon.'.$ext, 'public');
         $project->update(['icon' => $path]);
 
@@ -251,7 +256,7 @@ class ProjectController extends Controller
         ]);
 
         $file = $request->file('icon');
-        $ext = strtolower($file->getClientOriginalExtension()) === 'jpeg' ? 'jpg' : $file->getClientOriginalExtension();
+        $ext = Uploads::imageExtension($file);
         $path = $file->storeAs('project-item-type-icons/'.$project->id, Str::uuid().'.'.$ext, 'public');
 
         return response()->json(['icon' => $path, 'icon_display' => asset('storage/'.$path)]);
@@ -469,6 +474,19 @@ class ProjectController extends Controller
             abort(404, 'Item type not found for this project.');
         }
 
+        // Default types are shared by every workspace on the instance: a project can only
+        // switch one off or on for itself, never rename or restyle it for everyone.
+        if ($isGlobal) {
+            $validated = $request->validate(['is_active' => 'required|boolean']);
+            $disabled = collect($project->disabledItemTypeIds())->reject(fn (int $id) => $id === $itemType->id);
+            if (! $validated['is_active']) {
+                $disabled->push($itemType->id);
+            }
+            $project->update(['settings' => array_merge($project->settings ?? [], ['disabled_item_types' => $disabled->values()->all()])]);
+
+            return back()->with('success', $validated['is_active'] ? 'Item type enabled for this project.' : 'Item type disabled for this project.');
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:100',
             'slug' => 'nullable|string|max:100',
@@ -482,9 +500,7 @@ class ProjectController extends Controller
             $validated['slug'] = Str::slug($validated['name']);
         }
 
-        if (! $isGlobal) {
-            unset($validated['is_active']);
-        }
+        unset($validated['is_active']);
 
         $itemType->update($validated);
 

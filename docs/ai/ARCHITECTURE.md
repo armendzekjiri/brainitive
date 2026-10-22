@@ -192,6 +192,9 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 | A notification | `app/Notifications/` (+ `SendsWebPush` for push) — [add-notification skill](./skills/add-notification.md) |
 | A queued job | `app/Jobs/` |
 | An artisan command | `app/Console/Commands/` |
+| A file upload | `App\Support\Uploads` for the stored name (never the client's). Old risky files: `php artisan uploads:audit` |
+| A server-side request to a user URL | `App\Support\OutboundUrl::options()` (public IPs only, pinned, no auto-redirects) |
+| Rendering stored HTML | `safeHtmlProp()` (`resources/js/lib/sanitize.ts`); server: `App\Support\SafeHtml` |
 
 ## Self-hosting (Docker)
 - `Dockerfile` — multi-stage: composer → node (frontend; needs `vendor/tightenco/ziggy` for

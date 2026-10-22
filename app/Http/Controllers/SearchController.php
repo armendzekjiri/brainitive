@@ -40,6 +40,9 @@ class SearchController extends Controller
         }
 
         $term = '%'.preg_replace('/\s+/', '%', $q).'%';
+        // Projects the user can open (member, or workspace owner/admin) — not every project
+        // in their workspaces.
+        $projectIds = $user->accessibleProjectIds();
 
         // Workspaces (name, description)
         $workspaces = Workspace::query()
@@ -61,7 +64,7 @@ class SearchController extends Controller
 
         // Projects (name, description, key)
         $projects = Project::query()
-            ->whereIn('workspace_id', $workspaceIds)
+            ->whereIn('id', $projectIds)
             ->where(function ($query) use ($term) {
                 $query->where('name', 'like', $term)
                     ->orWhere('description', 'like', $term)
@@ -111,8 +114,11 @@ class SearchController extends Controller
                 $query->where('name', 'like', $term)
                     ->orWhere('description', 'like', $term);
             })
-            ->limit(8)
-            ->get(['id', 'workspace_id', 'name', 'slug', 'description'])
+            ->limit(25)
+            ->get()
+            ->filter(fn (Bookmark $b) => $user->can('view', $b)) // private groups stay private
+            ->take(8)
+            ->values()
             ->map(function ($b) {
                 $ws = Workspace::find($b->workspace_id);
 
@@ -130,7 +136,7 @@ class SearchController extends Controller
         $items = Item::query()
             ->join('boards', 'items.board_id', '=', 'boards.id')
             ->join('projects', 'boards.project_id', '=', 'projects.id')
-            ->whereIn('projects.workspace_id', $workspaceIds)
+            ->whereIn('projects.id', $projectIds)
             ->where(function ($query) use ($term) {
                 $query->where('items.title', 'like', $term)
                     ->orWhere('items.description', 'like', $term)
@@ -156,7 +162,7 @@ class SearchController extends Controller
         // Pages/documents (name; content is JSON so we search name only for now)
         $pages = Page::query()
             ->join('projects', 'pages.project_id', '=', 'projects.id')
-            ->whereIn('projects.workspace_id', $workspaceIds)
+            ->whereIn('projects.id', $projectIds)
             ->where('pages.type', 'page')
             ->visibleTo($user)
             ->where(function ($query) use ($term) {

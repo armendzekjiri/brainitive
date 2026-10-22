@@ -16,6 +16,7 @@ import {
     Phone,
     User as UserIcon,
 } from 'lucide-react';
+import { safeHtmlProp } from '@/lib/sanitize';
 
 interface ActivityLog {
     id: number;
@@ -282,7 +283,7 @@ export default function MemberProfile({ workspace, member, memberRole, assignedI
                                     >
                                         <MessageSquare className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                                         <div className="min-w-0 flex-1">
-                                            <p className="text-sm text-muted-foreground line-clamp-2" dangerouslySetInnerHTML={{ __html: comment.body }} />
+                                            <p className="text-sm text-muted-foreground line-clamp-2" dangerouslySetInnerHTML={safeHtmlProp(comment.body)} />
                                             <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
                                                 on {comment.item?.key} {comment.item?.title ? `· ${comment.item.title}` : ''}
                                             </p>

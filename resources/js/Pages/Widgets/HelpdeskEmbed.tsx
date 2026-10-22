@@ -20,6 +20,7 @@ import {
     useState,
 } from 'react';
 import { cn } from '@/lib/utils';
+import { safeHtmlProp } from '@/lib/sanitize';
 
 type FormField = {
     id: number;
@@ -367,7 +368,7 @@ export default function HelpdeskEmbed({
                                 {ticket.description && (
                                     <div
                                         className="mt-3 rounded-md bg-muted/80 p-3 text-sm text-muted-foreground [&_p]:mb-1 [&_p:last-child]:mb-0 [&_a]:text-primary"
-                                        dangerouslySetInnerHTML={{ __html: ticket.description }}
+                                        dangerouslySetInnerHTML={safeHtmlProp(ticket.description)}
                                     />
                                 )}
                             </CardHeader>
@@ -392,7 +393,7 @@ export default function HelpdeskEmbed({
                                             </p>
                                             <div
                                                 className="prose prose-sm max-w-none [&_p]:mb-1 [&_a]:text-primary"
-                                                dangerouslySetInnerHTML={{ __html: r.body }}
+                                                dangerouslySetInnerHTML={safeHtmlProp(r.body)}
                                             />
                                         </div>
                                     ))}

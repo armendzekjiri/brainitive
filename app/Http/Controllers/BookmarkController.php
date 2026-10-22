@@ -7,6 +7,7 @@ use App\Models\Bookmark;
 use App\Models\BookmarkItem;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -61,7 +62,7 @@ class BookmarkController extends Controller
 
         foreach ($bookmark->items->where('type', 'file') as $item) {
             if ($item->file_path) {
-                $item->file_url = asset('storage/' . $item->file_path);
+                $item->file_url = asset('storage/'.$item->file_path);
             }
         }
 
@@ -92,7 +93,7 @@ class BookmarkController extends Controller
         $originalSlug = $slug;
         $counter = 1;
         while ($workspace->bookmarks()->where('slug', $slug)->exists()) {
-            $slug = $originalSlug . '-' . $counter++;
+            $slug = $originalSlug.'-'.$counter++;
         }
 
         $iconValue = $validated['icon'] ?? null;
@@ -118,11 +119,12 @@ class BookmarkController extends Controller
         ]);
 
         if ($request->hasFile('icon_image')) {
-            $path = $request->file('icon_image')->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.$request->file('icon_image')->getClientOriginalExtension(), 'public');
+            $path = $request->file('icon_image')->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'public');
             $bookmark->update(['icon' => $path]);
         } elseif ($isTempIcon && isset($validated['icon'])) {
             $tempPath = str_contains($validated['icon'], 'storage/') ? Str::after($validated['icon'], 'storage/') : $validated['icon'];
-            if (str_starts_with($tempPath, 'bookmark-icons/temp/') && Storage::disk('public')->exists($tempPath)) {
+            // Only a file uploadIconTemp() created — no `..` tricks to move other people's files.
+            if (preg_match('#^bookmark-icons/temp/[0-9a-f-]{36}\.(png|jpg|gif|webp)$#', $tempPath) && Storage::disk('public')->exists($tempPath)) {
                 $ext = pathinfo($tempPath, PATHINFO_EXTENSION);
                 $newPath = 'bookmark-icons/'.$bookmark->id.'/icon.'.$ext;
                 Storage::disk('public')->move($tempPath, $newPath);
@@ -155,7 +157,7 @@ class BookmarkController extends Controller
         }
 
         if ($request->hasFile('icon_image')) {
-            $path = $request->file('icon_image')->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.$request->file('icon_image')->getClientOriginalExtension(), 'public');
+            $path = $request->file('icon_image')->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'public');
             $validated['icon'] = $path;
         }
 
@@ -164,6 +166,7 @@ class BookmarkController extends Controller
         if ($request->wantsJson()) {
             return response()->json(['bookmark' => $bookmark->fresh()]);
         }
+
         return back()->with('success', 'Bookmark updated.');
     }
 
@@ -180,7 +183,7 @@ class BookmarkController extends Controller
         ]);
 
         $file = $request->file('icon');
-        $ext = $file->getClientOriginalExtension() === 'jpeg' ? 'jpg' : $file->getClientOriginalExtension();
+        $ext = Uploads::imageExtension($file);
         $path = $file->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.$ext, 'public');
         $bookmark->update(['icon' => $path]);
 
@@ -200,7 +203,7 @@ class BookmarkController extends Controller
         ]);
 
         $file = $request->file('icon');
-        $ext = $file->getClientOriginalExtension() === 'jpeg' ? 'jpg' : $file->getClientOriginalExtension();
+        $ext = Uploads::imageExtension($file);
         $path = $file->storeAs('bookmark-icons/temp', Str::uuid().'.'.$ext, 'public');
 
         return response()->json(['icon_display' => asset('storage/'.$path), 'icon_path' => $path]);
@@ -221,6 +224,7 @@ class BookmarkController extends Controller
         }
 
         $bookmark->delete();
+
         return redirect()->route('bookmarks.index', [$workspace->slug])
             ->with('success', 'Bookmark deleted.');
     }
@@ -268,8 +272,8 @@ class BookmarkController extends Controller
                 ],
             ], [], ['file' => 'file']);
 
-            $filename = Str::uuid() . '_' . Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) . '.' . $file->getClientOriginalExtension();
-            $filePath = $file->storeAs('bookmark-files/' . $bookmark->id, $filename, 'public');
+            $filename = Uploads::name($file);
+            $filePath = $file->storeAs('bookmark-files/'.$bookmark->id, $filename, 'public');
         }
 
         $position = $bookmark->items()->max('position') + 1;
@@ -289,9 +293,11 @@ class BookmarkController extends Controller
         }
 
         if ($request->wantsJson()) {
-            $item->file_url = $filePath ? asset('storage/' . $filePath) : null;
+            $item->file_url = $filePath ? asset('storage/'.$filePath) : null;
+
             return response()->json(['item' => $item]);
         }
+
         return back()->with('success', 'Item added.');
     }
 
@@ -314,6 +320,7 @@ class BookmarkController extends Controller
         if ($request->wantsJson()) {
             return response()->json(['item' => $item->fresh()]);
         }
+
         return back()->with('success', 'Item updated.');
     }
 
@@ -324,11 +331,12 @@ class BookmarkController extends Controller
             abort(404);
         }
 
-        $item->update(['is_completed' => !$item->is_completed]);
+        $item->update(['is_completed' => ! $item->is_completed]);
 
         if ($request->wantsJson()) {
             return response()->json(['item' => $item->fresh()]);
         }
+
         return back();
     }
 
@@ -348,6 +356,7 @@ class BookmarkController extends Controller
         if ($request->wantsJson()) {
             return response()->json(['deleted' => true]);
         }
+
         return back()->with('success', 'Item removed.');
     }
 
@@ -365,7 +374,7 @@ class BookmarkController extends Controller
         ]);
 
         $user = User::findOrFail($validated['user_id']);
-        if (!$workspace->hasUser($user)) {
+        if (! $workspace->hasUser($user)) {
             return back()->with('error', 'User must be a member of this workspace.');
         }
 
@@ -390,7 +399,7 @@ class BookmarkController extends Controller
 
         $validated = $request->validate(['role' => 'required|in:viewer,editor']);
 
-        if (!$bookmark->collaborators()->where('user_id', $user->id)->exists()) {
+        if (! $bookmark->collaborators()->where('user_id', $user->id)->exists()) {
             abort(404);
         }
 
@@ -427,7 +436,7 @@ class BookmarkController extends Controller
 
         foreach ($bookmark->items->where('type', 'file') as $item) {
             if ($item->file_path) {
-                $item->file_url = asset('storage/' . $item->file_path);
+                $item->file_url = asset('storage/'.$item->file_path);
             }
         }
 

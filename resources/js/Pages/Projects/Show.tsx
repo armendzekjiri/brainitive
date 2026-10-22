@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { safeHtmlProp } from '@/lib/sanitize';
 
 type PageWithChildren = PageType & { children?: PageWithChildren[] };
 
@@ -151,7 +152,7 @@ export default function ProjectsShow({ workspace, project }: Props) {
                     {project.description && project.description.trim() !== '' && (
                         <Card>
                             <CardContent className="p-5">
-                                <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: project.description.trim().startsWith('<') ? project.description : `<p>${project.description.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>` }} />
+                                <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={safeHtmlProp(project.description.trim().startsWith('<') ? project.description : `<p>${project.description.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`)} />
                             </CardContent>
                         </Card>
                     )}

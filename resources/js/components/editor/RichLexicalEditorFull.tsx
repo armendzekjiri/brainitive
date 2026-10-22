@@ -200,6 +200,7 @@ import { MentionNode } from './nodes/MentionNode';
 import TableActionMenuPlugin from './plugins/TableActionMenuPlugin';
 import TableCellResizerPlugin from './plugins/TableCellResizerPlugin';
 import MentionsPlugin from './plugins/MentionsPlugin';
+import { safeHtmlProp } from '@/lib/sanitize';
 
 // Custom commands
 export const INSERT_IMAGE_COMMAND: LexicalCommand<{ src: string; altText: string }> = createCommand();
@@ -2140,9 +2141,9 @@ const RichLexicalOnChangeContext = createContext<((html: string) => void) | null
 /** Strip HTML to plain text and optionally truncate. */
 function htmlToPlainText(html: string, maxLength = 500): string {
     if (!html?.trim()) return '';
-    const div = document.createElement('div');
-    div.innerHTML = html;
-    const text = (div.textContent || div.innerText || '').replace(/\s+/g, ' ').trim();
+    // Inert document: parsing never runs scripts or loads images.
+    const div = new DOMParser().parseFromString(html, 'text/html').body;
+    const text = (div.textContent || '').replace(/\s+/g, ' ').trim();
     return maxLength && text.length > maxLength ? text.slice(0, maxLength) + '…' : text;
 }
 
@@ -2806,7 +2807,7 @@ function ToolbarPlugin({
                                             </div>
                                             <div
                                                 className="px-4 py-3 prose prose-sm max-w-none text-sm flex-1 min-h-0 overflow-y-auto"
-                                                dangerouslySetInnerHTML={{ __html: aiResult }}
+                                                dangerouslySetInnerHTML={safeHtmlProp(aiResult)}
                                             />
                                             <div className="flex gap-1.5 px-4 py-3 border-t bg-muted/30 shrink-0">
                                                 <Button

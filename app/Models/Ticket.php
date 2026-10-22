@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\SafeHtml;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -28,6 +30,18 @@ class Ticket extends Model
         'completed_at',
         'metadata',
     ];
+
+    /**
+     * Rich text that can come from the public helpdesk: sanitized when written and when
+     * read (rows saved before sanitizing existed).
+     */
+    protected function description(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => SafeHtml::clean($value),
+            set: fn (?string $value) => SafeHtml::clean($value),
+        );
+    }
 
     protected function casts(): array
     {
@@ -79,6 +93,27 @@ class Ticket extends Model
     public function column(): BelongsTo
     {
         return $this->belongsTo(HelpdeskColumn::class, 'column_id');
+    }
+
+    /**
+     * The secret in the contact's ticket link and the widget / portal requests. Derived
+     * from this ticket only (HMAC with the app key), so it opens exactly one ticket, never
+     * changes, and can't be obtained by submitting another ticket with the same email.
+     */
+    public function publicAccessToken(): string
+    {
+        return hash_hmac('sha256', 'ticket-access|'.$this->uuid, (string) config('app.key'));
+    }
+
+    public function verifyPublicAccessToken(?string $token): bool
+    {
+        return is_string($token) && $token !== '' && hash_equals($this->publicAccessToken(), $token);
+    }
+
+    /** Portal link for the contact. */
+    public function publicUrl(): string
+    {
+        return route('helpdesks.tickets.show-public', $this->uuid).'?token='.urlencode($this->publicAccessToken());
     }
 
     /**
@@ -179,7 +214,7 @@ class Ticket extends Model
         ]);
 
         // If moving out of done column, clear completed_at
-        if ($wasInDoneColumn && !$isNowInDoneColumn) {
+        if ($wasInDoneColumn && ! $isNowInDoneColumn) {
             $this->update(['completed_at' => null]);
         }
     }

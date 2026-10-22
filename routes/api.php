@@ -3,6 +3,7 @@
 use App\Http\Controllers\CliController;
 use App\Http\Controllers\Extension\CaptureController;
 use App\Http\Controllers\Extension\ExtensionController;
+use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\RejectCaptureTokens;
 use Illuminate\Support\Facades\Route;
 use Laravel\Passport\Http\Middleware\CheckToken;
@@ -14,10 +15,11 @@ use Laravel\Passport\Http\Middleware\CheckToken;
 */
 
 // Public: issue a Passport personal access token from email + password
-Route::post('/cli/login', [CliController::class, 'login']);
+Route::post('/cli/login', [CliController::class, 'login'])->middleware('throttle:5,1');
 
 // Protected endpoints — require a valid Passport API token (Bearer)
-Route::middleware(['auth:api', RejectCaptureTokens::class])->group(function () {
+// scopeBindings: {item} must belong to {taskList}, not just any list the user can manage.
+Route::middleware(['auth:api', EnsureUserIsNotSuspended::class, RejectCaptureTokens::class])->scopeBindings()->group(function () {
     Route::get('/cli/me', [CliController::class, 'me']);
     Route::delete('/cli/logout', [CliController::class, 'logout']);
 
@@ -38,7 +40,7 @@ Route::middleware(['auth:api', RejectCaptureTokens::class])->group(function () {
 | Everything resolves by numeric id and runs the same policies as the app.
 */
 Route::prefix('ext/v1')
-    ->middleware(['auth:api', CheckToken::using('capture'), 'throttle:120,1'])
+    ->middleware(['auth:api', EnsureUserIsNotSuspended::class, CheckToken::using('capture'), 'throttle:120,1'])
     ->name('ext.')
     ->group(function () {
         Route::get('me', [ExtensionController::class, 'me'])->name('me');

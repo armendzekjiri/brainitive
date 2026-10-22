@@ -2,25 +2,24 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Ticket;
-use App\Models\TicketContact;
-use App\Models\TicketReply;
-use App\Models\TicketAttachment;
-use App\Models\TicketFieldValue;
 use App\Models\Helpdesk;
 use App\Models\HelpdeskColumn;
-use App\Models\HelpdeskField;
-use App\Models\Project;
-use App\Models\Workspace;
-use App\Models\User;
 use App\Models\ItemPriority;
+use App\Models\Project;
+use App\Models\Ticket;
+use App\Models\TicketAttachment;
+use App\Models\TicketContact;
+use App\Models\User;
+use App\Models\Workspace;
 use App\Notifications\TicketAssignedNotification;
-use App\Notifications\TicketReplyNotification;
 use App\Notifications\TicketCreatedNotification;
+use App\Notifications\TicketReplyNotification;
+use App\Support\Uploads;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-use Illuminate\Support\Str;
 
 class TicketController extends Controller
 {
@@ -34,7 +33,7 @@ class TicketController extends Controller
         $validated = $request->validate([
             'subject' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'column_id' => 'required|exists:helpdesk_columns,id',
+            'column_id' => ['required', Rule::exists('helpdesk_columns', 'id')->where('helpdesk_id', $helpdesk->id)],
             'priority_id' => 'nullable|exists:item_priorities,id',
             'assigned_to' => 'nullable|exists:users,id',
             'ticket_contact_id' => 'nullable|exists:ticket_contacts,id',
@@ -42,7 +41,7 @@ class TicketController extends Controller
 
         // Create ticket contact if email provided
         $ticketContactId = $validated['ticket_contact_id'] ?? null;
-        if (!$ticketContactId && $request->has('contact_email')) {
+        if (! $ticketContactId && $request->has('contact_email')) {
             $contactEmail = $request->validate(['contact_email' => 'email|max:255'])['contact_email'];
             $contact = TicketContact::firstOrCreate(
                 ['email' => $contactEmail],
@@ -68,7 +67,7 @@ class TicketController extends Controller
         // Process custom fields
         $fields = $helpdesk->fields()->where('is_required', true)->get();
         foreach ($fields as $field) {
-            $value = $request->input('field_' . $field->name);
+            $value = $request->input('field_'.$field->name);
             if ($value !== null) {
                 $ticket->fieldValues()->create([
                     'helpdesk_field_id' => $field->id,
@@ -123,7 +122,7 @@ class TicketController extends Controller
 
         // Get default "New" column
         $newColumn = $helpdesk->columns()->where('slug', 'new')->first();
-        if (!$newColumn) {
+        if (! $newColumn) {
             $newColumn = $helpdesk->columns()->orderBy('position')->first();
         }
 
@@ -142,7 +141,7 @@ class TicketController extends Controller
         // Process custom fields (public form fields — all fields, not just required)
         $fields = $helpdesk->fields()->orderBy('position')->get();
         foreach ($fields as $field) {
-            $value = $request->input('field_' . $field->name);
+            $value = $request->input('field_'.$field->name);
             if ($value !== null && $value !== '') {
                 $ticket->fieldValues()->create([
                     'helpdesk_field_id' => $field->id,
@@ -151,11 +150,11 @@ class TicketController extends Controller
             }
         }
 
-        // Generate token once for contact (view ticket link in email + API response)
-        $accessToken = $contact->generateAccessToken();
+        // Token for this ticket only — never the contact's other tickets (anyone can submit
+        // with any email address).
+        $accessToken = $ticket->publicAccessToken();
 
-        // Notify contact (pass token so email link uses same token)
-        $contact->notify(new TicketCreatedNotification($ticket, null, $accessToken));
+        $contact->notify(new TicketCreatedNotification($ticket));
 
         // Notify helpdesk admins (project admins)
         $admins = $project->admins()->get();
@@ -196,7 +195,7 @@ class TicketController extends Controller
 
         // Add URLs to attachments
         foreach ($ticket->attachments as $attachment) {
-            $attachment->url = asset('storage/' . $attachment->path);
+            $attachment->url = asset('storage/'.$attachment->path);
             $attachment->formatted_size = $attachment->getFormattedSizeAttribute();
         }
 
@@ -225,8 +224,8 @@ class TicketController extends Controller
         $this->authorize('update', $ticket);
 
         $validated = $request->validate([
-            'column_id' => 'required|exists:helpdesk_columns,id',
-            'position'  => 'required|integer|min:0',
+            'column_id' => ['required', Rule::exists('helpdesk_columns', 'id')->where('helpdesk_id', $helpdesk->id)],
+            'position' => 'required|integer|min:0',
         ]);
 
         $oldColumn = $ticket->column;
@@ -258,8 +257,8 @@ class TicketController extends Controller
         // Notify new assignee if changed
         $newAssigneeId = $ticket->assigned_to;
         if (
-            $newAssigneeId 
-            && $newAssigneeId !== $oldAssigneeId 
+            $newAssigneeId
+            && $newAssigneeId !== $oldAssigneeId
             && $newAssigneeId !== $request->user()->id
         ) {
             $assignee = User::find($newAssigneeId);
@@ -302,7 +301,7 @@ class TicketController extends Controller
         ]);
 
         // Notify contact if reply is not internal
-        if (!$reply->is_internal_note && $ticket->contact) {
+        if (! $reply->is_internal_note && $ticket->contact) {
             $ticket->contact->notify(new TicketReplyNotification($ticket, $reply, $request->user()));
         }
 
@@ -328,9 +327,8 @@ class TicketController extends Controller
             'file.*' => 'file|max:10240',
         ]);
 
-        // Verify access token
         $contact = $ticket->contact;
-        if (! $contact || ! $contact->verifyAccessToken($validated['access_token'])) {
+        if (! $contact || ! $ticket->verifyPublicAccessToken($validated['access_token'])) {
             abort(403, 'Invalid access token');
         }
 
@@ -343,12 +341,12 @@ class TicketController extends Controller
         $files = $request->file('file');
         if (is_array($files)) {
             foreach ($files as $file) {
-                $filename = uniqid() . '_' . $file->getClientOriginalName();
-                $path = $file->storeAs('ticket-attachments/' . $ticket->id, $filename, 'public');
+                $filename = Uploads::name($file);
+                $path = $file->storeAs('ticket-attachments/'.$ticket->id, $filename, 'public');
                 $reply->attachments()->create([
                     'ticket_id' => $ticket->id,
                     'filename' => $filename,
-                    'original_filename' => $file->getClientOriginalName(),
+                    'original_filename' => Uploads::displayName($file),
                     'path' => $path,
                     'mime_type' => $file->getMimeType(),
                     'size' => $file->getSize(),
@@ -356,12 +354,12 @@ class TicketController extends Controller
                 ]);
             }
         } elseif ($files) {
-            $filename = uniqid() . '_' . $files->getClientOriginalName();
-            $path = $files->storeAs('ticket-attachments/' . $ticket->id, $filename, 'public');
+            $filename = Uploads::name($files);
+            $path = $files->storeAs('ticket-attachments/'.$ticket->id, $filename, 'public');
             $reply->attachments()->create([
                 'ticket_id' => $ticket->id,
                 'filename' => $filename,
-                'original_filename' => $files->getClientOriginalName(),
+                'original_filename' => Uploads::displayName($files),
                 'path' => $path,
                 'mime_type' => $files->getMimeType(),
                 'size' => $files->getSize(),
@@ -390,12 +388,12 @@ class TicketController extends Controller
         ]);
 
         $file = $request->file('file');
-        $filename = uniqid() . '_' . $file->getClientOriginalName();
-        $path = $file->storeAs('ticket-attachments/' . $ticket->id, $filename, 'public');
+        $filename = Uploads::name($file);
+        $path = $file->storeAs('ticket-attachments/'.$ticket->id, $filename, 'public');
 
         $attachment = $ticket->attachments()->create([
             'filename' => $filename,
-            'original_filename' => $file->getClientOriginalName(),
+            'original_filename' => Uploads::displayName($file),
             'path' => $path,
             'mime_type' => $file->getMimeType(),
             'size' => $file->getSize(),
@@ -403,7 +401,7 @@ class TicketController extends Controller
         ]);
 
         // Add URL for response
-        $attachment->url = asset('storage/' . $path);
+        $attachment->url = asset('storage/'.$path);
 
         return back()->with('success', 'Attachment uploaded successfully.');
     }
@@ -418,19 +416,17 @@ class TicketController extends Controller
             'access_token' => 'required|string',
         ]);
 
-        // Verify access token
-        $contact = $ticket->contact;
-        if (! $contact || ! $contact->verifyAccessToken($validated['access_token'])) {
+        if (! $ticket->verifyPublicAccessToken($validated['access_token'])) {
             abort(403, 'Invalid access token');
         }
 
         $file = $request->file('file');
-        $filename = uniqid() . '_' . $file->getClientOriginalName();
-        $path = $file->storeAs('ticket-attachments/' . $ticket->id, $filename, 'public');
+        $filename = Uploads::name($file);
+        $path = $file->storeAs('ticket-attachments/'.$ticket->id, $filename, 'public');
 
         $attachment = $ticket->attachments()->create([
             'filename' => $filename,
-            'original_filename' => $file->getClientOriginalName(),
+            'original_filename' => Uploads::displayName($file),
             'path' => $path,
             'mime_type' => $file->getMimeType(),
             'size' => $file->getSize(),
@@ -442,7 +438,7 @@ class TicketController extends Controller
             'attachment' => [
                 'id' => $attachment->id,
                 'filename' => $attachment->original_filename,
-                'url' => asset('storage/' . $path),
+                'url' => asset('storage/'.$path),
             ],
         ]);
     }
@@ -523,10 +519,7 @@ class TicketController extends Controller
      */
     public function getPublicTicketJson(Request $request, Ticket $ticket)
     {
-        $token = $request->query('token');
-        $contact = $ticket->contact;
-
-        if (! $contact || ! $token || ! $contact->verifyAccessToken($token)) {
+        if (! $ticket->verifyPublicAccessToken($request->query('token'))) {
             return response()->json(['error' => 'Invalid or expired access token'], 403);
         }
 
@@ -562,9 +555,7 @@ class TicketController extends Controller
     public function showPublic(Request $request, Ticket $ticket)
     {
         $accessToken = $request->query('token');
-        $contact = $ticket->contact;
-
-        if (! $contact || ! $accessToken || ! $contact->verifyAccessToken($accessToken)) {
+        if (! $ticket->verifyPublicAccessToken($accessToken)) {
             abort(403, 'Invalid access token');
         }
 
@@ -573,22 +564,22 @@ class TicketController extends Controller
             'helpdesk:id,uuid',
             'replies' => function ($q) {
                 $q->where('is_internal_note', false)
-                  ->with(['contact:id,name,email', 'attachments'])
-                  ->orderBy('created_at', 'asc');
+                    ->with(['contact:id,name,email', 'attachments'])
+                    ->orderBy('created_at', 'asc');
             },
             'attachments' => function ($q) {
                 $q->where('uploaded_by_contact', false) // Only show attachments from agents
-                  ->orderBy('created_at', 'desc');
+                    ->orderBy('created_at', 'desc');
             },
         ]);
 
         // Add URLs to attachments (ticket-level and reply-level)
         foreach ($ticket->attachments as $attachment) {
-            $attachment->url = asset('storage/' . $attachment->path);
+            $attachment->url = asset('storage/'.$attachment->path);
         }
         foreach ($ticket->replies as $reply) {
             foreach ($reply->attachments as $att) {
-                $att->url = asset('storage/' . $att->path);
+                $att->url = asset('storage/'.$att->path);
             }
         }
 
@@ -605,10 +596,7 @@ class TicketController extends Controller
      */
     public function publicReplies(Request $request, Ticket $ticket)
     {
-        $accessToken = $request->query('token');
-        $contact = $ticket->contact;
-
-        if (! $contact || ! $accessToken || ! $contact->verifyAccessToken($accessToken)) {
+        if (! $ticket->verifyPublicAccessToken($request->query('token'))) {
             abort(403, 'Invalid access token');
         }
 
@@ -620,7 +608,7 @@ class TicketController extends Controller
 
         return response()->json([
             'replies' => $replies,
-            'access_token' => $contact->generateAccessToken($ticket),
+            'access_token' => $ticket->publicAccessToken(),
         ]);
     }
 }

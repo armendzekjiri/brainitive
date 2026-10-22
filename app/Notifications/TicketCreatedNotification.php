@@ -7,6 +7,7 @@ use App\Models\TicketContact;
 use App\Models\User;
 use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class TicketCreatedNotification extends Notification
@@ -16,7 +17,6 @@ class TicketCreatedNotification extends Notification
     public function __construct(
         public readonly Ticket $ticket,
         public readonly TicketContact|User|null $source = null,
-        public readonly ?string $contactAccessToken = null,
     ) {}
 
     /**
@@ -25,9 +25,10 @@ class TicketCreatedNotification extends Notification
     public function via(object $notifiable): array
     {
         // For contacts, send email only; for users, send database + email + push
-        if ($notifiable instanceof \App\Models\TicketContact) {
+        if ($notifiable instanceof TicketContact) {
             return ['mail'];
         }
+
         return $this->withWebPush($notifiable, ['database', 'mail']);
     }
 
@@ -66,10 +67,10 @@ class TicketCreatedNotification extends Notification
         ]);
 
         $data = [
-            'type'         => 'ticket_created',
-            'ticket_key'   => $this->ticket->key,
+            'type' => 'ticket_created',
+            'ticket_key' => $this->ticket->key,
             'ticket_subject' => $this->ticket->subject,
-            'ticket_url'   => $url,
+            'ticket_url' => $url,
         ];
 
         if ($this->source instanceof User) {
@@ -93,9 +94,8 @@ class TicketCreatedNotification extends Notification
         $workspace = $project->workspace;
 
         // Different URL for contacts vs users (use token passed from controller so we don't invalidate the one returned in API)
-        if ($notifiable instanceof \App\Models\TicketContact) {
-            $token = $this->contactAccessToken ?? $notifiable->generateAccessToken();
-            $url = route('helpdesks.tickets.show-public', $this->ticket->uuid) . '?token=' . urlencode($token);
+        if ($notifiable instanceof TicketContact) {
+            $url = $this->ticket->publicUrl();
             $subject = "Ticket {$this->ticket->key} created: {$this->ticket->subject}";
             $line = "Your ticket has been created and we'll get back to you soon.";
             $action = 'View Ticket';
@@ -107,16 +107,16 @@ class TicketCreatedNotification extends Notification
                 $this->ticket->id,
             ]);
             $subject = "New ticket {$this->ticket->key}: {$this->ticket->subject}";
-            $sourceName = $this->source instanceof User 
-                ? $this->source->name 
-                : ($this->source instanceof TicketContact 
-                    ? ($this->source->name ?: $this->source->email) 
+            $sourceName = $this->source instanceof User
+                ? $this->source->name
+                : ($this->source instanceof TicketContact
+                    ? ($this->source->name ?: $this->source->email)
                     : 'A user');
             $line = "{$sourceName} created a new ticket.";
             $action = 'Review Ticket';
         }
 
-        return (new \Illuminate\Notifications\Messages\MailMessage)
+        return (new MailMessage)
             ->subject($subject)
             ->line($line)
             ->line($this->ticket->subject)

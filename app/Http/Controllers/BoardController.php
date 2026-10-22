@@ -16,6 +16,9 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
+use App\Support\Uploads;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -37,7 +40,7 @@ class BoardController extends Controller
             'description' => 'nullable|string',
         ]);
 
-        $slug = \Illuminate\Support\Str::slug($validated['name']);
+        $slug = Str::slug($validated['name']);
         $originalSlug = $slug;
         $counter = 1;
 
@@ -177,7 +180,7 @@ class BoardController extends Controller
             'color' => 'nullable|string|max:20',
         ]);
 
-        $slug = \Illuminate\Support\Str::slug($validated['name']);
+        $slug = Str::slug($validated['name']);
         $maxPosition = $board->columns()->max('position') ?? 0;
 
         $board->columns()->create([
@@ -282,7 +285,7 @@ class BoardController extends Controller
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'column_id' => 'required|exists:board_columns,id',
+            'column_id' => ['required', Rule::exists('board_columns', 'id')->where('board_id', $board->id)],
             'item_type_id' => 'nullable|exists:item_types,id',
             'priority_id' => 'nullable|exists:item_priorities,id',
             'assigned_to' => 'nullable|exists:users,id',
@@ -542,7 +545,7 @@ class BoardController extends Controller
         $this->authorize('update', $item);
 
         $validated = $request->validate([
-            'column_id' => 'required|exists:board_columns,id',
+            'column_id' => ['required', Rule::exists('board_columns', 'id')->where('board_id', $item->board_id)],
             'position' => 'required|integer|min:0',
         ]);
 
@@ -851,6 +854,13 @@ class BoardController extends Controller
         ]);
 
         // Prevent self-linking
+        // Only issues the user can open — otherwise the link would reveal another
+        // workspace's issue key and title.
+        $target = Item::with('board.project')->find($validated['target_item_id']);
+        if (! $target || $request->user()->cannot('view', $target)) {
+            return back()->withErrors(['target_item_id' => 'That issue was not found.']);
+        }
+
         if ($validated['target_item_id'] == $item->id) {
             return back()->withErrors(['target_item_id' => 'Cannot link an item to itself.']);
         }
@@ -917,8 +927,8 @@ class BoardController extends Controller
 
         $targetBoard = Board::findOrFail($validated['target_board_id']);
 
-        // Check if user has access to target board
-        $this->authorize('view', $targetBoard);
+        // Moving in = creating an issue on the target board.
+        $this->authorize('createItems', $targetBoard);
 
         // Get target column - either specified or first column of target board
         if (! empty($validated['target_column_id'])) {
@@ -955,13 +965,13 @@ class BoardController extends Controller
         ]);
 
         $file = $request->file('file');
-        $filename = uniqid().'_'.$file->getClientOriginalName();
+        $filename = Uploads::name($file);
         $path = $file->storeAs('attachments/'.$item->id, $filename, 'public');
 
         $attachment = $item->attachments()->create([
             'user_id' => $request->user()->id,
             'filename' => $filename,
-            'original_filename' => $file->getClientOriginalName(),
+            'original_filename' => Uploads::displayName($file),
             'path' => $path,
             'mime_type' => $file->getMimeType(),
             'size' => $file->getSize(),
@@ -978,7 +988,7 @@ class BoardController extends Controller
     /**
      * Delete an attachment.
      */
-    public function destroyAttachment(Request $request, Workspace $workspace, Project $project, Board $board, Item $item, \App\Models\Attachment $attachment)
+    public function destroyAttachment(Request $request, Workspace $workspace, Project $project, Board $board, Item $item, Attachment $attachment)
     {
         $this->authorize('update', $item);
 
@@ -1067,7 +1077,7 @@ class BoardController extends Controller
      * What a card on the board (and the item popup's "live" copy) needs — no comment or
      * attachment bodies, just their counts.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Item>|\Illuminate\Database\Eloquent\Relations\HasMany<Item, BoardColumn>  $query
+     * @param  Builder<Item>|HasMany<Item, BoardColumn>  $query
      */
     private function withCardData($query)
     {

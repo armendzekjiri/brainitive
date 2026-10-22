@@ -22,6 +22,7 @@ import {
     Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User,
     Label as LabelType, Comment, Attachment, ItemHistoryEntry,
 } from '@/types';
+import { safeHtmlProp } from '@/lib/sanitize';
 
 // ── Minimal item shape used by the "Link issue" picker ───────────────────────
 export type ProjectItemLite = {
@@ -117,7 +118,7 @@ export function CommentItem({
                     </div>
                     <div
                         className="text-sm mt-1 prose prose-sm max-w-none"
-                        dangerouslySetInnerHTML={{ __html: comment.body }}
+                        dangerouslySetInnerHTML={safeHtmlProp(comment.body)}
                     />
                     <Button
                         variant="ghost"
@@ -806,7 +807,7 @@ function ItemActivityAll({ comments, history, loading }: { comments: Comment[]; 
                                 <span className="text-muted-foreground">commented</span>
                                 <time className="text-xs text-muted-foreground/80">{formatDistanceToNow(new Date(event.comment.created_at), { addSuffix: true })}</time>
                             </div>
-                            <div className="mt-1 rounded-md border border-border/70 bg-card px-3 py-2 prose prose-sm max-w-none dark:prose-invert text-foreground" dangerouslySetInnerHTML={{ __html: event.comment.body }} />
+                            <div className="mt-1 rounded-md border border-border/70 bg-card px-3 py-2 prose prose-sm max-w-none dark:prose-invert text-foreground" dangerouslySetInnerHTML={safeHtmlProp(event.comment.body)} />
                         </div>
                     </li>
                 ))}

@@ -5,9 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Snippet;
 use App\Models\SnippetCollection;
 use App\Models\Workspace;
+use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -26,7 +26,7 @@ class SnippetController extends Controller
             ->get();
 
         return Inertia::render('Snippets/Index', [
-            'workspace'   => $workspace,
+            'workspace' => $workspace,
             'collections' => $collections,
         ]);
     }
@@ -54,9 +54,9 @@ class SnippetController extends Controller
         $canEdit = $this->canEdit($workspace);
 
         return Inertia::render('Snippets/Show', [
-            'workspace'  => $workspace,
+            'workspace' => $workspace,
             'collection' => $collection,
-            'canEdit'    => $canEdit,
+            'canEdit' => $canEdit,
         ]);
     }
 
@@ -65,10 +65,10 @@ class SnippetController extends Controller
         $this->authorize('create', $workspace);
 
         $validated = $request->validate([
-            'name'        => 'required|string|max:255',
+            'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:2000',
-            'icon'        => 'nullable|string|max:2048',
-            'visibility'  => 'nullable|in:private,public',
+            'icon' => 'nullable|string|max:2048',
+            'visibility' => 'nullable|in:private,public',
         ]);
 
         $slug = Str::slug($validated['name']) ?: 'collection';
@@ -79,7 +79,7 @@ class SnippetController extends Controller
                 ->where('slug', $slug)
                 ->exists()
         ) {
-            $slug = $base . '-' . $i++;
+            $slug = $base.'-'.$i++;
         }
 
         $maxPos = SnippetCollection::where('workspace_id', $workspace->id)->max('position') ?? 0;
@@ -87,11 +87,11 @@ class SnippetController extends Controller
         $collection = SnippetCollection::create([
             ...$validated,
             'workspace_id' => $workspace->id,
-            'created_by'   => Auth::id(),
-            'slug'         => $slug,
-            'icon'         => $validated['icon'] ?? '📋',
-            'visibility'   => $validated['visibility'] ?? 'private',
-            'position'     => $maxPos + 1,
+            'created_by' => Auth::id(),
+            'slug' => $slug,
+            'icon' => $validated['icon'] ?? '📋',
+            'visibility' => $validated['visibility'] ?? 'private',
+            'position' => $maxPos + 1,
         ]);
 
         return redirect()->route('snippets.show', [$workspace->slug, $collection->slug]);
@@ -103,10 +103,10 @@ class SnippetController extends Controller
         abort_if($collection->workspace_id !== $workspace->id, 404);
 
         $validated = $request->validate([
-            'name'        => 'sometimes|required|string|max:255',
+            'name' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string|max:2000',
-            'icon'        => 'nullable|string|max:2048',
-            'visibility'  => 'nullable|in:private,public',
+            'icon' => 'nullable|string|max:2048',
+            'visibility' => 'nullable|in:private,public',
         ]);
 
         $collection->update($validated);
@@ -132,11 +132,11 @@ class SnippetController extends Controller
         abort_if($collection->workspace_id !== $workspace->id, 404);
 
         $validated = $request->validate([
-            'title'       => 'required|string|max:255',
+            'title' => 'required|string|max:255',
             'description' => 'nullable|string|max:2000',
-            'language'    => 'nullable|string|max:50',
-            'content'     => 'nullable|string',
-            'visibility'  => 'nullable|in:inherit,private,public',
+            'language' => 'nullable|string|max:50',
+            'content' => 'nullable|string',
+            'visibility' => 'nullable|in:inherit,private,public',
         ]);
 
         $maxPos = Snippet::where('collection_id', $collection->id)->max('position') ?? 0;
@@ -144,10 +144,10 @@ class SnippetController extends Controller
         Snippet::create([
             ...$validated,
             'collection_id' => $collection->id,
-            'created_by'    => Auth::id(),
-            'language'      => $validated['language'] ?? 'plaintext',
-            'visibility'    => $validated['visibility'] ?? 'inherit',
-            'position'      => $maxPos + 1,
+            'created_by' => Auth::id(),
+            'language' => $validated['language'] ?? 'plaintext',
+            'visibility' => $validated['visibility'] ?? 'inherit',
+            'position' => $maxPos + 1,
         ]);
 
         return back();
@@ -160,11 +160,11 @@ class SnippetController extends Controller
         abort_if($snippet->collection_id !== $collection->id, 404);
 
         $validated = $request->validate([
-            'title'       => 'sometimes|required|string|max:255',
+            'title' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string|max:2000',
-            'language'    => 'nullable|string|max:50',
-            'content'     => 'nullable|string',
-            'visibility'  => 'nullable|in:inherit,private,public',
+            'language' => 'nullable|string|max:50',
+            'content' => 'nullable|string',
+            'visibility' => 'nullable|in:inherit,private,public',
         ]);
 
         $snippet->update($validated);
@@ -197,7 +197,7 @@ class SnippetController extends Controller
 
         return Inertia::render('Snippets/ShowPublic', [
             'collection' => $collection,
-            'isPublic'   => true,
+            'isPublic' => true,
         ]);
     }
 
@@ -211,9 +211,9 @@ class SnippetController extends Controller
         abort_if($snippet->resolvedVisibility() !== 'public', 404);
 
         return Inertia::render('Snippets/ShowPublic', [
-            'snippet'    => $snippet,
+            'snippet' => $snippet,
             'collection' => $snippet->collection,
-            'isPublic'   => true,
+            'isPublic' => true,
             'singleMode' => true,
         ]);
     }
@@ -229,7 +229,7 @@ class SnippetController extends Controller
         ]);
 
         $file = $request->file('icon');
-        $ext  = $file->getClientOriginalExtension() === 'jpeg' ? 'jpg' : $file->getClientOriginalExtension();
+        $ext = Uploads::imageExtension($file);
         $path = $file->storeAs('snippet-icons/temp', Str::uuid().'.'.$ext, 'public');
 
         return response()->json(['icon_display' => asset('storage/'.$path)]);
@@ -240,8 +240,11 @@ class SnippetController extends Controller
     private function canEdit(Workspace $workspace): bool
     {
         $user = Auth::user();
-        if (! $user) return false;
+        if (! $user) {
+            return false;
+        }
         $role = $user->workspaceRole($workspace);
+
         return in_array($role, ['admin', 'editor']);
     }
 }
