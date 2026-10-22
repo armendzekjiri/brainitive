@@ -89,6 +89,8 @@ const CHANGELOG = [
             'Link previews and AI endpoints can no longer reach internal network addresses (self-hosted: AI_ALLOW_PRIVATE_ENDPOINTS for a local model).',
             'CLI: suspended accounts can’t sign in, login is rate-limited, and task changes are checked against their list.',
             'Fixed: removing a link between two issues failed.',
+            'Fixed: creating a ticket in the helpdesk without a customer email, and opening a ticket from an email or notification, failed with an error. Ticket links now open the helpdesk with that ticket.',
+            'Snippets: only workspace editors and admins can add, change or delete snippets and collections.',
         ]
     },
     {
