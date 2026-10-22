@@ -9,6 +9,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * Run: npm run build:widget  (or vite build --config vite.widget.config.js)
  */
 export default defineConfig({
+    // Don't copy public/ into public/js (it duplicated favicons, .htaccess and images there)
+    publicDir: false,
     build: {
         outDir: 'public/js',
         emptyOutDir: false,

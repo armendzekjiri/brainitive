@@ -123,3 +123,4 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   ref; adding/removing a per-render function leaks listeners after the gesture.
 - **Playwright `page.mouse.click` ignores `modifiers`** — hold Shift with `keyboard.down` when
   testing multi-select in the harness.
+- **`npm run build:widget` used to copy `public/` into `public/js/`** (no `publicDir: false`), which is why favicons, `.htaccess`, `hot` and logos are tracked under `public/js/`. Fixed in `vite.widget.config.js`; the old copies are left in place until someone checks the server doesn't rely on them.
