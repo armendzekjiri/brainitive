@@ -61,3 +61,8 @@ npm run zip:firefox    # also writes the sources zip AMO asks for
 | Firefox AMO | `…-firefox.zip` + `…-sources.zip` | Free. `data_collection_permissions` declares `websiteContent` (what you capture goes to your Brainitive server) |
 
 Bump `version` in `package.json` for every store upload.
+
+**Direct download (until the stores list it):** the Release workflow attaches
+`brainitive-extension-chrome.zip` / `-firefox.zip` to the current GitHub release on every
+push to `main`; the homepage (`#extension` in `Pages/Welcome.tsx`) links to
+`releases/latest/download/…`.

@@ -28,6 +28,9 @@ import {
     CreditCard,
     ShieldCheck,
     Scale,
+    Puzzle,
+    Download,
+    MousePointerClick,
     ListChecks,
     CalendarDays,
     Briefcase,
@@ -467,6 +470,73 @@ function ProductTour() {
                     </div>
                 </RevealSection>
             </div>
+        </section>
+    );
+}
+
+const EXTENSION_DOWNLOAD = 'https://github.com/armendzekjiri/brainitive/releases/latest/download';
+
+/** Browser extension: what it does + download until the store listings are live. */
+function ExtensionSection() {
+    const features = [
+        { icon: MousePointerClick, title: 'Issue from any page', text: 'Link, selected text and a screenshot of an area, in two clicks.' },
+        { icon: Bookmark, title: 'Bookmarks & docs', text: 'Save links or clip a whole article as a clean doc.' },
+        { icon: Code2, title: 'Snippets', text: 'Right-click selected code: saved with its language.' },
+        { icon: LayoutDashboard, title: 'My Work alongside', text: 'Your assigned issues and tasks in the side panel; “bt” searches from the address bar.' },
+    ];
+
+    return (
+        <section id="extension" className="relative z-10 px-6 py-24 sm:py-28">
+            <RevealSection className="max-w-6xl mx-auto grid lg:grid-cols-[1.1fr_1fr] gap-10 items-center">
+                <div>
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[#0E83DC]/20 bg-[#0E83DC]/5 px-4 py-1.5 text-xs font-semibold text-[#0E83DC] mb-4">
+                        <Puzzle className="h-3.5 w-3.5" />
+                        Browser extension
+                    </div>
+                    <h2 className="text-3xl sm:text-4xl font-bold text-[#485E72] dark:text-slate-100 mb-4">Save anything from your browser</h2>
+                    <p className="text-[#485E72]/60 dark:text-slate-400 text-lg mb-8 max-w-xl">
+                        For Chrome, Edge and Firefox. Works with Brainitive Cloud and your own server: you sign in on your instance, and the extension can only save things and search titles.
+                    </p>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                        {features.map((f) => (
+                            <div key={f.title} className="flex gap-3">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0E83DC]/10 text-[#0E83DC]">
+                                    <f.icon className="h-4 w-4" />
+                                </div>
+                                <div>
+                                    <p className="font-semibold text-[#485E72] dark:text-slate-100 text-sm">{f.title}</p>
+                                    <p className="text-sm text-[#485E72]/60 dark:text-slate-400">{f.text}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-sm border border-[#C0C5C0]/30 dark:border-slate-700/60 rounded-2xl p-6 sm:p-8">
+                    <p className="font-semibold text-[#485E72] dark:text-slate-100 mb-1">Get the extension</p>
+                    <p className="text-sm text-[#485E72]/60 dark:text-slate-400 mb-5">Store listings are on the way. Until then, install the download:</p>
+                    <div className="flex flex-wrap gap-3 mb-6">
+                        <a href={`${EXTENSION_DOWNLOAD}/brainitive-extension-chrome.zip`} className="inline-flex items-center gap-2 rounded-xl bg-[#0E83DC] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#0E83DC]/20 hover:bg-[#0b6fbf]">
+                            <Download className="h-4 w-4" /> Chrome &amp; Edge
+                        </a>
+                        <a href={`${EXTENSION_DOWNLOAD}/brainitive-extension-firefox.zip`} className="inline-flex items-center gap-2 rounded-xl border border-[#C0C5C0]/60 dark:border-slate-600 px-5 py-2.5 text-sm font-semibold text-[#485E72] dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800">
+                            <Download className="h-4 w-4" /> Firefox
+                        </a>
+                    </div>
+                    <ol className="space-y-2 text-sm text-[#485E72]/80 dark:text-slate-300 list-decimal pl-5">
+                        <li>Unzip the download.</li>
+                        <li>
+                            Open <code className="rounded bg-[#485E72]/10 px-1">chrome://extensions</code> (Edge: <code className="rounded bg-[#485E72]/10 px-1">edge://extensions</code>) and turn on <strong>Developer mode</strong>.
+                        </li>
+                        <li>
+                            Click <strong>Load unpacked</strong> and choose the unzipped folder. Pin Brainitive from the puzzle icon.
+                        </li>
+                        <li>
+                            Firefox: <code className="rounded bg-[#485E72]/10 px-1">about:debugging</code> → This Firefox → <strong>Load Temporary Add-on</strong> → pick the zip (until it’s on Firefox Add-ons).
+                        </li>
+                    </ol>
+                </div>
+            </RevealSection>
         </section>
     );
 }
@@ -1127,6 +1197,9 @@ export default function Welcome({
                         </div>
                     </RevealSection>
                 </section>
+
+                {/* ═══ Browser extension ═══ */}
+                <ExtensionSection />
 
                 {/* ═══ Pricing ═══ */}
                 <PricingSection />
