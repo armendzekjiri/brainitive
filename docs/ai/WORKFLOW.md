@@ -99,6 +99,11 @@ fix → patch (`v1.12.0` → `v1.12.1`). Entry = `version`, short `title`, `tag`
 Major Feature / Enhancement / Patch), `date`, and user-facing `items` (what changed for the
 user, not file names).
 
+**Homepage + Welcome tab.** A new module or a big change to one also updates the feature
+cards in `resources/js/Pages/Welcome.tsx`, `WELCOME_FEATURES` in `HelpModal.tsx`, and — when
+the UI changed visibly — the screenshots in `public/images/screenshots/` (light + `-dark`,
+2880×1720 JPEG, demo data only, no real customer data).
+
 ## Git & PR conventions
 - Branch off `main`; commit/push only when asked.
 - Conventional commits with scope: `feat(mcp): …`, `fix(helpdesk): …`.

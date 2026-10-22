@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { LayoutGrid, FileText, PencilRuler, BookMarked, BrainCircuit, X, History, Sparkles } from 'lucide-react';
+import { LayoutGrid, FileText, PencilRuler, BookMarked, BrainCircuit, X, History, Sparkles, GanttChart, ListChecks, CalendarDays, Bot } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface HelpModalProps {
@@ -12,7 +12,80 @@ interface HelpModalProps {
 
 type TabType = 'welcome' | 'changelog';
 
+/** Overview on the Welcome tab — keep in sync when a module changes. */
+const WELCOME_FEATURES = [
+    {
+        icon: LayoutGrid,
+        tone: 'bg-blue-500/10 text-blue-500',
+        title: 'Boards: Kanban & Scrum',
+        description: 'Drag-and-drop boards with sprints, backlog, burndown and velocity, issue history, WIP limits, time tracking and shareable filters.',
+        where: 'Project → Boards',
+    },
+    {
+        icon: GanttChart,
+        tone: 'bg-violet-500/10 text-violet-500',
+        title: 'Plans (Gantt)',
+        description: 'Phases, bars, milestones and dependencies on a timeline. Templates, share link, print — and rows linked to board issues.',
+        where: 'Project → Plans',
+        isNew: true,
+    },
+    {
+        icon: FileText,
+        tone: 'bg-emerald-500/10 text-emerald-500',
+        title: 'Docs & Wiki',
+        description: 'Distraction-free writing with a floating toolbar and slash commands. Drafts stay private until you publish; every version is kept.',
+        where: 'Project → Pages',
+    },
+    {
+        icon: PencilRuler,
+        tone: 'bg-pink-500/10 text-pink-500',
+        title: 'Whiteboards',
+        description: 'Excalidraw with templates (retro, roadmap, story map …), autosave and history. Turn sticky notes into issues and see them as live cards.',
+        where: 'Project → Whiteboards',
+        isNew: true,
+    },
+    {
+        icon: ListChecks,
+        tone: 'bg-sky-500/10 text-sky-500',
+        title: 'Lists & My Work',
+        description: 'Light to-do lists with due dates, plus one view of everything assigned to you across projects.',
+        where: 'Project → Lists · Sidebar → My Work',
+    },
+    {
+        icon: CalendarDays,
+        tone: 'bg-orange-500/10 text-orange-500',
+        title: 'Calendar',
+        description: 'Connect Google Calendar and Tasks, see due dates next to your meetings and move things in place.',
+        where: 'Sidebar → Calendar',
+    },
+    {
+        icon: BookMarked,
+        tone: 'bg-amber-500/10 text-amber-500',
+        title: 'Bookmarks & Snippets',
+        description: 'Save links, APIs and reusable text or code snippets in one place — share collections publicly if you like.',
+        where: 'Sidebar → Bookmarks / Snippets',
+    },
+    {
+        icon: Bot,
+        tone: 'bg-slate-500/10 text-slate-500',
+        title: 'AI & MCP',
+        description: 'Connect Claude or ChatGPT over MCP to read and update your workspace, or use your own AI provider inside docs and issues.',
+        where: 'Workspace settings → AI · MCP: add <your Brainitive URL>/mcp as a connector',
+    },
+];
+
 const CHANGELOG = [
+    {
+        version: 'v1.13.1',
+        title: 'Homepage & Welcome Refresh',
+        tag: 'Patch',
+        date: '2026-10-22',
+        items: [
+            'Homepage: features now cover Scrum boards, Gantt timelines, the draft / publish workflow with version history, and whiteboard templates with issue cards.',
+            'Homepage: new “See it in action” tour with screenshots of timelines, boards, docs and whiteboards (light and dark).',
+            'Help → Welcome: new overview of all modules with where to find them, “New” badges and a short getting-started note.',
+        ]
+    },
     {
         version: 'v1.13.0',
         title: 'Plans ↔ Board Issues',
@@ -624,42 +697,28 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
                                 </div>
 
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                    <div className="flex items-start gap-4 p-4 rounded-xl border bg-card/50 shadow-sm hover:shadow-md transition-shadow">
-                                        <div className="p-2.5 bg-blue-500/10 rounded-lg text-blue-500 shrink-0">
-                                            <LayoutGrid className="size-5" />
+                                    {WELCOME_FEATURES.map((feature) => (
+                                        <div key={feature.title} className="flex items-start gap-4 p-4 rounded-xl border bg-card/50 shadow-sm hover:shadow-md transition-shadow">
+                                            <div className={cn('p-2.5 rounded-lg shrink-0', feature.tone)}>
+                                                <feature.icon className="size-5" />
+                                            </div>
+                                            <div className="min-w-0">
+                                                <h4 className="font-semibold text-sm flex items-center gap-2">
+                                                    {feature.title}
+                                                    {feature.isNew && <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">New</span>}
+                                                </h4>
+                                                <p className="text-xs text-muted-foreground mt-1 leading-snug">{feature.description}</p>
+                                                <p className="text-[11px] text-muted-foreground/80 mt-1.5">{feature.where}</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h4 className="font-semibold text-sm">Kanban Boards</h4>
-                                            <p className="text-xs text-muted-foreground mt-1 leading-snug">Manage tasks and project workflows intuitively with dynamic, drag-and-drop boards.</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-start gap-4 p-4 rounded-xl border bg-card/50 shadow-sm hover:shadow-md transition-shadow">
-                                        <div className="p-2.5 bg-emerald-500/10 rounded-lg text-emerald-500 shrink-0">
-                                            <FileText className="size-5" />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-semibold text-sm">Rich Text Documents</h4>
-                                            <p className="text-xs text-muted-foreground mt-1 leading-snug">Create highly interactive pages with rich formatting, slash commands, and table of contents.</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-start gap-4 p-4 rounded-xl border bg-card/50 shadow-sm hover:shadow-md transition-shadow">
-                                        <div className="p-2.5 bg-violet-500/10 rounded-lg text-violet-500 shrink-0">
-                                            <PencilRuler className="size-5" />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-semibold text-sm">Excalidraw Whiteboards</h4>
-                                            <p className="text-xs text-muted-foreground mt-1 leading-snug">Visualize your ideas, sketches, and diagrams on an infinite collaborative canvas.</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-start gap-4 p-4 rounded-xl border bg-card/50 shadow-sm hover:shadow-md transition-shadow">
-                                        <div className="p-2.5 bg-amber-500/10 rounded-lg text-amber-500 shrink-0">
-                                            <BookMarked className="size-5" />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-semibold text-sm">Bookmarks & Snippets</h4>
-                                            <p className="text-xs text-muted-foreground mt-1 leading-snug">Save your favorite links, APIs, and essential code snippets in one central place.</p>
-                                        </div>
-                                    </div>
+                                    ))}
+                                </div>
+
+                                <div className="rounded-xl border bg-muted/40 p-4 text-xs text-muted-foreground leading-relaxed">
+                                    <span className="font-semibold text-foreground">Getting started:</span>{' '}
+                                    pick a project in the sidebar and use <span className="font-medium text-foreground">+</span> to add a board, page, whiteboard, list or plan.
+                                    Everything you create inside a project is shared with its members by role (admin, editor, viewer).
+                                    See the <span className="font-medium text-foreground">Changelog</span> tab for what changed recently.
                                 </div>
                             </div>
                         )}
