@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\InstanceSettings;
+use App\Support\Uploads;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -46,7 +47,7 @@ class ProfileController extends Controller
                 Storage::disk('public')->delete($user->avatar);
             }
             $file = $request->file('avatar');
-            $ext = strtolower($file->getClientOriginalExtension()) === 'jpeg' ? 'jpg' : $file->getClientOriginalExtension();
+            $ext = Uploads::imageExtension($file);
             $path = $file->storeAs('profile-photos/'.$user->id, 'avatar.'.$ext, 'public');
             $user->avatar = $path;
         }

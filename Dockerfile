@@ -34,6 +34,8 @@ ENV SERVER_NAME=:80 \
 
 WORKDIR /app
 COPY docker/php.ini "$PHP_INI_DIR/conf.d/zz-brainitive.ini"
+# Default FrankenPHP config + no PHP execution / sandboxed markup under /storage (uploads)
+COPY docker/Caddyfile /etc/frankenphp/Caddyfile
 COPY --from=vendor /app /app
 COPY --from=assets /app/public/build /app/public/build
 COPY --from=assets /app/public/js/helpdesk-widget.js /app/public/js/helpdesk-widget.js

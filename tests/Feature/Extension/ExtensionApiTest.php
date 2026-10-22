@@ -15,32 +15,25 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Passport\Passport;
 use Tests\Feature\Boards\InteractsWithBoards;
+use Tests\Feature\Concerns\UsesPassportKeys;
 use Tests\TestCase;
 
 class ExtensionApiTest extends TestCase
 {
     use InteractsWithBoards;
     use RefreshDatabase;
+    use UsesPassportKeys;
 
     protected TaskList $taskList;
 
     protected Bookmark $bookmark;
-
-    /** @var array{private: string, public: string}|null */
-    private static ?array $keys = null;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->setUpBoard();
 
-        // The api guard needs Passport keys; generate a throwaway pair (storage/*.key is gitignored).
-        if (! self::$keys) {
-            $key = openssl_pkey_new(['private_key_bits' => 2048]);
-            openssl_pkey_export($key, $private);
-            self::$keys = ['private' => $private, 'public' => openssl_pkey_get_details($key)['key']];
-        }
-        config(['passport.private_key' => self::$keys['private'], 'passport.public_key' => self::$keys['public']]);
+        $this->usePassportKeys();
 
         $this->taskList = TaskList::create([
             'project_id' => $this->project->id,

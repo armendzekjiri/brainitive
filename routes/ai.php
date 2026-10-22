@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\LogMcpRequest;
 use App\Http\Middleware\RejectCaptureTokens;
 use App\Mcp\Servers\BrainitiveServer;
@@ -29,7 +30,7 @@ use Laravel\Mcp\Facades\Mcp;
 Mcp::oauthRoutes();
 
 Mcp::web('/mcp', BrainitiveServer::class)
-    ->middleware([LogMcpRequest::class, 'auth:api', RejectCaptureTokens::class]);
+    ->middleware([LogMcpRequest::class, 'auth:api', EnsureUserIsNotSuspended::class, RejectCaptureTokens::class]);
 
 // TEMPORARY: log GET probes (some clients open a standalone GET SSE stream before
 // POSTing). laravel/mcp normally answers GET with 405; we keep that behaviour but

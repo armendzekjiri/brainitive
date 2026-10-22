@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class FileController extends Controller
 {
@@ -15,11 +15,11 @@ class FileController extends Controller
     public function uploadImage(Request $request)
     {
         $request->validate([
-            'image' => 'required|image|mimes:jpeg,png,gif,webp,svg|max:10240', // 10MB max
+            'image' => 'required|image|mimes:jpeg,png,gif,webp|max:10240', // 10MB max; no SVG (scripts on our origin)
         ]);
 
         $file = $request->file('image');
-        $filename = Str::uuid() . '.' . $file->getClientOriginalExtension();
+        $filename = Uploads::imageName($file);
         $path = $file->storeAs('uploads/images', $filename, 'public');
 
         // Editor.js format response
@@ -44,7 +44,7 @@ class FileController extends Controller
         ]);
 
         $file = $request->file('document');
-        $filename = Str::uuid() . '_' . Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) . '.' . $file->getClientOriginalExtension();
+        $filename = Uploads::name($file);
         $path = $file->storeAs('uploads/documents', $filename, 'public');
 
         // Editor.js Attaches format response
@@ -55,7 +55,7 @@ class FileController extends Controller
                 'name' => $file->getClientOriginalName(),
                 'size' => $file->getSize(),
                 'title' => $file->getClientOriginalName(),
-                'extension' => $file->getClientOriginalExtension(),
+                'extension' => Uploads::extension($file),
             ],
         ]);
     }

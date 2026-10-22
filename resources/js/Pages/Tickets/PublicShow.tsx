@@ -9,6 +9,7 @@ import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { MessageSquare, Send, User, Headphones, LifeBuoy, FileText, Circle, Paperclip, X } from 'lucide-react';
 import { useState, FormEvent, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { safeHtmlProp } from '@/lib/sanitize';
 
 const MAX_REPLY_FILE_SIZE_MB = 10;
 const MAX_REPLY_FILE_SIZE_BYTES = MAX_REPLY_FILE_SIZE_MB * 1024 * 1024;
@@ -28,9 +29,8 @@ interface Props extends PageProps {
 
 function stripHtml(html: string): string {
     if (!html) return '';
-    const tmp = document.createElement('div');
-    tmp.innerHTML = html;
-    return tmp.textContent ?? tmp.innerText ?? '';
+    // DOMParser documents are inert: no scripts, no image loads (innerHTML on a div would fire onerror).
+    return new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '';
 }
 
 function isReplyBodyEmpty(html: string): boolean {
@@ -190,7 +190,7 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
                                             'rounded-lg border bg-muted/30 p-4 text-sm',
                                             'prose prose-sm max-w-none dark:prose-invert prose-p:my-2 prose-ul:my-2 prose-ol:my-2'
                                         )}
-                                        dangerouslySetInnerHTML={{ __html: ticket.description }}
+                                        dangerouslySetInnerHTML={safeHtmlProp(ticket.description)}
                                     />
                                 </div>
                             )}
@@ -240,9 +240,7 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
                                                         </div>
                                                         <div
                                                             className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap break-words"
-                                                            dangerouslySetInnerHTML={{
-                                                                __html: reply.body || '',
-                                                            }}
+                                                            dangerouslySetInnerHTML={safeHtmlProp(reply.body || '')}
                                                         />
                                                         {reply.attachments && reply.attachments.length > 0 && (
                                                             <ul className="mt-2 flex flex-wrap gap-2">

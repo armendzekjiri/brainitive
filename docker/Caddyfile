@@ -1,0 +1,35 @@
+# FrankenPHP's default Caddyfile (dunglas/frankenphp:1) + hardening for uploaded files.
+# public/storage → storage/app/public holds user uploads: they must never run as PHP and
+# never render as a page on our origin.
+{
+	skip_install_trust
+	{$CADDY_GLOBAL_OPTIONS}
+	frankenphp {
+		{$FRANKENPHP_CONFIG}
+	}
+}
+
+{$CADDY_EXTRA_CONFIG}
+
+{$SERVER_NAME:localhost} {
+	root {$SERVER_ROOT:public/}
+	@compressible not path /.well-known/mercure
+	encode @compressible zstd br gzip
+
+	# Never execute uploads, whatever their name.
+	@uploadedCode path_regexp uploadedCode (?i)^/storage/.*\.(php\d?|phtml|pht|phps|phar|inc)(/|$)
+	respond @uploadedCode 404
+
+	# Uploads are data: no MIME sniffing; HTML / SVG / XML only in a sandbox (no scripts,
+	# no access to our cookies or pages).
+	@uploads path /storage/*
+	header @uploads X-Content-Type-Options nosniff
+	@uploadedMarkup path_regexp uploadedMarkup (?i)^/storage/.*\.(html?|xhtml|xht|shtml|svgz?|xml|xsl)$
+	header @uploadedMarkup Content-Security-Policy "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox"
+
+	{$CADDY_SERVER_EXTRA_DIRECTIVES}
+	php_server {
+	}
+}
+
+import Caddyfile.d/*.caddyfile

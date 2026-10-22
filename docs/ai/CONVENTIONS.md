@@ -131,6 +131,17 @@ class Example extends Model
   CSRF-exempt (`bootstrap/app.php`).
 - **All routes named** (Ziggy depends on it).
 
+### Security rules (see KNOWLEDGE for the why)
+- **Uploads:** store with `App\Support\Uploads::name()` / `imageName()`. Never use
+  `getClientOriginalName()` / `getClientOriginalExtension()` in a stored path.
+- **Raw HTML:** React renders it only through `safeHtmlProp()` (`@/lib/sanitize`); server-side
+  rich text from untrusted sources goes through `App\Support\SafeHtml::clean()`.
+- **Foreign ids** in request data are validated against the parent
+  (`Rule::exists(...)->where('board_id', $board->id)`) or authorized with a policy.
+- **Requests to user-supplied URLs** only via `App\Support\OutboundUrl::options()`.
+- **Public tokens** are scoped to one record (`Ticket::publicAccessToken()`), never to a person
+  or email address.
+
 ### API tokens & scopes
 - Passport scopes are declared in `AppServiceProvider` (`Passport::tokensCan`): `mcp:use` (AI
   connectors) and `capture` (browser extension).

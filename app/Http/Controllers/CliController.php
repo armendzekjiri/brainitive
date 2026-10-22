@@ -28,6 +28,13 @@ class CliController extends Controller
 
         $user = Auth::user();
 
+        if ($user->isSuspended()) {
+            Auth::logout();
+            throw ValidationException::withMessages([
+                'email' => ['This account is suspended.'],
+            ]);
+        }
+
         // Revoke any previous CLI tokens so there is only ever one active.
         // Wrapped in try/catch in case the OAuth tables have not been migrated
         // yet on this environment.
@@ -155,6 +162,7 @@ class CliController extends Controller
     public function updateItem(Request $request, TaskList $taskList, TaskListItem $item): JsonResponse
     {
         $this->authorize('manageItems', $taskList);
+        abort_unless($item->task_list_id === $taskList->id, 404);
 
         $validated = $request->validate([
             'title' => 'sometimes|required|string|max:500',
@@ -190,6 +198,7 @@ class CliController extends Controller
     public function destroyItem(Request $request, TaskList $taskList, TaskListItem $item): JsonResponse
     {
         $this->authorize('manageItems', $taskList);
+        abort_unless($item->task_list_id === $taskList->id, 404);
 
         $item->delete();
 

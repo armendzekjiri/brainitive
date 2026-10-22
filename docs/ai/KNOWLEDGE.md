@@ -201,3 +201,33 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   a *test copy* of the manifest for screenshots. Don't add it to the shipped manifest.
 - **Passport keys in tests:** `storage/*.key` is gitignored, so token-guard tests generate a
   throwaway key pair into `passport.private_key` / `public_key` (see `ExtensionApiTest`).
+- **Uploads: never store the client's file name or extension.** The public disk is served
+  from `/storage`. FrankenPHP (and a typical nginx `location ~ \.php$`) *executes*
+  `*.php` there, and browsers render HTML/SVG on our origin. Use `App\Support\Uploads`:
+  `name()` for attachments (harmless extensions kept, active ones become `.bin`),
+  `imageName()` / `imageExtension()` for images (extension from the content). Keep the
+  client name only as display text (`Uploads::displayName()`). `docker/Caddyfile` adds a
+  404 for PHP under `/storage` plus a sandbox CSP for markup as a second layer;
+  `php artisan uploads:audit` finds old risky files.
+- **Rich HTML from other people is sanitized twice.** Ticket descriptions and replies go
+  through `App\Support\SafeHtml` (symfony/html-sanitizer) in the model accessors (on write
+  *and* read, so old rows are covered). Every React `dangerouslySetInnerHTML` uses
+  `safeHtmlProp()` from `resources/js/lib/sanitize.ts` (DOMPurify). To get plain text from
+  HTML, use `DOMParser`, never `div.innerHTML` (that fires `<img onerror>`).
+- **Public ticket links use per-ticket tokens.** `Ticket::publicAccessToken()` is an HMAC of
+  the ticket UUID with `APP_KEY`: it opens one ticket and never rotates. Contacts are
+  global (matched by email across workspaces), so anything contact-wide is open to anyone
+  who types that email into a public form. Rotating `APP_KEY` invalidates every ticket link.
+- **Server-side requests to user URLs go through `App\Support\OutboundUrl::options()`**:
+  http(s) only, public IPs only (`FILTER_FLAG_GLOBAL_RANGE`), no redirects (follow by hand and
+  re-check each hop), and the connection is pinned to the checked IP (`CURLOPT_RESOLVE`).
+- **Foreign ids in requests must be scoped to the parent.** `exists:board_columns,id` accepts
+  any workspace's column; use `Rule::exists(...)->where('board_id', …)`. For ids that only
+  get *displayed* (issue links), check the user can `view` the target.
+- **`scopeBindings()` guesses the child relation from the parameter name.**
+  `{item}/links/{link}` called `Item::links()`, which doesn't exist, so unlinking issues
+  returned 500. Use `->withoutScopedBindings()` plus an ownership check in the controller, or
+  add the relation. The CLI API group is scoped (`{taskList}/items/{item}`).
+- **Default (global) item types are shared by every workspace.** Projects switch them off
+  in `projects.settings.disabled_item_types` (`Project::disabledItemTypeIds()`, honoured by
+  `ItemType::forProject`). Projects never edit the global row.

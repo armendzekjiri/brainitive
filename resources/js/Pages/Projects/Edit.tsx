@@ -688,6 +688,8 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                                     )}
                                                 </div>
                                                 <div className="flex items-center gap-1">
+                                                    {/* Default types are shared by every workspace: they can only be switched off per project. */}
+                                                    {!isGlobal && (
                                                     <Dialog
                                                         open={editingItemType?.id === type.id}
                                                         onOpenChange={(open) => !open && setEditingItemType(null)}
@@ -707,7 +709,7 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                                             <DialogHeader>
                                                                 <DialogTitle>Edit item type</DialogTitle>
                                                                 <DialogDescription>
-                                                                    {isGlobal ? 'Update the default type. Changes apply to all projects.' : 'Update the type name, color, or icon.'}
+                                                                    Update the type name, color, or icon.
                                                                 </DialogDescription>
                                                             </DialogHeader>
                                                             {editingItemType && (
@@ -721,6 +723,7 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                                             )}
                                                         </DialogContent>
                                                     </Dialog>
+                                                    )}
                                                     {isGlobal ? (
                                                         isDisabled ? (
                                                             <Button

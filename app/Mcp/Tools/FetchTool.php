@@ -55,7 +55,10 @@ class FetchTool extends Tool
             return Response::error('No content found for that id.');
         }
 
-        if (! $this->userCanAccess($model, $type, $workspaceIds) || ($type === 'page' && $user->cannot('view', $model))) {
+        // Workspace membership first, then the same policy the app uses (project membership,
+        // private bookmark groups, unpublished pages).
+        $policyChecked = in_array($type, ['page', 'item', 'project', 'bookmark'], true);
+        if (! $this->userCanAccess($model, $type, $workspaceIds) || ($policyChecked && $user->cannot('view', $model))) {
             return Response::error('You do not have access to that content.');
         }
 

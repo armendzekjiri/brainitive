@@ -56,6 +56,7 @@ class ItemType extends Model
         if (str_contains($icon, '/') || strlen($icon) > 50) {
             return asset('storage/'.$icon);
         }
+
         return $icon;
     }
 
@@ -88,9 +89,11 @@ class ItemType extends Model
      */
     public function scopeForProject($query, Project $project)
     {
-        return $query->where(function ($q) use ($project) {
-            $q->where(function ($q2) {
-                $q2->whereNull('project_id')->where('is_active', true);
+        $disabled = $project->disabledItemTypeIds();
+
+        return $query->where(function ($q) use ($project, $disabled) {
+            $q->where(function ($q2) use ($disabled) {
+                $q2->whereNull('project_id')->where('is_active', true)->whereNotIn('id', $disabled);
             })->orWhere('project_id', $project->id);
         });
     }

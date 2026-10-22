@@ -3,8 +3,10 @@
 namespace App\Jobs;
 
 use App\Models\BookmarkItem;
+use App\Support\OutboundUrl;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
@@ -19,21 +21,19 @@ class FetchLinkMetadataJob implements ShouldQueue
     public function handle(): void
     {
         $item = BookmarkItem::find($this->bookmarkItemId);
-        if (!$item || $item->type !== 'link' || !$item->url) {
+        if (! $item || $item->type !== 'link' || ! $item->url) {
             return;
         }
 
         $url = $item->url;
-        if (!Str::startsWith($url, ['http://', 'https://'])) {
-            $url = 'https://' . $url;
+        if (! Str::startsWith($url, ['http://', 'https://'])) {
+            $url = 'https://'.$url;
         }
 
         try {
-            $response = Http::timeout(10)
-                ->withHeaders(['User-Agent' => 'Mozilla/5.0 (compatible; Brainitive/1.0)'])
-                ->get($url);
+            $response = $this->fetch($url);
 
-            if (!$response->successful()) {
+            if (! $response?->successful()) {
                 return;
             }
 
@@ -53,11 +53,11 @@ class FetchLinkMetadataJob implements ShouldQueue
             if ($description !== null && $description !== '') {
                 $metadata['description'] = Str::limit($description, 500);
             }
-            if (!empty($metadata)) {
+            if (! empty($metadata)) {
                 $update['metadata'] = $metadata;
             }
 
-            if (!empty($update)) {
+            if (! empty($update)) {
                 $item->update($update);
             }
         } catch (\Throwable) {
@@ -65,11 +65,48 @@ class FetchLinkMetadataJob implements ShouldQueue
         }
     }
 
+    /**
+     * GET a user-supplied URL: public addresses only, redirects followed by hand (each hop
+     * checked again), at most 2 MB.
+     */
+    private function fetch(string $url): ?Response
+    {
+        for ($hop = 0; $hop <= 3; $hop++) {
+            $options = OutboundUrl::options($url);
+            if ($options === null) {
+                return null;
+            }
+
+            $response = Http::timeout(10)
+                ->connectTimeout(5)
+                ->withOptions($options + ['on_headers' => function ($headers) {
+                    if ((int) $headers->getHeaderLine('Content-Length') > 2_000_000) {
+                        throw new \RuntimeException('Response too large');
+                    }
+                }])
+                ->withHeaders(['User-Agent' => 'Mozilla/5.0 (compatible; Brainitive/1.0)'])
+                ->get($url);
+
+            if (! $response->redirect()) {
+                return $response;
+            }
+
+            $location = $response->header('Location');
+            if ($location === '') {
+                return null;
+            }
+            $url = $this->resolveUrl($location, $this->baseUrl($url));
+        }
+
+        return null;
+    }
+
     private function extractTitle(string $html): ?string
     {
         if (preg_match('/<title[^>]*>([^<]+)<\/title>/i', $html, $m)) {
             return trim(html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
         }
+
         return null;
     }
 
@@ -108,6 +145,7 @@ class FetchLinkMetadataJob implements ShouldQueue
                 return $s;
             }
         }
+
         return null;
     }
 
@@ -126,7 +164,7 @@ class FetchLinkMetadataJob implements ShouldQueue
         // Fallback: Google favicon service
         $host = parse_url($pageUrl, PHP_URL_HOST);
         if ($host) {
-            return 'https://www.google.com/s2/favicons?sz=32&domain=' . urlencode($host);
+            return 'https://www.google.com/s2/favicons?sz=32&domain='.urlencode($host);
         }
 
         return null;
@@ -137,8 +175,9 @@ class FetchLinkMetadataJob implements ShouldQueue
         $parts = parse_url($url);
         $scheme = $parts['scheme'] ?? 'https';
         $host = $parts['host'] ?? '';
-        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
-        return $scheme . '://' . $host . $port . '/';
+        $port = isset($parts['port']) ? ':'.$parts['port'] : '';
+
+        return $scheme.'://'.$host.$port.'/';
     }
 
     private function resolveUrl(string $href, string $base): string
@@ -148,12 +187,14 @@ class FetchLinkMetadataJob implements ShouldQueue
             return $href;
         }
         if (Str::startsWith($href, '//')) {
-            return 'https:' . $href;
+            return 'https:'.$href;
         }
         if (Str::startsWith($href, '/')) {
             $parsed = parse_url($base);
-            return ($parsed['scheme'] ?? 'https') . '://' . ($parsed['host'] ?? '') . $href;
+
+            return ($parsed['scheme'] ?? 'https').'://'.($parsed['host'] ?? '').$href;
         }
-        return rtrim($base, '/') . '/' . ltrim($href, '/');
+
+        return rtrim($base, '/').'/'.ltrim($href, '/');
     }
 }

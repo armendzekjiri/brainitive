@@ -14,6 +14,7 @@ use App\Models\TaskList;
 use App\Support\Boards\ProjectIssues;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\Mcp\ResourceLocator;
+use App\Support\Uploads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -176,8 +177,8 @@ class CaptureController extends Controller
 
     private function attachScreenshot(Item $item, UploadedFile $file, int $userId): void
     {
-        $original = 'screenshot-'.now()->format('Y-m-d-His').'.'.($file->extension() ?: 'png');
-        $filename = Str::uuid().'_'.$original;
+        $original = 'screenshot-'.now()->format('Y-m-d-His').'.'.Uploads::imageExtension($file);
+        $filename = Str::uuid().'.'.Uploads::imageExtension($file);
         $path = $file->storeAs('attachments/'.$item->id, $filename, 'public');
 
         $item->attachments()->create([

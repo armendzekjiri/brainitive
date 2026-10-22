@@ -3,13 +3,15 @@
 namespace App\Notifications;
 
 use App\Models\Ticket;
-use App\Models\TicketReply;
 use App\Models\TicketContact;
+use App\Models\TicketReply;
 use App\Models\User;
 use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Str;
 
 class TicketReplyNotification extends Notification implements ShouldQueue
 {
@@ -30,6 +32,7 @@ class TicketReplyNotification extends Notification implements ShouldQueue
         if ($notifiable instanceof TicketContact) {
             return ['mail'];
         }
+
         return $this->withWebPush($notifiable, ['database', 'mail']);
     }
 
@@ -46,7 +49,7 @@ class TicketReplyNotification extends Notification implements ShouldQueue
 
         return $this->webPush(
             "Reply on {$this->ticket->key}",
-            "{$actorName}: " . \Illuminate\Support\Str::limit(strip_tags($this->reply->body), 80),
+            "{$actorName}: ".Str::limit(strip_tags($this->reply->body), 80),
             $url,
         );
     }
@@ -79,7 +82,7 @@ class TicketReplyNotification extends Notification implements ShouldQueue
             'ticket_subject' => $this->ticket->subject,
             'ticket_url' => $url,
             'actor_name' => $actorName,
-            'reply_preview' => \Illuminate\Support\Str::limit(strip_tags($this->reply->body), 100),
+            'reply_preview' => Str::limit(strip_tags($this->reply->body), 100),
         ];
     }
 
@@ -93,17 +96,16 @@ class TicketReplyNotification extends Notification implements ShouldQueue
         $workspace = $project->workspace;
 
         if ($notifiable instanceof TicketContact) {
-            // Client: email with link to portal (generate token so link works)
-            $token = $notifiable->generateAccessToken();
-            $url = route('helpdesks.tickets.show-public', $this->ticket->uuid) . '?token=' . urlencode($token);
+            // Client: link to this ticket in the portal
+            $url = $this->ticket->publicUrl();
             $subject = "Reply on ticket {$this->ticket->key}: {$this->ticket->subject}";
             $line = 'Support has replied to your ticket.';
 
-            return (new \Illuminate\Notifications\Messages\MailMessage)
+            return (new MailMessage)
                 ->subject($subject)
                 ->line($line)
-                ->line('Ticket: ' . $this->ticket->subject)
-                ->line(\Illuminate\Support\Str::limit(strip_tags($this->reply->body), 200))
+                ->line('Ticket: '.$this->ticket->subject)
+                ->line(Str::limit(strip_tags($this->reply->body), 200))
                 ->action('View ticket', $url);
         }
 
@@ -122,10 +124,10 @@ class TicketReplyNotification extends Notification implements ShouldQueue
         $subject = "Reply on ticket {$this->ticket->key}: {$this->ticket->subject}";
         $line = "{$actorName} replied to this ticket.";
 
-        return (new \Illuminate\Notifications\Messages\MailMessage)
+        return (new MailMessage)
             ->subject($subject)
             ->line($line)
-            ->line(\Illuminate\Support\Str::limit(strip_tags($this->reply->body), 200))
+            ->line(Str::limit(strip_tags($this->reply->body), 200))
             ->action('View ticket', $url);
     }
 }

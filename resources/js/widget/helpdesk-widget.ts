@@ -441,7 +441,10 @@
             replyForm.appendChild(replySub);
             wrap.appendChild(replyForm);
         } catch (err) {
-            wrap.innerHTML = '<p class="msg error">' + (err instanceof Error ? err.message : 'Failed to load ticket') + '</p>';
+            const msg = document.createElement('p');
+            msg.className = 'msg error';
+            msg.textContent = err instanceof Error ? err.message : 'Failed to load ticket';
+            wrap.replaceChildren(msg);
         }
     }
 
