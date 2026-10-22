@@ -62,7 +62,7 @@ class SnippetController extends Controller
 
     public function storeCollection(Request $request, Workspace $workspace)
     {
-        $this->authorize('create', $workspace);
+        $this->authorize('create', [SnippetCollection::class, $workspace]);
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -99,7 +99,7 @@ class SnippetController extends Controller
 
     public function updateCollection(Request $request, Workspace $workspace, SnippetCollection $collection)
     {
-        $this->authorize('create', $workspace);
+        $this->authorize('update', $collection);
         abort_if($collection->workspace_id !== $workspace->id, 404);
 
         $validated = $request->validate([
@@ -116,7 +116,7 @@ class SnippetController extends Controller
 
     public function destroyCollection(Request $request, Workspace $workspace, SnippetCollection $collection)
     {
-        $this->authorize('create', $workspace);
+        $this->authorize('delete', $collection);
         abort_if($collection->workspace_id !== $workspace->id, 404);
 
         $collection->delete();
@@ -128,7 +128,7 @@ class SnippetController extends Controller
 
     public function storeSnippet(Request $request, Workspace $workspace, SnippetCollection $collection)
     {
-        $this->authorize('create', $workspace);
+        $this->authorize('create', [SnippetCollection::class, $workspace]);
         abort_if($collection->workspace_id !== $workspace->id, 404);
 
         $validated = $request->validate([
@@ -155,7 +155,7 @@ class SnippetController extends Controller
 
     public function updateSnippet(Request $request, Workspace $workspace, SnippetCollection $collection, Snippet $snippet)
     {
-        $this->authorize('create', $workspace);
+        $this->authorize('create', [SnippetCollection::class, $workspace]);
         abort_if($collection->workspace_id !== $workspace->id, 404);
         abort_if($snippet->collection_id !== $collection->id, 404);
 
@@ -174,7 +174,7 @@ class SnippetController extends Controller
 
     public function destroySnippet(Request $request, Workspace $workspace, SnippetCollection $collection, Snippet $snippet)
     {
-        $this->authorize('create', $workspace);
+        $this->authorize('create', [SnippetCollection::class, $workspace]);
         abort_if($collection->workspace_id !== $workspace->id, 404);
         abort_if($snippet->collection_id !== $collection->id, 404);
 
