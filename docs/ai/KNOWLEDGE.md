@@ -244,3 +244,9 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   maps every `data.type` to a sentence. The bell and the page used to fall back to
   "{actor} moved {item_key}", so ticket notifications (`ticket_*`, with no `item_*` keys)
   showed as "moved". Add a case for each new type.
+- **Project data hangs off `project_id`; only `projects` stores `workspace_id`.** Moving a
+  project is a single update (see `ProjectTransfer`). Keep it that way: a new project-level
+  table must not copy `workspace_id`, or moves (and access checks) drift. Workspace-level
+  things (bookmarks, snippets, invitations) are not project data and stay behind.
+- **`projects` unique keys `(workspace_id, slug)` and `(workspace_id, key)` include
+  soft-deleted rows.** Check with `withTrashed()` before reusing a slug or key in a workspace.

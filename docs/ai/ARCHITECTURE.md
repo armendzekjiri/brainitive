@@ -61,6 +61,7 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Routes:** `Route::resource('workspaces')` + `workspaces/{workspace}/...`, `projects/{project:slug}/...` groups in `web.php`
 - **Pages:** `Pages/Workspaces/`, `Pages/Projects/`, `Pages/Invitations/`
 - Projects also own **Labels** and **Item Types** (configured via `ProjectController`).
+- **Moving a project to another workspace:** `App\Support\Projects\ProjectTransfer` (`preview` / `move`), `ProjectController::movePreview` / `move` (`projects.move.*`), UI `components/projects/MoveProjectCard.tsx` (Project settings → Danger zone). Only `projects.workspace_id` changes; everything else hangs off the project. Admin of both workspaces; members not in the target are detached; links to issues outside the project are removed; the key must be free in the target, and a taken slug gets `-2`.
 
 ### Kanban — Boards, Columns, Items
 - **Models:** `Board`, `BoardColumn`, `Item`, `ItemType`, `ItemPriority`, `ItemLink`, `Label`, `Comment`, `Attachment`

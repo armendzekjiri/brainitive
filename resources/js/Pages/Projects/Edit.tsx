@@ -1,6 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 import { ProjectIcon } from '@/components/ProjectIcon';
+import MoveProjectCard from '@/components/projects/MoveProjectCard';
 import { PageProps, Workspace, Project, Label as LabelType, User, ItemType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -56,6 +57,8 @@ interface Props extends PageProps {
     workspaceUsers: User[];
     canManageMembers: boolean;
     projectItemTypes?: ProjectItemType[];
+    /** Workspaces the user also administers (empty when they can't move this project). */
+    moveTargets?: { id: number; name: string; slug: string }[];
 }
 
 // Predefined colors for labels and project
@@ -274,7 +277,7 @@ function ItemTypeForm({
     );
 }
 
-export default function ProjectsEdit({ auth, workspace, project, workspaceUsers, canManageMembers, projectItemTypes = [] }: Props) {
+export default function ProjectsEdit({ auth, workspace, project, workspaceUsers, canManageMembers, projectItemTypes = [], moveTargets = [] }: Props) {
     const [createLabelOpen, setCreateLabelOpen] = useState(false);
     const [editingLabel, setEditingLabel] = useState<LabelType | null>(null);
     const [createItemTypeOpen, setCreateItemTypeOpen] = useState(false);
@@ -940,6 +943,7 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                         </TabsContent>
 
                         <TabsContent value="danger" className="space-y-8">
+                            <MoveProjectCard workspace={workspace} project={project} targets={moveTargets} />
                             <Card className="border-destructive/50">
                                 <CardHeader>
                                     <CardTitle className="text-destructive">Danger Zone</CardTitle>

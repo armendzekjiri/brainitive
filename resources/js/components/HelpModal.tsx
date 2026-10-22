@@ -76,6 +76,17 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.18.0',
+        title: 'Move Projects Between Workspaces',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'Project settings → Danger zone → Move to another workspace: boards and issues, docs, whiteboards, plans, task lists, helpdesks and tickets, labels and issue types all move with the project.',
+            'Project members who are already in the other workspace keep their access; you see who loses access before you confirm, and can invite them to the workspace and the project afterwards.',
+            'You need to be an admin of both workspaces. If the other workspace already uses the project key, change the key first.',
+        ]
+    },
+    {
         version: 'v1.17.0',
         title: 'Better Helpdesk + Snippets in the Extension',
         tag: 'Feature',

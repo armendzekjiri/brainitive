@@ -206,6 +206,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             'project' => 'slug',
         ]);
         Route::post('projects/{project:slug}/icon', [ProjectController::class, 'uploadIcon'])->name('projects.icon.upload')->scopeBindings();
+        Route::get('projects/{project:slug}/move-preview', [ProjectController::class, 'movePreview'])->name('projects.move.preview')->scopeBindings();
+        Route::post('projects/{project:slug}/move', [ProjectController::class, 'move'])->name('projects.move')->scopeBindings();
 
         // Labels (nested under projects)
         Route::prefix('projects/{project:slug}')->group(function () {
