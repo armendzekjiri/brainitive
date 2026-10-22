@@ -3,7 +3,7 @@
 **Branch:** chore/dependency-updates
 **Status:** done
 **Started:** 2026-10-22
-**Board card:** BRAI-48 — https://www.brainitive.app/workspaces/personal/projects/brainitive/boards/main-board#item-147
+**Board card:** BRAI-48 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-147
 
 ## Problem / goal
 Many Composer and npm packages are behind, and `composer audit` / `npm audit` report known

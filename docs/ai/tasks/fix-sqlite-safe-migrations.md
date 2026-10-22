@@ -3,7 +3,7 @@
 **Branch:** fix/sqlite-safe-migrations
 **Status:** done
 **Started:** 2026-05-31
-**Board card:** BRAI-46 — https://www.brainitive.app/workspaces/personal/projects/brainitive/boards/main-board#item-131
+**Board card:** BRAI-46 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-131
 
 ## Problem / goal
 Some migrations still contain raw database-specific SQL that breaks SQLite local setup or

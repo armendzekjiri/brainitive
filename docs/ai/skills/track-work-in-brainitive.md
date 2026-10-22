@@ -25,6 +25,10 @@ Jira/Atlassian or asks you to compare with an external tracker.
 ## The flow
 
 ### 0. Locate the Brainitive board (once per task)
+Current location (moved from `personal` on 2026-10-23): workspace **`ndizeal-everything`**,
+project **`brainitive`**, board **`main-board`**: columns To Do `25`, In Progress `26`,
+Testing `67`, Can be Improved `68`, Done `27`. If that fails (moved again), discover it:
+
 `list_workspaces` → pick the Brainitive workspace slug → `list_projects` → the Brainitive
 project → `list_boards` → the project's development board → `get_board` to read its columns
 (note the **In Progress** and **Testing** column names/ids) and existing items.
@@ -65,7 +69,7 @@ When writing or editing Brainitive Pages via MCP (`create_page` / `update_page`)
 
 ### Where pages go — structure
 - **AI-agent documentation lives under one parent page: "General AI Documentation"**
-  (workspace `personal`, project `brainitive`, uuid `0b4eb6f8-efa9-4191-8425-f6fe4dde676d`).
+  (workspace `ndizeal-everything`, project `brainitive`, uuid `0b4eb6f8-efa9-4191-8425-f6fe4dde676d`).
   It is the index/parent for all AI docs.
 - **Every AI documentation page is a child of that parent** — pass its uuid as `parent_uuid`
   on `create_page`. Never create AI docs at the project root.

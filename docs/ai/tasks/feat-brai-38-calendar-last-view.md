@@ -3,7 +3,7 @@
 **Branch:** feat/brai-38-calendar-last-view
 **Status:** done
 **Started:** 2026-05-31
-**Board card:** BRAI-38 — https://www.brainitive.app/workspaces/personal/projects/brainitive/boards/main-board#item-123
+**Board card:** BRAI-38 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-123
 
 ## Problem / goal
 

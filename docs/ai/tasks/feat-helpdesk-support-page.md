@@ -3,6 +3,7 @@
 **Branch:** feat/helpdesk-support-page
 **Status:** done
 **Started:** 2026-10-23
+**Board card:** BRAI-56 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-158
 
 ## Problem / goal
 - Agents created tickets with one subject input and no customer, so the customer could not be emailed, and the support form's required fields were ignored.

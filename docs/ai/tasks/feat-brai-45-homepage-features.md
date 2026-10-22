@@ -3,7 +3,7 @@
 **Branch:** feat/brai-45-homepage-features
 **Status:** done
 **Started:** 2026-05-31
-**Board card:** BRAI-45 — https://www.brainitive.app/workspaces/personal/projects/brainitive/boards/main-board#item-130
+**Board card:** BRAI-45 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-130
 
 ## Problem / goal
 The homepage (`resources/js/Pages/Welcome.tsx`) lists only 12 features in a flat grid and
