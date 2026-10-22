@@ -134,3 +134,19 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   policy all say so. Don't add copy that implies payment is taken until billing ships. Building billing needs a new dependency (e.g. Cashier) and must
   stay off for self-hosted instances.
 
+- **~66 feature tests fail with `RouteNotFoundException`?** A stale local route cache
+  (`bootstrap/cache/routes-v7.php`, git-ignored) hides routes added since it was built. Run
+  `php artisan route:clear` before `php artisan test`. Same for "Class … not found" at boot:
+  `vendor/` is behind `composer.lock` — run `composer install`.
+- **npm `overrides` patch Excalidraw's pinned dependencies.** `@excalidraw/excalidraw`
+  0.18 pins exact old `nanoid`, `sass` and (via mermaid/chevrotain) `lodash-es` versions
+  with known advisories. Root `package.json` **and** `excalidraw-build/package.json` force
+  patched versions (`nanoid` 3.x → ≥3.3.20, 4.x → 5.x — only the named `nanoid()` export is
+  used). Drop the overrides once an Excalidraw release ships patched pins. Changing
+  `excalidraw-build` deps means rebuilding and committing `public/js/excalidraw-dist/`.
+- **Tiptap is not in the shipped app.** `components/editor/PageEditor.tsx` (+
+  `SlashCommands`, `TableOfContents`, `extensions/Callout`) is the only Tiptap consumer and
+  nothing imports it — pages use Lexical. The `@tiptap/*` packages are removal candidates.
+- **`excalidraw-build/node_modules` used to be committed** (`.gitignore` had `/node_modules`,
+  root only). Now `node_modules/` is ignored everywhere; run `npm install` in
+  `excalidraw-build/` before rebuilding the whiteboard bundle.

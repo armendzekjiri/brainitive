@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Dependency updates within current majors + security fixes](./chore-dependency-updates.md) | done |
 | [Open source + Brainitive Cloud pricing](./feat-open-source-cloud.md) | done |
 | [Homepage + Welcome tab refresh](./feat-homepage-feature-refresh.md) | done |
 | [Plans ↔ board issues](./feat-plan-issue-links.md) | done |
