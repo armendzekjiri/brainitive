@@ -1,6 +1,6 @@
 # On every push to main: tag the version from the newest CHANGELOG entry in
 # resources/js/components/HelpModal.tsx (if it isn't tagged yet), publish a GitHub Release
-# with that entry's notes, then build the Docker image (:edge always; :X.Y.Z, :X.Y and
+# with that entry's notes, attach the browser-extension zips, then build the Docker image (:edge always; :X.Y.Z, :X.Y and
 # :latest for a new version).
 #
 # The image build is called from here rather than triggered by the tag: tags created with
@@ -52,6 +52,31 @@ jobs:
             --latest
           echo "released=true" >> "$GITHUB_OUTPUT"
           echo "### Released $TAG" >> "$GITHUB_STEP_SUMMARY"
+
+  # Browser extension zips on the current release (stable names, replaced on every push), so
+  # https://github.com/<repo>/releases/latest/download/brainitive-extension-chrome.zip works.
+  extension:
+    needs: version
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: browser-extension/package-lock.json
+      - run: npm ci
+      - run: npm run zip && npm run zip:firefox
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          cp dist/*-chrome.zip brainitive-extension-chrome.zip
+          cp dist/*-firefox.zip brainitive-extension-firefox.zip
+          gh release upload "$TAG" brainitive-extension-chrome.zip brainitive-extension-firefox.zip --clobber
 
   docker:
     needs: version
