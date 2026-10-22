@@ -179,8 +179,25 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **`require_email_verification` defaults to true.** It was seeded `false` but never
   enforced; a migration sets existing rows to `true` and the seeder now writes `true`, so
   verification keeps being required until an admin turns it off.
-- **Tags pushed by a workflow don't trigger workflows.** Anything created with the default
-  `GITHUB_TOKEN` (tags, releases) doesn't start `on: push: tags` workflows, so
-  `release.yml` *calls* `docker-publish.yml` (`workflow_call`) instead of relying on the
-  tag. Only the **newest** changelog version gets tagged — skipping a version means it is
-  never released.
+- **Browser-extension tokens are `capture`-scoped and kept off read APIs.** Every Passport
+  token passes `auth:api`, so scopes are the only thing separating the extension from MCP.
+  `RejectCaptureTokens` (on `/mcp` and `/api/cli`) rejects tokens that can `capture` but not
+  `mcp:use`. Old MCP tokens without scopes still work there (an empty scope list can't
+  `capture`). Add the middleware to any new endpoint that returns content.
+- **The `bookmark` route parameter has an explicit slug binding** (`AppServiceProvider`), which
+  overrides `{bookmark:id}`. The extension route uses `{bookmarkGroup:id}` for that reason.
+- **`ProjectIssues::create()` loads a slim `board` relation** (no `project_id`).
+  `ResourceLocator::locate()` then falls back to `url('/')`: set the full board first
+  (`$item->setRelation('board', $board)`).
+- **Extension OAuth redirect URIs are per browser and per install.** Chrome/Edge use
+  `https://<extension-id>.chromiumapp.org/`, Firefox `https://<uuid>.extensions.allizom.org/`.
+  The extension registers one Passport client per server and re-registers when the redirect
+  changes, so `oauth_clients` gains a "Brainitive for Chrome/Edge/Firefox" row per install.
+  This is expected.
+- **Testing the extension in Chrome 137+:** branded Chrome ignores `--load-extension`. Load the
+  unpacked build over the DevTools pipe (`--remote-debugging-pipe
+  --enable-unsafe-extension-debugging`, CDP `Extensions.loadUnpacked`), then connect Playwright
+  over `--remote-debugging-port`. Automation gets no `activeTab` grant, so add `<all_urls>` to
+  a *test copy* of the manifest for screenshots. Don't add it to the shipped manifest.
+- **Passport keys in tests:** `storage/*.key` is gitignored, so token-guard tests generate a
+  throwaway key pair into `passport.private_key` / `public_key` (see `ExtensionApiTest`).

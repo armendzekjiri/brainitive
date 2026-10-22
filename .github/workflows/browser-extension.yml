@@ -1,0 +1,36 @@
+name: Browser extension
+
+on:
+  pull_request:
+    paths: ['browser-extension/**', '.github/workflows/browser-extension.yml']
+  push:
+    branches: [main]
+    paths: ['browser-extension/**', '.github/workflows/browser-extension.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: browser-extension/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run zip
+      - run: npm run zip:firefox
+      - uses: actions/upload-artifact@v4
+        with:
+          name: browser-extension
+          path: browser-extension/dist/*.zip
+          retention-days: 14

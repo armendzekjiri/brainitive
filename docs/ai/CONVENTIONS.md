@@ -14,7 +14,7 @@ The rules every agent follows when writing code. To *locate* code, use
 | Frontend | React 18, TypeScript 5, Inertia.js v2 |
 | CSS | Tailwind CSS 3 + shadcn/ui (new-york) + Radix UI |
 | Rich text | Editor.js, Tiptap 3, Lexical; Excalidraw whiteboard |
-| Auth | Breeze (session) + Socialite (Google/GitHub) + Passport (OAuth2.1 bearer for MCP/CLI) |
+| Auth | Breeze (session) + Socialite (Google/GitHub) + Passport (OAuth2.1 bearer for MCP/CLI/browser extension) |
 | Authorization | Explicit policies + `spatie/laravel-permission` v6 |
 | Routing | Ziggy (`route()` in JS) |
 | Forms | Inertia `useForm` (simple) / react-hook-form + Zod (complex) |
@@ -130,6 +130,15 @@ class Example extends Model
 - Helpdesk **public** widget/portal: `widget/*` + `portal/*` use the `cors` middleware and are
   CSRF-exempt (`bootstrap/app.php`).
 - **All routes named** (Ziggy depends on it).
+
+### API tokens & scopes
+- Passport scopes are declared in `AppServiceProvider` (`Passport::tokensCan`): `mcp:use` (AI
+  connectors) and `capture` (browser extension).
+- A new token-guarded surface decides which tokens may use it. The extension API requires
+  `CheckToken::using('capture')`; anything that can **read** content (`/mcp`, `/api/cli`) adds
+  `RejectCaptureTokens`, so a leaked extension token can only save things and search titles.
+- Extension endpoints resolve models by numeric id and authorize with the same policies as the
+  app — never a new permission rule.
 
 ### Migrations
 ```php

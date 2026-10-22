@@ -110,6 +110,7 @@ docker run --rm -v brainitive_storage:/storage -v "$PWD":/backup alpine tar czf 
 | Web push notifications | `docker compose exec app php artisan webpush:vapid`, copy the keys into `.env` |
 | AI writing helpers | Workspace settings → AI (bring your own provider key) |
 | MCP (Claude, ChatGPT) | Add `https://<your-domain>/mcp` as a connector; users sign in with OAuth |
+| Browser extension | Nothing to set up: in the extension choose **Self-hosted** and enter your domain. It registers itself over OAuth and needs HTTPS (plain http only for `localhost`) |
 
 After changing `.env`: `docker compose up -d` (the app container rebuilds its config cache
 on start).

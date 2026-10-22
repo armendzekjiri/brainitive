@@ -14,30 +14,6 @@ use Inertia\Response;
 
 class MyWorkController extends Controller
 {
-    /**
-     * Get project IDs the current user can access (workspace member + project role or workspace admin).
-     */
-    private function accessibleProjectIds(Request $request): array
-    {
-        $user = $request->user();
-        $workspaceIds = $user->workspaces()->pluck('workspaces.id');
-
-        return Project::query()
-            ->whereIn('workspace_id', $workspaceIds)
-            ->where(function ($q) use ($user) {
-                $q->whereHas('workspace', function ($wq) use ($user) {
-                    $wq->whereHas('users', function ($uq) use ($user) {
-                        $uq->where('users.id', $user->id)->whereIn('workspace_user.role', ['owner', 'admin']);
-                    });
-                })
-                    ->orWhereHas('users', function ($uq) use ($user) {
-                        $uq->where('users.id', $user->id);
-                    });
-            })
-            ->pluck('id')
-            ->all();
-    }
-
     private function applyBoardScope($query, string $scope, int $userId)
     {
         return $scope === 'created'
@@ -163,7 +139,7 @@ class MyWorkController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
-        $projectIds = $this->accessibleProjectIds($request);
+        $projectIds = $request->user()->accessibleProjectIds();
         $boardIds = Board::whereIn('project_id', $projectIds)->pluck('id');
         $taskListIds = TaskList::whereIn('project_id', $projectIds)->pluck('id');
         $scope = $request->string('scope')->toString() === 'created' ? 'created' : 'assigned';

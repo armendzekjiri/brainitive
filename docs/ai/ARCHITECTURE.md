@@ -22,12 +22,13 @@ React page  ◀─────┘  resources/js/Pages/**  (props are typed in ty
 
 AI client ──OAuth2.1/Bearer──▶ routes/ai.php  ──▶ BrainitiveServer ──▶ app/Mcp/Tools/*
 CLI       ──Bearer token────▶ routes/api.php  ──▶ CliController
+Browser extension ──OAuth2.1 (capture scope)──▶ routes/api.php /api/ext/v1 ──▶ Extension\*Controller
 External site ──▶ routes/web.php (cors, no CSRF) ──▶ Helpdesk widget/portal
 ```
 
 - **No API layer for the app itself.** Inertia passes controller props straight to React.
 - **Three route entry points:** `web.php` (the app, Inertia), `ai.php` (MCP server),
-  `api.php` (CLI, Passport bearer). Plus `auth.php` (Breeze + social) and `console.php`.
+  `api.php` (CLI + browser extension, Passport bearer). Plus `auth.php` (Breeze + social) and `console.php`.
 - **Request bootstrap / global middleware:** `bootstrap/app.php` — registers
   `HandleInertiaRequests`, the `cors` alias, and CSRF exemptions for `widget/*` + `portal/*`.
 
@@ -37,7 +38,8 @@ External site ──▶ routes/web.php (cors, no CSRF) ──▶ Helpdesk widget
 |---|---|---|
 | Web login (session) | Laravel **Breeze**, `routes/auth.php`, `app/Http/Controllers/Auth/` | Email verification required |
 | Social login | `Auth/GoogleAuthController.php`, `Auth/GitHubAuthController.php` | Laravel **Socialite** |
-| API/MCP/CLI tokens | Laravel **Passport** (OAuth 2.1 + bearer) | Configured in `AppServiceProvider::boot()` (token TTLs) |
+| API/MCP/CLI tokens | Laravel **Passport** (OAuth 2.1 + bearer) | Configured in `AppServiceProvider::boot()` (token TTLs, scopes `mcp:use` + `capture`) |
+| Token scopes | `capture` = browser extension, only `/api/ext/v1` (`CheckToken::using('capture')`) | `RejectCaptureTokens` keeps capture tokens off `/mcp` and `/api/cli/*` |
 | Policy registration | **`app/Providers/AppServiceProvider.php`** | Policies are **explicitly** `Gate::policy(...)`-registered, *not* auto-discovered |
 | Instance admin | `InstanceAdmin` model, `instance.admin` middleware, `/admin/*` | **No content access** — runs the instance from the admin console (see below). Suspended users are signed out by `EnsureUserIsNotSuspended` (web group) |
 | Global Inertia props | `app/Http/Middleware/HandleInertiaRequests.php` | `auth.user`, `flash`, `workspaces`, `currentWorkspace`, `currentPageUuid` |
@@ -152,6 +154,17 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 ### CLI API
 - **Controller:** `CliController` — `routes/api.php`: `/cli/login` issues a Passport token; `auth:api`-guarded `/cli/...` endpoints expose workspaces + task lists (JSON).
 
+### Browser extension (Chrome, Edge, Firefox)
+- **Extension source:** `browser-extension/` (WXT + React + TS, own `package.json`, not part of
+  the app build) — see its `README.md`. `entrypoints/` = popup, side panel, options, background
+  worker; `lib/` = OAuth (`auth.ts`), API client, page reading / screenshots, Markdown clipping.
+- **Sign-in:** OAuth 2.1 + PKCE via Dynamic Client Registration (`/oauth/register` from
+  `Mcp::oauthRoutes()`), scope `capture`; consent screen `resources/views/mcp/authorize.blade.php`.
+- **API:** `routes/api.php` → `/api/ext/v1/*` (`ext.*` routes):
+  `Extension/ExtensionController` (me, destinations, search, my-work) and
+  `Extension/CaptureController` (issue + screenshot, bookmark item, doc, task). Ids are numeric;
+  same policies as the app. Tests: `tests/Feature/Extension/ExtensionApiTest.php`.
+
 ---
 
 ## Frontend layout (`resources/js/`)
@@ -175,6 +188,7 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 | A policy | `app/Policies/` **and register it** in `AppServiceProvider` |
 | An Inertia page | `resources/js/Pages/<Module>/` + type in `types/index.d.ts` — [add-inertia-page skill](./skills/add-inertia-page.md) |
 | An MCP tool | `app/Mcp/Tools/` + `BrainitiveServer::$tools` — [add-mcp-tool skill](./skills/add-mcp-tool.md) |
+| A browser-extension capture | `Extension/CaptureController` + `ext.*` route, then `browser-extension/lib/api.ts` + a form in `components/forms.tsx` |
 | A notification | `app/Notifications/` (+ `SendsWebPush` for push) — [add-notification skill](./skills/add-notification.md) |
 | A queued job | `app/Jobs/` |
 | An artisan command | `app/Console/Commands/` |
