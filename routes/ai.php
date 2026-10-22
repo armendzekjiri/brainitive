@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Middleware\LogMcpRequest;
+use App\Http\Middleware\RejectCaptureTokens;
 use App\Mcp\Servers\BrainitiveServer;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Laravel\Mcp\Facades\Mcp;
 
@@ -27,7 +29,7 @@ use Laravel\Mcp\Facades\Mcp;
 Mcp::oauthRoutes();
 
 Mcp::web('/mcp', BrainitiveServer::class)
-    ->middleware([LogMcpRequest::class, 'auth:api']);
+    ->middleware([LogMcpRequest::class, 'auth:api', RejectCaptureTokens::class]);
 
 // TEMPORARY: log GET probes (some clients open a standalone GET SSE stream before
 // POSTing). laravel/mcp normally answers GET with 405; we keep that behaviour but
@@ -35,7 +37,7 @@ Mcp::web('/mcp', BrainitiveServer::class)
 // the package's silent 405 handler (last route registered for a method+URI wins).
 // Remove together with LogMcpRequest once the Perplexity connector is sorted.
 Route::get('/mcp', function () {
-    \Illuminate\Support\Facades\Log::info('[MCP-DEBUG] GET probe', [
+    Log::info('[MCP-DEBUG] GET probe', [
         'accept' => request()->header('Accept'),
         'user_agent' => request()->userAgent(),
         'has_authorization' => request()->header('Authorization') !== null,

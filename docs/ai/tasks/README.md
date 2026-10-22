@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Browser extension (Chrome, Edge, Firefox)](./feat-browser-extension.md) | done |
 | [Instance admin console; no content access for instance admins](./feat-instance-admin-console.md) | done |
 | [Dependency updates within current majors + security fixes](./chore-dependency-updates.md) | done |
 | [Open source + Brainitive Cloud pricing](./feat-open-source-cloud.md) | done |

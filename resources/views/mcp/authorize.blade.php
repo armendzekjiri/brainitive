@@ -73,10 +73,18 @@
 
             <h1>Connect {{ $client->name }} to {{ config('app.name', 'Brainitive') }}</h1>
 
+            @php($captureOnly = collect($scopes)->pluck('id')->all() === ['capture'])
             <p class="lead">
-                <strong>{{ $client->name }}</strong> will be able to read and write your
-                {{ config('app.name', 'Brainitive') }} content — pages, tasks, boards, snippets and
-                bookmarks — on your behalf. It can only access what your account can access.
+                @if($captureOnly)
+                    <strong>{{ $client->name }}</strong> will be able to save pages, links, notes and
+                    screenshots to {{ config('app.name', 'Brainitive') }}, see your assigned work and search
+                    titles. It can't read the content of your documents, and only reaches what your
+                    account can.
+                @else
+                    <strong>{{ $client->name }}</strong> will be able to read and write your
+                    {{ config('app.name', 'Brainitive') }} content — pages, tasks, boards, snippets and
+                    bookmarks — on your behalf. It can only access what your account can access.
+                @endif
             </p>
 
             <div class="panel">

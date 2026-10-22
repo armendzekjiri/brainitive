@@ -1,7 +1,11 @@
 <?php
 
 use App\Http\Controllers\CliController;
+use App\Http\Controllers\Extension\CaptureController;
+use App\Http\Controllers\Extension\ExtensionController;
+use App\Http\Middleware\RejectCaptureTokens;
 use Illuminate\Support\Facades\Route;
+use Laravel\Passport\Http\Middleware\CheckToken;
 
 /*
 |--------------------------------------------------------------------------
@@ -13,7 +17,7 @@ use Illuminate\Support\Facades\Route;
 Route::post('/cli/login', [CliController::class, 'login']);
 
 // Protected endpoints — require a valid Passport API token (Bearer)
-Route::middleware('auth:api')->group(function () {
+Route::middleware(['auth:api', RejectCaptureTokens::class])->group(function () {
     Route::get('/cli/me', [CliController::class, 'me']);
     Route::delete('/cli/logout', [CliController::class, 'logout']);
 
@@ -26,3 +30,24 @@ Route::middleware('auth:api')->group(function () {
     Route::patch('/cli/lists/{taskList}/items/{item}', [CliController::class, 'updateItem']);
     Route::delete('/cli/lists/{taskList}/items/{item}', [CliController::class, 'destroyItem']);
 });
+
+/*
+|--------------------------------------------------------------------------
+| Browser extension (OAuth token with the `capture` scope)
+|--------------------------------------------------------------------------
+| Everything resolves by numeric id and runs the same policies as the app.
+*/
+Route::prefix('ext/v1')
+    ->middleware(['auth:api', CheckToken::using('capture'), 'throttle:120,1'])
+    ->name('ext.')
+    ->group(function () {
+        Route::get('me', [ExtensionController::class, 'me'])->name('me');
+        Route::get('destinations', [ExtensionController::class, 'destinations'])->name('destinations');
+        Route::get('search', [ExtensionController::class, 'search'])->name('search');
+        Route::get('my-work', [ExtensionController::class, 'myWork'])->name('my-work');
+
+        Route::post('bookmarks/{bookmarkGroup:id}/items', [CaptureController::class, 'bookmarkItem'])->name('bookmarks.items.store');
+        Route::post('boards/{board:id}/items', [CaptureController::class, 'issue'])->name('boards.items.store');
+        Route::post('projects/{project:id}/pages', [CaptureController::class, 'page'])->name('projects.pages.store');
+        Route::post('task-lists/{taskList:id}/items', [CaptureController::class, 'task'])->name('task-lists.items.store');
+    });

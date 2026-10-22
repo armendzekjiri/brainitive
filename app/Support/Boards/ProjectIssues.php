@@ -121,14 +121,15 @@ class ProjectIssues
     }
 
     /**
-     * Create issues in the board's first column (and the backlog on Scrum boards).
+     * Create issues in the given column — default the board's first — (and the backlog on
+     * Scrum boards).
      *
-     * @param  list<array{title: string, start_date?: string|null, due_date?: string|null, assigned_to?: int|null}>  $issues
+     * @param  list<array{title: string, description?: string|null, start_date?: string|null, due_date?: string|null, assigned_to?: int|null}>  $issues
      * @return Collection<int, Item> in the given order
      */
-    public static function create(Board $board, Project $project, User $user, array $issues): Collection
+    public static function create(Board $board, Project $project, User $user, array $issues, ?BoardColumn $column = null): Collection
     {
-        $column = $board->columns()->first();
+        $column ??= $board->columns()->first();
         if (! $column instanceof BoardColumn) {
             throw new \DomainException('This board has no columns yet.');
         }
@@ -144,6 +145,7 @@ class ProjectIssues
             foreach ($issues as $issue) {
                 $ids[] = $board->items()->create([
                     'title' => trim($issue['title']),
+                    'description' => $issue['description'] ?? null,
                     'project_id' => $project->id,
                     'column_id' => $column->id,
                     'item_type_id' => $typeId,

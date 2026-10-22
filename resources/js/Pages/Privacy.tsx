@@ -1,5 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, Shield, Database, Eye, FileText, Lock, UserCheck, Cookie, RefreshCw, Mail, Server } from 'lucide-react';
+import { ArrowLeft, Shield, Database, Eye, FileText, Lock, UserCheck, Cookie, RefreshCw, Mail, Server, Puzzle } from 'lucide-react';
 import ApplicationLogo from '@/Components/ApplicationLogo';
 import { CookieConsent } from '@/components/CookieConsent';
 
@@ -53,14 +53,20 @@ const sections = [
         content: 'Brainitive uses strictly necessary cookies (session management, authentication) and, with your consent, analytics cookies to understand how the app is used. You can manage your cookie preferences through the cookie settings banner. See our Cookie Policy for full details.',
     },
     {
-        icon: RefreshCw,
+        icon: Puzzle,
         num: '9',
+        title: 'Browser extension',
+        content: 'The optional Brainitive browser extension (Chrome, Edge, Firefox) reads a web page only when you use it on that page — the toolbar button, the right-click menu or a keyboard shortcut — and sends what you choose to capture (the page address and title, selected text, a clipped article or a screenshot) only to the Brainitive server you signed in to. It does not track your browsing, has no analytics and shares nothing with third parties. Its sign-in token is stored on your device, can only save content and search titles, and is removed when you sign out.',
+    },
+    {
+        icon: RefreshCw,
+        num: '10',
         title: 'Changes to this policy',
         content: 'We may update this Privacy Policy from time to time. When we do, we will update the "Last updated" date below and, for material changes, notify you by email or an in-app notice at least 14 days before the change takes effect.',
     },
     {
         icon: Mail,
-        num: '10',
+        num: '11',
         title: 'Contact',
         content: 'For privacy questions or data requests, email us at privacy@brainitive.com. For general enquiries, reach us at hello@brainitive.com.',
     },
@@ -95,7 +101,7 @@ export default function Privacy() {
                         <div>
                             <h1 className="text-3xl font-bold text-[#485E72]">Privacy Policy</h1>
                             <p className="text-sm text-[#485E72]/50 mt-1">
-                                Last updated: 28 February 2026
+                                Last updated: 22 October 2026
                             </p>
                         </div>
                     </div>

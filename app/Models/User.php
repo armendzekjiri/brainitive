@@ -195,6 +195,22 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
     }
 
     /**
+     * IDs of projects the user can open: a project member, or owner/admin of its workspace.
+     *
+     * @return array<int, int>
+     */
+    public function accessibleProjectIds(): array
+    {
+        return Project::query()
+            ->whereIn('workspace_id', $this->workspaces()->select('workspaces.id'))
+            ->where(fn ($q) => $q
+                ->whereHas('workspace.users', fn ($uq) => $uq->where('users.id', $this->id)->whereIn('workspace_user.role', ['owner', 'admin']))
+                ->orWhereHas('users', fn ($uq) => $uq->where('users.id', $this->id)))
+            ->pluck('id')
+            ->all();
+    }
+
+    /**
      * IDs of projects the user administers: project admin, or admin/owner of the workspace.
      *
      * @return array<int, int>

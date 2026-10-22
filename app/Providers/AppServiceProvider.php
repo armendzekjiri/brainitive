@@ -55,6 +55,12 @@ class AppServiceProvider extends ServiceProvider
         Passport::tokensExpireIn(now()->addDays(30));
         Passport::refreshTokensExpireIn(now()->addDays(60));
         Passport::personalAccessTokensExpireIn(now()->addYear());
+        // `capture` is the browser extension's scope: it only reaches /api/ext/v1, never
+        // /mcp or the CLI API (RejectCaptureTokens).
+        Passport::tokensCan([
+            'mcp:use' => 'Use MCP server',
+            'capture' => 'Save pages, links, notes and screenshots to your workspaces and search them',
+        ]);
 
         // Queue workers are long-lived: re-read instance settings (mail, verification) per job.
         Queue::before(function () {

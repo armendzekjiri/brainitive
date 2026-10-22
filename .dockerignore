@@ -5,6 +5,7 @@
 !.env.example
 node_modules
 excalidraw-build/node_modules
+browser-extension
 vendor
 public/build
 public/hot

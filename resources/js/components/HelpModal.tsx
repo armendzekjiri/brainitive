@@ -76,6 +76,20 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.16.0',
+        title: 'Browser Extension',
+        tag: 'Feature',
+        date: '2026-10-22',
+        items: [
+            'New browser extension for Chrome, Edge and Firefox: save the page you are on to Brainitive in two clicks.',
+            'Create an issue from any page — with the link, the text you selected and a screenshot of the whole view or an area you drag.',
+            'Save links to a bookmark group, clip an article or a selection as a doc (draft or published), or add a task with a due date.',
+            'Right-click a page, link or selection for quick actions; Alt+Shift+B opens the extension, Alt+Shift+S screenshots an area.',
+            'Type “bt” and a space in the address bar to search Brainitive, and keep My Work open in the side panel.',
+            'Works with Brainitive Cloud and self-hosted servers. You sign in on your own server; the extension can only save things and search titles — it can’t read your documents.',
+        ]
+    },
+    {
         version: 'v1.15.0',
         title: 'Instance Admin Console',
         tag: 'Feature',
