@@ -173,3 +173,8 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **`require_email_verification` defaults to true.** It was seeded `false` but never
   enforced; a migration sets existing rows to `true` and the seeder now writes `true`, so
   verification keeps being required until an admin turns it off.
+- **Tags pushed by a workflow don't trigger workflows.** Anything created with the default
+  `GITHUB_TOKEN` (tags, releases) doesn't start `on: push: tags` workflows, so
+  `release.yml` *calls* `docker-publish.yml` (`workflow_call`) instead of relying on the
+  tag. Only the **newest** changelog version gets tagged — skipping a version means it is
+  never released.
