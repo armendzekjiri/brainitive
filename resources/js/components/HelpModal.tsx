@@ -97,7 +97,7 @@ const CHANGELOG = [
         items: [
             'Brainitive is now open source under the GNU AGPL-3.0 — every feature is free to self-host.',
             'Self-hosting with Docker: one image for web, queue and scheduler, MariaDB and Redis, automatic HTTPS. See docs/self-hosting.md.',
-            'New pricing for Brainitive Cloud: Free (up to 5 members), Team (€6 per user / month, €5 yearly), Business (€12, €10 yearly) and Enterprise.',
+            'Brainitive Cloud is free during early access. Planned prices for later are on the homepage: Free (up to 5 members), Team (€6 per user / month, €5 yearly), Business (€12, €10 yearly) and Enterprise — announced at least 30 days before anyone pays.',
             'Contributing: contributor licence agreement, code of conduct, security policy and issue templates.',
         ]
     },
