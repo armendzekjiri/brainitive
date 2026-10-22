@@ -1,0 +1,144 @@
+import { Bell, ExternalLink, LifeBuoy } from 'lucide-react';
+import type { ReactNode } from 'react';
+
+/**
+ * The database payload of every notification type the app sends (see app/Notifications).
+ * Rendered by the bell dropdown and the notifications page — add new types here only.
+ */
+export interface NotificationData {
+    type:
+        | 'mentioned'
+        | 'page_updated'
+        | 'item_assigned'
+        | 'item_status_changed'
+        | 'item_reminder'
+        | 'ticket_created'
+        | 'ticket_reply'
+        | 'ticket_assigned'
+        | string;
+    item_key?: string;
+    item_title?: string;
+    item_url?: string;
+    old_column?: string;
+    new_column?: string;
+    when_label?: string;
+    context_type?: string;
+    context_title?: string;
+    context_url?: string;
+    page_name?: string;
+    page_url?: string;
+    ticket_key?: string;
+    ticket_subject?: string;
+    ticket_url?: string;
+    reply_preview?: string;
+    contact_name?: string;
+    contact_email?: string;
+    actor_name?: string;
+    actor_avatar?: string;
+}
+
+/** Who did it: a user, or the customer for helpdesk tickets. */
+export function notificationActor(d: NotificationData): string {
+    return d.actor_name || d.contact_name || d.contact_email || '';
+}
+
+export function notificationUrl(d: NotificationData): string | undefined {
+    return d.ticket_url ?? d.item_url ?? d.context_url ?? d.page_url;
+}
+
+/** Second line under the sentence. */
+export function notificationDetail(d: NotificationData): string | undefined {
+    if (d.type === 'ticket_reply') return d.reply_preview || d.ticket_subject;
+    return d.ticket_subject ?? d.item_title ?? d.page_name;
+}
+
+export function NotificationAvatar({ data: d }: { data: NotificationData }) {
+    if (d.type === 'item_reminder') return <Bell className="size-4 text-muted-foreground" />;
+    if (d.actor_avatar) return <img src={d.actor_avatar} alt={d.actor_name} className="size-full object-cover" />;
+    const actor = notificationActor(d);
+    if (actor) return <>{actor.charAt(0)}</>;
+    return d.type.startsWith('ticket_') ? <LifeBuoy className="size-4 text-muted-foreground" /> : <>?</>;
+}
+
+/** "Alice assigned you to WEB-12", "customer@x.com opened ticket SUP-3", … */
+export function NotificationMessage({
+    data: d,
+    onOpen,
+    linkClassName = 'font-medium text-primary hover:underline inline-flex items-center gap-0.5',
+    iconClassName = 'size-2.5',
+    newTab = false,
+}: {
+    data: NotificationData;
+    onOpen?: () => void;
+    linkClassName?: string;
+    iconClassName?: string;
+    newTab?: boolean;
+}) {
+    const link = (href: string | undefined, label: ReactNode) => (
+        <a href={href} className={linkClassName} onClick={onOpen} {...(newTab ? { target: '_blank', rel: 'noreferrer' } : {})}>
+            {label}
+            <ExternalLink className={iconClassName} />
+        </a>
+    );
+    const actor = <span className="font-medium">{notificationActor(d) || 'Someone'}</span>;
+
+    switch (d.type) {
+        case 'item_reminder':
+            return (
+                <>
+                    {link(d.item_url, d.item_key)} {d.when_label}
+                </>
+            );
+        case 'mentioned':
+            return (
+                <>
+                    {actor} mentioned you {d.context_type === 'page' ? 'on page ' : 'in '}
+                    {link(d.context_url, d.context_title)}
+                </>
+            );
+        case 'page_updated':
+            return (
+                <>
+                    {actor} updated page {link(d.page_url, d.page_name)}
+                </>
+            );
+        case 'item_assigned':
+            return (
+                <>
+                    {actor} assigned you to {link(d.item_url, d.item_key)}
+                </>
+            );
+        case 'item_status_changed':
+            return (
+                <>
+                    {actor} moved {link(d.item_url, d.item_key)} from <span className="text-muted-foreground">{d.old_column}</span>
+                    <span className="mx-1 text-muted-foreground">→</span>
+                    <span className="font-medium">{d.new_column}</span>
+                </>
+            );
+        case 'ticket_created':
+            return (
+                <>
+                    {actor} opened ticket {link(d.ticket_url, d.ticket_key)}
+                </>
+            );
+        case 'ticket_reply':
+            return (
+                <>
+                    {actor} replied to ticket {link(d.ticket_url, d.ticket_key)}
+                </>
+            );
+        case 'ticket_assigned':
+            return (
+                <>
+                    {actor} assigned you to ticket {link(d.ticket_url, d.ticket_key)}
+                </>
+            );
+        default:
+            return (
+                <>
+                    {actor} updated {link(notificationUrl(d), d.ticket_key ?? d.item_key ?? d.page_name ?? 'this')}
+                </>
+            );
+    }
+}

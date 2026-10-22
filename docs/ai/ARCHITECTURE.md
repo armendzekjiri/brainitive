@@ -105,6 +105,11 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Routes:** authed `helpdesks/...` + `tickets/...` under `projects/{project}`; **public** `widget/*` and `portal/*` (cors, CSRF-exempt) for the embedded widget and customer portal
 - **Pages:** `Pages/Helpdesks/`, `Pages/Tickets/`, `Pages/Widgets/`
 - Tickets support custom fields (`HelpdeskField` → `TicketFieldValue`) and external contacts (`TicketContact`, can be notified by email but not web push).
+- **Agents create tickets** in `components/helpdesk/NewTicketDialog.tsx` → `TicketController::store`: customer email required, and the public form's required rules (`settings.default_field_*`, required `HelpdeskField`s) apply.
+- **Resolving** = moving into an `is_done_column` column: the board asks for a closing message (`components/helpdesk/ResolveTicketDialog.tsx`); `TicketController::move` saves it as a reply and sends `TicketResolvedNotification` to the contact.
+- **Ticket links** (`tickets.show`) render `Helpdesks/Show` with `openTicketId`; there is no separate ticket page.
+- **Support page:** `/support/{public_slug}` (`HelpdeskWidgetController::supportPage`) renders the embed form full-page with branding; the address is set under Helpdesk settings → Embed.
+- **Notifications UI:** every notification type is rendered by `components/NotificationMessage.tsx` (bell dropdown + `/notifications`). A new notification type needs a case there.
 
 ### Snippets
 - **Models:** `SnippetCollection` (policy target), `Snippet`

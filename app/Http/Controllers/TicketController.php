@@ -14,8 +14,10 @@ use App\Models\Workspace;
 use App\Notifications\TicketAssignedNotification;
 use App\Notifications\TicketCreatedNotification;
 use App\Notifications\TicketReplyNotification;
+use App\Notifications\TicketResolvedNotification;
 use App\Support\Uploads;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -24,76 +26,89 @@ use Inertia\Response;
 class TicketController extends Controller
 {
     /**
-     * Store a new ticket (internal creation).
+     * An agent creates a ticket for a customer (call, email…): the customer's email is
+     * required, and the support form's own required fields apply here too.
      */
     public function store(Request $request, Workspace $workspace, Project $project, Helpdesk $helpdesk)
     {
         $this->authorize('createTickets', $helpdesk);
 
-        $validated = $request->validate([
+        $settings = $helpdesk->settings ?? [];
+        $nameRequired = empty($settings['default_field_contact_name']['hidden']) && ! empty($settings['default_field_contact_name']['is_required']);
+        $messageRequired = empty($settings['default_field_description']['hidden']) && ! empty($settings['default_field_description']['is_required']);
+        $fields = $helpdesk->fields()->orderBy('position')->get();
+
+        $rules = [
             'subject' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => [$messageRequired ? 'required' : 'nullable', 'string', 'max:50000'],
+            'contact_email' => 'required|email|max:255',
+            'contact_name' => [$nameRequired ? 'required' : 'nullable', 'string', 'max:255'],
             'column_id' => ['required', Rule::exists('helpdesk_columns', 'id')->where('helpdesk_id', $helpdesk->id)],
             'priority_id' => 'nullable|exists:item_priorities,id',
-            'assigned_to' => 'nullable|exists:users,id',
-            'ticket_contact_id' => 'nullable|exists:ticket_contacts,id',
-        ]);
+            // Only people in this workspace — any user id would email a stranger the ticket.
+            'assigned_to' => ['nullable', Rule::exists('workspace_user', 'user_id')->where('workspace_id', $workspace->id)],
+            'notify_contact' => 'nullable|boolean',
+        ];
+        $attributes = [];
+        foreach ($fields as $field) {
+            if ($field->type === 'file') {
+                continue;
+            }
+            $key = 'field_'.$field->name;
+            $attributes[$key] = $field->label;
+            $rules[$key] = match ($field->type) {
+                'checkboxes' => [$field->is_required ? 'required' : 'nullable', 'array'],
+                'checkbox' => [$field->is_required ? 'accepted' : 'nullable', 'boolean'],
+                'number' => [$field->is_required ? 'required' : 'nullable', 'numeric'],
+                'date' => [$field->is_required ? 'required' : 'nullable', 'date'],
+                'select', 'radio' => [$field->is_required ? 'required' : 'nullable', Rule::in($field->options ?? [])],
+                default => [$field->is_required ? 'required' : 'nullable', 'string', 'max:10000'],
+            };
+        }
+        $validated = $request->validate($rules, [], $attributes);
 
-        // Create ticket contact if email provided
-        $ticketContactId = $validated['ticket_contact_id'] ?? null;
-        if (! $ticketContactId && $request->has('contact_email')) {
-            $contactEmail = $request->validate(['contact_email' => 'email|max:255'])['contact_email'];
-            $contact = TicketContact::firstOrCreate(
-                ['email' => $contactEmail],
-                ['uuid' => (string) Str::uuid()]
-            );
-            $ticketContactId = $contact->id;
+        $contact = TicketContact::firstOrCreate(['email' => strtolower($validated['contact_email'])], ['uuid' => (string) Str::uuid()]);
+        if (! empty($validated['contact_name']) && ! $contact->name) {
+            $contact->update(['name' => $validated['contact_name']]);
         }
 
-        // Get next position in column
-        $maxPosition = Ticket::where('column_id', $validated['column_id'])->max('position') ?? 0;
+        $ticket = DB::transaction(function () use ($helpdesk, $project, $validated, $contact, $fields, $request) {
+            $maxPosition = Ticket::where('column_id', $validated['column_id'])->max('position') ?? 0;
 
-        $ticket = $helpdesk->tickets()->create([
-            'subject' => $validated['subject'],
-            'description' => $validated['description'] ?? null,
-            'column_id' => $validated['column_id'],
-            'priority_id' => $validated['priority_id'] ?? ItemPriority::where('is_default', true)->first()?->id,
-            'assigned_to' => $validated['assigned_to'] ?? null,
-            'ticket_contact_id' => $ticketContactId,
-            'key' => $project->getNextTicketKey(),
-            'position' => $maxPosition + 1,
-        ]);
+            $ticket = $helpdesk->tickets()->create([
+                'subject' => $validated['subject'],
+                'description' => $validated['description'] ?? null,
+                'column_id' => $validated['column_id'],
+                'priority_id' => $validated['priority_id'] ?? ItemPriority::where('is_default', true)->first()?->id,
+                'assigned_to' => $validated['assigned_to'] ?? null,
+                'ticket_contact_id' => $contact->id,
+                'key' => $project->getNextTicketKey(),
+                'position' => $maxPosition + 1,
+            ]);
 
-        // Process custom fields
-        $fields = $helpdesk->fields()->where('is_required', true)->get();
-        foreach ($fields as $field) {
-            $value = $request->input('field_'.$field->name);
-            if ($value !== null) {
+            foreach ($fields as $field) {
+                $value = $request->input('field_'.$field->name);
+                if ($field->type === 'file' || $value === null || $value === '' || $value === []) {
+                    continue;
+                }
                 $ticket->fieldValues()->create([
                     'helpdesk_field_id' => $field->id,
-                    'value' => $value,
+                    'value' => is_array($value) ? json_encode(array_values($value)) : (is_bool($value) ? ($value ? '1' : '0') : (string) $value),
                 ]);
             }
+
+            return $ticket;
+        });
+
+        if ($ticket->assigned_to && $ticket->assigned_to !== $request->user()->id) {
+            User::find($ticket->assigned_to)?->notify(new TicketAssignedNotification($ticket, $request->user()));
         }
 
-        // Notify assignee if assigned to someone else
-        $newAssigneeId = $ticket->assigned_to;
-        if ($newAssigneeId && $newAssigneeId !== $request->user()->id) {
-            $assignee = User::find($newAssigneeId);
-            if ($assignee) {
-                $assignee->notify(new TicketAssignedNotification($ticket, $request->user()));
-            }
+        if ($request->boolean('notify_contact', true)) {
+            $contact->notify(new TicketCreatedNotification($ticket));
         }
 
-        // Notify contact if ticket created with contact
-        if ($ticketContactId) {
-            $contact = TicketContact::find($ticketContactId);
-            if ($contact) {
-                $contact->notify(new TicketCreatedNotification($ticket));
-            }
-        }
-
-        return back()->with('success', 'Ticket created successfully.');
+        return back()->with('success', "Ticket {$ticket->key} created.");
     }
 
     /**
@@ -194,12 +209,31 @@ class TicketController extends Controller
         $validated = $request->validate([
             'column_id' => ['required', Rule::exists('helpdesk_columns', 'id')->where('helpdesk_id', $helpdesk->id)],
             'position' => 'required|integer|min:0',
+            // Resolving: closing message (saved as a reply) and whether to email the customer.
+            'resolution_message' => 'nullable|string|max:20000',
+            'notify_contact' => 'nullable|boolean',
         ]);
 
-        $oldColumn = $ticket->column;
+        $wasDone = (bool) $ticket->column?->is_done_column;
         $newColumn = HelpdeskColumn::findOrFail($validated['column_id']);
 
         $ticket->moveToColumn($newColumn, $validated['position']);
+
+        if ($newColumn->is_done_column && ! $wasDone) {
+            $message = trim((string) ($validated['resolution_message'] ?? ''));
+            if ($message !== '') {
+                $ticket->replies()->create([
+                    'user_id' => $request->user()->id,
+                    'body' => collect(preg_split('/\n{2,}/', $message))
+                        ->map(fn (string $p) => '<p>'.nl2br(e(trim($p))).'</p>')
+                        ->implode(''),
+                    'is_internal_note' => false,
+                ]);
+            }
+            if ($request->boolean('notify_contact') && $ticket->contact) {
+                $ticket->contact->notify(new TicketResolvedNotification($ticket, $message ?: null));
+            }
+        }
 
         return back();
     }
@@ -215,7 +249,7 @@ class TicketController extends Controller
             'subject' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
             'priority_id' => 'nullable|exists:item_priorities,id',
-            'assigned_to' => 'nullable|exists:users,id',
+            'assigned_to' => ['nullable', Rule::exists('workspace_user', 'user_id')->where('workspace_id', $workspace->id)],
         ]);
 
         $oldAssigneeId = $ticket->assigned_to;

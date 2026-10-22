@@ -91,6 +91,8 @@ import { useState, useRef, useEffect, DragEvent, FormEvent, useCallback, useMemo
 import { Link } from '@inertiajs/react';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { safeHtmlProp } from '@/lib/sanitize';
+import NewTicketDialog from '@/components/helpdesk/NewTicketDialog';
+import ResolveTicketDialog from '@/components/helpdesk/ResolveTicketDialog';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -303,140 +305,6 @@ function TicketCard({
     );
 }
 
-// Create Ticket Inline
-function CreateTicketInline({
-    column,
-    workspace,
-    project,
-    helpdesk,
-    fields,
-}: {
-    column: HelpdeskColumn;
-    workspace: Workspace;
-    project: Project;
-    helpdesk: Helpdesk;
-    fields: HelpdeskField[];
-}) {
-    const [isCreating, setIsCreating] = useState(false);
-    const inputRef = useRef<HTMLInputElement>(null);
-    const { data, setData, post, processing, reset } = useForm({
-        subject: '',
-        column_id: column.id,
-        priority_id: '',
-        assigned_to: '',
-        description: '',
-    });
-
-    const requiredFields = fields.filter(f => f.is_required);
-    const canSubmit = data.subject.trim() && requiredFields.every(f => 
-        data[f.name as keyof typeof data] !== undefined && data[f.name as keyof typeof data] !== ''
-    );
-
-    const handleSubmit = (e: FormEvent) => {
-        e.preventDefault();
-        if (!canSubmit) return;
-        const payload = {
-            subject: data.subject,
-            column_id: data.column_id,
-            priority_id: data.priority_id || null,
-            assigned_to: data.assigned_to || null,
-            description: data.description || null,
-        };
-        router.post(route('tickets.store', [workspace.slug, project.slug, helpdesk.slug]), payload, {
-            onSuccess: () => {
-                reset('subject', 'priority_id', 'assigned_to', 'description');
-                inputRef.current?.focus();
-            },
-        });
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Escape') {
-            setIsCreating(false);
-            reset();
-        }
-    };
-
-    if (!isCreating) {
-        return (
-            <Button
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start text-muted-foreground hover:text-foreground gap-2 h-9"
-                onClick={() => {
-                    setIsCreating(true);
-                    setTimeout(() => inputRef.current?.focus(), 0);
-                }}
-            >
-                <Plus className="size-4" />
-                New Ticket
-            </Button>
-        );
-    }
-
-    return (
-        <form onSubmit={handleSubmit} className="space-y-2">
-            <Card className="bg-background shadow-sm">
-                <CardContent className="p-3 space-y-2">
-                    <Input
-                        ref={inputRef}
-                        value={data.subject}
-                        onChange={(e) => setData('subject', e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        placeholder="Ticket subject"
-                        className="border-0 p-0 h-auto text-sm focus-visible:ring-0 placeholder:text-muted-foreground/60"
-                        autoFocus
-                    />
-                    {fields.filter(f => f.is_visible_on_card).map((field) => (
-                        <div key={field.id} className="flex flex-col gap-1">
-                            <Label className="text-[10px] text-muted-foreground">{field.label}</Label>
-                            {field.type === 'select' ? (
-                                <Select 
-                                    value={data[field.name as keyof typeof data] as string || ''} 
-                                    onValueChange={(v) => setData(field.name as keyof typeof data, v)}
-                                >
-                                    <SelectTrigger className="h-8 text-xs">
-                                        <SelectValue placeholder={`Select ${field.label}`} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {field.options?.map((opt, idx) => (
-                                            <SelectItem key={idx} value={opt}>{opt}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            ) : (
-                                <Input
-                                    type={field.type === 'number' ? 'number' : 'text'}
-                                    value={data[field.name as keyof typeof data] as string || ''}
-                                    onChange={(e) => setData(field.name as keyof typeof data, e.target.value)}
-                                    className="h-8 text-xs"
-                                    placeholder={field.label}
-                                />
-                            )}
-                        </div>
-                    ))}
-                </CardContent>
-            </Card>
-            <div className="flex items-center gap-2">
-                <Button type="submit" size="sm" disabled={processing || !canSubmit}>
-                    Create
-                </Button>
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                        setIsCreating(false);
-                        reset();
-                    }}
-                >
-                    Cancel
-                </Button>
-            </div>
-        </form>
-    );
-}
-
 // Column Component
 function HelpdeskColumnComponent({
     column,
@@ -445,6 +313,7 @@ function HelpdeskColumnComponent({
     helpdesk,
     fields,
     onEditTicket,
+    onNewTicket,
     onDragStart,
     onDragEnd,
     onDragOver,
@@ -457,6 +326,7 @@ function HelpdeskColumnComponent({
     helpdesk: Helpdesk;
     fields: HelpdeskField[];
     onEditTicket: (ticket: Ticket) => void;
+    onNewTicket: (columnId: number) => void;
     onDragStart: (e: DragEvent, ticket: Ticket) => void;
     onDragEnd: () => void;
     onDragOver: (e: DragEvent, column: HelpdeskColumn) => void;
@@ -521,13 +391,15 @@ function HelpdeskColumnComponent({
 
             {/* Create Ticket */}
             <div className="p-2 pt-0">
-                <CreateTicketInline
-                    column={column}
-                    workspace={workspace}
-                    project={project}
-                    helpdesk={helpdesk}
-                    fields={fields}
-                />
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start text-muted-foreground hover:text-foreground gap-2 h-9"
+                    onClick={() => onNewTicket(column.id)}
+                >
+                    <Plus className="size-4" />
+                    New Ticket
+                </Button>
             </div>
         </div>
     );
@@ -545,6 +417,7 @@ function TicketEditModal({
     fields,
     open,
     onClose,
+    onMove,
 }: {
     ticket: Ticket | null;
     workspace: Workspace;
@@ -556,6 +429,8 @@ function TicketEditModal({
     fields: HelpdeskField[];
     open: boolean;
     onClose: () => void;
+    /** Move to a column; may ask to resolve first (revert = put the select back). */
+    onMove: (ticket: Ticket, columnId: number, revert: () => void) => void;
 }) {
     const [subjectValue, setSubjectValue] = useState(ticket?.subject || '');
     const [isEditingSubject, setIsEditingSubject] = useState(false);
@@ -623,10 +498,7 @@ function TicketEditModal({
     const handleMoveToColumn = (newColId: string) => {
         setColumnId(newColId);
         if (!ticket) return;
-        router.patch(route('tickets.move', [workspace.slug, project.slug, helpdesk.slug, ticket.id]), {
-            column_id: parseInt(newColId),
-            position: 0,
-        }, { preserveScroll: true });
+        onMove(ticket, parseInt(newColId), () => setColumnId(String(ticket.column_id)));
     };
 
     // Comment handlers
@@ -1227,6 +1099,8 @@ export default function HelpdesksShow({
         () => helpdesk.columns.flatMap((col) => col.tickets ?? []).find((t) => t.id === openTicketId) ?? null,
     );
     const [draggedTicket, setDraggedTicket] = useState<Ticket | null>(null);
+    /** Column the "New ticket" dialog starts in; null = closed. */
+    const [newTicketColumnId, setNewTicketColumnId] = useState<number | null>(null);
     const [dragOverColumn, setDragOverColumn] = useState<number | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [currentView, setCurrentView] = useState<'kanban' | 'list'>('kanban');
@@ -1278,17 +1152,39 @@ export default function HelpdesksShow({
         setDragOverColumn(column.id);
     };
 
+    // Moving into a "done" column asks for a closing message first (ResolveTicketDialog).
+    const [resolving, setResolving] = useState<{ ticket: Ticket; columnId: number; onCancel?: () => void } | null>(null);
+    const [resolvingBusy, setResolvingBusy] = useState(false);
+    const isDone = (columnId: number | undefined) => helpdesk.columns.some((c) => c.id === columnId && c.is_done_column);
+
+    const moveTicket = (ticket: Ticket, columnId: number, onCancel?: () => void) => {
+        if (isDone(columnId) && !isDone(ticket.column_id)) {
+            setResolving({ ticket, columnId, onCancel });
+            return;
+        }
+        router.patch(route('tickets.move', [workspace.slug, project.slug, helpdesk.slug, ticket.id]), { column_id: columnId, position: 0 }, { preserveScroll: true });
+    };
+
+    const confirmResolve = (message: string, notify: boolean) => {
+        if (!resolving) return;
+        router.patch(
+            route('tickets.move', [workspace.slug, project.slug, helpdesk.slug, resolving.ticket.id]),
+            { column_id: resolving.columnId, position: 0, resolution_message: message, notify_contact: notify },
+            {
+                preserveScroll: true,
+                onStart: () => setResolvingBusy(true),
+                onFinish: () => {
+                    setResolvingBusy(false);
+                    setResolving(null);
+                },
+            },
+        );
+    };
+
     const handleDrop = (e: DragEvent, column: HelpdeskColumn) => {
         e.preventDefault();
         if (draggedTicket && draggedTicket.column_id !== column.id) {
-            router.patch(
-                route('tickets.move', [workspace.slug, project.slug, helpdesk.slug, draggedTicket.id]),
-                {
-                    column_id: column.id,
-                    position: 0,
-                },
-                { preserveScroll: true }
-            );
+            moveTicket(draggedTicket, column.id);
         }
         setDraggedTicket(null);
         setDragOverColumn(null);
@@ -1377,6 +1273,11 @@ export default function HelpdesksShow({
                                 className="pl-9 h-9 w-64 bg-muted/50 border-0"
                             />
                         </div>
+
+                        <Button size="sm" className="gap-2 h-9" onClick={() => setNewTicketColumnId(helpdesk.columns[0]?.id ?? 0)}>
+                            <Plus className="size-4" />
+                            New ticket
+                        </Button>
 
                         {/* Filter */}
                         <Popover open={filterOpen} onOpenChange={setFilterOpen}>
@@ -1498,6 +1399,7 @@ export default function HelpdesksShow({
                                     helpdesk={helpdesk}
                                     fields={helpdesk.fields}
                                     onEditTicket={setEditingTicket}
+                                    onNewTicket={setNewTicketColumnId}
                                     onDragStart={handleDragStart}
                                     onDragEnd={handleDragEnd}
                                     onDragOver={handleDragOver}
@@ -1620,8 +1522,30 @@ export default function HelpdesksShow({
             </div>
 
             {/* Ticket Edit Modal */}
+            <ResolveTicketDialog
+                ticket={resolving?.ticket ?? null}
+                columnName={helpdesk.columns.find((c) => c.id === resolving?.columnId)?.name ?? ''}
+                agentName={auth.user?.name ?? ''}
+                processing={resolvingBusy}
+                onConfirm={confirmResolve}
+                onCancel={() => {
+                    resolving?.onCancel?.();
+                    setResolving(null);
+                }}
+            />
+            <NewTicketDialog
+                open={newTicketColumnId !== null}
+                onOpenChange={(open) => !open && setNewTicketColumnId(null)}
+                workspace={workspace}
+                project={project}
+                helpdesk={helpdesk}
+                priorities={priorities}
+                projectUsers={projectUsers}
+                initialColumnId={newTicketColumnId}
+            />
             <TicketEditModal
                 key={editingTicket?.id}
+                onMove={moveTicket}
                 ticket={editingTicket}
                 workspace={workspace}
                 project={project}

@@ -111,11 +111,14 @@ export default function HelpdeskEmbed({
     base_url,
     ticket_uuid: initialTicketUuid = null,
     token: initialToken = null,
+    page,
 }: {
     helpdesk_uuid: string;
     base_url: string;
     ticket_uuid?: string | null;
     token?: string | null;
+    /** Set on the shareable support page (/support/{slug}): full page with a branded header. */
+    page?: { title: string; organization?: string | null; logo_url?: string | null; brand_color?: string };
 }) {
     const baseUrl = base_url.replace(/\/$/, '');
     const [formConfig, setFormConfig] = useState<FormConfig | null>(null);
@@ -337,8 +340,26 @@ export default function HelpdeskEmbed({
     const welcomeMessage = formConfig?.branding?.welcome_message ?? 'How can we help you?';
 
     return (
-        <EmbedLayout>
-            <Head title="Contact support" />
+        <EmbedLayout wide={!!page}>
+            <Head title={page ? `${page.title} — Support` : 'Contact support'} />
+            {page && (
+                <header className="mb-6 flex items-center gap-3">
+                    {page.logo_url ? (
+                        <img src={page.logo_url} alt="" className="h-10 w-10 rounded-lg object-contain" />
+                    ) : (
+                        <div
+                            className="flex h-10 w-10 items-center justify-center rounded-lg text-lg font-semibold text-white"
+                            style={{ backgroundColor: page.brand_color || '#0E83DC' }}
+                        >
+                            {(page.organization || page.title).charAt(0).toUpperCase()}
+                        </div>
+                    )}
+                    <div className="min-w-0">
+                        <h1 className="truncate text-lg font-semibold">{page.title}</h1>
+                        {page.organization && <p className="truncate text-sm text-muted-foreground">{page.organization}</p>}
+                    </div>
+                </header>
+            )}
             {loading ? (
                 <Card>
                     <CardContent className="flex flex-col items-center justify-center py-12">

@@ -3,8 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\Helpdesk;
-use App\Models\Workspace;
-use App\Models\Project;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -55,6 +53,7 @@ class HelpdeskWidgetController extends Controller
                     $type = strtolower(trim($type));
                     $type = str_replace(' ', '_', $type);
                 }
+
                 return [
                     'id' => $f->id,
                     'name' => $f->name,
@@ -97,6 +96,29 @@ class HelpdeskWidgetController extends Controller
         $response->headers->set('Content-Security-Policy', 'frame-ancestors *');
 
         return $response;
+    }
+
+    /**
+     * Shareable full-page support form: /support/{public_slug}. Same form and ticket view as
+     * the inline embed, with the helpdesk's name and branding around it.
+     */
+    public function supportPage(Request $request, string $publicSlug)
+    {
+        $helpdesk = Helpdesk::where('public_slug', $publicSlug)->with('project.workspace')->firstOrFail();
+        $settings = $helpdesk->settings ?? [];
+
+        return Inertia::render('Widgets/HelpdeskEmbed', [
+            'helpdesk_uuid' => $helpdesk->uuid,
+            'base_url' => $request->getSchemeAndHttpHost(),
+            'ticket_uuid' => $request->query('ticket'),
+            'token' => $request->query('token'),
+            'page' => [
+                'title' => $helpdesk->name,
+                'organization' => $helpdesk->project?->workspace?->name,
+                'logo_url' => $settings['logo_url'] ?? null,
+                'brand_color' => $settings['brand_color'] ?? '#0E83DC',
+            ],
+        ]);
     }
 
     /**

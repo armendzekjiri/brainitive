@@ -1,28 +1,14 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import { PageProps } from '@/types';
-import { Bell, BellOff, CheckCheck, ExternalLink, ArrowLeft } from 'lucide-react';
+import { Bell, BellOff, CheckCheck, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import axios from 'axios';
+import { NotificationAvatar, type NotificationData, notificationDetail, NotificationMessage } from '@/components/NotificationMessage';
 import { useState } from 'react';
 
-interface NotificationData {
-    type: string;
-    item_key?: string;
-    item_title?: string;
-    item_url?: string;
-    old_column?: string;
-    new_column?: string;
-    context_type?: string;
-    context_title?: string;
-    context_url?: string;
-    page_name?: string;
-    page_url?: string;
-    actor_name: string;
-    actor_avatar?: string;
-}
 
 interface Notification {
     id: string;
@@ -77,10 +63,7 @@ function NotificationRow({ notification, onMarkRead }: { notification: Notificat
         )}>
             {/* Avatar */}
             <div className="size-10 rounded-full bg-muted flex items-center justify-center shrink-0 text-sm font-semibold uppercase overflow-hidden border">
-                {d.actor_avatar
-                    ? <img src={d.actor_avatar} alt={d.actor_name} className="size-full object-cover" />
-                    : (d.actor_name?.charAt(0) ?? '?')
-                }
+                <NotificationAvatar data={d} />
             </div>
 
             {/* Content */}
@@ -88,54 +71,13 @@ function NotificationRow({ notification, onMarkRead }: { notification: Notificat
                 <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                         <p className="text-sm leading-relaxed">
-                            <span className="font-semibold">{d.actor_name}</span>
-                            {d.type === 'mentioned' && (
-                                <>
-                                    {' mentioned you '}
-                                    {d.context_type === 'page' ? 'on page ' : 'in '}
-                                    <a
-                                        href={d.context_url!}
-                                        className="font-semibold text-primary hover:underline inline-flex items-center gap-0.5"
-                                    >
-                                        {d.context_title}
-                                        <ExternalLink className="size-3 ml-0.5" />
-                                    </a>
-                                </>
-                            )}
-                            {d.type === 'page_updated' && (
-                                <>
-                                    {' updated page '}
-                                    <a
-                                        href={d.page_url}
-                                        className="font-semibold text-primary hover:underline inline-flex items-center gap-0.5"
-                                    >
-                                        {d.page_name}
-                                        <ExternalLink className="size-3 ml-0.5" />
-                                    </a>
-                                </>
-                            )}
-                            {d.type !== 'mentioned' && d.type !== 'page_updated' && (
-                                <>
-                                    {d.type === 'item_assigned' ? ' assigned you to ' : ' moved '}
-                                    <a
-                                        href={d.item_url}
-                                        className="font-semibold text-primary hover:underline inline-flex items-center gap-0.5"
-                                    >
-                                        {d.item_key}
-                                        <ExternalLink className="size-3 ml-0.5" />
-                                    </a>
-                                </>
-                            )}
-                            {d.type === 'item_status_changed' && (
-                                <>
-                                    {' from '}
-                                    <span className="text-muted-foreground">{d.old_column}</span>
-                                    <span className="mx-1.5 text-muted-foreground">→</span>
-                                    <span className="font-medium">{d.new_column}</span>
-                                </>
-                            )}
+                            <NotificationMessage
+                                data={d}
+                                linkClassName="font-semibold text-primary hover:underline inline-flex items-center gap-0.5"
+                                iconClassName="size-3 ml-0.5"
+                            />
                         </p>
-                        <p className="text-sm text-muted-foreground mt-0.5 truncate">{d.item_title ?? d.page_name}</p>
+                        <p className="text-sm text-muted-foreground mt-0.5 truncate">{notificationDetail(d)}</p>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">

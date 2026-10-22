@@ -1,33 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { usePage, Link } from '@inertiajs/react';
 import axios from 'axios';
-import { Bell, CheckCheck, ExternalLink, X, BellOff } from 'lucide-react';
+import { Bell, CheckCheck, X, BellOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
     Popover,
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import { NotificationAvatar, type NotificationData, notificationDetail, NotificationMessage } from '@/components/NotificationMessage';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { PageProps } from '@/types';
 
-interface NotificationData {
-    type: string;
-    item_key?: string;
-    item_title?: string;
-    item_url?: string;
-    old_column?: string;
-    new_column?: string;
-    context_type?: string;
-    context_title?: string;
-    context_url?: string;
-    page_name?: string;
-    page_url?: string;
-    when_label?: string;
-    actor_name?: string;
-    actor_avatar?: string;
-}
 
 interface Notification {
     id: string;
@@ -197,93 +182,14 @@ export function NotificationsDropdown() {
                                     >
                                         {/* Avatar / Icon */}
                                         <div className="size-8 rounded-full bg-muted flex items-center justify-center shrink-0 text-xs font-medium uppercase overflow-hidden border">
-                                            {d.type === 'item_reminder'
-                                                ? <Bell className="size-4 text-muted-foreground" />
-                                                : d.actor_avatar
-                                                    ? <img src={d.actor_avatar} alt={d.actor_name} className="size-full object-cover" />
-                                                    : d.actor_name?.charAt(0) ?? '?'
-                                            }
+                                            <NotificationAvatar data={d} />
                                         </div>
 
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm leading-snug">
-                                                {d.type === 'item_reminder' ? (
-                                                    <>
-                                                        <a
-                                                            href={d.item_url}
-                                                            className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            onClick={() => { if (isUnread) markRead(n.id); }}
-                                                        >
-                                                            {d.item_key}
-                                                            <ExternalLink className="size-2.5" />
-                                                        </a>
-                                                        {' '}{d.when_label}
-                                                    </>
-                                                ) : (
-                                                <span className="font-medium">{d.actor_name}</span>
-                                                )}
-                                                {d.type === 'mentioned' && (
-                                                    <>
-                                                        {' mentioned you '}
-                                                        {d.context_type === 'page' ? 'on page ' : 'in '}
-                                                        <a
-                                                            href={d.context_url!}
-                                                            className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            onClick={(e) => {
-                                                                if (isUnread) markRead(n.id);
-                                                            }}
-                                                        >
-                                                            {d.context_title}
-                                                            <ExternalLink className="size-2.5" />
-                                                        </a>
-                                                    </>
-                                                )}
-                                                {d.type === 'page_updated' && (
-                                                    <>
-                                                        {' updated page '}
-                                                        <a
-                                                            href={d.page_url}
-                                                            className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            onClick={() => { if (isUnread) markRead(n.id); }}
-                                                        >
-                                                            {d.page_name}
-                                                            <ExternalLink className="size-2.5" />
-                                                        </a>
-                                                    </>
-                                                )}
-                                                {d.type !== 'mentioned' && d.type !== 'page_updated' && d.type !== 'item_reminder' && (
-                                                    <>
-                                                        {d.type === 'item_assigned' ? ' assigned you to ' : ' moved '}
-                                                        <a
-                                                            href={d.item_url}
-                                                            className="font-medium text-primary hover:underline inline-flex items-center gap-0.5"
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            onClick={(e) => {
-                                                                if (isUnread) markRead(n.id);
-                                                            }}
-                                                        >
-                                                            {d.item_key}
-                                                            <ExternalLink className="size-2.5" />
-                                                        </a>
-                                                    </>
-                                                )}
-                                                {d.type === 'item_status_changed' && (
-                                                    <>
-                                                        {' from '}
-                                                        <span className="text-muted-foreground">{d.old_column}</span>
-                                                        {' → '}
-                                                        <span className="font-medium">{d.new_column}</span>
-                                                    </>
-                                                )}
+                                                <NotificationMessage data={d} newTab onOpen={() => { if (isUnread) markRead(n.id); }} />
                                             </p>
-                                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{d.item_title ?? d.page_name}</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{notificationDetail(d)}</p>
                                             <p className="text-[11px] text-muted-foreground/70 mt-1">{timeAgo(n.created_at)}</p>
                                         </div>
 
