@@ -20,7 +20,7 @@ const sections = [
         icon: CreditCard,
         num: '3',
         title: 'Plans and billing',
-        content: 'Brainitive offers the following plans: Free (€0/month – all features, 5 workspaces, 1 GB storage per workspace); Pro (€3.99/month – everything in Free, 20 workspaces, 2 GB per workspace / 40 GB total, priority support); Max (€9.99/month – everything in Pro, unlimited workspaces, 1 TB total storage, dedicated support); Custom/Enterprise (custom pricing – SLA, compliance, dedicated success manager, custom integrations). Paid plans are billed monthly in advance. Prices are exclusive of any applicable taxes. We reserve the right to adjust pricing with at least 30 days\' notice.',
+        content: 'These Terms apply to Brainitive Cloud, the hosted service operated by us. Brainitive Cloud offers the following plans: Free (€0 – up to 5 members, all features, 1 GB file storage); Team (€6 per user per month, or €5 per user per month billed yearly – unlimited members, 100 GB file storage, email support); Business (€12 per user per month, or €10 per user per month billed yearly – everything in Team plus priority support, a data processing agreement, a 99.9% uptime SLA and daily backups with 30-day restore); Enterprise (custom pricing and a separate agreement). Paid plans are billed in advance for the chosen period. Prices are exclusive of any applicable taxes. We reserve the right to adjust pricing with at least 30 days\' notice. The Brainitive software itself is open source under the GNU Affero General Public License v3.0; if you run it on your own servers (self-hosting), that licence applies instead of these Terms and no fees are due to us.',
     },
     {
         icon: UserCheck,

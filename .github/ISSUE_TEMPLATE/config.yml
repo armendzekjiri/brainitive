@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/armendzekjiri/brainitive/security/advisories/new
+    about: Please report security issues privately.
+  - name: Cloud billing or account question
+    url: mailto:hello@brainitive.com
+    about: For Brainitive Cloud accounts and invoices.

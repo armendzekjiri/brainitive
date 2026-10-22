@@ -76,6 +76,18 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.14.0',
+        title: 'Brainitive Is Open Source',
+        tag: 'Major Release',
+        date: '2026-10-22',
+        items: [
+            'Brainitive is now open source under the GNU AGPL-3.0 — every feature is free to self-host.',
+            'Self-hosting with Docker: one image for web, queue and scheduler, MariaDB and Redis, automatic HTTPS. See docs/self-hosting.md.',
+            'New pricing for Brainitive Cloud: Free (up to 5 members), Team (€6 per user / month, €5 yearly), Business (€12, €10 yearly) and Enterprise.',
+            'Contributing: contributor licence agreement, code of conduct, security policy and issue templates.',
+        ]
+    },
+    {
         version: 'v1.13.1',
         title: 'Homepage & Welcome Refresh',
         tag: 'Patch',

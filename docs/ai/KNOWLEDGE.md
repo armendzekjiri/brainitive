@@ -124,3 +124,12 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **Playwright `page.mouse.click` ignores `modifiers`** — hold Shift with `keyboard.down` when
   testing multi-select in the harness.
 - **`npm run build:widget` used to copy `public/` into `public/js/`** (no `publicDir: false`), which is why favicons, `.htaccess`, `hot` and logos are tracked under `public/js/`. Fixed in `vite.widget.config.js`; the old copies are left in place until someone checks the server doesn't rely on them.
+- **Docker image: never print PHP errors into responses.** With `display_errors` on, a
+  warning before the headers turns every 404/500 into a 200. `docker/php.ini` sets
+  `display_errors = Off` and logs to stderr.
+- **There is no automatic first admin.** Instance admins are made with
+  `php artisan make:instance-admin <email>` (also in the self-hosting guide).
+- **Cloud pricing is marketing only so far** — there is no billing and no plan-limit
+  enforcement in the code. Building billing needs a new dependency (e.g. Cashier) and must
+  stay off for self-hosted instances.
+

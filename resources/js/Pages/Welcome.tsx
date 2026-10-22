@@ -108,6 +108,227 @@ function RevealSection({
     );
 }
 
+const REPO_URL = 'https://github.com/armendzekjiri/brainitive';
+const SELF_HOSTING_URL = `${REPO_URL}/blob/main/docs/self-hosting.md`;
+
+function GitHubMark({ className = '' }: { className?: string }) {
+    return (
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" className={className}>
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+        </svg>
+    );
+}
+
+type Billing = 'monthly' | 'yearly';
+
+/** Brainitive Cloud tiers; prices per user and month in EUR (yearly = billed once a year). */
+const CLOUD_PLANS: {
+    name: string;
+    description: string;
+    price: Record<Billing, number>;
+    perUser: boolean;
+    features: string[];
+    cta: string;
+    highlighted?: boolean;
+}[] = [
+    {
+        name: 'Free',
+        description: 'For small teams getting started.',
+        price: { monthly: 0, yearly: 0 },
+        perUser: false,
+        features: [
+            'Up to 5 members',
+            'All features: boards, Scrum, docs, whiteboards, Gantt plans',
+            'Unlimited projects, pages and boards',
+            '1 GB file storage',
+            'Community support',
+        ],
+        cta: 'Start for free',
+    },
+    {
+        name: 'Team',
+        description: 'For teams that run their projects on Brainitive.',
+        price: { monthly: 6, yearly: 5 },
+        perUser: true,
+        features: [
+            'Unlimited members and guests by role',
+            'Everything in Free',
+            '100 GB file storage',
+            'Email support (within 2 business days)',
+        ],
+        cta: 'Start with Team',
+        highlighted: true,
+    },
+    {
+        name: 'Business',
+        description: 'For companies with compliance needs.',
+        price: { monthly: 12, yearly: 10 },
+        perUser: true,
+        features: [
+            'Everything in Team',
+            'Priority support (next business day)',
+            'Data processing agreement (DPA / AVV)',
+            '99.9% uptime SLA',
+            'Daily backups with 30-day restore',
+        ],
+        cta: 'Start with Business',
+    },
+];
+
+function formatEuro(value: number): string {
+    return value === 0 ? '0' : Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function PricingSection() {
+    const [billing, setBilling] = useState<Billing>('yearly');
+
+    return (
+        <section id="pricing" className="relative z-10 px-6 py-24 sm:py-32">
+            <div className="max-w-6xl mx-auto">
+                <RevealSection className="text-center mb-12">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[#0E83DC]/20 bg-[#0E83DC]/5 px-4 py-1.5 text-xs font-semibold text-[#0E83DC] mb-4">
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Pricing
+                    </div>
+                    <h2 className="text-3xl sm:text-4xl font-bold text-[#485E72] dark:text-slate-100 mb-4">
+                        Open source. Pay only for the cloud.
+                    </h2>
+                    <p className="text-[#485E72]/60 dark:text-slate-400 max-w-2xl mx-auto text-lg">
+                        Every feature is free to self-host. Brainitive Cloud runs it for you &mdash;
+                        updates, backups and support included. Prices in EUR, plus VAT where applicable.
+                    </p>
+
+                    <div className="mt-8 inline-flex items-center rounded-xl border border-border/70 bg-card/70 p-1" role="radiogroup" aria-label="Billing period">
+                        {(['monthly', 'yearly'] as Billing[]).map((period) => (
+                            <button
+                                key={period}
+                                type="button"
+                                role="radio"
+                                aria-checked={billing === period}
+                                onClick={() => setBilling(period)}
+                                className={`rounded-lg px-4 py-2 text-sm font-semibold transition-all ${billing === period ? 'bg-[#0E83DC] text-white shadow' : 'text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC]'}`}
+                            >
+                                {period === 'monthly' ? 'Monthly' : 'Yearly'}
+                                {period === 'yearly' && (
+                                    <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${billing === 'yearly' ? 'bg-white/20' : 'bg-[#69A748]/15 text-[#69A748]'}`}>
+                                        −17%
+                                    </span>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                </RevealSection>
+
+                {/* Cloud tiers */}
+                <div className="grid gap-6 md:grid-cols-3">
+                    {CLOUD_PLANS.map((plan, i) => (
+                        <RevealSection key={plan.name} delay={i * 80}>
+                            <div
+                                className={`relative h-full rounded-2xl border p-6 flex flex-col transition-all duration-300 hover:-translate-y-1 ${plan.highlighted
+                                    ? 'border-[#0E83DC]/40 bg-card shadow-xl shadow-[#0E83DC]/10 ring-1 ring-[#0E83DC]/20'
+                                    : 'border-border/60 bg-card/70 backdrop-blur-sm hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20'
+                                    }`}
+                            >
+                                {plan.highlighted && (
+                                    <span className="absolute -top-3 left-6 rounded-full bg-[#0E83DC] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white shadow">
+                                        Most popular
+                                    </span>
+                                )}
+                                <div className="text-xs font-semibold uppercase tracking-wider text-[#0E83DC]">Cloud</div>
+                                <h3 className="mt-1 font-bold text-xl text-[#485E72] dark:text-slate-100">{plan.name}</h3>
+                                <p className="mt-1 text-sm text-[#485E72]/60 dark:text-slate-400">{plan.description}</p>
+                                <div className="mt-5 flex items-baseline gap-1.5">
+                                    <span className="text-4xl font-bold text-[#485E72] dark:text-slate-100">€{formatEuro(plan.price[billing])}</span>
+                                    <span className="text-sm text-[#485E72]/60 dark:text-slate-400">
+                                        {plan.perUser ? `per user / month${billing === 'yearly' ? ', billed yearly' : ''}` : 'forever'}
+                                    </span>
+                                </div>
+                                <ul className="mt-6 space-y-2.5 flex-1">
+                                    {plan.features.map((feature) => (
+                                        <li key={feature} className="flex items-start gap-2.5 text-sm text-[#485E72]/75 dark:text-slate-300">
+                                            <Check className="h-4 w-4 shrink-0 mt-0.5 text-[#69A748]" strokeWidth={2.5} />
+                                            {feature}
+                                        </li>
+                                    ))}
+                                </ul>
+                                <Link
+                                    href={route('register')}
+                                    className={`mt-6 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-all ${plan.highlighted
+                                        ? 'bg-[#0E83DC] text-white hover:bg-[#0b6fbf] shadow-lg shadow-[#0E83DC]/25'
+                                        : 'border-2 border-border/80 text-[#485E72] dark:text-slate-100 hover:border-[#0E83DC]/40 hover:text-[#0E83DC]'
+                                        }`}
+                                >
+                                    {plan.cta}
+                                    <ChevronRight className="h-4 w-4" />
+                                </Link>
+                            </div>
+                        </RevealSection>
+                    ))}
+                </div>
+
+                {/* Self-hosted + Enterprise */}
+                <div className="mt-6 grid gap-6 md:grid-cols-2">
+                    <RevealSection delay={240}>
+                        <div className="h-full rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm p-6 sm:p-7 flex flex-col">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <div className="text-xs font-semibold uppercase tracking-wider text-[#69A748]">Open source</div>
+                                    <h3 className="mt-1 font-bold text-xl text-[#485E72] dark:text-slate-100">Self-hosted</h3>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-3xl font-bold text-[#485E72] dark:text-slate-100">€0</div>
+                                    <div className="text-xs text-[#485E72]/60 dark:text-slate-400">AGPL-3.0</div>
+                                </div>
+                            </div>
+                            <p className="mt-3 text-sm text-[#485E72]/60 dark:text-slate-400 flex-1">
+                                Every feature, unlimited users, on your own server. One Docker command to start,
+                                community support on GitHub.
+                            </p>
+                            <div className="mt-5 flex flex-wrap gap-3">
+                                <a href={SELF_HOSTING_URL} target="_blank" rel="noopener" className="inline-flex items-center gap-2 rounded-xl bg-[#485E72] dark:bg-slate-100 px-4 py-2.5 text-sm font-bold text-white dark:text-slate-900 hover:opacity-90 transition-opacity">
+                                    Self-host guide
+                                    <ChevronRight className="h-4 w-4" />
+                                </a>
+                                <a href={REPO_URL} target="_blank" rel="noopener" className="inline-flex items-center gap-2 rounded-xl border-2 border-border/80 px-4 py-2.5 text-sm font-bold text-[#485E72] dark:text-slate-100 hover:border-[#0E83DC]/40 hover:text-[#0E83DC] transition-all">
+                                    <GitHubMark className="h-4 w-4" />
+                                    View on GitHub
+                                </a>
+                            </div>
+                        </div>
+                    </RevealSection>
+
+                    <RevealSection delay={320}>
+                        <a
+                            href="mailto:hello@brainitive.com?subject=Brainitive%20Enterprise"
+                            className="group h-full rounded-2xl border-2 border-border/70 bg-card/70 backdrop-blur-sm p-6 sm:p-7 flex flex-col transition-all duration-300 hover:border-[#0E83DC]/30 hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20"
+                        >
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <div className="text-xs font-semibold uppercase tracking-wider text-[#485E72]/70 dark:text-slate-400">Cloud or on-premise</div>
+                                    <h3 className="mt-1 font-bold text-xl text-[#485E72] dark:text-slate-100">Enterprise</h3>
+                                </div>
+                                <div className="text-right text-sm font-semibold text-[#485E72]/70 dark:text-slate-300">Custom</div>
+                            </div>
+                            <ul className="mt-3 grid gap-1.5 text-sm text-[#485E72]/70 dark:text-slate-300 sm:grid-cols-2 flex-1">
+                                {['Commercial licence (no AGPL obligations)', 'Dedicated instance or on-premise', 'SAML SSO & SCIM on request', 'Custom SLA & onboarding'].map((item) => (
+                                    <li key={item} className="flex items-start gap-2">
+                                        <Check className="h-4 w-4 shrink-0 mt-0.5 text-[#69A748]" strokeWidth={2.5} />
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
+                            <span className="mt-5 inline-flex items-center gap-2 self-start rounded-xl border-2 border-border/80 px-4 py-2.5 text-sm font-bold text-[#485E72] dark:text-slate-100 group-hover:border-[#0E83DC]/40 group-hover:text-[#0E83DC] transition-all">
+                                Contact us
+                                <ChevronRight className="h-4 w-4" />
+                            </span>
+                        </a>
+                    </RevealSection>
+                </div>
+            </div>
+        </section>
+    );
+}
+
 /** Product screenshots (light + dark) for the "See it in action" section. */
 const TOUR = [
     {
@@ -417,87 +638,8 @@ export default function Welcome({
         },
     ];
 
-    const plans = [
-        {
-            name: 'Free',
-            price: '0',
-            period: 'forever',
-            description: 'All features, great for getting started.',
-            features: [
-                '2 workspaces',
-                '10 projects across all workspaces',
-                '50 pages & subpages across all projects',
-                '5 whiteboards across all projects',
-                '5 snippets collections & unlimited snippets per workspace',
-                '5 bookmarks collections & unlimited items per workspace',
-                '3 users per workspace',
-                '1 GB attachments',
-            ],
-            cta: 'Get started free',
-            href: route('register'),
-            highlighted: false,
-        },
-        {
-            name: 'PLUS',
-            price: '3.99',
-            period: '/month',
-            description: 'More capacity for growing teams.',
-            features: [
-                '5 workspaces',
-                '20 projects across all workspaces',
-                '100 pages & subpages across all projects',
-                '30 whiteboards across all projects',
-                '50 snippets collections & unlimited snippets per workspace',
-                '50 bookmarks collections & unlimited items per workspace',
-                '5 users per workspace (€1.99 each extra user)',
-                '5 GB attachments (€0.50 each additional GB)',
-            ],
-            cta: 'Get PLUS',
-            href: route('register'),
-            highlighted: true,
-        },
-        {
-            name: 'PRO',
-            price: '5.99',
-            period: '/month',
-            description: 'Even more for active teams.',
-            features: [
-                '10 workspaces',
-                '50 projects across all workspaces',
-                '200 pages & subpages across all projects',
-                '60 whiteboards across all projects',
-                '100 snippets collections & unlimited snippets per workspace',
-                '100 bookmarks collections & unlimited items per workspace',
-                '10 users per workspace (€1.99 each extra user)',
-                '10 GB attachments (€0.50 each additional GB)',
-            ],
-            cta: 'Get PRO',
-            href: route('register'),
-            highlighted: false,
-        },
-        {
-            name: 'MAX',
-            price: '9.99',
-            period: '/month',
-            description: 'Unlimited scale, more users & storage.',
-            features: [
-                'Unlimited workspaces',
-                'Unlimited projects across all workspaces',
-                'Unlimited pages & subpages across all projects',
-                'Unlimited whiteboards across all projects',
-                'Unlimited snippets collections & unlimited snippets per workspace',
-                'Unlimited bookmarks collections & unlimited items per workspace',
-                '15 users per project (€2.99 each extra user) & unlimited workspace members',
-                '20 GB attachments (€0.50 each additional GB)',
-            ],
-            cta: 'Get MAX',
-            href: route('register'),
-            highlighted: false,
-        },
-    ];
-
     const stats = [
-        { value: '100%', label: 'Free to start' },
+        { value: '100%', label: 'Open source' },
         { value: '∞', label: 'Projects & pages' },
         { value: '<50ms', label: 'UI response time' },
         { value: '99.9%', label: 'Uptime SLA' },
@@ -691,7 +833,7 @@ export default function Welcome({
                         {/* Badge */}
                         <div className="inline-flex items-center gap-2 rounded-full border border-[#0E83DC]/20 bg-card/70 backdrop-blur-sm px-4 py-1.5 text-xs font-semibold text-[#0E83DC] mb-8 animate-fade-in shadow-sm">
                             <Sparkles className="h-3.5 w-3.5" />
-                            All-in-one workspace platform
+                            Open source &middot; All-in-one workspace
                         </div>
 
 
@@ -967,155 +1109,7 @@ export default function Welcome({
                 </section>
 
                 {/* ═══ Pricing ═══ */}
-                <section
-                    id="pricing"
-                    className="relative z-10 px-6 py-24 sm:py-32"
-                >
-                    <div className="max-w-6xl mx-auto">
-                        <RevealSection className="text-center mb-16">
-                            <div className="inline-flex items-center gap-2 rounded-full border border-[#0E83DC]/20 bg-[#0E83DC]/5 px-4 py-1.5 text-xs font-semibold text-[#0E83DC] mb-4">
-                                <Sparkles className="h-3.5 w-3.5" />
-                                Pricing
-                            </div>
-                            <h2 className="text-3xl sm:text-4xl font-bold text-[#485E72] dark:text-slate-100 mb-4">
-                                Simple, transparent pricing
-                            </h2>
-                            <p className="text-[#485E72]/60 dark:text-slate-400 max-w-xl mx-auto text-lg">
-                                Start free, upgrade when you need more workspaces or
-                                storage. All prices in euros (EUR).
-                            </p>
-                        </RevealSection>
-
-                        {/* Free — horizontal full-width card on top */}
-                        {(() => {
-                            const freePlan = plans[0];
-                            return (
-                                <RevealSection delay={0}>
-                                    <Link
-                                        href={freePlan.href}
-                                        className="block w-full rounded-2xl border border-border/60 bg-card/70 backdrop-blur-sm p-6 sm:p-8 transition-all duration-300 hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20 hover:-translate-y-0.5"
-                                    >
-                                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                                            <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
-                                                <div>
-                                                    <h3 className="font-bold text-xl text-[#485E72] dark:text-slate-100">
-                                                        {freePlan.name}
-                                                    </h3>
-                                                    <div className="mt-1 flex items-baseline gap-1">
-                                                        <span className="text-3xl font-bold text-[#485E72] dark:text-slate-100">
-                                                            €{freePlan.price}
-                                                        </span>
-                                                        <span className="text-[#485E72]/50 dark:text-slate-400 text-sm">
-                                                            {freePlan.period}
-                                                        </span>
-                                                    </div>
-                                                    <p className="mt-1 text-sm text-[#485E72]/60 dark:text-slate-400">
-                                                        {freePlan.description}
-                                                    </p>
-                                                </div>
-                                                <ul className="flex flex-wrap gap-x-6 gap-y-2 sm:gap-y-1 text-sm text-[#485E72]/70 dark:text-slate-300">
-                                                    {freePlan.features.map((f) => (
-                                                        <li key={f} className="flex items-center gap-2">
-                                                            <Check className="h-4 w-4 shrink-0 text-[#69A748]" />
-                                                            <span>{f}</span>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            </div>
-                                            <span className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#485E72] px-5 py-3 text-sm font-bold text-white hover:bg-[#3a4d5e] transition-all shrink-0 self-start lg:self-center">
-                                                {freePlan.cta}
-                                                <ChevronRight className="h-4 w-4" />
-                                            </span>
-                                        </div>
-                                    </Link>
-                                </RevealSection>
-                            );
-                        })()}
-
-                        {/* 3 paid plans — middle row */}
-                        <div className="grid sm:grid-cols-3 gap-5 mt-6">
-                            {plans.slice(1, 4).map((plan, i) => (
-                                <RevealSection
-                                    key={`${plan.name}-${plan.price}-${i}`}
-                                    delay={(i + 1) * 80}
-                                >
-                                    <div
-                                        className={`h-full rounded-2xl border p-6 flex flex-col transition-all duration-300 hover:-translate-y-1 ${plan.highlighted
-                                                ? 'border-[#0E83DC]/40 bg-card ring-2 ring-[#0E83DC]/20 shadow-xl shadow-[#0E83DC]/10'
-                                                : 'border-border/60 bg-card/70 backdrop-blur-sm hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20'
-                                            }`}
-                                    >
-                                        {plan.highlighted && (
-                                            <div className="inline-flex self-start items-center rounded-full bg-[#0E83DC]/10 px-3 py-1 text-xs font-bold text-[#0E83DC] mb-3">
-                                                Most popular
-                                            </div>
-                                        )}
-                                        <h3 className="font-bold text-lg text-[#485E72] dark:text-slate-100">
-                                            {plan.name}
-                                        </h3>
-                                        <div className="mt-3 flex items-baseline gap-1">
-                                            <span className="text-3xl font-bold text-[#485E72] dark:text-slate-100">
-                                                €{plan.price}
-                                            </span>
-                                            <span className="text-[#485E72]/50 dark:text-slate-400 text-sm">
-                                                {plan.period}
-                                            </span>
-                                        </div>
-                                        <p className="mt-2 text-sm text-[#485E72]/60 dark:text-slate-400">
-                                            {plan.description}
-                                        </p>
-                                        <ul className="mt-6 space-y-3 flex-1">
-                                            {plan.features.map((f) => (
-                                                <li
-                                                    key={f}
-                                                    className="flex items-start gap-2.5 text-sm"
-                                                >
-                                                    <Check className="h-4 w-4 shrink-0 mt-0.5 text-[#69A748]" />
-                                                    <span className="text-[#485E72]/70 dark:text-slate-300">
-                                                        {f}
-                                                    </span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                        <Link
-                                            href={plan.href}
-                                            className={`mt-6 inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition-all ${plan.highlighted
-                                                    ? 'bg-[#0E83DC] text-white shadow-lg shadow-[#0E83DC]/20 hover:bg-[#0b6fbf] hover:shadow-xl'
-                                                    : 'bg-[#485E72] text-white hover:bg-[#3a4d5e]'
-                                                }`}
-                                        >
-                                            {plan.cta}
-                                            <ChevronRight className="h-4 w-4" />
-                                        </Link>
-                                    </div>
-                                </RevealSection>
-                            ))}
-                        </div>
-
-                        {/* Custom for Enterprise — full width */}
-                        <RevealSection delay={320} className="mt-8">
-                            <a
-                                href="mailto:hello@brainitive.com?subject=Enterprise%20plan"
-                                className="block w-full rounded-2xl border-2 border-border/70 bg-card/70 backdrop-blur-sm p-6 sm:p-8 transition-all duration-300 hover:border-[#0E83DC]/30 hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20 group"
-                            >
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                    <div>
-                                        <h3 className="font-bold text-xl text-[#485E72] dark:text-slate-100">
-                                            Custom for Enterprise
-                                        </h3>
-                                        <p className="mt-1 text-sm text-[#485E72]/60 dark:text-slate-400">
-                                            Custom limits, SLA, dedicated success manager &amp; integrations. Contact us for a quote.
-                                        </p>
-                                    </div>
-                                    <span className="inline-flex items-center gap-2 rounded-xl border-2 border-border/80 px-5 py-2.5 text-sm font-bold text-[#485E72] dark:text-slate-100 group-hover:border-[#0E83DC]/40 group-hover:text-[#0E83DC] transition-all shrink-0">
-                                        Contact us
-                                        <ChevronRight className="h-4 w-4" />
-                                    </span>
-                                </div>
-                            </a>
-                        </RevealSection>
-                    </div>
-                </section>
+                <PricingSection />
 
                 {/* ═══ CTA ═══ */}
                 {!auth?.user && (
@@ -1169,6 +1163,23 @@ export default function Welcome({
                                     className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
                                 >
                                     Pricing
+                                </a>
+                                <a
+                                    href={REPO_URL}
+                                    target="_blank"
+                                    rel="noopener"
+                                    className="inline-flex items-center gap-1.5 text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
+                                >
+                                    <GitHubMark className="h-3.5 w-3.5" />
+                                    GitHub
+                                </a>
+                                <a
+                                    href={SELF_HOSTING_URL}
+                                    target="_blank"
+                                    rel="noopener"
+                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
+                                >
+                                    Self-hosting
                                 </a>
                                 <Link
                                     href="/privacy"

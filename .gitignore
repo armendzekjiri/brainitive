@@ -22,4 +22,7 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
-/public/js/build/
+# public/js only holds committed build output that the deploy doesn't rebuild
+/public/js/*
+!/public/js/excalidraw-dist/
+!/public/js/helpdesk-widget.js

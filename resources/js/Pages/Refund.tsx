@@ -8,7 +8,7 @@ const sections = [
         icon: RotateCcw,
         num: '1',
         title: '7-day money-back guarantee',
-        content: 'We offer a full 7-day money-back guarantee on all paid Brainitive plans (Pro and Max). If you are not satisfied with your purchase for any reason, contact us within 7 days of your initial payment and we will issue a full refund — no questions asked. This applies to first-time purchases only.',
+        content: 'We offer a full 7-day money-back guarantee on all paid Brainitive Cloud plans (Team and Business). If you are not satisfied with your purchase for any reason, contact us within 7 days of your initial payment and we will issue a full refund — no questions asked. This applies to first-time purchases only.',
         highlight: true,
     },
     {
@@ -27,7 +27,7 @@ const sections = [
         icon: CreditCard,
         num: '4',
         title: 'How to request a refund',
-        content: 'Send an email to billing@brainitive.com with the subject "Refund Request" and include: your account email address, the plan you purchased (Pro or Max), the date of purchase, and a brief reason for the refund (optional). We will process your request within 5 business days. Refunds are returned to the original payment method.',
+        content: 'Send an email to billing@brainitive.com with the subject "Refund Request" and include: your account email address, the plan you purchased (Team or Business), the date of purchase, and a brief reason for the refund (optional). We will process your request within 5 business days. Refunds are returned to the original payment method.',
     },
     {
         icon: XCircle,
