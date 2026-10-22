@@ -13,6 +13,11 @@ self-hosted servers.
 | Address bar | Type `bt`, a space and a search |
 | Side panel | My Work (open issues + tasks assigned to you) and search |
 
+## Try it in Chrome
+
+`npm install && npm run build`, then `chrome://extensions` → **Developer mode** → **Load unpacked**
+→ choose `browser-extension/dist/chrome-mv3`. After a rebuild, click the reload icon on the card.
+
 ## Develop
 
 ```bash
@@ -29,9 +34,9 @@ Point it at a local Brainitive by pre-granting the host:
 
 ```bash
 npm run typecheck
-npm run build          # .output/chrome-mv3   (Chrome, Edge)
-npm run build:firefox  # .output/firefox-mv3
-npm run zip            # store uploads in .output/*.zip
+npm run build          # dist/chrome-mv3   (Chrome, Edge)
+npm run build:firefox  # dist/firefox-mv3
+npm run zip            # store uploads in dist/*.zip
 npm run zip:firefox    # also writes the sources zip AMO asks for
 ```
 

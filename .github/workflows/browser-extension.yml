@@ -32,5 +32,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: browser-extension
-          path: browser-extension/.output/*.zip
+          path: browser-extension/dist/*.zip
           retention-days: 14

@@ -3,6 +3,8 @@ import { CLOUD_ORIGIN } from './lib/config';
 
 export default defineConfig({
     modules: ['@wxt-dev/module-react'],
+    // Visible folder (not .output) so "Load unpacked" can find it in the file picker.
+    outDir: 'dist',
     manifest: ({ browser }) => ({
         name: 'Brainitive',
         description: 'Save pages, links, issues, docs and screenshots to Brainitive.',
