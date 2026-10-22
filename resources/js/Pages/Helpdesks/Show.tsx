@@ -98,6 +98,8 @@ interface Props extends PageProps {
     helpdesk: Helpdesk & { columns: (HelpdeskColumn & { tickets: Ticket[] })[]; fields: HelpdeskField[] };
     priorities: ItemPriority[];
     projectUsers: User[];
+    /** Set by a ticket link (tickets.show): open this ticket's panel on load. */
+    openTicketId?: number;
 }
 
 // Priority icon component (reuse from boards)
@@ -1219,8 +1221,11 @@ export default function HelpdesksShow({
     helpdesk,
     priorities,
     projectUsers,
+    openTicketId,
 }: Props) {
-    const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
+    const [editingTicket, setEditingTicket] = useState<Ticket | null>(
+        () => helpdesk.columns.flatMap((col) => col.tickets ?? []).find((t) => t.id === openTicketId) ?? null,
+    );
     const [draggedTicket, setDraggedTicket] = useState<Ticket | null>(null);
     const [dragOverColumn, setDragOverColumn] = useState<number | null>(null);
     const [searchQuery, setSearchQuery] = useState('');

@@ -172,48 +172,16 @@ class TicketController extends Controller
     }
 
     /**
-     * Show a single ticket (full page view).
+     * Ticket link (emails, notifications): the helpdesk board with this ticket's panel open.
+     * There is no separate ticket page; it used to render a missing `Tickets/Show` (500).
      */
     public function show(Request $request, Workspace $workspace, Project $project, Helpdesk $helpdesk, Ticket $ticket): Response
     {
         $this->authorize('view', $ticket);
 
-        $ticket->load([
-            'assignee:id,name,email,avatar',
-            'priority',
-            'contact',
-            'column',
-            'fieldValues.field',
-            'replies' => function ($q) {
-                $q->with(['user:id,name,email', 'contact:id,name,email'])
-                    ->orderBy('created_at', 'desc');
-            },
-            'attachments' => function ($q) {
-                $q->orderBy('created_at', 'desc');
-            },
-        ]);
-
-        // Add URLs to attachments
-        foreach ($ticket->attachments as $attachment) {
-            $attachment->url = asset('storage/'.$attachment->path);
-            $attachment->formatted_size = $attachment->getFormattedSizeAttribute();
-        }
-
-        $priorities = ItemPriority::forProject($project)->orderBy('order')->get();
-        $projectUsers = $project->workspace->users()->get(['users.id', 'name', 'email', 'avatar']);
-        $columns = $helpdesk->columns()->orderBy('position')->get();
-        $fields = $helpdesk->fields()->orderBy('position')->get();
-
-        return Inertia::render('Tickets/Show', [
-            'workspace' => $workspace,
-            'project' => $project,
-            'helpdesk' => $helpdesk,
-            'ticket' => $ticket,
-            'priorities' => $priorities,
-            'projectUsers' => $projectUsers,
-            'columns' => $columns,
-            'fields' => $fields,
-        ]);
+        return app(HelpdeskController::class)
+            ->show($request, $workspace, $project, $helpdesk)
+            ->with('openTicketId', $ticket->id);
     }
 
     /**

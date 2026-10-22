@@ -231,3 +231,12 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **Default (global) item types are shared by every workspace.** Projects switch them off
   in `projects.settings.disabled_item_types` (`Project::disabledItemTypeIds()`, honoured by
   `ItemType::forProject`). Projects never edit the global row.
+- **Feature tests don't catch a missing Inertia page.** `withoutVite()` skips the manifest,
+  so `Inertia::render('Tickets/Show')` passed tests while production returned 500 (the file
+  never existed). For a new render, assert `assertInertia(fn ($p) => $p->component(...))` and
+  that the file exists. Ticket links (`tickets.show`) render `Helpdesks/Show` with
+  `openTicketId`; there is no separate ticket page.
+- **SQLite in tests is lax about NOT NULL in some paths; production is PostgreSQL.** To test a
+  DB-specific failure, run the tests against a throwaway Postgres:
+  `docker run -d -p 55432:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=brainitive_test postgres:17-alpine`,
+  then `DB_CONNECTION=pgsql DB_PORT=55432 DB_DATABASE=brainitive_test DB_USERNAME=postgres DB_PASSWORD=test php artisan test`.
