@@ -9,7 +9,6 @@ import { SetupChecklist } from '@/components/Onboarding/SetupChecklist';
 
 interface Props extends PageProps {
     workspaces: Workspace[];
-    isInstanceAdmin: boolean;
 }
 
 // Gradient for cover when no header image; fallback color for logo circle
@@ -29,7 +28,7 @@ function getWorkspaceBg(name: string): string {
     return colors[name.charCodeAt(0) % colors.length];
 }
 
-export default function WorkspacesIndex({ auth, workspaces, isInstanceAdmin }: Props) {
+export default function WorkspacesIndex({ auth, workspaces }: Props) {
     return (
         <AppLayout>
             <Head title="Workspaces" />
@@ -62,9 +61,7 @@ export default function WorkspacesIndex({ auth, workspaces, isInstanceAdmin }: P
                                 No workspaces yet
                             </h3>
                             <p className="text-muted-foreground text-center max-w-md mb-8 text-base">
-                                {isInstanceAdmin
-                                    ? "Create your first workspace to organize your projects and collaborate with your team."
-                                    : "You haven't been added to any workspaces yet. Contact an administrator to get access."}
+                                Create your first workspace to organize your projects and collaborate with your team.
                             </p>
                             <Link href={route('workspaces.create')}>
                                 <Button size="lg" className="gap-2 shrink-0">

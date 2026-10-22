@@ -2,9 +2,11 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Board;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Page;
+use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Plans\PlanTemplates;
@@ -37,16 +39,16 @@ class HandleInertiaRequests extends Middleware
      *
      * @return array<string, mixed>
      */
-    private function onboardingProps(\App\Models\User $user): array
+    private function onboardingProps(User $user): array
     {
         $state = $user->onboarding_state ?? [];
         $workspaces = $user->workspaces()->pluck('workspaces.id');
 
         $hasProject = $workspaces->isNotEmpty()
-            ? \App\Models\Project::whereIn('workspace_id', $workspaces)->exists()
+            ? Project::whereIn('workspace_id', $workspaces)->exists()
             : false;
         $hasBoard = $workspaces->isNotEmpty()
-            ? \App\Models\Board::whereHas('project', fn ($q) => $q->whereIn('workspace_id', $workspaces))->exists()
+            ? Board::whereHas('project', fn ($q) => $q->whereIn('workspace_id', $workspaces))->exists()
             : false;
         $hasPage = $workspaces->isNotEmpty()
             ? Page::whereHas('project', fn ($q) => $q->whereIn('workspace_id', $workspaces))->exists()
@@ -156,12 +158,7 @@ class HandleInertiaRequests extends Middleware
         $currentWorkspace = null;
 
         if ($user) {
-            // Get all user's workspaces
-            if ($user->isInstanceAdmin()) {
-                $workspaces = Workspace::withCount('projects')->get();
-            } else {
-                $workspaces = $user->workspaces()->withCount('projects')->get();
-            }
+            $workspaces = $user->workspaces()->withCount('projects')->get();
 
             $routeWorkspaceSlug = $this->workspaceSlugFromRoute($request);
             $workspaceSlug = $routeWorkspaceSlug;
@@ -234,6 +231,7 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'auth' => [
                 'user' => $user,
+                'isInstanceAdmin' => fn () => (bool) $user?->isInstanceAdmin(),
             ],
             'workspaces' => $workspaces,
             'currentWorkspace' => $currentWorkspace,

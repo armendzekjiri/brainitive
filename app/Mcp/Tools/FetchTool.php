@@ -39,9 +39,7 @@ class FetchTool extends Tool
             return Response::error('Invalid id. Expected the "type:id" handle returned by search.');
         }
 
-        $workspaceIds = $user->isInstanceAdmin()
-            ? Workspace::query()->pluck('id')->all()
-            : $user->workspaces()->pluck('workspaces.id')->all();
+        $workspaceIds = $user->workspaces()->pluck('workspaces.id')->all();
 
         $model = match ($type) {
             'page' => Page::with('project.workspace')->find($id),

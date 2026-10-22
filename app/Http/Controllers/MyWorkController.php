@@ -20,10 +20,6 @@ class MyWorkController extends Controller
     private function accessibleProjectIds(Request $request): array
     {
         $user = $request->user();
-        if ($user->isInstanceAdmin()) {
-            return Project::pluck('id')->all();
-        }
-
         $workspaceIds = $user->workspaces()->pluck('workspaces.id');
 
         return Project::query()

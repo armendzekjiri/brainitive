@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Notifications\VerifyEmailNotification;
+use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -17,7 +18,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, HasPushSubscriptions, HasRoles, Notifiable;
 
     /**
@@ -60,6 +61,8 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'suspended_at' => 'datetime',
+            'last_login_at' => 'datetime',
             'password' => 'hashed',
             'onboarding_state' => 'array',
         ];
@@ -82,6 +85,22 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
     public function sendEmailVerificationNotification(): void
     {
         $this->notify(new VerifyEmailNotification);
+    }
+
+    /**
+     * Verification can be switched off in the instance admin settings.
+     */
+    public function hasVerifiedEmail(): bool
+    {
+        return ! InstanceSettings::requiresEmailVerification() || parent::hasVerifiedEmail();
+    }
+
+    /**
+     * Suspended by an instance admin: can't sign in, tokens revoked.
+     */
+    public function isSuspended(): bool
+    {
+        return $this->suspended_at !== null;
     }
 
     /**
@@ -153,10 +172,6 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
      */
     public function hasWorkspaceAccess(Workspace $workspace): bool
     {
-        if ($this->isInstanceAdmin()) {
-            return true;
-        }
-
         return $this->workspaces()
             ->where('workspace_id', $workspace->id)
             ->exists();
@@ -167,10 +182,6 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
      */
     public function hasProjectAccess(Project $project): bool
     {
-        if ($this->isInstanceAdmin()) {
-            return true;
-        }
-
         // Workspace admins have access to all projects
         $workspaceRole = $this->workspaceRole($project->workspace);
         if ($workspaceRole === 'admin') {

@@ -150,3 +150,26 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **`excalidraw-build/node_modules` used to be committed** (`.gitignore` had `/node_modules`,
   root only). Now `node_modules/` is ignored everywhere; run `npm install` in
   `excalidraw-build/` before rebuilding the whiteboard bundle.
+- **Instance admins don't see content (since v1.15.0).** The old `Gate::before()` bypass and
+  every `isInstanceAdmin()` branch in content queries were removed on purpose. Admin tooling
+  goes in `/admin` and shows metadata only.
+- **Deleting a user cascades far.** `created_by` on projects, boards, items, task lists,
+  task list items, helpdesks, snippet collections and snippets is `cascadeOnDelete`, and so
+  is `workspaces.owner_id`. A plain `$user->delete()` wipes content in *other* people's
+  workspaces. Use `App\Support\Admin\UserDeletion` (reassigns to the workspace owner, keeps
+  other people's comment replies). The self-service delete in `ProfileController` still
+  calls `$user->delete()` directly.
+- **Workspaces / projects / boards / items are soft-deleted.** Count them through Eloquent
+  (`Workspace::count()`, relations) — `DB::table(...)->count()` includes trashed rows.
+- **Admin SMTP is applied lazily, never at boot.** `config:cache` boots the app, so applying
+  it in `boot()` would write the SMTP password into `bootstrap/cache/config.php`.
+  `InstanceMailConfig::apply()` runs on `mail.manager` resolve and before each queued job.
+- **`InstanceSettings::current()` is memoised per request** and flushed in
+  `AppServiceProvider::boot()`, on save and per queued job — call `flushCache()` in tests
+  after changing settings out of band.
+- **Don't name page props after shared Inertia props.** A page prop called `workspaces`
+  replaces the shared sidebar `workspaces` array and crashes `AppLayout` (`t.map is not a
+  function`). The admin workspace list is `managedWorkspaces` for that reason.
+- **`require_email_verification` defaults to true.** It was seeded `false` but never
+  enforced; a migration sets existing rows to `true` and the seeder now writes `true`, so
+  verification keeps being required until an admin turns it off.

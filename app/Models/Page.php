@@ -221,10 +221,6 @@ class Page extends Model
      */
     public function scopeVisibleTo(Builder $query, User $user): void
     {
-        if ($user->isInstanceAdmin()) {
-            return;
-        }
-
         $adminProjectIds = $user->adminProjectIds();
 
         $query->where(function (Builder $visible) use ($user, $adminProjectIds) {

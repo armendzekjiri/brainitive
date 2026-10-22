@@ -35,9 +35,6 @@ class SearchController extends Controller
 
         $user = $request->user();
         $workspaceIds = $user->workspaces()->pluck('workspaces.id')->toArray();
-        if ($user->isInstanceAdmin()) {
-            $workspaceIds = Workspace::pluck('id')->toArray();
-        }
         if (empty($workspaceIds)) {
             return response()->json($empty);
         }

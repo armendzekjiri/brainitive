@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\WorkspaceInvitation;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -54,6 +55,10 @@ class GitHubAuthController extends Controller
                     'email_verified_at' => $user->email_verified_at ?? now(),
                 ]);
             } else {
+                if (! WorkspaceInvitation::canSignUp($email)) {
+                    return redirect()->route('login')->with('status', 'Sign-up is by invitation only. Ask a workspace admin to invite this email address.');
+                }
+
                 $user = User::query()->create([
                     'name' => $githubUser->getName() ?? $githubUser->getNickname() ?? $email,
                     'email' => $email,
@@ -61,6 +66,8 @@ class GitHubAuthController extends Controller
                     'email_verified_at' => now(),
                     'password' => bcrypt(str()->random(64)),
                 ]);
+
+                WorkspaceInvitation::acceptPendingForUser($user);
             }
         }
 

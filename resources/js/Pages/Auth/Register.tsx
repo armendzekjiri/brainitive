@@ -6,7 +6,7 @@ import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 
-export default function Register() {
+export default function Register({ registrationOpen = true }: { registrationOpen?: boolean }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         name: '',
         email: '',
@@ -25,6 +25,12 @@ export default function Register() {
     return (
         <GuestLayout>
             <Head title="Register" />
+
+            {!registrationOpen && (
+                <div className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                    Sign-up on this instance is by invitation only. Use the email address your invitation was sent to.
+                </div>
+            )}
 
             <form onSubmit={submit}>
                 <div>

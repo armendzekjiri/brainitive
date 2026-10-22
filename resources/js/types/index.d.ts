@@ -387,6 +387,7 @@ export type PageProps<
 > = T & {
     auth: {
         user: User;
+        isInstanceAdmin?: boolean;
     };
     flash?: {
         success?: string;
@@ -683,4 +684,70 @@ export interface ItemHistoryEntry {
     changes?: Record<string, { from?: unknown; to?: unknown; changed?: boolean; added?: string[]; removed?: string[] }> | null;
     metadata?: Record<string, unknown> | null;
     created_at: string;
+}
+
+// ── Instance admin console (metadata only — never workspace content) ───────────
+
+export interface Paginated<T> {
+    data: T[];
+    current_page: number;
+    last_page: number;
+    per_page: number;
+    total: number;
+    from: number | null;
+    to: number | null;
+    prev_page_url: string | null;
+    next_page_url: string | null;
+}
+
+export interface AdminUserRow {
+    id: number;
+    name: string;
+    email: string;
+    avatar_display: string | null;
+    email_verified_at: string | null;
+    suspended_at: string | null;
+    last_login_at: string | null;
+    created_at: string | null;
+    sign_in_methods: ('password' | 'google' | 'github')[];
+    is_instance_admin: boolean;
+    workspaces_count: number;
+    owned_workspaces_count: number;
+    projects_count: number;
+}
+
+export interface AdminUserDetail {
+    workspaces: {
+        id: number;
+        name: string;
+        role: string;
+        /** Workspace owners / admins can open every project in it. */
+        all_projects: boolean;
+        projects_count: number;
+        members_count: number;
+        project_memberships: number;
+    }[];
+    delete_blockers: string[];
+    delete_impact: { reassigned: number; comments_deleted: number };
+    has_api_tokens: boolean;
+}
+
+export interface AdminWorkspaceRow {
+    id: number;
+    name: string;
+    owner: { id: number; name: string; email: string } | null;
+    members_count: number;
+    projects_count: number;
+    created_at: string | null;
+}
+
+export interface AdminAuditEntry {
+    id: number;
+    actor_name: string;
+    action: string;
+    target_type: 'user' | 'workspace' | null;
+    target_label: string | null;
+    meta: Record<string, unknown> | null;
+    ip_address: string | null;
+    created_at: string | null;
 }
