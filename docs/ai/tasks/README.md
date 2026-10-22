@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Helpdesk: agent ticket form, resolve message, support page](./feat-helpdesk-support-page.md) | done |
 | [Security review fixes](./fix-security-review.md) | done |
 | [Browser extension (Chrome, Edge, Firefox)](./feat-browser-extension.md) | done |
 | [Automatic releases: tag + release + Docker image on push to main](./chore-release-workflow.md) | done |

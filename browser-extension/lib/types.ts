@@ -43,6 +43,7 @@ export interface WorkspaceTarget {
     slug: string;
     projects: ProjectTarget[];
     bookmarks: { id: number; name: string; icon: string | null }[];
+    snippet_collections: { id: number; name: string }[];
 }
 
 export interface Destinations {
@@ -93,7 +94,7 @@ export interface PendingCapture {
     clipWholePage?: boolean;
 }
 
-export type Mode = 'issue' | 'bookmark' | 'doc' | 'task';
+export type Mode = 'issue' | 'bookmark' | 'doc' | 'task' | 'snippet';
 
 export interface Session {
     server: string;

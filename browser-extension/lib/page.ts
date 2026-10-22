@@ -10,6 +10,10 @@ import { browser } from 'wxt/browser';
 export interface PageSelection {
     text: string;
     html: string;
+    /** `language-xxx` / `lang-xxx` / `hljs xxx` class of the code block around the selection. */
+    codeLanguage: string;
+    /** The selection sits inside <pre> / <code>. */
+    inCode: boolean;
 }
 
 export interface PageDocument {
@@ -24,12 +28,22 @@ export async function readSelection(tabId: number): Promise<PageSelection | null
             target: { tabId },
             func: () => {
                 const selection = window.getSelection();
-                if (!selection || selection.isCollapsed) return { text: '', html: '' };
+                if (!selection || selection.isCollapsed) return { text: '', html: '', codeLanguage: '', inCode: false };
                 const container = document.createElement('div');
                 for (let i = 0; i < selection.rangeCount; i++) {
                     container.appendChild(selection.getRangeAt(i).cloneContents());
                 }
-                return { text: selection.toString(), html: container.innerHTML };
+                const anchor = selection.anchorNode instanceof Element ? selection.anchorNode : selection.anchorNode?.parentElement;
+                const code = anchor?.closest('pre, code') ?? container.querySelector('pre, code');
+                let codeLanguage = '';
+                for (const el of [code, code?.querySelector('code'), code?.parentElement]) {
+                    const match = el?.className?.toString().match(/(?:^|\s)(?:language|lang)-([\w+#-]+)|(?:^|\s)hljs\s+([\w+#-]+)/);
+                    if (match) {
+                        codeLanguage = (match[1] ?? match[2] ?? "").toLowerCase();
+                        break;
+                    }
+                }
+                return { text: selection.toString(), html: container.innerHTML, codeLanguage, inCode: !!code };
             },
         });
         return (result?.result as PageSelection | undefined) ?? null;

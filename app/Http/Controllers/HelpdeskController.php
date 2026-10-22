@@ -5,12 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\Helpdesk;
 use App\Models\HelpdeskColumn;
 use App\Models\HelpdeskField;
-use App\Models\Project;
-use App\Models\Workspace;
-use App\Models\Ticket;
-use App\Models\User;
 use App\Models\ItemPriority;
+use App\Models\Project;
+use App\Models\Ticket;
+use App\Models\Workspace;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -28,12 +29,12 @@ class HelpdeskController extends Controller
             'description' => 'nullable|string',
         ]);
 
-        $slug = \Illuminate\Support\Str::slug($validated['name']);
+        $slug = Str::slug($validated['name']);
         $originalSlug = $slug;
         $counter = 1;
 
         while ($project->helpdesks()->where('slug', $slug)->exists()) {
-            $slug = $originalSlug . '-' . $counter++;
+            $slug = $originalSlug.'-'.$counter++;
         }
 
         // Helpdesk model's created event creates default columns (Open, In Progress, Resolved)
@@ -72,9 +73,9 @@ class HelpdeskController extends Controller
                                     $r->with(['user:id,name,email', 'contact:id,name,email'])
                                         ->orderBy('created_at', 'desc')
                                         ->limit(5);
-                                }
+                                },
                             ]);
-                    }
+                    },
                 ]);
             },
             'fields' => function ($q) {
@@ -86,7 +87,7 @@ class HelpdeskController extends Controller
         foreach ($helpdesk->columns as $column) {
             foreach ($column->tickets as $ticket) {
                 foreach ($ticket->attachments as $attachment) {
-                    $attachment->url = asset('storage/' . $attachment->path);
+                    $attachment->url = asset('storage/'.$attachment->path);
                     $attachment->formatted_size = $attachment->getFormattedSizeAttribute();
                 }
             }
@@ -139,6 +140,10 @@ class HelpdeskController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'settings' => 'nullable|array',
+            'public_slug' => ['nullable', 'string', 'min:3', 'max:60', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', Rule::unique('helpdesks', 'public_slug')->ignore($helpdesk->id)],
+        ], [
+            'public_slug.regex' => 'Use lowercase letters, numbers and single dashes, e.g. acme-support.',
+            'public_slug.unique' => 'This address is already taken.',
         ]);
 
         if (isset($validated['settings'])) {
@@ -176,7 +181,7 @@ class HelpdeskController extends Controller
             'is_done_column' => 'nullable|boolean',
         ]);
 
-        $slug = \Illuminate\Support\Str::slug($validated['name']);
+        $slug = Str::slug($validated['name']);
         $maxPosition = $helpdesk->columns()->max('position') ?? 0;
 
         $helpdesk->columns()->create([

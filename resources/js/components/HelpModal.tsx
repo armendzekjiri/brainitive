@@ -76,6 +76,19 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.17.0',
+        title: 'Better Helpdesk + Snippets in the Extension',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'New ticket: create tickets for customers in a full form, with their email and name, your support form’s custom fields (required ones included), status, priority and assignee. Optionally email them the ticket link.',
+            'Resolve with a message: moving a ticket to a done column asks for a closing message. It’s saved as a reply and the customer gets a “your ticket is resolved” email with the link.',
+            'Support page: give your helpdesk a short public address like /support/acme and send it to customers. It opens your support form as a full page (Helpdesk settings → Embed).',
+            'Notifications for helpdesk tickets now say what happened (“Cleo opened ticket SUP-12”, “replied to”, “assigned you to”) instead of just “moved”.',
+            'Browser extension 1.1: select code or text on any page and save it as a snippet (right-click → Add selection to snippets, or the new Snippet tab). The language is detected from the page.',
+        ]
+    },
+    {
         version: 'v1.16.1',
         title: 'Security Fixes',
         tag: 'Patch',

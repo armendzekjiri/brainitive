@@ -18,6 +18,7 @@ class Helpdesk extends Model
         'uuid',
         'name',
         'slug',
+        'public_slug',
         'description',
         'position',
         'created_by',

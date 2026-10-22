@@ -43,6 +43,10 @@ import {
     Code,
     Eye,
     Lock,
+    Link2,
+    Check,
+    Copy,
+    ExternalLink,
 } from 'lucide-react';
 import { useState, useEffect, FormEvent, DragEvent } from 'react';
 import axios from 'axios';
@@ -753,6 +757,7 @@ export default function HelpdesksEdit({ workspace, project, helpdesk, appUrl }: 
     const { data, setData, put, processing, errors } = useForm({
         name: helpdesk.name,
         description: helpdesk.description || '',
+        public_slug: helpdesk.public_slug ?? '',
         settings: {
             brand_color: mergedSettings.brand_color ?? defaultSettings.brand_color,
             logo_url: mergedSettings.logo_url ?? '',
@@ -1363,6 +1368,16 @@ export default function HelpdesksEdit({ workspace, project, helpdesk, appUrl }: 
                         </TabsContent>
 
                         <TabsContent value="embed" className="space-y-6">
+                            <SupportPageCard
+                                appUrl={appUrl}
+                                savedSlug={helpdesk.public_slug ?? ''}
+                                value={data.public_slug}
+                                onChange={(v) => setData('public_slug', v.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-{2,}/g, '-'))}
+                                suggestion={slugify(`${workspace.name} ${helpdesk.name}`)}
+                                error={errors.public_slug}
+                                processing={processing}
+                                onSave={() => put(route('helpdesks.update', [workspace.slug, project.slug, helpdesk.slug]), { preserveScroll: true })}
+                            />
                             <Card>
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-3">
@@ -1543,5 +1558,102 @@ export default function HelpdesksEdit({ workspace, project, helpdesk, appUrl }: 
                 </Dialog>
             </div>
         </AppLayout>
+    );
+}
+
+function slugify(text: string): string {
+    return text
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 60);
+}
+
+/** Short public address for the support form, to send to customers or link from a website. */
+function SupportPageCard({
+    appUrl,
+    savedSlug,
+    value,
+    onChange,
+    suggestion,
+    error,
+    processing,
+    onSave,
+}: {
+    appUrl: string;
+    savedSlug: string;
+    value: string;
+    onChange: (value: string) => void;
+    suggestion: string;
+    error?: string;
+    processing: boolean;
+    onSave: () => void;
+}) {
+    const [copied, setCopied] = useState(false);
+    const savedUrl = savedSlug ? `${appUrl}/support/${savedSlug}` : null;
+    const host = appUrl.replace(/^https?:\/\//, '');
+
+    const copy = async () => {
+        if (!savedUrl) return;
+        await navigator.clipboard.writeText(savedUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+    };
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-3">
+                    <Link2 className="size-5 text-primary" />
+                    Support page
+                </CardTitle>
+                <CardDescription>
+                    A short link to your support form as a full page. Send it to customers, put it in your email signature or link it from your website.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="space-y-2">
+                    <Label htmlFor="public_slug">Address</Label>
+                    <div className="flex items-stretch gap-2">
+                        <div className="flex flex-1 items-center overflow-hidden rounded-md border bg-background focus-within:ring-2 focus-within:ring-ring">
+                            <span className="whitespace-nowrap border-r bg-muted/50 px-3 py-2 text-sm text-muted-foreground">{host}/support/</span>
+                            <input
+                                id="public_slug"
+                                value={value}
+                                onChange={(e) => onChange(e.target.value)}
+                                placeholder={suggestion || 'acme'}
+                                maxLength={60}
+                                className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none"
+                            />
+                        </div>
+                        <Button type="button" onClick={onSave} disabled={processing || value === savedSlug}>
+                            Save
+                        </Button>
+                    </div>
+                    {error && <p className="text-sm text-destructive">{error}</p>}
+                    {!value && suggestion && (
+                        <button type="button" className="text-xs text-primary hover:underline" onClick={() => onChange(suggestion)}>
+                            Use “{suggestion}”
+                        </button>
+                    )}
+                </div>
+                {savedUrl && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 p-3">
+                        <code className="flex-1 break-all text-sm">{savedUrl}</code>
+                        <Button type="button" variant="outline" size="sm" onClick={copy}>
+                            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                            {copied ? 'Copied' : 'Copy'}
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" asChild>
+                            <a href={savedUrl} target="_blank" rel="noreferrer">
+                                <ExternalLink className="size-4" /> Open
+                            </a>
+                        </Button>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
     );
 }

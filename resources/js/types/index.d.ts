@@ -516,6 +516,8 @@ export interface Helpdesk {
     project_id: number;
     name: string;
     slug: string;
+    /** Shareable support page: /support/{public_slug} */
+    public_slug?: string | null;
     description?: string;
     settings?: {
         brand_color?: string;

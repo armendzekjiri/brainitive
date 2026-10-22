@@ -7,6 +7,7 @@ use App\Models\Board;
 use App\Models\Bookmark;
 use App\Models\Item;
 use App\Models\Page;
+use App\Models\SnippetCollection;
 use App\Models\TaskList;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -228,5 +229,30 @@ class ExtensionApiTest extends TestCase
 
         $this->asExtension($this->outsider);
         $this->assertCount(0, $this->getJson(route('ext.search', ['q' => 'gateway']))->json('items'));
+    }
+
+    public function test_save_selected_code_as_a_snippet(): void
+    {
+        $collection = SnippetCollection::create(['workspace_id' => $this->workspace->id, 'name' => 'Scripts', 'slug' => 'scripts', 'created_by' => $this->editor->id]);
+
+        $this->asExtension($this->editor);
+        $this->assertSame([$collection->id], array_column($this->getJson(route('ext.destinations'))->json('workspaces.0.snippet_collections'), 'id'));
+
+        $response = $this->postJson(route('ext.snippet-collections.snippets.store', $collection->id), [
+            'title' => 'Restart queue',
+            'content' => "php artisan queue:restart\nphp artisan horizon:terminate",
+            'language' => 'bash',
+            'description' => 'Source: https://laravel.com/docs/queues',
+        ])->assertCreated();
+
+        $snippet = $collection->snippets()->firstOrFail();
+        $this->assertSame('bash', $snippet->language);
+        $this->assertStringContainsString("\nphp artisan horizon", $snippet->content);
+        $this->assertStringContainsString('/snippets/', $response->json('location.url'));
+
+        // Workspace "member" (not editor) can't add snippets.
+        $this->asExtension($this->viewer);
+        $this->postJson(route('ext.snippet-collections.snippets.store', $collection->id), ['title' => 'x', 'content' => 'y'])->assertForbidden();
+        $this->postJson(route('ext.snippet-collections.snippets.store', $collection->id), ['title' => 'x', 'content' => 'y', 'language' => '<script>'])->assertForbidden();
     }
 }

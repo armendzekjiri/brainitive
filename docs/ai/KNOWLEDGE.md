@@ -240,3 +240,7 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   DB-specific failure, run the tests against a throwaway Postgres:
   `docker run -d -p 55432:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=brainitive_test postgres:17-alpine`,
   then `DB_CONNECTION=pgsql DB_PORT=55432 DB_DATABASE=brainitive_test DB_USERNAME=postgres DB_PASSWORD=test php artisan test`.
+- **Notification payloads are rendered in one place.** `components/NotificationMessage.tsx`
+  maps every `data.type` to a sentence. The bell and the page used to fall back to
+  "{actor} moved {item_key}", so ticket notifications (`ticket_*`, with no `item_*` keys)
+  showed as "moved". Add a case for each new type.

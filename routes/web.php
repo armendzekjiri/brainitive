@@ -107,6 +107,7 @@ Route::middleware('cors')->group(function () {
     Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/replies', [TicketController::class, 'storePublicReply'])->name('helpdesks.tickets.replies.store-public');
     Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/attachments', [TicketController::class, 'storePublicAttachment'])->name('helpdesks.tickets.attachments.store-public');
     Route::get('/portal/tickets/{ticket:uuid}', [TicketController::class, 'showPublic'])->name('helpdesks.tickets.show-public');
+    Route::get('/support/{publicSlug}', [HelpdeskWidgetController::class, 'supportPage'])->where('publicSlug', '[a-z0-9-]+')->name('helpdesks.support-page');
     Route::get('/portal/tickets/{ticket:uuid}/replies', [TicketController::class, 'publicReplies'])->name('helpdesks.tickets.replies.public');
 });
 

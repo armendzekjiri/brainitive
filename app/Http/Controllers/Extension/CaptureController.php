@@ -10,6 +10,7 @@ use App\Models\Bookmark;
 use App\Models\Item;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\SnippetCollection;
 use App\Models\TaskList;
 use App\Support\Boards\ProjectIssues;
 use App\Support\Mcp\PageContentConverter;
@@ -172,6 +173,38 @@ class CaptureController extends Controller
             'created' => true,
             'task_id' => $item->id,
             'location' => ResourceLocator::locate($item),
+        ], 201);
+    }
+
+    /**
+     * Selected code / text from a page into a snippet collection (same rule as the app:
+     * workspace editors and admins).
+     */
+    public function snippet(Request $request, SnippetCollection $snippetCollection): JsonResponse
+    {
+        $this->authorize('create', [SnippetCollection::class, $snippetCollection->workspace]);
+
+        $validated = $request->validate([
+            'title' => 'required|string|max:255',
+            'content' => 'required|string|max:200000',
+            'language' => 'nullable|string|max:50|regex:/^[a-z0-9+#-]+$/',
+            'description' => 'nullable|string|max:2000',
+        ]);
+
+        $snippet = $snippetCollection->snippets()->create([
+            'title' => $validated['title'],
+            'content' => $validated['content'],
+            'language' => $validated['language'] ?? 'plaintext',
+            'description' => $validated['description'] ?? null,
+            'visibility' => 'inherit',
+            'position' => ($snippetCollection->snippets()->max('position') ?? 0) + 1,
+            'created_by' => $request->user()->id,
+        ]);
+
+        return response()->json([
+            'created' => true,
+            'snippet_slug' => $snippet->slug,
+            'location' => ResourceLocator::locate($snippet),
         ], 201);
     }
 

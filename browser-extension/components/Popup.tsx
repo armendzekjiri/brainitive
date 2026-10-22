@@ -4,10 +4,10 @@ import { send } from '@/lib/messages';
 import { isRestrictedUrl, readSelection } from '@/lib/page';
 import { getLastMode, setLastMode, takePendingCapture } from '@/lib/storage';
 import type { Created, Mode } from '@/lib/types';
-import { Bookmark, CheckCircle2, ExternalLink, FileText, ListTodo, Loader2, LogOut, PanelRight, RefreshCw, SquareKanban } from 'lucide-react';
+import { Bookmark, CheckCircle2, Code2, ExternalLink, FileText, ListTodo, Loader2, LogOut, PanelRight, RefreshCw, SquareKanban } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
-import { BookmarkForm, DocForm, IssueForm, type PageContext, TaskForm } from './forms';
+import { BookmarkForm, DocForm, IssueForm, type PageContext, SnippetForm, TaskForm } from './forms';
 import SignIn from './SignIn';
 
 const MODES: { mode: Mode; label: string; icon: typeof SquareKanban }[] = [
@@ -15,6 +15,7 @@ const MODES: { mode: Mode; label: string; icon: typeof SquareKanban }[] = [
     { mode: 'bookmark', label: 'Bookmark', icon: Bookmark },
     { mode: 'doc', label: 'Doc', icon: FileText },
     { mode: 'task', label: 'Task', icon: ListTodo },
+    { mode: 'snippet', label: 'Snippet', icon: Code2 },
 ];
 
 /** Popup: the toolbar button, a context-menu hand-off, or the same page in a small window. */
@@ -42,15 +43,20 @@ function Capture({ server }: { server: string }) {
 
             const url = pending?.pageUrl ?? tab?.url ?? '';
             const restricted = isRestrictedUrl(url);
-            const selection = tab?.id && !restricted && !pending?.selectionText ? await readSelection(tab.id) : null;
+            // Read the selection from the page even after a right-click: the menu's
+            // selectionText drops line breaks, which ruins code.
+            const selection = tab?.id && !restricted ? await readSelection(tab.id) : null;
+            const fromPage = selection?.text.trim() ? selection : null;
 
             setPage({
                 tabId: tab?.id,
                 windowId: tab?.windowId,
                 url: /^https?:/.test(url) ? url : '',
                 title: pending?.pageTitle ?? tab?.title ?? '',
-                selectionText: pending?.selectionText ?? selection?.text ?? '',
-                selectionHtml: pending?.selectionText ? '' : (selection?.html ?? ''),
+                selectionText: fromPage?.text ?? pending?.selectionText ?? '',
+                selectionHtml: fromPage?.html ?? '',
+                codeLanguage: fromPage?.codeLanguage ?? '',
+                inCode: fromPage?.inCode ?? false,
                 linkUrl: pending?.linkUrl,
                 restricted,
                 screenshot: pending?.screenshot,
@@ -157,6 +163,8 @@ function Capture({ server }: { server: string }) {
                             return <DocForm key="doc" {...props} />;
                         case 'task':
                             return <TaskForm key="task" {...props} />;
+                        case 'snippet':
+                            return <SnippetForm key="snippet" {...props} />;
                     }
                 })()
             )}
