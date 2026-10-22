@@ -1,3 +1,0 @@
-import { GraphConverter } from "../GraphConverter.js";
-import { Flowchart } from "../../parser/flowchart.js";
-export declare const FlowchartToExcalidrawSkeletonConverter: GraphConverter<Flowchart>;

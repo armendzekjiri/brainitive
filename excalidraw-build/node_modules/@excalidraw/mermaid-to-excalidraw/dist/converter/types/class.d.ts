@@ -1,3 +1,0 @@
-import { GraphConverter } from "../GraphConverter.js";
-import type { Class } from "../../parser/class.js";
-export declare const classToExcalidrawSkeletonConvertor: GraphConverter<Class>;
