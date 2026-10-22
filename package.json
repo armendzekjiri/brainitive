@@ -51,7 +51,7 @@
         "@editorjs/warning": "^1.4.1",
         "@emoji-mart/data": "^1.2.1",
         "@emoji-mart/react": "^1.1.1",
-        "@excalidraw/excalidraw": "^0.18.0",
+        "@excalidraw/excalidraw": "^0.18.1",
         "@fontsource/hanken-grotesk": "^5.2.8",
         "@fontsource/inter": "^5.2.8",
         "@fontsource/jetbrains-mono": "^5.2.8",
