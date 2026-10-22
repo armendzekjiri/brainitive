@@ -37,6 +37,8 @@ import {
     Bot,
     KeyRound,
     Search,
+    GanttChart,
+    MonitorPlay,
     type LucideIcon,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -106,6 +108,128 @@ function RevealSection({
     );
 }
 
+/** Product screenshots (light + dark) for the "See it in action" section. */
+const TOUR = [
+    {
+        key: 'plans',
+        label: 'Gantt timelines',
+        icon: GanttChart,
+        title: 'See the whole project on one timeline',
+        points: ['Phases, milestones and dependencies', 'Drag bars, paste rows straight from Excel', 'Rows linked to board issues stay in sync'],
+        image: '/images/screenshots/plans.jpg',
+        imageDark: '/images/screenshots/plans-dark.jpg',
+    },
+    {
+        key: 'boards',
+        label: 'Boards & Scrum',
+        icon: FolderKanban,
+        title: 'Run the work on Kanban or Scrum boards',
+        points: ['Sprints, backlog, burndown and velocity', 'WIP limits, quick filters, time tracking', 'Full history on every issue'],
+        image: '/images/screenshots/board.jpg',
+        imageDark: '/images/screenshots/board-dark.jpg',
+    },
+    {
+        key: 'docs',
+        label: 'Docs & wiki',
+        icon: FileText,
+        title: 'Write it down in calm, focused docs',
+        points: ['Floating toolbar and slash commands', 'Drafts stay private until you publish', 'Every version kept — restore any time'],
+        image: '/images/screenshots/docs.jpg',
+        imageDark: '/images/screenshots/docs-dark.jpg',
+    },
+    {
+        key: 'whiteboards',
+        label: 'Whiteboards',
+        icon: Palette,
+        title: 'Workshop on a whiteboard, keep the outcome',
+        points: ['Retro, roadmap, story map and more templates', 'Live issue cards on the canvas', 'Turn sticky notes into issues in one click'],
+        image: '/images/screenshots/whiteboard.jpg',
+        imageDark: '/images/screenshots/whiteboard.jpg',
+    },
+] as const;
+
+function ProductTour() {
+    const [active, setActive] = useState<(typeof TOUR)[number]['key']>('plans');
+    const current = TOUR.find((t) => t.key === active) ?? TOUR[0];
+
+    return (
+        <section id="tour" className="relative z-10 py-20 sm:py-28">
+            <div className="max-w-6xl mx-auto px-6">
+                <RevealSection className="text-center mb-10">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[#0E83DC]/20 bg-[#0E83DC]/5 px-4 py-1.5 text-xs font-semibold text-[#0E83DC] mb-4">
+                        <MonitorPlay className="h-3.5 w-3.5" />
+                        See it in action
+                    </div>
+                    <h2 className="text-3xl sm:text-4xl font-bold text-[#485E72] dark:text-slate-100 mb-4">
+                        From the first workshop to the last release
+                    </h2>
+                    <p className="text-[#485E72]/60 dark:text-slate-400 max-w-xl mx-auto text-lg">
+                        Plan on a timeline, run sprints on boards, write it down in docs &mdash; all connected.
+                    </p>
+                </RevealSection>
+
+                <RevealSection>
+                    <div className="flex flex-wrap justify-center gap-2 mb-8" role="tablist" aria-label="Product tour">
+                        {TOUR.map((tab) => (
+                            <button
+                                key={tab.key}
+                                type="button"
+                                role="tab"
+                                aria-selected={active === tab.key}
+                                aria-controls="tour-panel"
+                                onClick={() => setActive(tab.key)}
+                                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${active === tab.key
+                                    ? 'bg-[#0E83DC] text-white shadow-lg shadow-[#0E83DC]/25'
+                                    : 'bg-card/70 text-[#485E72]/70 dark:text-slate-300 border border-border/60 hover:text-[#0E83DC] hover:border-[#0E83DC]/30'
+                                    }`}
+                            >
+                                <tab.icon className="h-4 w-4" />
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div id="tour-panel" role="tabpanel" className="grid lg:grid-cols-[1fr_280px] gap-8 items-center">
+                        {/* Browser frame */}
+                        <div className="rounded-2xl border border-border/70 bg-card shadow-2xl shadow-[#485E72]/15 dark:shadow-black/40 overflow-hidden">
+                            <div className="flex items-center gap-1.5 border-b border-border/60 bg-muted/50 px-4 py-2.5">
+                                <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+                                <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+                                <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+                                <span className="ml-3 truncate rounded-md bg-background/80 px-3 py-0.5 text-[11px] text-[#485E72]/60 dark:text-slate-400">
+                                    brainitive.com &middot; {current.label}
+                                </span>
+                            </div>
+                            <div className="relative aspect-[1440/860] bg-background">
+                                {TOUR.map((tab) => (
+                                    <div key={tab.key} className={`absolute inset-0 transition-opacity duration-500 ${active === tab.key ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} aria-hidden={active !== tab.key}>
+                                        <img src={tab.image} alt={`${tab.label} in Brainitive`} loading="lazy" decoding="async" width={1440} height={860} className="h-full w-full object-cover object-top dark:hidden" />
+                                        <img src={tab.imageDark} alt={`${tab.label} in Brainitive`} loading="lazy" decoding="async" width={1440} height={860} className="hidden h-full w-full object-cover object-top dark:block" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 className="text-xl font-bold text-[#485E72] dark:text-slate-100 mb-4">{current.title}</h3>
+                            <ul className="space-y-3">
+                                {current.points.map((point) => (
+                                    <li key={point} className="flex items-start gap-3 text-[#485E72]/70 dark:text-slate-300">
+                                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#69A748]/15 text-[#69A748]">
+                                            <Check className="h-3 w-3" strokeWidth={3} />
+                                        </span>
+                                        <span className="text-sm leading-relaxed">{point}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
+                </RevealSection>
+            </div>
+        </section>
+    );
+}
+
 export default function Welcome({
     auth,
     canLoginWithGoogle,
@@ -147,9 +271,15 @@ export default function Welcome({
                 },
                 {
                     icon: FolderKanban,
-                    title: 'Boards & Kanban',
+                    title: 'Boards, Kanban & Scrum',
                     description:
-                        'Drag-and-drop boards with labels, priorities, subtasks, attachments, and comments.',
+                        'Kanban or Scrum with sprints, backlog and burndown — plus issue history, WIP limits and time tracking.',
+                },
+                {
+                    icon: GanttChart,
+                    title: 'Gantt timelines',
+                    description:
+                        'Phases, milestones and dependencies on a timeline. Start in a workshop, then link rows to real issues.',
                 },
                 {
                     icon: ListChecks,
@@ -181,7 +311,7 @@ export default function Welcome({
                     icon: FileText,
                     title: 'Wiki & docs',
                     description:
-                        'Tree-organized pages with rich content. Keep them as drafts or publish.',
+                        'Calm, distraction-free pages with drafts, publishing, version history and restore.',
                 },
                 {
                     icon: PenLine,
@@ -193,7 +323,7 @@ export default function Welcome({
                     icon: Palette,
                     title: 'Whiteboards',
                     description:
-                        'Sketch and diagram with Excalidraw, embedded right inside your pages.',
+                        'Excalidraw with templates, autosave and history — turn sticky notes into board issues.',
                 },
                 {
                     icon: Code2,
@@ -421,6 +551,13 @@ export default function Welcome({
                                 Features
                             </a>
                             <a
+                                href="#tour"
+                                className="inline-flex items-center gap-1.5 text-sm font-medium text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC] transition-colors"
+                            >
+                                <MonitorPlay className="h-3.5 w-3.5" />
+                                Tour
+                            </a>
+                            <a
                                 href="#pricing"
                                 className="inline-flex items-center gap-1.5 text-sm font-medium text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC] transition-colors"
                             >
@@ -507,6 +644,14 @@ export default function Welcome({
                                 Features
                             </a>
                             <a
+                                href="#tour"
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="flex items-center gap-2 text-sm font-medium text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC]"
+                            >
+                                <MonitorPlay className="h-3.5 w-3.5" />
+                                Tour
+                            </a>
+                            <a
                                 href="#pricing"
                                 onClick={() => setMobileMenuOpen(false)}
                                 className="flex items-center gap-2 text-sm font-medium text-[#485E72]/70 dark:text-slate-300 hover:text-[#0E83DC]"
@@ -582,9 +727,9 @@ export default function Welcome({
                             className="mt-6 text-lg sm:text-xl text-[#485E72]/70 dark:text-slate-300 max-w-2xl mx-auto animate-fade-in-up leading-relaxed"
                             style={{ animationDelay: '0.15s' }}
                         >
-                            Brainitive brings workspaces, Kanban boards, and a full wiki
-                            together. Plan in boards, write in rich pages, and sketch in
-                            Excalidraw &mdash; all in one app.
+                            Boards, sprints, docs, whiteboards and Gantt timelines &mdash;
+                            one app for the whole project, from the first workshop to the
+                            last release.
                         </p>
 
                         <div
@@ -719,8 +864,8 @@ export default function Welcome({
                                 Everything you need, in one place
                             </h2>
                             <p className="text-[#485E72]/60 dark:text-slate-400 max-w-xl mx-auto text-lg">
-                                Plan, write, collaborate, and connect &mdash; from Kanban
-                                boards and wiki pages to calendar sync and AI agents.
+                                Plan, write, collaborate, and connect &mdash; from Scrum
+                                boards and timelines to wiki pages, calendar sync and AI agents.
                             </p>
                         </RevealSection>
 
@@ -787,6 +932,9 @@ export default function Welcome({
                     </div>
                 </section>
 
+                {/* ═══ Product tour (screenshots) ═══ */}
+                <ProductTour />
+
                 {/* ═══ Visual break / Highlight strip ═══ */}
                 <section className="relative z-10 py-20 sm:py-28 overflow-hidden">
                     <div className="absolute inset-0 bg-gradient-to-r from-[#0E83DC] to-[#485E72]" />
@@ -797,9 +945,9 @@ export default function Welcome({
                         </h2>
                         <p className="text-white/70 text-lg max-w-2xl mx-auto mb-10 leading-relaxed">
                             Stop switching between Notion, Trello, and Google Docs.
-                            Brainitive combines project boards, a full wiki with rich
-                            editors, and Excalidraw whiteboarding into a single, fast
-                            platform.
+                            Brainitive combines Kanban and Scrum boards, a wiki with version
+                            history, whiteboards and Gantt timelines &mdash; all connected,
+                            in one fast platform.
                         </p>
                         <div className="flex flex-wrap justify-center gap-4">
                             <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-white/90 text-sm font-medium">

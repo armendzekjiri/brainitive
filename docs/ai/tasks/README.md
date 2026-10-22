@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Homepage + Welcome tab refresh](./feat-homepage-feature-refresh.md) | done |
 | [Plans ↔ board issues](./feat-plan-issue-links.md) | done |
 | [Plans: Tom's Planner–style Gantt per project](./feat-project-plans.md) | done |
 | [Whiteboards: autosave, history, templates, issue cards](./feat-whiteboard-essentials.md) | done |
