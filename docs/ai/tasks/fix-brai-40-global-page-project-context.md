@@ -3,7 +3,7 @@
 **Branch:** fix/brai-40-global-page-project-context
 **Status:** done
 **Started:** 2026-05-31
-**Board card:** BRAI-40 — https://www.brainitive.app/workspaces/personal/projects/brainitive/boards/main-board#item-125
+**Board card:** BRAI-40 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-125
 
 ## Problem / goal
 Global pages such as Calendar, My Work, Home, and Inbox lose the selected workspace/project

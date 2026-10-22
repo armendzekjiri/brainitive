@@ -3,7 +3,7 @@
 **Branch:** fix/dependabot-alerts
 **Status:** done
 **Started:** 2026-10-22
-**Board card:** BRAI-51 — https://www.brainitive.app/workspaces/personal/projects/brainitive/boards/main-board#item-150
+**Board card:** BRAI-51 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-150
 
 ## Problem / goal
 After the dependency updates, Dependabot still had 4 open alerts on `main`:

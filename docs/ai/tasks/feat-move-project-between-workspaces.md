@@ -3,6 +3,7 @@
 **Branch:** feat/move-project-between-workspaces
 **Status:** done
 **Started:** 2026-10-23
+**Board card:** BRAI-58 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-160
 
 ## Decisions (from the user)
 - Only an admin/owner of **both** workspaces can move a project.

@@ -3,7 +3,7 @@
 **Branch:** feat/instance-admin-console
 **Status:** done
 **Started:** 2026-10-22
-**Board card:** BRAI-49 — https://www.brainitive.app/workspaces/personal/projects/brainitive/boards/main-board#item-148
+**Board card:** BRAI-49 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-148
 
 ## Problem / goal
 Instance admins currently bypass **every** policy (`Gate::before()`), see every workspace

@@ -3,7 +3,7 @@
 **Branch:** fix/security-review
 **Status:** done
 **Started:** 2026-10-23
-**Board card:** BRAI-53 — https://www.brainitive.app/workspaces/personal/projects/brainitive/boards/main-board#item-155
+**Board card:** BRAI-53 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-155
 
 ## Problem / goal
 An external review (ChatGPT, checkout `ff693f2`) reported 3 high findings and 3 leads. We

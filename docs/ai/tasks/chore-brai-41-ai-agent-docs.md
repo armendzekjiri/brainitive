@@ -3,7 +3,7 @@
 **Branch:** chore/brai-41-ai-agent-docs
 **Status:** done
 **Started:** 2026-05-31
-**Board card:** BRAI-41 — https://www.brainitive.app/workspaces/personal/projects/brainitive/boards/main-board#item-126
+**Board card:** BRAI-41 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-126
 
 ## Problem / goal
 Agents were treating `BRAI-*` work keys as possible Jira issues and the new in-product AI

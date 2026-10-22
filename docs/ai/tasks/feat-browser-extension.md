@@ -3,7 +3,7 @@
 **Branch:** feat/browser-extension
 **Status:** done
 **Started:** 2026-10-22
-**Board card:** BRAI-52 — https://www.brainitive.app/workspaces/personal/projects/brainitive/boards/main-board#item-151
+**Board card:** BRAI-52 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-151
 
 ## Problem / goal
 People find work in the browser (a bug, an article, a link, a screenshot) and have to switch
