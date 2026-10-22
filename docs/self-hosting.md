@@ -10,7 +10,8 @@ software, hosted and updated for you.
 - Docker 24+ with the Compose plugin
 - 2 GB RAM (4 GB for teams above ~50 people), 10 GB disk plus your uploads
 - A domain name if you want HTTPS without your own reverse proxy
-- An SMTP account for invitations and notifications
+- An SMTP account for invitations, password resets and notifications (set it in `.env` or
+  later in the admin console)
 
 ## Quick start
 
@@ -28,11 +29,24 @@ docker compose run --rm --no-deps app php artisan key:generate --show
 docker compose up -d
 ```
 
-Open `http://<server>:8080`, register your account, then make it the instance admin:
+Open `http://<server>:8080`, register your account, then make it the instance admin (this
+also marks its email as verified, so you get in before mail works):
 
 ```bash
 docker compose exec app php artisan make:instance-admin you@example.com
 ```
+
+Then open **your avatar → Instance admin**. The console has:
+
+- **Overview** — users, workspaces, storage, failed jobs, mail status.
+- **Users** — accounts with workspace / project counts, password reset links (emailed, or
+  copied to share yourself), verify email, suspend, instance-admin role, delete.
+- **Workspaces** — owner, members, projects; transfer ownership, delete.
+- **Settings** — open or invite-only sign-up, email verification, SMTP server + test email.
+- **Audit log** — every admin action.
+
+Instance admins manage the instance but **can't read workspace content**: they only see
+workspaces they've been invited to, like everyone else.
 
 Until a release image is published, add `--build` to the `up` command to build it from
 source (takes a few minutes). To always build yourself, set `BRAINITIVE_IMAGE=brainitive:local`
@@ -98,8 +112,8 @@ on start).
 - **`Database not reachable`** — `DB_PASSWORD` in `.env` must match what MariaDB was first
   started with. Changing it later needs `ALTER USER` inside MariaDB, or a fresh `db` volume.
 - **Logs** — `docker compose logs -f app queue scheduler`.
-- **Mails not arriving** — test with `docker compose exec app php artisan tinker` →
-  `Mail::raw('test', fn ($m) => $m->to('you@example.com'));`.
+- **Mails not arriving** — Instance admin → Settings → *Send a test email* shows the mail
+  server's error. SMTP saved there overrides `MAIL_*` in `.env`.
 
 ## Licence
 

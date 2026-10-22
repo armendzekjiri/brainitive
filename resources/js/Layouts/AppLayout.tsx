@@ -86,6 +86,7 @@ import {
     Sun,
     CalendarDays,
     GanttChart,
+    ShieldCheck,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { ThemeMenu } from '@/components/ThemeMenu';
@@ -1500,6 +1501,7 @@ function AppSidebar({
     onOpenHelp?: () => void;
 }) {
     const { auth, currentPageUuid } = usePage<PageProps>().props;
+    const isInstanceAdmin = !!auth.isInstanceAdmin;
     const user = auth.user;
     const projects = currentWorkspace?.projects || [];
 
@@ -1793,6 +1795,14 @@ function AppSidebar({
                                     <Link href={route('workspaces.edit', currentWorkspace.slug)} className="flex items-center gap-3 p-2">
                                         <Settings className="size-4" />
                                         <span className="text-sm">Workspace settings</span>
+                                    </Link>
+                                </DropdownMenuItem>
+                            )}
+                            {isInstanceAdmin && (
+                                <DropdownMenuItem asChild className="cursor-pointer">
+                                    <Link href={route('admin.overview')} className="flex items-center gap-3 p-2">
+                                        <ShieldCheck className="size-4" />
+                                        <span className="text-sm">Instance admin</span>
                                     </Link>
                                 </DropdownMenuItem>
                             )}

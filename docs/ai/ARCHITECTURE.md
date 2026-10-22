@@ -39,7 +39,7 @@ External site ──▶ routes/web.php (cors, no CSRF) ──▶ Helpdesk widget
 | Social login | `Auth/GoogleAuthController.php`, `Auth/GitHubAuthController.php` | Laravel **Socialite** |
 | API/MCP/CLI tokens | Laravel **Passport** (OAuth 2.1 + bearer) | Configured in `AppServiceProvider::boot()` (token TTLs) |
 | Policy registration | **`app/Providers/AppServiceProvider.php`** | Policies are **explicitly** `Gate::policy(...)`-registered, *not* auto-discovered |
-| Instance-admin bypass | `Gate::before()` in `AppServiceProvider` | Instance admins pass every check |
+| Instance admin | `InstanceAdmin` model, `instance.admin` middleware, `/admin/*` | **No content access** — runs the instance from the admin console (see below). Suspended users are signed out by `EnsureUserIsNotSuspended` (web group) |
 | Global Inertia props | `app/Http/Middleware/HandleInertiaRequests.php` | `auth.user`, `flash`, `workspaces`, `currentWorkspace`, `currentPageUuid` |
 
 > Sanctum is still installed but **Passport** is the token mechanism for MCP + CLI. See
@@ -126,6 +126,14 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
   every 5 min in `routes/console.php`.
 - **Routes:** `calendar/connections/...` controller group in `web.php`
 - **Pages:** `Pages/Calendar/`
+
+### Instance admin console
+- **Routes:** `admin.*` in `web.php` (`/admin`, `users`, `workspaces`, `settings`, `audit-log`), middleware `auth`, `verified`, `instance.admin` (`EnsureInstanceAdmin`)
+- **Controllers:** `app/Http/Controllers/Admin/` — `OverviewController`, `UserController` (reset link / email, verify, suspend, admin role, create, delete), `WorkspaceController` (list, members, transfer, delete; route param `{managedWorkspace:id}`), `SettingsController` (sign-up, verification, SMTP + test email), `AuditLogController`
+- **Models / support:** `InstanceSettings` (singleton row; `allowsRegistration()`, `requiresEmailVerification()`, `mailSettings()` — SMTP password encrypted), `AdminAuditLog::record()`, `app/Support/Admin/UserDeletion` (guards + reassigns created content to the workspace owner before deleting), `InstanceMailConfig` (applies admin SMTP on `mail.manager` resolve + per queued job)
+- **Pages:** `Pages/Admin/{Overview,Users,Workspaces,Settings,AuditLog}.tsx`, shell `components/admin/AdminShell.tsx`; entry in the `AppLayout` user menu when `auth.isInstanceAdmin`
+- **Metadata only:** names, emails, counts, dates. Never page / board / item content.
+- **Promote via CLI:** `php artisan make:instance-admin <email>` (also verifies the email)
 
 ### MyWork, Search, Notifications, Files
 - **MyWork:** `MyWorkController` → `Pages/MyWork/` — cross-workspace "assigned to me" dashboard

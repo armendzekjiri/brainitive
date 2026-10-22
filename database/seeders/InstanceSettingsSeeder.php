@@ -16,7 +16,7 @@ class InstanceSettingsSeeder extends Seeder
             'name' => 'Brainitive',
             'settings' => [
                 'allow_registration' => true,
-                'require_email_verification' => false,
+                'require_email_verification' => true,
             ],
         ]);
     }

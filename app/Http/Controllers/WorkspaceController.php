@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ActivityLog;
 use App\Models\Board;
+use App\Models\Comment;
 use App\Models\Item;
 use App\Models\Page;
+use App\Models\Project;
 use App\Models\TaskList;
 use App\Models\User;
 use App\Models\Workspace;
@@ -26,23 +29,14 @@ class WorkspaceController extends Controller
     {
         $user = $request->user();
 
-        // Instance admins see all workspaces
-        if ($user->isInstanceAdmin()) {
-            $workspaces = Workspace::withCount(['projects', 'users'])
-                ->with('owner:id,name,email')
-                ->latest()
-                ->get();
-        } else {
-            $workspaces = $user->workspaces()
-                ->withCount(['projects', 'users'])
-                ->with('owner:id,name,email')
-                ->latest()
-                ->get();
-        }
+        $workspaces = $user->workspaces()
+            ->withCount(['projects', 'users'])
+            ->with('owner:id,name,email')
+            ->latest()
+            ->get();
 
         return Inertia::render('Workspaces/Index', [
             'workspaces' => $workspaces,
-            'isInstanceAdmin' => $user->isInstanceAdmin(),
         ]);
     }
 
@@ -117,9 +111,7 @@ class WorkspaceController extends Controller
             $workspace->projects->filter(fn ($project) => $request->user()->hasProjectAccess($project))->values()
         );
 
-        $userRole = $request->user()->isInstanceAdmin()
-            ? 'admin'
-            : $request->user()->workspaceRole($workspace);
+        $userRole = $request->user()->workspaceRole($workspace);
 
         // ── Home metrics (scoped to accessible projects) ───────────────────
         $projectIds = $workspace->projects->pluck('id');
@@ -224,7 +216,7 @@ class WorkspaceController extends Controller
 
         $role = $user->workspaceRole($workspace);
 
-        $assignedItems = \App\Models\Item::query()
+        $assignedItems = Item::query()
             ->where('assigned_to', $user->id)
             ->whereHas('board', fn ($q) => $q->whereIn('project_id', $workspaceProjectIds))
             ->with([
@@ -237,7 +229,7 @@ class WorkspaceController extends Controller
             ->limit(20)
             ->get(['id', 'uuid', 'key', 'title', 'board_id', 'column_id', 'priority_id', 'assigned_to', 'due_date', 'completed_at', 'updated_at']);
 
-        $recentComments = \App\Models\Comment::query()
+        $recentComments = Comment::query()
             ->where('user_id', $user->id)
             ->whereHas('item', fn ($q) => $q->whereHas('board', fn ($q2) => $q2->whereIn('project_id', $workspaceProjectIds)))
             ->with([
@@ -249,7 +241,7 @@ class WorkspaceController extends Controller
             ->limit(10)
             ->get(['id', 'item_id', 'user_id', 'body', 'created_at']);
 
-        $recentPages = \App\Models\Page::query()
+        $recentPages = Page::query()
             ->where('last_edited_by', $user->id)
             ->whereIn('project_id', $workspaceProjectIds)
             ->visibleTo($request->user())
@@ -259,15 +251,15 @@ class WorkspaceController extends Controller
             ->get(['id', 'uuid', 'name', 'icon', 'project_id', 'status', 'updated_at']);
 
         // Only activity on this workspace's items — the log spans every workspace
-        $activityLogs = \App\Models\ActivityLog::query()
+        $activityLogs = ActivityLog::query()
             ->where('user_id', $user->id)
-            ->where('loggable_type', \App\Models\Item::class)
-            ->whereIn('loggable_id', \App\Models\Item::whereIn('project_id', $workspaceProjectIds)->select('id'))
+            ->where('loggable_type', Item::class)
+            ->whereIn('loggable_id', Item::whereIn('project_id', $workspaceProjectIds)->select('id'))
             ->latest()
             ->limit(20)
             ->get(['id', 'loggable_type', 'loggable_id', 'action', 'changes', 'metadata', 'created_at']);
 
-        $projects = \App\Models\Project::query()
+        $projects = Project::query()
             ->whereIn('id', $workspaceProjectIds)
             ->where(function ($q) use ($user) {
                 $q->where('created_by', $user->id)
@@ -308,9 +300,7 @@ class WorkspaceController extends Controller
                 'inviter' => $inv->inviter ? ['id' => $inv->inviter->id, 'name' => $inv->inviter->name] : null,
             ]);
 
-        $userRole = $request->user()->isInstanceAdmin()
-            ? 'admin'
-            : $request->user()->workspaceRole($workspace);
+        $userRole = $request->user()->workspaceRole($workspace);
 
         return [
             'workspace' => $workspace,

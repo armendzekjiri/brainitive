@@ -76,6 +76,20 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.15.0',
+        title: 'Instance Admin Console',
+        tag: 'Feature',
+        date: '2026-10-22',
+        items: [
+            'Privacy: instance admins no longer see other people’s workspaces, pages, boards or search results — only the ones they are invited to.',
+            'New admin console (avatar menu → Instance admin) with an overview of users, workspaces, storage, mail and background jobs.',
+            'Users: workspace and project counts per person, password reset by email or by a link you share yourself, verify email, suspend, admin role, add and delete accounts.',
+            'Workspaces: see owner, members and projects, transfer ownership or delete — without opening the content.',
+            'Settings: invite-only sign-up, email verification on or off, and your own SMTP server with a test email.',
+            'Every admin action is recorded in an audit log.',
+        ]
+    },
+    {
         version: 'v1.14.0',
         title: 'Brainitive Is Open Source',
         tag: 'Major Release',

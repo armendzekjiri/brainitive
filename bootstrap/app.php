@@ -1,8 +1,13 @@
 <?php
 
+use App\Http\Middleware\AddCorsHeaders;
+use App\Http\Middleware\EnsureInstanceAdmin;
+use App\Http\Middleware\EnsureUserIsNotSuspended;
+use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -18,12 +23,14 @@ return Application::configure(basePath: dirname(__DIR__))
         }
 
         $middleware->web(append: [
-            \App\Http\Middleware\HandleInertiaRequests::class,
-            \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+            EnsureUserIsNotSuspended::class,
+            HandleInertiaRequests::class,
+            AddLinkHeadersForPreloadedAssets::class,
         ]);
 
         $middleware->alias([
-            'cors' => \App\Http\Middleware\AddCorsHeaders::class,
+            'cors' => AddCorsHeaders::class,
+            'instance.admin' => EnsureInstanceAdmin::class,
         ]);
 
         // Public helpdesk widget/portal (embedded on external sites) — no session, no CSRF

@@ -4,10 +4,12 @@ namespace App\Providers;
 
 use App\Models\Board;
 use App\Models\Bookmark;
+use App\Models\InstanceSettings;
 use App\Models\Item;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\SnippetCollection;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Policies\BoardPolicy;
 use App\Policies\BookmarkPolicy;
@@ -16,7 +18,11 @@ use App\Policies\PagePolicy;
 use App\Policies\ProjectPolicy;
 use App\Policies\SnippetPolicy;
 use App\Policies\WorkspacePolicy;
+use App\Support\Admin\InstanceMailConfig;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
@@ -29,7 +35,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // SMTP saved in the admin console overrides .env mail config (see InstanceMailConfig).
+        $this->app->afterResolving('mail.manager', fn () => InstanceMailConfig::apply());
     }
 
     /**
@@ -37,6 +44,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        InstanceSettings::flushCache();
+
         Vite::prefetch(concurrency: 3);
 
         // OAuth 2.1 (Passport) — powers the remote MCP server connect flow for
@@ -47,6 +56,21 @@ class AppServiceProvider extends ServiceProvider
         Passport::refreshTokensExpireIn(now()->addDays(60));
         Passport::personalAccessTokensExpireIn(now()->addYear());
 
+        // Queue workers are long-lived: re-read instance settings (mail, verification) per job.
+        Queue::before(function () {
+            InstanceSettings::flushCache();
+
+            if ($this->app->resolved('mail.manager')) {
+                InstanceMailConfig::apply();
+            }
+        });
+
+        Event::listen(Login::class, function (Login $event) {
+            if ($event->user instanceof User) {
+                User::whereKey($event->user->getAuthIdentifier())->toBase()->update(['last_login_at' => now()]);
+            }
+        });
+
         // Register policies
         Gate::policy(Workspace::class, WorkspacePolicy::class);
         Gate::policy(Project::class, ProjectPolicy::class);
@@ -55,13 +79,6 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Bookmark::class, BookmarkPolicy::class);
         Gate::policy(Item::class, ItemPolicy::class);
         Gate::policy(SnippetCollection::class, SnippetPolicy::class);
-
-        // Instance admins bypass all permission checks
-        Gate::before(function ($user, $ability) {
-            if ($user->isInstanceAdmin()) {
-                return true;
-            }
-        });
 
         // Resolve page from project's allPages() so child pages (e.g. documents inside folders) are found
         Route::bind('page', function (string $value, $route) {

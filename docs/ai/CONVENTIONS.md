@@ -29,7 +29,8 @@ The rules every agent follows when writing code. To *locate* code, use
 - **Workspace:** owner > admin > editor > viewer / member
 - **Project:** admin > editor > viewer
 - **Bookmark:** creator > editor > viewer
-- **Instance Admin:** bypasses **all** policy checks (`Gate::before()` in `AppServiceProvider`)
+- **Instance Admin:** manages accounts, workspaces (metadata) and settings in `/admin`; **no**
+  policy bypass and no content access — same workspace / project access as anyone else
 
 ## Brand colors
 
@@ -118,7 +119,8 @@ class Example extends Model
   in `AppServiceProvider::boot()`. (This project does *not* rely on auto-discovery.) Note
   `SnippetPolicy` is registered against `SnippetCollection`.
 - Methods: `viewAny, view, create, update, delete` + custom (`manageMembers`, `inviteMembers`, …).
-- Instance admins bypass everything via `Gate::before()`.
+- There is **no** `Gate::before()` bypass. Don't add `isInstanceAdmin()` branches to content
+  queries or policies — instance admins work only through the admin console.
 - Role helpers on `User`: `workspaceRole($ws)`, `projectRole($p)`, `hasWorkspaceAccess()`,
   `hasProjectAccess()`, `isInstanceAdmin()`.
 

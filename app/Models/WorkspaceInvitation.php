@@ -80,7 +80,7 @@ class WorkspaceInvitation extends Model
      */
     public function isValid(): bool
     {
-        return !$this->isExpired() && !$this->isAccepted();
+        return ! $this->isExpired() && ! $this->isAccepted();
     }
 
     /**
@@ -106,6 +106,16 @@ class WorkspaceInvitation extends Model
     public function scopeForEmail($query, string $email)
     {
         return $query->where('email', $email);
+    }
+
+    /**
+     * New accounts are allowed while registration is open, and always for an email with a
+     * pending invitation.
+     */
+    public static function canSignUp(string $email): bool
+    {
+        return InstanceSettings::allowsRegistration()
+            || self::query()->forEmail(strtolower($email))->valid()->exists();
     }
 
     /**

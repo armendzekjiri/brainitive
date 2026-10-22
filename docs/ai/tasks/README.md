@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Instance admin console; no content access for instance admins](./feat-instance-admin-console.md) | done |
 | [Open source + Brainitive Cloud pricing](./feat-open-source-cloud.md) | done |
 | [Homepage + Welcome tab refresh](./feat-homepage-feature-refresh.md) | done |
 | [Plans ↔ board issues](./feat-plan-issue-links.md) | done |

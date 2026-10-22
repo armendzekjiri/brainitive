@@ -1,11 +1,18 @@
 <?php
 
+use App\Http\Controllers\Admin;
 use App\Http\Controllers\AiController;
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BookmarkController;
+use App\Http\Controllers\CalendarConnectionController;
+use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\FileController;
+use App\Http\Controllers\HelpdeskController;
+use App\Http\Controllers\HelpdeskWidgetController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\MyWorkController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PageStickyNoteController;
 use App\Http\Controllers\PageVersionController;
@@ -17,6 +24,8 @@ use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\SnippetController;
 use App\Http\Controllers\SprintController;
+use App\Http\Controllers\TaskListController;
+use App\Http\Controllers\TicketController;
 use App\Http\Controllers\WhiteboardController;
 use App\Http\Controllers\WorkspaceController;
 use Illuminate\Support\Facades\Route;
@@ -86,19 +95,19 @@ Route::get('/share/plans/{token}', [PublicPlanController::class, 'show'])->name(
 Route::get('/share/snippet-collections/{uuid}', [SnippetController::class, 'showPublicCollection'])->name('snippet-collections.public.show');
 
 // Embed test page (same-origin; use this URL to verify iframe works)
-Route::get('/embed-test/{helpdesk:uuid}', [App\Http\Controllers\HelpdeskWidgetController::class, 'embedTestPage'])->name('helpdesks.embed-test');
+Route::get('/embed-test/{helpdesk:uuid}', [HelpdeskWidgetController::class, 'embedTestPage'])->name('helpdesks.embed-test');
 
 // Public helpdesk widget and portal (no auth, CORS for embedding on external sites)
 Route::middleware('cors')->group(function () {
-    Route::get('/widget/helpdesks/{helpdesk:uuid}', [App\Http\Controllers\HelpdeskWidgetController::class, 'showWidget'])->name('helpdesks.widget.show');
-    Route::get('/widget/helpdesks/{helpdesk:uuid}/form', [App\Http\Controllers\HelpdeskWidgetController::class, 'formConfig'])->name('helpdesks.widget.form');
-    Route::get('/widget/helpdesks/{helpdesk:uuid}/embed', [App\Http\Controllers\HelpdeskWidgetController::class, 'embed'])->name('helpdesks.widget.embed');
-    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets', [App\Http\Controllers\TicketController::class, 'storePublic'])->name('helpdesks.tickets.store-public');
-    Route::get('/widget/tickets/{ticket:uuid}', [App\Http\Controllers\TicketController::class, 'getPublicTicketJson'])->name('helpdesks.tickets.get-public');
-    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/replies', [App\Http\Controllers\TicketController::class, 'storePublicReply'])->name('helpdesks.tickets.replies.store-public');
-    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/attachments', [App\Http\Controllers\TicketController::class, 'storePublicAttachment'])->name('helpdesks.tickets.attachments.store-public');
-    Route::get('/portal/tickets/{ticket:uuid}', [App\Http\Controllers\TicketController::class, 'showPublic'])->name('helpdesks.tickets.show-public');
-    Route::get('/portal/tickets/{ticket:uuid}/replies', [App\Http\Controllers\TicketController::class, 'publicReplies'])->name('helpdesks.tickets.replies.public');
+    Route::get('/widget/helpdesks/{helpdesk:uuid}', [HelpdeskWidgetController::class, 'showWidget'])->name('helpdesks.widget.show');
+    Route::get('/widget/helpdesks/{helpdesk:uuid}/form', [HelpdeskWidgetController::class, 'formConfig'])->name('helpdesks.widget.form');
+    Route::get('/widget/helpdesks/{helpdesk:uuid}/embed', [HelpdeskWidgetController::class, 'embed'])->name('helpdesks.widget.embed');
+    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets', [TicketController::class, 'storePublic'])->name('helpdesks.tickets.store-public');
+    Route::get('/widget/tickets/{ticket:uuid}', [TicketController::class, 'getPublicTicketJson'])->name('helpdesks.tickets.get-public');
+    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/replies', [TicketController::class, 'storePublicReply'])->name('helpdesks.tickets.replies.store-public');
+    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/attachments', [TicketController::class, 'storePublicAttachment'])->name('helpdesks.tickets.attachments.store-public');
+    Route::get('/portal/tickets/{ticket:uuid}', [TicketController::class, 'showPublic'])->name('helpdesks.tickets.show-public');
+    Route::get('/portal/tickets/{ticket:uuid}/replies', [TicketController::class, 'publicReplies'])->name('helpdesks.tickets.replies.public');
 });
 
 // Workspace invitation (guest can view; auth user with matching email can accept)
@@ -119,12 +128,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/my-work', [MyWorkController::class, 'index'])->name('my-work.index');
 
     // Calendar — personal calendar across all workspaces
-    Route::get('/calendar', [App\Http\Controllers\CalendarController::class, 'index'])->name('calendar.index');
-    Route::patch('/calendar/view', [App\Http\Controllers\CalendarController::class, 'updateView'])->name('calendar.view.update');
-    Route::patch('/calendar/reschedule', [App\Http\Controllers\CalendarController::class, 'reschedule'])->name('calendar.reschedule');
+    Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar.index');
+    Route::patch('/calendar/view', [CalendarController::class, 'updateView'])->name('calendar.view.update');
+    Route::patch('/calendar/reschedule', [CalendarController::class, 'reschedule'])->name('calendar.reschedule');
 
     // Calendar connections (external providers: Google, etc.)
-    Route::prefix('calendar/connections')->controller(App\Http\Controllers\CalendarConnectionController::class)->group(function () {
+    Route::prefix('calendar/connections')->controller(CalendarConnectionController::class)->group(function () {
         Route::get('google/redirect', 'redirectToGoogle')->name('calendar.connections.google.redirect');
         Route::get('google/callback', 'googleCallback')->name('calendar.connections.google.callback');
         Route::get('pending', 'pendingPicker')->name('calendar.connections.pending');
@@ -271,44 +280,44 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('plans/{plan:slug}/versions', [PlanController::class, 'versions'])->name('plans.versions.index');
             Route::get('plans/{plan:slug}/versions/{versionNumber}', [PlanController::class, 'version'])->whereNumber('versionNumber')->name('plans.versions.show');
             Route::post('plans/{plan:slug}/versions/{versionNumber}/restore', [PlanController::class, 'restore'])->whereNumber('versionNumber')->name('plans.versions.restore');
-            Route::post('task-lists', [App\Http\Controllers\TaskListController::class, 'store'])->name('task-lists.store');
-            Route::get('task-lists/{taskList:slug}', [App\Http\Controllers\TaskListController::class, 'show'])->name('task-lists.show');
-            Route::put('task-lists/{taskList:slug}', [App\Http\Controllers\TaskListController::class, 'update'])->name('task-lists.update');
-            Route::delete('task-lists/{taskList:slug}', [App\Http\Controllers\TaskListController::class, 'destroy'])->name('task-lists.destroy');
-            Route::post('task-lists/{taskList:slug}/watch', [App\Http\Controllers\TaskListController::class, 'toggleWatch'])->name('task-lists.watch');
-            Route::post('task-lists/{taskList:slug}/items', [App\Http\Controllers\TaskListController::class, 'storeItem'])->name('task-lists.items.store');
-            Route::post('task-lists/{taskList:slug}/items/reorder', [App\Http\Controllers\TaskListController::class, 'reorderItems'])->name('task-lists.items.reorder');
-            Route::patch('task-lists/{taskList:slug}/items/{item}', [App\Http\Controllers\TaskListController::class, 'updateItem'])->name('task-lists.items.update');
-            Route::delete('task-lists/{taskList:slug}/items/{item}', [App\Http\Controllers\TaskListController::class, 'destroyItem'])->name('task-lists.items.destroy');
+            Route::post('task-lists', [TaskListController::class, 'store'])->name('task-lists.store');
+            Route::get('task-lists/{taskList:slug}', [TaskListController::class, 'show'])->name('task-lists.show');
+            Route::put('task-lists/{taskList:slug}', [TaskListController::class, 'update'])->name('task-lists.update');
+            Route::delete('task-lists/{taskList:slug}', [TaskListController::class, 'destroy'])->name('task-lists.destroy');
+            Route::post('task-lists/{taskList:slug}/watch', [TaskListController::class, 'toggleWatch'])->name('task-lists.watch');
+            Route::post('task-lists/{taskList:slug}/items', [TaskListController::class, 'storeItem'])->name('task-lists.items.store');
+            Route::post('task-lists/{taskList:slug}/items/reorder', [TaskListController::class, 'reorderItems'])->name('task-lists.items.reorder');
+            Route::patch('task-lists/{taskList:slug}/items/{item}', [TaskListController::class, 'updateItem'])->name('task-lists.items.update');
+            Route::delete('task-lists/{taskList:slug}/items/{item}', [TaskListController::class, 'destroyItem'])->name('task-lists.items.destroy');
 
             // Helpdesks (nested under projects)
-            Route::post('helpdesks', [App\Http\Controllers\HelpdeskController::class, 'store'])->name('helpdesks.store');
-            Route::get('helpdesks/{helpdesk:slug}', [App\Http\Controllers\HelpdeskController::class, 'show'])->name('helpdesks.show');
-            Route::get('helpdesks/{helpdesk:slug}/edit', [App\Http\Controllers\HelpdeskController::class, 'edit'])->name('helpdesks.edit');
-            Route::put('helpdesks/{helpdesk:slug}', [App\Http\Controllers\HelpdeskController::class, 'update'])->name('helpdesks.update');
-            Route::delete('helpdesks/{helpdesk:slug}', [App\Http\Controllers\HelpdeskController::class, 'destroy'])->name('helpdesks.destroy');
-            Route::post('helpdesks/{helpdesk:slug}/columns', [App\Http\Controllers\HelpdeskController::class, 'storeColumn'])->name('helpdesks.columns.store');
-            Route::put('helpdesks/{helpdesk:slug}/columns/{column}', [App\Http\Controllers\HelpdeskController::class, 'updateColumn'])->name('helpdesks.columns.update');
-            Route::post('helpdesks/{helpdesk:slug}/columns/reorder', [App\Http\Controllers\HelpdeskController::class, 'reorderColumns'])->name('helpdesks.columns.reorder');
-            Route::delete('helpdesks/{helpdesk:slug}/columns/{column}', [App\Http\Controllers\HelpdeskController::class, 'destroyColumn'])->name('helpdesks.columns.destroy');
-            Route::post('helpdesks/{helpdesk:slug}/fields', [App\Http\Controllers\HelpdeskController::class, 'storeField'])->name('helpdesks.fields.store');
-            Route::put('helpdesks/{helpdesk:slug}/fields/{field}', [App\Http\Controllers\HelpdeskController::class, 'updateField'])->name('helpdesks.fields.update');
-            Route::post('helpdesks/{helpdesk:slug}/fields/reorder', [App\Http\Controllers\HelpdeskController::class, 'reorderFields'])->name('helpdesks.fields.reorder');
-            Route::delete('helpdesks/{helpdesk:slug}/fields/{field}', [App\Http\Controllers\HelpdeskController::class, 'destroyField'])->name('helpdesks.fields.destroy');
-            Route::post('helpdesks/{helpdesk:slug}/tickets/reorder', [App\Http\Controllers\HelpdeskController::class, 'reorderTickets'])->name('helpdesks.tickets.reorder');
-            Route::get('helpdesks/{helpdesk:slug}/tickets/root', [App\Http\Controllers\HelpdeskController::class, 'rootTicketsJson'])->name('helpdesks.tickets.root');
+            Route::post('helpdesks', [HelpdeskController::class, 'store'])->name('helpdesks.store');
+            Route::get('helpdesks/{helpdesk:slug}', [HelpdeskController::class, 'show'])->name('helpdesks.show');
+            Route::get('helpdesks/{helpdesk:slug}/edit', [HelpdeskController::class, 'edit'])->name('helpdesks.edit');
+            Route::put('helpdesks/{helpdesk:slug}', [HelpdeskController::class, 'update'])->name('helpdesks.update');
+            Route::delete('helpdesks/{helpdesk:slug}', [HelpdeskController::class, 'destroy'])->name('helpdesks.destroy');
+            Route::post('helpdesks/{helpdesk:slug}/columns', [HelpdeskController::class, 'storeColumn'])->name('helpdesks.columns.store');
+            Route::put('helpdesks/{helpdesk:slug}/columns/{column}', [HelpdeskController::class, 'updateColumn'])->name('helpdesks.columns.update');
+            Route::post('helpdesks/{helpdesk:slug}/columns/reorder', [HelpdeskController::class, 'reorderColumns'])->name('helpdesks.columns.reorder');
+            Route::delete('helpdesks/{helpdesk:slug}/columns/{column}', [HelpdeskController::class, 'destroyColumn'])->name('helpdesks.columns.destroy');
+            Route::post('helpdesks/{helpdesk:slug}/fields', [HelpdeskController::class, 'storeField'])->name('helpdesks.fields.store');
+            Route::put('helpdesks/{helpdesk:slug}/fields/{field}', [HelpdeskController::class, 'updateField'])->name('helpdesks.fields.update');
+            Route::post('helpdesks/{helpdesk:slug}/fields/reorder', [HelpdeskController::class, 'reorderFields'])->name('helpdesks.fields.reorder');
+            Route::delete('helpdesks/{helpdesk:slug}/fields/{field}', [HelpdeskController::class, 'destroyField'])->name('helpdesks.fields.destroy');
+            Route::post('helpdesks/{helpdesk:slug}/tickets/reorder', [HelpdeskController::class, 'reorderTickets'])->name('helpdesks.tickets.reorder');
+            Route::get('helpdesks/{helpdesk:slug}/tickets/root', [HelpdeskController::class, 'rootTicketsJson'])->name('helpdesks.tickets.root');
 
             // Tickets (nested under helpdesks)
-            Route::post('helpdesks/{helpdesk:slug}/tickets', [App\Http\Controllers\TicketController::class, 'store'])->name('tickets.store');
-            Route::get('helpdesks/{helpdesk:slug}/tickets/{ticket}', [App\Http\Controllers\TicketController::class, 'show'])->name('tickets.show');
-            Route::patch('helpdesks/{helpdesk:slug}/tickets/{ticket}/move', [App\Http\Controllers\TicketController::class, 'move'])->name('tickets.move');
-            Route::patch('helpdesks/{helpdesk:slug}/tickets/{ticket}', [App\Http\Controllers\TicketController::class, 'update'])->name('tickets.update');
-            Route::delete('helpdesks/{helpdesk:slug}/tickets/{ticket}', [App\Http\Controllers\TicketController::class, 'destroy'])->name('tickets.destroy');
-            Route::post('helpdesks/{helpdesk:slug}/tickets/{ticket}/replies', [App\Http\Controllers\TicketController::class, 'storeReply'])->name('tickets.replies.store');
-            Route::post('helpdesks/{helpdesk:slug}/tickets/{ticket}/attachments', [App\Http\Controllers\TicketController::class, 'storeAttachment'])->name('tickets.attachments.store');
-            Route::delete('helpdesks/{helpdesk:slug}/tickets/{ticket}/attachments/{attachment}', [App\Http\Controllers\TicketController::class, 'destroyAttachment'])->name('tickets.attachments.destroy');
-            Route::post('helpdesks/{helpdesk:slug}/tickets/{ticket}/watch', [App\Http\Controllers\TicketController::class, 'toggleWatch'])->name('tickets.watch');
-            Route::patch('helpdesks/{helpdesk:slug}/tickets/{ticket}/fields', [App\Http\Controllers\TicketController::class, 'updateFieldValues'])->name('tickets.fields.update');
+            Route::post('helpdesks/{helpdesk:slug}/tickets', [TicketController::class, 'store'])->name('tickets.store');
+            Route::get('helpdesks/{helpdesk:slug}/tickets/{ticket}', [TicketController::class, 'show'])->name('tickets.show');
+            Route::patch('helpdesks/{helpdesk:slug}/tickets/{ticket}/move', [TicketController::class, 'move'])->name('tickets.move');
+            Route::patch('helpdesks/{helpdesk:slug}/tickets/{ticket}', [TicketController::class, 'update'])->name('tickets.update');
+            Route::delete('helpdesks/{helpdesk:slug}/tickets/{ticket}', [TicketController::class, 'destroy'])->name('tickets.destroy');
+            Route::post('helpdesks/{helpdesk:slug}/tickets/{ticket}/replies', [TicketController::class, 'storeReply'])->name('tickets.replies.store');
+            Route::post('helpdesks/{helpdesk:slug}/tickets/{ticket}/attachments', [TicketController::class, 'storeAttachment'])->name('tickets.attachments.store');
+            Route::delete('helpdesks/{helpdesk:slug}/tickets/{ticket}/attachments/{attachment}', [TicketController::class, 'destroyAttachment'])->name('tickets.attachments.destroy');
+            Route::post('helpdesks/{helpdesk:slug}/tickets/{ticket}/watch', [TicketController::class, 'toggleWatch'])->name('tickets.watch');
+            Route::patch('helpdesks/{helpdesk:slug}/tickets/{ticket}/fields', [TicketController::class, 'updateFieldValues'])->name('tickets.fields.update');
 
             // Pages (nested under projects)
             Route::post('pages', [PageController::class, 'store'])->name('pages.store');
@@ -340,16 +349,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
 Route::middleware('auth')->group(function () {
     // Onboarding state (welcome modal + setup checklist)
-    Route::post('/api/onboarding/welcome-seen', [App\Http\Controllers\OnboardingController::class, 'markWelcomeSeen'])->name('onboarding.welcome-seen');
-    Route::post('/api/onboarding/checklist-dismissed', [App\Http\Controllers\OnboardingController::class, 'dismissChecklist'])->name('onboarding.checklist-dismissed');
+    Route::post('/api/onboarding/welcome-seen', [OnboardingController::class, 'markWelcomeSeen'])->name('onboarding.welcome-seen');
+    Route::post('/api/onboarding/checklist-dismissed', [OnboardingController::class, 'dismissChecklist'])->name('onboarding.checklist-dismissed');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     // File uploads
-    Route::post('/upload/image', [App\Http\Controllers\FileController::class, 'uploadImage'])->name('upload.image');
-    Route::post('/upload/document', [App\Http\Controllers\FileController::class, 'uploadDocument'])->name('upload.document');
+    Route::post('/upload/image', [FileController::class, 'uploadImage'])->name('upload.image');
+    Route::post('/upload/document', [FileController::class, 'uploadDocument'])->name('upload.document');
 
     // Page-level sticky notes (per user, per URL)
     Route::get('/api/page-sticky-notes', [PageStickyNoteController::class, 'index'])->name('page-sticky-notes.index');
@@ -368,6 +377,35 @@ Route::middleware('auth')->group(function () {
     // Browser push subscriptions
     Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');
     Route::delete('/api/push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push-subscriptions.destroy');
+});
+
+// Instance admin console — accounts, workspaces (metadata only) and instance settings
+Route::middleware(['auth', 'verified', 'instance.admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/', Admin\OverviewController::class)->name('overview');
+
+    Route::get('users', [Admin\UserController::class, 'index'])->name('users.index');
+    Route::post('users', [Admin\UserController::class, 'store'])->name('users.store');
+    Route::get('users/{user}', [Admin\UserController::class, 'show'])->name('users.show');
+    Route::delete('users/{user}', [Admin\UserController::class, 'destroy'])->name('users.destroy');
+    Route::post('users/{user}/password-reset-email', [Admin\UserController::class, 'sendPasswordResetEmail'])->name('users.password-reset-email');
+    Route::post('users/{user}/password-reset-link', [Admin\UserController::class, 'createPasswordResetLink'])->name('users.password-reset-link');
+    Route::post('users/{user}/verify-email', [Admin\UserController::class, 'verifyEmail'])->name('users.verify-email');
+    Route::post('users/{user}/resend-verification', [Admin\UserController::class, 'resendVerification'])->name('users.resend-verification');
+    Route::post('users/{user}/suspend', [Admin\UserController::class, 'suspend'])->name('users.suspend');
+    Route::post('users/{user}/unsuspend', [Admin\UserController::class, 'unsuspend'])->name('users.unsuspend');
+    Route::post('users/{user}/admin', [Admin\UserController::class, 'grantAdmin'])->name('users.admin.grant');
+    Route::delete('users/{user}/admin', [Admin\UserController::class, 'revokeAdmin'])->name('users.admin.revoke');
+
+    Route::get('workspaces', [Admin\WorkspaceController::class, 'index'])->name('workspaces.index');
+    Route::get('workspaces/{managedWorkspace:id}/members', [Admin\WorkspaceController::class, 'members'])->name('workspaces.members');
+    Route::post('workspaces/{managedWorkspace:id}/transfer', [Admin\WorkspaceController::class, 'transfer'])->name('workspaces.transfer');
+    Route::delete('workspaces/{managedWorkspace:id}', [Admin\WorkspaceController::class, 'destroy'])->name('workspaces.destroy');
+
+    Route::get('settings', [Admin\SettingsController::class, 'edit'])->name('settings.edit');
+    Route::put('settings', [Admin\SettingsController::class, 'update'])->name('settings.update');
+    Route::post('settings/test-email', [Admin\SettingsController::class, 'testEmail'])->name('settings.test-email');
+
+    Route::get('audit-log', Admin\AuditLogController::class)->name('audit-log');
 });
 
 require __DIR__.'/auth.php';

@@ -10,6 +10,7 @@ use App\Services\GoogleCalendarService;
 use App\Services\GoogleTasksService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -20,10 +21,6 @@ class CalendarController extends Controller
     private function accessibleProjectIds(Request $request): array
     {
         $user = $request->user();
-        if ($user->isInstanceAdmin()) {
-            return Project::pluck('id')->all();
-        }
-
         $workspaceIds = $user->workspaces()->pluck('workspaces.id');
 
         return Project::query()
@@ -461,7 +458,7 @@ class CalendarController extends Controller
      * Project a task-list-item's recurrence forward into [start, end].
      * Returns a Collection of Carbon dates (always at start-of-day).
      */
-    private function projectRecurrence(?Carbon $baseDate, ?string $recurrence, Carbon $rangeStart, Carbon $rangeEnd): \Illuminate\Support\Collection
+    private function projectRecurrence(?Carbon $baseDate, ?string $recurrence, Carbon $rangeStart, Carbon $rangeEnd): Collection
     {
         $dates = collect();
         if (! $baseDate) {
