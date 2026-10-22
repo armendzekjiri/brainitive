@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Friendly error pages (BRAI-47)](./fix-error-pages.md) | done |
 | [Move a project to another workspace](./feat-move-project-between-workspaces.md) | done |
 | [Helpdesk: agent ticket form, resolve message, support page](./feat-helpdesk-support-page.md) | done |
 | [Security review fixes](./fix-security-review.md) | done |

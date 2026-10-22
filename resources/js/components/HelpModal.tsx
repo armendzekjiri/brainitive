@@ -76,6 +76,16 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.18.1',
+        title: 'Friendly Error Pages',
+        tag: 'Patch',
+        date: '2026-10-23',
+        items: [
+            'Missing pages, missing access and server errors now show a clear page in light or dark mode, with the right way back: your workspace when you’re signed in, home or sign-in when you’re not.',
+            'An expired session takes you back with a short note instead of a “419 Page Expired” screen.',
+        ]
+    },
+    {
         version: 'v1.18.0',
         title: 'Move Projects Between Workspaces',
         tag: 'Feature',

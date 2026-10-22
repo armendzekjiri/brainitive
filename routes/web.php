@@ -413,3 +413,7 @@ Route::middleware(['auth', 'verified', 'instance.admin'])->prefix('admin')->name
 });
 
 require __DIR__.'/auth.php';
+
+// Unknown URLs: a 404 that runs through the web middleware (session + shared props), so
+// the error page knows whether you're signed in.
+Route::fallback(fn () => abort(404));
