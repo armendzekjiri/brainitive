@@ -9,6 +9,7 @@ import { browser, type Browser } from 'wxt/browser';
 const MENUS = [
     { id: 'save-link', title: 'Save link to Brainitive', contexts: ['link'] },
     { id: 'issue-selection', title: 'Create issue from selection', contexts: ['selection'] },
+    { id: 'snippet-selection', title: 'Add selection to snippets', contexts: ['selection'] },
     { id: 'doc-selection', title: 'Clip selection to a doc', contexts: ['selection'] },
     { id: 'issue-page', title: 'Create issue from this page', contexts: ['page'] },
     { id: 'save-page', title: 'Save page as bookmark', contexts: ['page'] },
@@ -35,6 +36,8 @@ export default defineBackground(() => {
                 return handOff({ ...base, mode: 'bookmark', linkUrl: info.linkUrl, selectionText: info.selectionText }, tab.windowId);
             case 'issue-selection':
                 return handOff({ ...base, mode: 'issue', selectionText: info.selectionText }, tab.windowId);
+            case 'snippet-selection':
+                return handOff({ ...base, mode: 'snippet', selectionText: info.selectionText }, tab.windowId);
             case 'doc-selection':
                 return handOff({ ...base, mode: 'doc', selectionText: info.selectionText }, tab.windowId);
             case 'issue-page':

@@ -9,6 +9,7 @@ use App\Models\InstanceSettings;
 use App\Models\Item;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\SnippetCollection;
 use App\Models\TaskListItem;
 use App\Models\Workspace;
 use App\Support\Mcp\ResourceLocator;
@@ -61,6 +62,7 @@ class ExtensionController extends Controller
                 'projects.taskLists.project.workspace',
                 'bookmarks' => fn ($q) => $q->orderBy('name'),
                 'bookmarks.workspace',
+                'snippetCollections' => fn ($q) => $q->orderBy('name'),
             ])
             ->orderBy('name')
             ->get();
@@ -98,8 +100,11 @@ class ExtensionController extends Controller
                         'name' => $bookmark->name,
                         'icon' => $bookmark->icon,
                     ])->values(),
+                'snippet_collections' => $gate->allows('create', [SnippetCollection::class, $workspace])
+                    ? $workspace->snippetCollections->map->only(['id', 'name'])->values()
+                    : collect(),
             ];
-        })->filter(fn (array $w) => $w['projects']->isNotEmpty() || $w['bookmarks']->isNotEmpty());
+        })->filter(fn (array $w) => $w['projects']->isNotEmpty() || $w['bookmarks']->isNotEmpty() || $w['snippet_collections']->isNotEmpty());
 
         return response()->json(['workspaces' => $result->values()]);
     }

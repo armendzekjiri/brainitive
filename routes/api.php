@@ -52,4 +52,5 @@ Route::prefix('ext/v1')
         Route::post('boards/{board:id}/items', [CaptureController::class, 'issue'])->name('boards.items.store');
         Route::post('projects/{project:id}/pages', [CaptureController::class, 'page'])->name('projects.pages.store');
         Route::post('task-lists/{taskList:id}/items', [CaptureController::class, 'task'])->name('task-lists.items.store');
+        Route::post('snippet-collections/{snippetCollection:id}/snippets', [CaptureController::class, 'snippet'])->name('snippet-collections.snippets.store');
     });

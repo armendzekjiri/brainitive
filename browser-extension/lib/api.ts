@@ -52,6 +52,8 @@ export function createApi(getToken: TokenProvider) {
         saveBookmark: (bookmarkId: number, data: { type: 'link' | 'note'; title?: string; url?: string; content?: string }) =>
             post<Created>(`bookmarks/${bookmarkId}/items`, data),
         createPage: (projectId: number, data: { title: string; markdown: string; publish: boolean }) => post<Created>(`projects/${projectId}/pages`, data),
+        createSnippet: (collectionId: number, data: { title: string; content: string; language: string; description?: string }) =>
+            post<Created>(`snippet-collections/${collectionId}/snippets`, data),
         createTask: (taskListId: number, data: { title: string; notes?: string; due_date?: string; assign_to_me: boolean }) =>
             post<Created>(`task-lists/${taskListId}/items`, data),
     };

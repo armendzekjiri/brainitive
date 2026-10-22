@@ -1,6 +1,7 @@
 import { ApiError } from '@/lib/api';
 import { api } from '@/lib/client';
 import { extractArticle, htmlToMarkdown, quote, sourceLine } from '@/lib/markdown';
+import { detectLanguage, LANGUAGES } from '@/lib/languages';
 import { send } from '@/lib/messages';
 import { dataUrlToBlob, readDocument } from '@/lib/page';
 import { getLastDestination, setLastDestination } from '@/lib/storage';
@@ -17,6 +18,9 @@ export interface PageContext {
     title: string;
     selectionText: string;
     selectionHtml: string;
+    /** Language class of the code block the selection came from, if any. */
+    codeLanguage: string;
+    inCode: boolean;
     linkUrl?: string;
     /** Browser pages that can't be scripted or captured. */
     restricted: boolean;
@@ -466,6 +470,64 @@ export function TaskForm({ page, destinations, onCreated }: FormProps) {
                 </label>
             </div>
             <Submit busy={busy} label="Add task" disabled={!id || !title.trim()} />
+        </Form>
+    );
+}
+
+// ---------------------------------------------------------------------------------------
+// Snippet
+
+export function SnippetForm({ page, destinations, onCreated }: FormProps) {
+    const collections = useMemo(
+        () => destinations.workspaces.flatMap((ws) => (ws.snippet_collections ?? []).map((c) => ({ value: c.id, label: c.name, group: ws.name }))),
+        [destinations],
+    );
+    const { id, setId } = useRemembered<{ id: number }>('snippet', collections);
+    const [content, setContent] = useState(page.selectionText.replace(/\u00a0/g, ' '));
+    const [language, setLanguage] = useState(() => detectLanguage(page.codeLanguage, page.selectionText));
+    const [title, setTitle] = useState(() => {
+        const firstLine = page.selectionText.trim().split('\n')[0] ?? '';
+        return page.inCode || !firstLine ? page.title : firstLine.slice(0, 120);
+    });
+    const [description, setDescription] = useState(page.url ? `Source: ${page.url}` : '');
+    const { busy, error, run } = useSubmit();
+
+    const submit = () =>
+        run(async () => {
+            if (!id) return;
+            const created = await api.createSnippet(id, { title: title.trim(), content, language, description: description.trim() || undefined });
+            await setLastDestination('snippet', { id });
+            onCreated(created, 'Snippet saved');
+        });
+
+    return (
+        <Form onSubmit={submit} error={error}>
+            <DestinationSelect label="Collection" options={collections} value={id} onChange={setId} empty="You can’t add snippets yet. Create a collection under Snippets, or ask for editor access to the workspace." />
+            <div className="row">
+                <label className="field" style={{ flex: 2 }}>
+                    <span>Title</span>
+                    <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={255} required autoFocus />
+                </label>
+                <label className="field">
+                    <span>Language</span>
+                    <select value={language} onChange={(e) => setLanguage(e.target.value)}>
+                        {LANGUAGES.map((l) => (
+                            <option key={l.value} value={l.value}>
+                                {l.label}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+            </div>
+            <label className="field">
+                <span>Code / text</span>
+                <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={9} spellCheck={false} placeholder="Select text on the page first, or paste it here" required />
+            </label>
+            <label className="field">
+                <span>Note</span>
+                <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} />
+            </label>
+            <Submit busy={busy} label="Save snippet" disabled={!id || !title.trim() || !content.trim()} />
         </Form>
     );
 }
