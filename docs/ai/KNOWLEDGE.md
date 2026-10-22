@@ -250,3 +250,14 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   things (bookmarks, snippets, invitations) are not project data and stay behind.
 - **`projects` unique keys `(workspace_id, slug)` and `(workspace_id, key)` include
   soft-deleted rows.** Check with `withTrashed()` before reusing a slug or key in a workspace.
+- **Error pages are Inertia (`Pages/Error.tsx`), wired in `bootstrap/app.php`
+  (`withExceptions` → `respond`).** JSON requests keep JSON; 5xx keep Laravel's debug page
+  while `APP_DEBUG=true`; 419 redirects (to login for guests, back for users).
+  Two traps: unknown URLs never enter the `web` group (no session), hence
+  `Route::fallback(fn () => abort(404))` at the end of `routes/web.php`. And route-model
+  binding throws before `HandleInertiaRequests` shares props, so the responder shares them
+  itself.
+- **Import paths must match git's case, not the Mac's.** `resources/js/components/` and
+  `Components/` are two folders on Linux (one on macOS). Check with
+  `git ls-files | grep -i <name>` before importing, e.g. `@/Components/ApplicationLogo`, but
+  `@/components/ui/button`.
