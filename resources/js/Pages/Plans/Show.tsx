@@ -19,8 +19,10 @@ import { ImportDialog } from '@/components/plan/ImportDialog';
 import { ShareDialog } from '@/components/plan/ShareDialog';
 import { downloadFile, toCsv } from '@/components/plan/csv';
 import { formatDate, todayDay } from '@/components/plan/dates';
-import { insertRows } from '@/components/plan/ops';
-import { PlanPayload, PlanRow } from '@/components/plan/types';
+import { blockEnd, insertRows } from '@/components/plan/ops';
+import { CreateIssuesDialog, IssuePickerDialog } from '@/components/plan/IssueDialogs';
+import { rowFromIssue, rowIssueDates, rowsFromIssues, syncFromIssues, unlinkRows } from '@/components/plan/issues';
+import { IssueAction, IssueSummary, PlanPayload, PlanRow } from '@/components/plan/types';
 import { usePlanEditor } from '@/components/plan/usePlanEditor';
 import { PageProps, Project, Workspace } from '@/types';
 import { cn } from '@/lib/utils';
@@ -30,6 +32,10 @@ interface Props extends PageProps {
     project: Project;
     plan: PlanPayload;
     members: { id: number; name: string; avatar?: string | null }[];
+    /** Linked issues by id */
+    issues: Record<number, IssueSummary>;
+    /** Boards the user can create issues on */
+    boards: { id: number; name: string }[];
     can: { update: boolean; delete: boolean };
 }
 
@@ -42,7 +48,7 @@ function relativeTime(date: Date | null): string {
     return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function PlanShow({ workspace, project, plan, members, can }: Props) {
+export default function PlanShow({ workspace, project, plan, members, issues: initialIssues, boards, can }: Props) {
     const params = useMemo(() => [workspace.slug, project.slug, plan.slug] as [string, string, string], [workspace.slug, project.slug, plan.slug]);
     const printMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('print') === '1';
 
@@ -62,6 +68,80 @@ export default function PlanShow({ workspace, project, plan, members, can }: Pro
     const [renaming, setRenaming] = useState(false);
     const [name, setName] = useState(plan.name);
     const [, setTick] = useState(0);
+    const [issues, setIssues] = useState<Record<number, IssueSummary>>(initialIssues ?? {});
+    const [issueDialog, setIssueDialog] = useState<{ kind: 'create' | 'link' | 'add'; rowIds: string[] } | null>(null);
+
+    // The issue is the source of truth: linked rows take its data when the plan opens.
+    // Saved without an undo step; issues that no longer exist are unlinked.
+    const syncIssues = (map: Record<number, IssueSummary>, removeMissing = true) => {
+        if (!can.update) return;
+        editor.apply((doc) => {
+            let data = syncFromIssues(doc.data, map);
+            if (removeMissing) {
+                const missing = data.rows.filter((r) => r.itemId !== undefined && !map[r.itemId]).map((r) => r.id);
+                if (missing.length) data = unlinkRows(data, missing);
+            }
+            return data === doc.data ? doc : { ...doc, data };
+        }, { history: false });
+    };
+    useEffect(() => syncIssues(initialIssues ?? {}), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const issueUrl = route('plans.issues', params);
+
+    const refreshIssues = async () => {
+        const ids = [...new Set(editor.doc.data.rows.map((r) => r.itemId).filter((id): id is number => id !== undefined))];
+        if (!ids.length) return;
+        const { data } = await window.axios.get(issueUrl, { params: { ids } });
+        const map = Object.fromEntries((data.items as IssueSummary[]).map((i) => [i.id, i]));
+        setIssues(map);
+        syncIssues(map);
+    };
+
+    const onIssueAction = (action: IssueAction, rowIds: string[]) => {
+        if (action === 'refresh') void refreshIssues();
+        else if (action === 'unlink') editor.apply((doc) => ({ ...doc, data: unlinkRows(doc.data, rowIds) }));
+        else setIssueDialog({ kind: action, rowIds });
+    };
+
+    const createIssues = async (boardId: number, rows: PlanRow[]) => {
+        const { data } = await window.axios.post(route('plans.issues.store', params), {
+            board_id: boardId,
+            rows: rows.map((row) => ({ title: row.name.trim().slice(0, 255), who: row.who ?? null, ...rowIssueDates(row) })),
+        });
+        const created = data.items as IssueSummary[];
+        setIssues((m) => ({ ...m, ...Object.fromEntries(created.map((i) => [i.id, i])) }));
+        const byRow = new Map(rows.map((row, i) => [row.id, created[i]]));
+        editor.apply((doc) => ({
+            ...doc,
+            data: { ...doc.data, rows: doc.data.rows.map((row) => (byRow.get(row.id) ? rowFromIssue(row, byRow.get(row.id)!) : row)) },
+        }));
+    };
+
+    const pickIssues = (picked: IssueSummary[]) => {
+        if (!issueDialog || !picked.length) return;
+        setIssues((m) => ({ ...m, ...Object.fromEntries(picked.map((i) => [i.id, i])) }));
+        if (issueDialog.kind === 'link') {
+            const rowId = issueDialog.rowIds[0];
+            editor.apply((doc) => ({ ...doc, data: { ...doc.data, rows: doc.data.rows.map((row) => (row.id === rowId ? rowFromIssue(row, picked[0]) : row)) } }));
+            return;
+        }
+        editor.apply((doc) => {
+            const selected = new Set(issueDialog.rowIds);
+            const last = doc.data.rows.reduce((at, r, i) => (selected.has(r.id) ? i : at), -1);
+            const at = last >= 0 ? blockEnd(doc.data.rows, last) : doc.data.rows.length;
+            const level = last >= 0 ? doc.data.rows[last].level : 0;
+            return { ...doc, data: insertRows(doc.data, at, rowsFromIssues(picked, level)) };
+        });
+    };
+
+    // Viewers can't save the sync, so they see it applied on the fly
+    const shownDoc = useMemo(
+        () => (can.update ? editor.doc : { ...editor.doc, data: syncFromIssues(editor.doc.data, issues) }),
+        [can.update, editor.doc, issues],
+    );
+
+    const linkedIds = new Set(editor.doc.data.rows.map((r) => r.itemId).filter((id): id is number => id !== undefined));
+    const dialogRows = issueDialog ? editor.doc.data.rows.filter((r) => issueDialog.rowIds.includes(r.id)) : [];
 
     // Keep "saved 3 min ago" fresh
     useEffect(() => {
@@ -117,7 +197,7 @@ export default function PlanShow({ workspace, project, plan, members, can }: Pro
                     <div className="text-xs text-muted-foreground">Printed {formatDate(todayDay())}</div>
                 </div>
                 <div className="w-max rounded-md border">
-                    <PlanChart doc={editor.doc} printMode showToolbar={false} />
+                    <PlanChart doc={shownDoc} issues={issues} printMode showToolbar={false} />
                 </div>
             </div>
         );
@@ -240,7 +320,9 @@ export default function PlanShow({ workspace, project, plan, members, can }: Pro
                 )}
 
                 <PlanChart
-                    doc={editor.doc}
+                    doc={shownDoc}
+                    issues={issues}
+                    onIssueAction={can.update ? onIssueAction : undefined}
                     editor={can.update ? editor : null}
                     members={members}
                     className="min-h-0 flex-1 border-t"
@@ -262,6 +344,21 @@ export default function PlanShow({ workspace, project, plan, members, can }: Pro
                 canManage={can.update}
                 shareRoute={route('plans.share', params)}
                 onChange={setShareUrl}
+            />
+            <CreateIssuesDialog
+                open={issueDialog?.kind === 'create'}
+                onOpenChange={(open) => !open && setIssueDialog(null)}
+                rows={dialogRows}
+                boards={boards ?? []}
+                onCreate={createIssues}
+            />
+            <IssuePickerDialog
+                open={issueDialog?.kind === 'link' || issueDialog?.kind === 'add'}
+                onOpenChange={(open) => !open && setIssueDialog(null)}
+                searchUrl={issueUrl}
+                single={issueDialog?.kind === 'link'}
+                linkedIds={linkedIds}
+                onPick={pickIssues}
             />
             <ImportDialog open={importOpen} onOpenChange={setImportOpen} hasRows={editor.doc.data.rows.length > 0} onImport={importRows} />
             <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

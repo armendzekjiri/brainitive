@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Board;
 use App\Models\Plan;
 use App\Models\PlanVersion;
 use App\Models\Project;
 use App\Models\Workspace;
+use App\Support\Boards\ProjectIssues;
 use App\Support\Plans\PlanDocument;
+use App\Support\Plans\PlanIssueSync;
 use App\Support\Plans\PlanTemplates;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -57,6 +60,12 @@ class PlanController extends Controller
             'project' => $project,
             'plan' => $this->payload($workspace, $project, $plan),
             'members' => $workspace->users()->orderBy('name')->get(['users.id', 'users.name', 'users.avatar']),
+            'issues' => $this->linkedIssues($workspace, $project, $plan),
+            'boards' => $project->boards()->get(['id', 'name', 'project_id'])
+                ->each(fn (Board $board) => $board->setRelation('project', $project))
+                ->filter(fn (Board $board) => $request->user()->can('createItems', $board))
+                ->map(fn (Board $board) => ['id' => $board->id, 'name' => $board->name])
+                ->values(),
             'can' => [
                 'update' => $request->user()->can('update', $plan),
                 'delete' => $request->user()->can('delete', $plan),
@@ -116,9 +125,12 @@ class PlanController extends Controller
             ], 409);
         }
 
+        $data = PlanIssueSync::restrictToProject($project, PlanDocument::normalize($validated['data']));
+        PlanIssueSync::writeThrough($plan->data, $data, $request->user());
+
         $version = $plan->saveDocument(
             $request->user(),
-            PlanDocument::normalize($validated['data']),
+            $data,
             PlanDocument::normalizeSettings($validated['settings'] ?? $plan->settings),
             $request->boolean('checkpoint'),
         );
@@ -228,6 +240,78 @@ class PlanController extends Controller
         $restored = $plan->restoreVersion($version, $request->user());
 
         return response()->json(['restored_as' => $restored->version] + $this->documentState($plan->load('lastEditor:id,name')));
+    }
+
+    /**
+     * Issues of this project for plan rows: a search (`q`) or the linked ones (`ids`).
+     */
+    public function issues(Request $request, Workspace $workspace, Project $project, Plan $plan): JsonResponse
+    {
+        $this->authorize('view', $plan);
+
+        $validated = $request->validate([
+            'q' => 'nullable|string|max:255',
+            'ids' => 'nullable|array|max:1000',
+            'ids.*' => 'integer',
+        ]);
+
+        $items = ProjectIssues::find($project, $validated['q'] ?? null, $validated['ids'] ?? null);
+
+        return response()->json(['items' => ProjectIssues::summaries($workspace, $project, $items)]);
+    }
+
+    /**
+     * Create one issue per plan row: its dates become start / due date, a "Who" that matches
+     * a workspace member becomes the assignee. Answers in the order of the rows.
+     */
+    public function storeIssues(Request $request, Workspace $workspace, Project $project, Plan $plan): JsonResponse
+    {
+        $this->authorize('update', $plan);
+
+        $validated = $request->validate([
+            'board_id' => ['required', 'integer', Rule::exists('boards', 'id')->where('project_id', $project->id)],
+            'rows' => 'required|array|min:1|max:100',
+            'rows.*.title' => 'required|string|max:255',
+            'rows.*.start_date' => 'nullable|date_format:Y-m-d',
+            'rows.*.due_date' => 'nullable|date_format:Y-m-d|after_or_equal:rows.*.start_date',
+            'rows.*.who' => 'nullable|string|max:255',
+        ]);
+
+        $board = Board::findOrFail($validated['board_id']);
+        $this->authorize('createItems', $board);
+
+        $members = $workspace->users()->get(['users.id', 'users.name'])
+            ->keyBy(fn ($user) => mb_strtolower(trim($user->name)));
+
+        try {
+            $items = ProjectIssues::create($board, $project, $request->user(), array_map(fn (array $row) => [
+                'title' => $row['title'],
+                'start_date' => $row['start_date'] ?? null,
+                'due_date' => $row['due_date'] ?? null,
+                'assigned_to' => isset($row['who']) ? $members->get(mb_strtolower(trim($row['who'])))?->id : null,
+            ], $validated['rows']));
+        } catch (\DomainException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json(['items' => ProjectIssues::summaries($workspace, $project, $items)], 201);
+    }
+
+    /**
+     * Summaries of the issues the plan's rows are linked to, keyed by id.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function linkedIssues(Workspace $workspace, Project $project, Plan $plan): array
+    {
+        $ids = PlanIssueSync::linkedIds($plan->data ?? []);
+        if ($ids === []) {
+            return [];
+        }
+
+        return collect(ProjectIssues::summaries($workspace, $project, ProjectIssues::find($project, null, $ids)))
+            ->keyBy('id')
+            ->all();
     }
 
     /**

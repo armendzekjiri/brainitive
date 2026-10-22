@@ -14,6 +14,19 @@ type TabType = 'welcome' | 'changelog';
 
 const CHANGELOG = [
     {
+        version: 'v1.13.0',
+        title: 'Plans ↔ Board Issues',
+        tag: 'Feature',
+        date: '2026-10-21',
+        items: [
+            'Turn plan rows into board issues in one go: pick a board, and each row becomes an issue with its dates as start / due date and a matching "Who" as assignee.',
+            'Link a row to an existing issue, or add issues from the board as new rows (Issues menu in the plan toolbar or right-click on a row).',
+            'Linked rows show the issue key and the board status, and follow the issue: title, assignee, dates and progress update when the plan opens or with "Refresh from board".',
+            'Moving or resizing a linked bar, or renaming the row, updates the issue — the issue history shows the change.',
+            'Open or unlink the issue from the row menu; issues deleted on the board are unlinked automatically.',
+        ]
+    },
+    {
         version: 'v1.12.0',
         title: 'Plans: Tom\'s Planner–Style Gantt Charts',
         tag: 'Major Feature',

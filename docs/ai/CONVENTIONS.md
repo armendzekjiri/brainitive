@@ -308,6 +308,15 @@ Pages work like Confluence. Keep these rules when touching pages:
 - History = checkpoints like whiteboards: "Save version", every 30 min while editing, or when
   another user saved last. The slug never changes on rename (links and share URLs stay valid).
 - Templates live in `PlanTemplates` (PHP) and reach the UI as the shared `planTemplates` prop.
+- **Rows linked to issues** (`row.itemId`): the **issue is the source of truth**. On open the
+  page applies issue title / assignee / status / dates / progress to linked rows
+  (`components/plan/issues.ts`, saved without an undo step; missing issues are unlinked).
+  Name and date edits on a linked row are written to the issue on save by
+  `PlanIssueSync::writeThrough()`, **only for fields that changed against the stored plan**
+  (a stale tab must never revert board changes) and only with item update rights. Dates:
+  bars' span = start / due; a lone milestone = due date only. Status is read-only on linked
+  rows; Who is read-only once the issue has an assignee.
+- Reuse `ProjectIssues` for anything that shows or creates issues outside the board.
 
 ## Item history (activity log)
 

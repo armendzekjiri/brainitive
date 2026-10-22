@@ -264,6 +264,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('plans/{plan:slug}/document', [PlanController::class, 'document'])->name('plans.document');
             Route::put('plans/{plan:slug}/document', [PlanController::class, 'save'])->name('plans.save');
             Route::post('plans/{plan:slug}/duplicate', [PlanController::class, 'duplicate'])->name('plans.duplicate');
+            Route::get('plans/{plan:slug}/issues', [PlanController::class, 'issues'])->name('plans.issues');
+            Route::post('plans/{plan:slug}/issues', [PlanController::class, 'storeIssues'])->name('plans.issues.store');
             Route::post('plans/{plan:slug}/share', [PlanController::class, 'share'])->name('plans.share');
             Route::delete('plans/{plan:slug}/share', [PlanController::class, 'unshare'])->name('plans.unshare');
             Route::get('plans/{plan:slug}/versions', [PlanController::class, 'versions'])->name('plans.versions.index');

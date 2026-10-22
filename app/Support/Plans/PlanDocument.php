@@ -35,6 +35,7 @@ class PlanDocument
             'data.rows.*.status' => ['nullable', Rule::in(self::STATUSES)],
             'data.rows.*.notes' => 'nullable|string|max:5000',
             'data.rows.*.collapsed' => 'nullable|boolean',
+            'data.rows.*.itemId' => 'nullable|integer|min:1',
             'data.rows.*.bars' => 'present|array|max:'.self::MAX_BARS_PER_ROW,
             'data.rows.*.bars.*.id' => 'required|string|max:64',
             'data.rows.*.bars.*.start' => 'required|date_format:Y-m-d',
@@ -68,6 +69,7 @@ class PlanDocument
         $rows = [];
         $rowIds = [];
         $barIds = [];
+        $itemIds = [];
         $previousLevel = -1;
 
         foreach ($data['rows'] ?? [] as $row) {
@@ -99,6 +101,12 @@ class PlanDocument
                 ], fn ($value) => $value !== null);
             }
 
+            // One row per issue
+            $itemId = isset($row['itemId']) && ! isset($itemIds[$row['itemId']]) ? (int) $row['itemId'] : null;
+            if ($itemId !== null) {
+                $itemIds[$itemId] = true;
+            }
+
             $rows[] = array_filter([
                 'id' => $row['id'],
                 'name' => (string) ($row['name'] ?? ''),
@@ -107,6 +115,7 @@ class PlanDocument
                 'status' => $row['status'] ?? null,
                 'notes' => self::text($row['notes'] ?? null),
                 'collapsed' => ! empty($row['collapsed']) ? true : null,
+                'itemId' => $itemId,
                 'bars' => $bars,
             ], fn ($value) => $value !== null);
         }
