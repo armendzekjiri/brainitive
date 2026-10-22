@@ -12,6 +12,7 @@ use App\Models\Helpdesk;
 use App\Models\Item;
 use App\Models\ItemType;
 use App\Models\Project;
+use App\Models\SnippetCollection;
 use App\Models\TaskList;
 use App\Models\Ticket;
 use App\Models\User;
@@ -305,5 +306,27 @@ class SecurityRegressionTest extends TestCase
             ->assertRedirect();
 
         $this->assertModelMissing($link);
+    }
+
+    public function test_snippets_can_only_be_changed_by_workspace_editors(): void
+    {
+        $collection = SnippetCollection::create(['workspace_id' => $this->workspace->id, 'name' => 'Deploy', 'slug' => 'deploy', 'created_by' => $this->workspace->owner_id]);
+        $snippet = $collection->snippets()->create(['title' => 'Key', 'content' => 'secret', 'language' => 'plaintext', 'created_by' => $this->workspace->owner_id, 'position' => 1]);
+        $ws = $this->workspace->slug;
+
+        foreach ([$this->outsider, $this->editor /* workspace role "member" */] as $user) {
+            $this->actingAs($user)->post(route('snippets.store', $ws), ['name' => 'Mine'])->assertForbidden();
+            $this->actingAs($user)->put(route('snippets.update', [$ws, $collection->slug]), ['name' => 'Pwned'])->assertForbidden();
+            $this->actingAs($user)->post(route('snippets.snippets.store', [$ws, $collection->slug]), ['title' => 'x'])->assertForbidden();
+            $this->actingAs($user)->put(route('snippets.snippets.update', [$ws, $collection->slug, $snippet->slug]), ['title' => 'Pwned'])->assertForbidden();
+            $this->actingAs($user)->delete(route('snippets.snippets.destroy', [$ws, $collection->slug, $snippet->slug]))->assertForbidden();
+            $this->actingAs($user)->delete(route('snippets.destroy', [$ws, $collection->slug]))->assertForbidden();
+        }
+
+        $this->assertSame('Deploy', $collection->fresh()->name);
+        $this->assertSame('Key', $snippet->fresh()->title);
+
+        $this->workspace->users()->updateExistingPivot($this->editor->id, ['role' => 'editor']);
+        $this->actingAs($this->editor)->post(route('snippets.snippets.store', [$ws, $collection->slug]), ['title' => 'Allowed'])->assertRedirect();
     }
 }
