@@ -129,7 +129,8 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `display_errors = Off` and logs to stderr.
 - **There is no automatic first admin.** Instance admins are made with
   `php artisan make:instance-admin <email>` (also in the self-hosting guide).
-- **Cloud pricing is marketing only so far** — there is no billing and no plan-limit
-  enforcement in the code. Building billing needs a new dependency (e.g. Cashier) and must
+- **Cloud is free during early access; the prices are planned, not live.** There is no
+  billing and no plan-limit enforcement in the code, and the homepage, Terms and Refund
+  policy all say so. Don't add copy that implies payment is taken until billing ships. Building billing needs a new dependency (e.g. Cashier) and must
   stay off for self-hosted instances.
 
