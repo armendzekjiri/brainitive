@@ -98,6 +98,9 @@ newest entry *is* the app version). New feature → minor bump (`v1.11.0` → `v
 fix → patch (`v1.12.0` → `v1.12.1`). Entry = `version`, short `title`, `tag` (Feature /
 Major Feature / Enhancement / Patch), `date`, and user-facing `items` (what changed for the
 user, not file names).
+Merging to `main` with a new top version **releases it automatically**
+(`.github/workflows/release.yml`): tag `vX.Y.Z`, GitHub Release with the entry's items as
+notes, and Docker images `:X.Y.Z` / `:X.Y` / `:latest`. No bump → only `:edge` is rebuilt.
 
 **Homepage + Welcome tab.** A new module or a big change to one also updates the feature
 cards in `resources/js/Pages/Welcome.tsx`, `WELCOME_FEATURES` in `HelpModal.tsx`, and — when

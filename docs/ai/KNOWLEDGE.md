@@ -142,8 +142,14 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   0.18 pins exact old `nanoid`, `sass` and (via mermaid/chevrotain) `lodash-es` versions
   with known advisories. Root `package.json` **and** `excalidraw-build/package.json` force
   patched versions (`nanoid` 3.x → ≥3.3.20, 4.x → 5.x — only the named `nanoid()` export is
-  used). Drop the overrides once an Excalidraw release ships patched pins. Changing
-  `excalidraw-build` deps means rebuilding and committing `public/js/excalidraw-dist/`.
+  used). `katex` is forced to the root's direct `^0.18` (`"$katex"`; mermaid still asks for
+  0.16) and `postcss-selector-parser` to 7.x under Tailwind 3 (built CSS is byte-identical).
+  Drop the overrides once upstream ships patched pins. Changing `excalidraw-build` deps
+  means rebuilding and committing `public/js/excalidraw-dist/`.
+- **`braces` (GHSA-vfj7-8cjw-p6xm) has no fixed release.** Every version is flagged; it only
+  comes in through Tailwind 3's build-time globbing (chokidar / micromatch / fast-glob) over
+  our own `tailwind.config.js` patterns, so it isn't reachable from user input. It goes away
+  with the Tailwind 4 migration (Tailwind 4 doesn't use it).
 - **Tiptap is not in the shipped app.** `components/editor/PageEditor.tsx` (+
   `SlashCommands`, `TableOfContents`, `extensions/Callout`) is the only Tiptap consumer and
   nothing imports it — pages use Lexical. The `@tiptap/*` packages are removal candidates.

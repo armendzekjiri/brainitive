@@ -201,7 +201,10 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
   DB, migrates, seeds item types / priorities / instance settings, creates Passport keys
   and runs `optimize`.
 - `compose.yaml` + `.env.docker.example` — app, queue, scheduler, MariaDB 11.4, Redis 7.
-- `.github/workflows/docker-publish.yml` — image to `ghcr.io/<owner>/brainitive` (`:edge`
-  from main, semver + `:latest` from `v*` tags).
+- **Releases:** `.github/workflows/release.yml` runs on every push to `main`: reads the newest
+  `CHANGELOG` version in `HelpModal.tsx` (`.github/scripts/changelog-release.mjs`), creates
+  tag + GitHub Release if that version is new, then calls `docker-publish.yml` → image
+  `ghcr.io/<owner>/brainitive` (`:edge` + `:sha-…` always; `:X.Y.Z`, `:X.Y`, `:latest` on a
+  new version; a hand-pushed `v*` tag builds too).
 - User guide: `docs/self-hosting.md`. `TRUSTED_PROXIES` (env, `bootstrap/app.php`) for
   reverse proxies.

@@ -48,9 +48,17 @@ Then open **your avatar → Instance admin**. The console has:
 Instance admins manage the instance but **can't read workspace content**: they only see
 workspaces they've been invited to, like everyone else.
 
-Until a release image is published, add `--build` to the `up` command to build it from
-source (takes a few minutes). To always build yourself, set `BRAINITIVE_IMAGE=brainitive:local`
-in `.env` and run `docker compose up -d --build`.
+`compose.yaml` runs `ghcr.io/armendzekjiri/brainitive:latest`, the newest release. Image
+tags:
+
+| Tag | What |
+|---|---|
+| `latest` | Newest release |
+| `1.15.0`, `1.15` | A specific release / newest patch of a minor version — pin one with `BRAINITIVE_IMAGE` in `.env` |
+| `edge` | Latest commit on `main` (may be unreleased) |
+
+Release notes: GitHub → Releases. To build from source instead, set
+`BRAINITIVE_IMAGE=brainitive:local` in `.env` and run `docker compose up -d --build`.
 
 ## HTTPS
 
