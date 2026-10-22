@@ -121,7 +121,10 @@ function GitHubMark({ className = '' }: { className?: string }) {
 
 type Billing = 'monthly' | 'yearly';
 
-/** Brainitive Cloud tiers; prices per user and month in EUR (yearly = billed once a year). */
+/**
+ * Brainitive Cloud tiers; prices per user and month in EUR (yearly = billed once a year).
+ * Planned prices only: Cloud is free during early access and nothing is billed yet.
+ */
 const CLOUD_PLANS: {
     name: string;
     description: string;
@@ -143,7 +146,7 @@ const CLOUD_PLANS: {
             '1 GB file storage',
             'Community support',
         ],
-        cta: 'Start for free',
+        cta: 'Join early access',
     },
     {
         name: 'Team',
@@ -156,7 +159,7 @@ const CLOUD_PLANS: {
             '100 GB file storage',
             'Email support (within 2 business days)',
         ],
-        cta: 'Start with Team',
+        cta: 'Join early access',
         highlighted: true,
     },
     {
@@ -171,7 +174,7 @@ const CLOUD_PLANS: {
             '99.9% uptime SLA',
             'Daily backups with 30-day restore',
         ],
-        cta: 'Start with Business',
+        cta: 'Join early access',
     },
 ];
 
@@ -195,8 +198,20 @@ function PricingSection() {
                     </h2>
                     <p className="text-[#485E72]/60 dark:text-slate-400 max-w-2xl mx-auto text-lg">
                         Every feature is free to self-host. Brainitive Cloud runs it for you &mdash;
-                        updates, backups and support included. Prices in EUR, plus VAT where applicable.
+                        updates, backups and support included.
                     </p>
+
+                    <div className="mt-8 mx-auto max-w-2xl rounded-2xl border border-[#69A748]/30 bg-[#69A748]/[0.07] px-5 py-4 text-left sm:flex sm:items-start sm:gap-3">
+                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#69A748] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                            <Sparkles className="h-3 w-3" />
+                            Early access
+                        </span>
+                        <p className="mt-2 sm:mt-0 text-sm text-[#485E72]/80 dark:text-slate-300">
+                            <strong className="text-[#485E72] dark:text-slate-100">Brainitive Cloud is free while we're in early access</strong> &mdash;
+                            no plan limits, no credit card. The prices below are planned for later. We'll announce them at
+                            least 30 days ahead, and you only pay if you choose a paid plan.
+                        </p>
+                    </div>
 
                     <div className="mt-8 inline-flex items-center rounded-xl border border-border/70 bg-card/70 p-1" role="radiogroup" aria-label="Billing period">
                         {(['monthly', 'yearly'] as Billing[]).map((period) => (
@@ -237,10 +252,15 @@ function PricingSection() {
                                 <div className="text-xs font-semibold uppercase tracking-wider text-[#0E83DC]">Cloud</div>
                                 <h3 className="mt-1 font-bold text-xl text-[#485E72] dark:text-slate-100">{plan.name}</h3>
                                 <p className="mt-1 text-sm text-[#485E72]/60 dark:text-slate-400">{plan.description}</p>
-                                <div className="mt-5 flex items-baseline gap-1.5">
+                                {plan.perUser && (
+                                    <span className="mt-4 self-start rounded-full bg-[#69A748]/15 px-2.5 py-0.5 text-[11px] font-bold text-[#69A748]">
+                                        Free during early access
+                                    </span>
+                                )}
+                                <div className={`${plan.perUser ? 'mt-2' : 'mt-5'} flex items-baseline gap-1.5`}>
                                     <span className="text-4xl font-bold text-[#485E72] dark:text-slate-100">€{formatEuro(plan.price[billing])}</span>
                                     <span className="text-sm text-[#485E72]/60 dark:text-slate-400">
-                                        {plan.perUser ? `per user / month${billing === 'yearly' ? ', billed yearly' : ''}` : 'forever'}
+                                        {plan.perUser ? `per user / month${billing === 'yearly' ? ', billed yearly' : ''}, later` : 'forever'}
                                     </span>
                                 </div>
                                 <ul className="mt-6 space-y-2.5 flex-1">

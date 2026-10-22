@@ -39,8 +39,9 @@
 
 ## Get Brainitive
 
-**Brainitive Cloud** — hosted for you, updates and backups included, free for small
-teams. → [brainitive.com](https://brainitive.com/#pricing)
+**Brainitive Cloud** — hosted for you, updates and backups included. Free during early
+access; paid plans come later and are announced in advance. →
+[brainitive.com](https://brainitive.com/#pricing)
 
 **Self-hosted** — free and complete, on your own server:
 

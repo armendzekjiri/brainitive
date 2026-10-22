@@ -13,7 +13,10 @@ licence, contribution rules, a self-hosting path that works, and pricing that ma
 - **AGPL-3.0-only** for the whole app (all current features open). Commercial licence and
   Enterprise for companies that can't use AGPL. CLA (modelled on the Apache ICLA) so
   contributions can be dual-licensed. CLA and licence choice to be reviewed by a lawyer.
-- **Pricing (EUR, per user / month):** Cloud Free €0 (≤ 5 members, 1 GB) · Team €6 (€5
+- **Early access first:** Cloud is free (no limits, no card) until we have feedback and
+  everything is stable. The prices below are shown as planned; they are announced at least
+  30 days before they start and only apply to users who choose a paid plan.
+- **Planned pricing (EUR, per user / month):** Cloud Free €0 (≤ 5 members, 1 GB) · Team €6 (€5
   yearly, 100 GB, email support) · Business €12 (€10 yearly, priority support, DPA, 99.9% SLA,
   30-day restore) · Self-hosted €0 (AGPL) · Enterprise custom (commercial licence,
   on-premise / dedicated, SAML/SCIM on request). No feature gating — only seats, storage
