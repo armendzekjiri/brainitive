@@ -290,6 +290,16 @@ Pages work like Confluence. Keep these rules when touching pages:
   validator): `--viz-series-1` for the measured series, `--viz-reference` grey for the
   guideline / committed.
 
+## Licence & dependencies
+
+- Brainitive is **AGPL-3.0-only** (`LICENSE`); contributions need the CLA (`CLA.md`, bot in
+  `.github/workflows/cla.yml`) so the project can also be licensed commercially.
+- **New dependencies must be AGPL-compatible** (MIT, BSD, Apache-2.0, LGPL, MPL-2.0, GPL-3.0,
+  AGPL-3.0). No "pro"/paid packages, no SSPL / BUSL / Commons Clause / non-commercial licences.
+  Dependency changes still need the maintainer's approval.
+- Anything that only makes sense for Brainitive Cloud (billing, plan limits) must be optional
+  and off by default, so self-hosted instances keep every feature.
+
 ## Plans (Gantt planner)
 
 - **One JSON document per plan** (`plans.data` = `{ rows, dependencies }`), edited client-side and

@@ -1,59 +1,78 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
-
 <p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+  <img src="public/images/logo.png" alt="Brainitive" height="64">
 </p>
 
-## About Laravel
+<p align="center">
+  <strong>Boards, docs, whiteboards and Gantt plans — one open-source workspace for the whole project.</strong>
+</p>
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+<p align="center">
+  <a href="https://brainitive.com">Website</a> ·
+  <a href="https://brainitive.com/#pricing">Cloud</a> ·
+  <a href="docs/self-hosting.md">Self-hosting</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="LICENSE">AGPL-3.0</a>
+</p>
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+![Gantt plans in Brainitive](public/images/screenshots/plans.jpg)
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## What's inside
 
-## Learning Laravel
+- **Boards** — Kanban or Scrum: sprints, backlog, burndown and velocity, issue history, WIP
+  limits, time tracking, shareable filters, list / timeline / calendar views.
+- **Plans** — Gantt timelines with milestones, dependencies, templates, Excel import /
+  export, share links; rows can be linked to board issues and stay in sync.
+- **Docs & wiki** — distraction-free editor with slash commands, drafts, publishing and
+  version history.
+- **Whiteboards** — Excalidraw with templates, autosave and history; turn sticky notes into
+  issues and see them as live cards.
+- **Lists, My Work, Calendar** — light to-dos, everything assigned to you, Google Calendar &
+  Tasks sync.
+- **Helpdesk** — embeddable support widget and ticket portal.
+- **AI** — an MCP server so Claude or ChatGPT can read and update your workspace, plus
+  bring-your-own-key writing helpers.
+- **Snippets & bookmarks**, roles and permissions, notifications and web push.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+| Boards | Docs | Whiteboards |
+|---|---|---|
+| ![Board](public/images/screenshots/board.jpg) | ![Docs](public/images/screenshots/docs.jpg) | ![Whiteboard](public/images/screenshots/whiteboard.jpg) |
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Get Brainitive
 
-## Laravel Sponsors
+**Brainitive Cloud** — hosted for you, updates and backups included, free for small
+teams. → [brainitive.com](https://brainitive.com/#pricing)
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+**Self-hosted** — free and complete, on your own server:
 
-### Premium Partners
+```bash
+git clone https://github.com/armendzekjiri/brainitive.git && cd brainitive
+cp .env.docker.example .env
+docker compose run --rm --no-deps app php artisan key:generate --show   # → APP_KEY in .env
+docker compose up -d --build
+```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+HTTPS, backups, updates and optional features: [docs/self-hosting.md](docs/self-hosting.md).
 
-## Contributing
+## Development
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Laravel 12 · Inertia 2 · React 18 + TypeScript · Tailwind · PHPUnit.
 
-## Code of Conduct
+```bash
+cp .env.example .env
+composer install && npm ci
+php artisan key:generate && php artisan migrate --seed
+composer run dev
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Architecture, conventions and pitfalls are documented in [`docs/ai/`](docs/ai/README.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
-## Security Vulnerabilities
+## Licence
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Brainitive is free software under the [GNU Affero General Public License v3.0](LICENSE). If
+you run a modified version for others over a network, you must make your changes available
+under the same licence. Commercial licences without that obligation are available —
+hello@brainitive.com.
 
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+"Brainitive" and the logo are trademarks of the project owners; the licence covers the code,
+not the name.

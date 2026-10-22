@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Open source + Brainitive Cloud pricing](./feat-open-source-cloud.md) | done |
 | [Homepage + Welcome tab refresh](./feat-homepage-feature-refresh.md) | done |
 | [Plans ↔ board issues](./feat-plan-issue-links.md) | done |
 | [Plans: Tom's Planner–style Gantt per project](./feat-project-plans.md) | done |

@@ -1,0 +1,70 @@
+# Brainitive self-hosting. Quick start: docs/self-hosting.md
+#   cp .env.docker.example .env   # then set APP_KEY, APP_URL, passwords, mail
+#   docker compose up -d
+x-brainitive: &brainitive
+  image: ${BRAINITIVE_IMAGE:-ghcr.io/armendzekjiri/brainitive:latest}
+  build: .
+  env_file: .env
+  restart: unless-stopped
+  volumes:
+    - storage:/app/storage
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+  app:
+    <<: *brainitive
+    environment:
+      CONTAINER_ROLE: app
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+      - "${HTTPS_PORT:-8443}:443"
+    volumes:
+      - storage:/app/storage
+      - caddy_data:/data
+      - caddy_config:/config
+
+  queue:
+    <<: *brainitive
+    environment:
+      CONTAINER_ROLE: queue
+    command: ["php", "artisan", "queue:work", "--tries=3", "--max-time=3600"]
+
+  scheduler:
+    <<: *brainitive
+    environment:
+      CONTAINER_ROLE: scheduler
+    command: ["php", "artisan", "schedule:work"]
+
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_DATABASE:-brainitive}
+      MARIADB_USER: ${DB_USERNAME:-brainitive}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
+    volumes:
+      - db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis:/data
+
+volumes:
+  storage:
+  db:
+  redis:
+  caddy_data:
+  caddy_config:

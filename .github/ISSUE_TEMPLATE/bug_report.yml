@@ -1,0 +1,35 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open a board\n2. …"
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where do you run Brainitive?
+      options: [Brainitive Cloud, Self-hosted (Docker), Self-hosted (other), Local development]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Help → Changelog shows the version (e.g. v1.14.0), or the commit for self-hosted.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Browser console errors, `storage/logs/laravel.log` excerpts (remove secrets!).

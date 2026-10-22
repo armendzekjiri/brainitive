@@ -170,3 +170,16 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 | A notification | `app/Notifications/` (+ `SendsWebPush` for push) — [add-notification skill](./skills/add-notification.md) |
 | A queued job | `app/Jobs/` |
 | An artisan command | `app/Console/Commands/` |
+
+## Self-hosting (Docker)
+- `Dockerfile` — multi-stage: composer → node (frontend; needs `vendor/tightenco/ziggy` for
+  `tsc`) → `dunglas/frankenphp` runtime (Caddy + PHP 8.4, non-root, extensions installed
+  with `install-php-extensions`).
+- `docker/entrypoint.sh` — `CONTAINER_ROLE=app|queue|scheduler`; the app role waits for the
+  DB, migrates, seeds item types / priorities / instance settings, creates Passport keys
+  and runs `optimize`.
+- `compose.yaml` + `.env.docker.example` — app, queue, scheduler, MariaDB 11.4, Redis 7.
+- `.github/workflows/docker-publish.yml` — image to `ghcr.io/<owner>/brainitive` (`:edge`
+  from main, semver + `:latest` from `v*` tags).
+- User guide: `docs/self-hosting.md`. `TRUSTED_PROXIES` (env, `bootstrap/app.php`) for
+  reverse proxies.
