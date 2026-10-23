@@ -8,6 +8,7 @@ use App\Http\Middleware\GuardOAuthFlows;
 use App\Models\Helpdesk;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Models\WorkspaceInvitation;
 use App\Notifications\TicketCreatedNotification;
 use App\Support\OutboundUrl;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\URL;
 use Laravel\Passport\ClientRepository;
 use Laravel\Socialite\Contracts\Provider;
 use Laravel\Socialite\Facades\Socialite;
@@ -87,7 +89,7 @@ class AuthOAuthHardeningTest extends TestCase
 
     public function test_oauth_client_registration_is_throttled(): void
     {
-        for ($i = 0; $i < 20; $i++) {
+        for ($i = 0; $i < 120; $i++) {
             $this->postJson('/oauth/register', ['client_name' => 'App '.$i, 'redirect_uris' => ['http://localhost:9000/cb']]);
         }
         $this->postJson('/oauth/register', ['client_name' => 'One more', 'redirect_uris' => ['http://localhost:9000/cb']])->assertStatus(429);
@@ -97,8 +99,12 @@ class AuthOAuthHardeningTest extends TestCase
     {
         $user = User::factory()->unverified()->create(['password' => Hash::make('secret-pass')]);
 
-        $this->actingAs($user)->get('/oauth/authorize?client_id=x&response_type=code')->assertRedirect(route('verification.notice'));
-        Auth::logout();
+        // a real browser session (login form + session cookie), not actingAs
+        $this->post('/login', ['email' => $user->email, 'password' => 'secret-pass']);
+        Auth::forgetGuards();
+        $this->get('/oauth/authorize?client_id=x&response_type=code')->assertRedirect(route('verification.notice'));
+        $this->post('/logout');
+        Auth::forgetGuards();
 
         $this->postJson('/api/cli/login', ['email' => $user->email, 'password' => 'secret-pass'])->assertForbidden()->assertJsonMissing(['token']);
     }
@@ -211,6 +217,46 @@ class AuthOAuthHardeningTest extends TestCase
 
         $contact = Ticket::with('contact')->firstOrFail()->contact;
         $this->assertCount(3, Notification::sent($contact, TicketCreatedNotification::class));
+    }
+
+    public function test_a_re_invited_member_can_still_verify_and_invitations_are_closed(): void
+    {
+        $user = User::factory()->unverified()->create();
+        WorkspaceInvitation::create(['workspace_id' => $this->workspace->id, 'email' => $user->email, 'role' => 'viewer', 'token' => str()->random(40), 'invited_by' => $this->editor->id, 'expires_at' => now()->addDays(30)]);
+        $this->workspace->addUser($user, 'editor'); // added directly meanwhile
+
+        $this->get(URL::temporarySignedRoute('verification.verify', now()->addHour(), ['id' => $user->id, 'hash' => sha1($user->email)], absolute: false))
+            ->assertRedirect();
+        $this->assertNotNull($user->fresh()->email_verified_at);
+        $this->assertSame('editor', $user->workspaceRole($this->workspace));
+    }
+
+    public function test_after_sign_up_an_invited_person_lands_back_on_the_invitation(): void
+    {
+        $invitation = WorkspaceInvitation::create(['workspace_id' => $this->workspace->id, 'email' => 'new@example.com', 'role' => 'viewer', 'token' => str()->random(40), 'invited_by' => $this->editor->id, 'expires_at' => now()->addDays(30)]);
+
+        $this->get(route('invitations.show', $invitation->token))->assertOk();
+        $this->post('/register', ['name' => 'New', 'email' => 'new@example.com', 'password' => 'password-123', 'password_confirmation' => 'password-123'])
+            ->assertRedirect(route('invitations.show', $invitation->token));
+    }
+
+    public function test_changing_the_ai_endpoint_drops_the_saved_key(): void
+    {
+        $admin = User::factory()->create();
+        $this->workspace->addUser($admin, 'admin');
+        $this->workspace->update(['settings' => ['ai_endpoint' => 'https://api.openai.com', 'ai_api_key' => Crypt::encryptString('sk-real')]]);
+
+        $this->actingAs($admin)->postJson(route('ai.settings.save', $this->workspace->slug), ['ai_endpoint' => 'https://8.8.8.8/attacker', 'ai_model' => 'x'])->assertOk();
+        $this->assertNull($this->workspace->fresh()->settings['ai_api_key'] ?? null);
+    }
+
+    public function test_the_portal_knows_when_attachments_are_off(): void
+    {
+        $helpdesk = Helpdesk::create(['project_id' => $this->project->id, 'name' => 'Support', 'slug' => 'support', 'created_by' => $this->editor->id, 'settings' => ['default_field_attachments' => ['hidden' => true]]]);
+        $data = $this->postJson(route('helpdesks.tickets.store-public', $helpdesk->uuid), ['subject' => 'Q', 'description' => 'x', 'contact_email' => 'c@example.com'])->assertOk()->json();
+
+        $this->get(route('helpdesks.tickets.show-public', $data['ticket_uuid']).'?token='.$data['access_token'])
+            ->assertOk()->assertInertia(fn ($page) => $page->where('attachments_enabled', false));
     }
 
     private function fakeGoogle(string $email, bool $verified): void

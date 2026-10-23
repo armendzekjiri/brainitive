@@ -20,10 +20,17 @@ class AuditUploads extends Command
     public function handle(): int
     {
         $disk = Storage::disk('public');
-        $found = collect($disk->allFiles())->filter(fn (string $path) => Uploads::isActive($path))->values();
+        $all = collect($disk->allFiles());
+        $found = $all->filter(fn (string $path) => Uploads::isActive($path))->values();
+        $unknown = $all->filter(fn (string $path) => Uploads::isUnknownType($path))->values();
+
+        if ($unknown->isNotEmpty()) {
+            $this->line('Not on the allowlist (stored before it existed) — review, not deleted by --delete:');
+            $this->table(['Path', 'Size'], $unknown->map(fn (string $path) => [$path, number_format($disk->size($path)).' B']));
+        }
 
         if ($found->isEmpty()) {
-            $this->info('No risky files on the public disk.');
+            $this->info('No executable or markup files on the public disk.');
 
             return self::SUCCESS;
         }

@@ -60,7 +60,7 @@ class TaskListController extends Controller
         ]);
 
         // Project members for assignee picker
-        $members = $project->workspace->users()
+        $members = $project->accessibleUsers()
             ->select('users.id', 'users.name', 'users.email', 'users.avatar')
             ->get();
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\InstanceSettings;
 use App\Models\User;
 use App\Models\WorkspaceInvitation;
 use App\Support\SignOutEverywhere;
@@ -52,7 +53,7 @@ class GoogleAuthController extends Controller
             if ($user) {
                 // Someone may have registered this address without owning it: the provider
                 // proves the email, so the never-verified account is reset before linking
-                if ($user->email_verified_at === null) {
+                if ($user->email_verified_at === null && InstanceSettings::requiresEmailVerification()) {
                     $user->forceFill(['password' => bcrypt(str()->random(64))])->save();
                     SignOutEverywhere::run($user);
                 }

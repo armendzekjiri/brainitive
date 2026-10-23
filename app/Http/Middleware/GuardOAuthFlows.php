@@ -20,12 +20,14 @@ class GuardOAuthFlows
 {
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->isMethod('POST') && $request->is('oauth/register')) {
+        if ($request->isMethod('POST') && $request->is('oauth/register') && ! $request->attributes->get('oauth-register-checked')) {
+            $request->attributes->set('oauth-register-checked', true);
+            // hosted clients (Claude, ChatGPT…) register from a few backend IPs, one client per connection
             $key = 'oauth-register:'.$request->ip();
-            if (RateLimiter::tooManyAttempts($key, 20)) {
+            if (RateLimiter::tooManyAttempts($key, 120)) {
                 return response()->json(['error' => 'too_many_requests', 'error_description' => 'Too many client registrations. Try again later.'], 429);
             }
-            RateLimiter::hit($key, 3600);
+            RateLimiter::hit($key, 600);
 
             foreach ((array) $request->input('redirect_uris', []) as $uri) {
                 if (is_string($uri) && ! self::allowedRedirect($uri)) {
@@ -63,6 +65,9 @@ class GuardOAuthFlows
             return true;
         }
         if ($scheme !== 'https') {
+            return false;
+        }
+        if (! preg_match('/^[a-z0-9.-]+$/', $host)) {
             return false;
         }
         foreach ((array) config('mcp.allowed_redirect_hosts', []) as $allowed) {

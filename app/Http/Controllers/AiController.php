@@ -29,6 +29,12 @@ class AiController extends Controller
 
         $settings = $workspace->settings ?? [];
 
+        // the saved key belongs to the saved endpoint: pointing it elsewhere needs the key again
+        if (rtrim((string) ($validated['ai_endpoint'] ?? ''), '/') !== rtrim((string) ($settings['ai_endpoint'] ?? ''), '/')
+            && empty($validated['ai_api_key'])) {
+            $settings['ai_api_key'] = null;
+        }
+
         $settings['ai_endpoint'] = $validated['ai_endpoint'] ?? null;
         $settings['ai_model'] = $validated['ai_model'] ?? null;
 

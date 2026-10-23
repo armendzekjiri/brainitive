@@ -26,6 +26,14 @@
   project icon names keep working; reply attachments share the per-ticket cap; remaining ticket
   mails use plain visitor text; the portal hides attachments when the helpdesk turned them off.
 
+- Final review follow-ups: authorize gate in the web group (needs the session); the inline helpdesk
+  embed shows the ticket in the embed after submit (the portal page isn't frameable); invitations
+  never fail on existing memberships; invite → sign-up returns to the invitation; social takeover
+  reset only where verification is required; throttled reset answers look generic; changing the AI
+  endpoint drops the saved key; old non-push-service subscriptions removed (migration); portal
+  attachment flag; assignee pickers / MCP member list = project-accessible users; upload audit
+  separates deletable markup from unknown types.
+
 ## Tests
 `tests/Feature/Security/AuthOAuthHardeningTest.php`, additions in `SecurityRegressionTest`,
 `AccessControlTest`, `AdminSettingsTest`, `PlanIssueLinkTest`.

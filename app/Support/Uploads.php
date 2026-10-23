@@ -70,7 +70,7 @@ class Uploads
         return Str::limit($name !== '' ? $name : 'file', 250, '');
     }
 
-    /** Anything a browser might render as a page: known active types and every extension not in SAFE. */
+    /** Executable or page-like (php, html, svg, xml …): safe to delete when found among uploads. */
     public static function isActive(string $path): bool
     {
         $name = strtolower(basename($path));
@@ -79,6 +79,17 @@ class Uploads
             if (str_ends_with($name, '.'.$ext) || str_contains($name, '.'.$ext.'.')) {
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    /** Not allowlisted (stored before the allowlist, e.g. .rss / .atom): review — some browsers render them. */
+    public static function isUnknownType(string $path): bool
+    {
+        $name = strtolower(basename($path));
+        if (str_starts_with($name, '.') || self::isActive($path)) {
+            return false;
         }
         $ext = pathinfo($name, PATHINFO_EXTENSION);
 

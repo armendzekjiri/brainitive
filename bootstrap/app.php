@@ -32,6 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(GuardOAuthFlows::class);
 
         $middleware->web(append: [
+            GuardOAuthFlows::class, // the /oauth/authorize check needs the session (StartSession runs in this group)
             FrameProtection::class,
             EnsureUserIsNotSuspended::class,
             HandleInertiaRequests::class,

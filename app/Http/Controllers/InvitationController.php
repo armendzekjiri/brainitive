@@ -38,6 +38,11 @@ class InvitationController extends Controller
         $inviter = $invitation->inviter;
         $user = $request->user();
 
+        // after signing up / in, come back here to accept (the link proves the address)
+        if (! $user) {
+            $request->session()->put('url.intended', route('invitations.show', $token));
+        }
+
         // Authenticated user with matching email can accept
         $canAccept = $user && strtolower($user->email) === strtolower($invitation->email);
 

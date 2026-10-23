@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -212,6 +213,17 @@ class Project extends Model
     public function itemPriorities(): HasMany
     {
         return $this->hasMany(ItemPriority::class);
+    }
+
+    /**
+     * Users who can open this project: its members plus workspace owners / admins
+     * (the same people as User::hasProjectAccess()).
+     */
+    public function accessibleUsers(): Builder
+    {
+        return User::query()->where(fn ($q) => $q
+            ->whereHas('projects', fn ($p) => $p->where('projects.id', $this->id))
+            ->orWhereHas('workspaces', fn ($w) => $w->where('workspaces.id', $this->workspace_id)->whereIn('workspace_user.role', ['owner', 'admin'])));
     }
 
     /**

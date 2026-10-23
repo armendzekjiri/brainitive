@@ -55,9 +55,12 @@ Visitor text in ticket mails goes through `NewLeadNotification::plain()` (Markdo
 - An email is "proven" only by `email_verified_at` (raw column — `hasVerifiedEmail()` is always
   true when the instance doesn't require verification), a provider-verified social email, or the
   invitation link. Sign-up no longer joins invited workspaces; the `Verified` listener in
-  `AppServiceProvider` (or `/invite/{token}`) does. A social login that matches a never-verified
+  `AppServiceProvider` (or `/invite/{token}`) does — guests opening an invite are sent back to it
+  after sign-up / login (`url.intended`). `acceptPendingForUser` skips existing memberships. A social login that matches a never-verified
   account resets it (`SignOutEverywhere`) before linking; Google needs `email_verified`.
-- `App\Http\Middleware\GuardOAuthFlows` (global): `POST /oauth/register` is throttled and https
+- `App\Http\Middleware\GuardOAuthFlows` runs globally (for `/oauth/register`, which has no group)
+  AND in the web group — the `/oauth/authorize` verification check needs the session, and global
+  middleware runs before StartSession (`$request->user()` is null there). `POST /oauth/register` is throttled and https
   redirect hosts must be in `mcp.allowed_redirect_hosts` (+ `MCP_REDIRECT_HOSTS`) or loopback —
   the package's own `redirect_domains` stays `*` because it can't do wildcard hosts (extension
   ids). Unverified users can't reach `/oauth/authorize`. The consent page shows the redirect host.

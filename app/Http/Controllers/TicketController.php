@@ -594,7 +594,7 @@ class TicketController extends Controller
 
         $ticket->load([
             'column',
-            'helpdesk:id,uuid',
+            'helpdesk:id,uuid,settings',
             'replies' => function ($q) {
                 $q->where('is_internal_note', false)
                     ->with(['contact:id,name,email', 'attachments'])

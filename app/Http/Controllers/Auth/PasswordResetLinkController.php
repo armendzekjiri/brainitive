@@ -40,10 +40,6 @@ class PasswordResetLinkController extends Controller
             $request->only('email')
         );
 
-        if ($status == Password::RESET_THROTTLED) {
-            throw ValidationException::withMessages(['email' => [trans($status)]]);
-        }
-
         // Same answer whether or not an account exists (no account enumeration)
         return back()->with('status', 'If an account exists for that address, we sent a link to reset the password.');
     }

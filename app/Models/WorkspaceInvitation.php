@@ -134,7 +134,10 @@ class WorkspaceInvitation extends Model
 
         foreach ($invitations as $invitation) {
             $invitation->markAsAccepted();
-            $invitation->workspace->addUser($user, $invitation->role, $invitation->inviter ?? null);
+            // already a member (added directly meanwhile): the invitation is simply done
+            if (! $invitation->workspace->users()->where('users.id', $user->id)->exists()) {
+                $invitation->workspace->addUser($user, $invitation->role, $invitation->inviter ?? null);
+            }
         }
     }
 }

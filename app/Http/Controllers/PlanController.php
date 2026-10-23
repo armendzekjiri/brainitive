@@ -280,8 +280,7 @@ class PlanController extends Controller
         $board = Board::findOrFail($validated['board_id']);
         $this->authorize('createItems', $board);
 
-        $members = $workspace->users()->get(['users.id', 'users.name'])
-            ->filter(fn ($user) => $user->hasProjectAccess($project))
+        $members = $project->accessibleUsers()->get(['users.id', 'users.name'])
             ->keyBy(fn ($user) => mb_strtolower(trim($user->name)));
 
         try {

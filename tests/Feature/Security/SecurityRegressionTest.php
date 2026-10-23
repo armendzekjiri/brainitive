@@ -446,7 +446,9 @@ class SecurityRegressionTest extends TestCase
         $this->assertSame('Renamed', $this->project->fresh()->name);
 
         // the attachment audit flags any non-allowlisted extension (files stored before the allowlist)
-        $this->assertTrue(Uploads::isActive('ticket-attachments/1/abc.rss'));
-        $this->assertFalse(Uploads::isActive('ticket-attachments/1/abc.pdf'));
+        $this->assertTrue(Uploads::isUnknownType('ticket-attachments/1/abc.rss'));
+        $this->assertFalse(Uploads::isUnknownType('ticket-attachments/1/abc.pdf'));
+        $this->assertFalse(Uploads::isUnknownType('.gitignore'));
+        $this->assertTrue(Uploads::isActive('ticket-attachments/1/abc.xhtm'));
     }
 }
