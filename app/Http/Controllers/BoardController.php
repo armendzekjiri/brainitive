@@ -19,6 +19,7 @@ use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
 use App\Support\Boards\ItemComments;
 use App\Support\Boards\ItemMentions;
+use App\Support\Boards\Swimlanes;
 use App\Support\Github\ItemDevelopment;
 use App\Support\Uploads;
 use Illuminate\Database\Eloquent\Builder;
@@ -135,6 +136,14 @@ class BoardController extends Controller
             'workspace' => $workspace,
             'project' => $project,
             'board' => $board,
+            // Choices for the swimlane rule builder
+            'laneOptions' => [
+                'priorities' => ItemPriority::forProject($project)->orderBy('order')->get(['id', 'name', 'slug', 'color']),
+                'types' => ItemType::forProject($project)->orderBy('id')->get(['id', 'name', 'slug', 'color']),
+                'labels' => $project->labels()->orderBy('name')->get(['id', 'name', 'color']),
+                'users' => $project->workspace->users()->orderBy('name')->get(['users.id', 'name']),
+                'releases' => Release::where('project_id', $project->id)->where('status', '!=', Release::STATUS_ARCHIVED)->orderBy('release_date')->get(['id', 'name', 'status']),
+            ],
         ]);
     }
 
@@ -158,6 +167,21 @@ class BoardController extends Controller
         $board->update($validated);
 
         return redirect()->back()->with('success', 'Board updated successfully.');
+    }
+
+    /**
+     * Save the board's swimlanes (custom lane rules and the default lane mode for everyone).
+     */
+    public function updateSwimlanes(Request $request, Workspace $workspace, Project $project, Board $board)
+    {
+        $this->authorize('update', $board);
+
+        $validated = $request->validate(Swimlanes::rules());
+        $settings = $board->settings ?? [];
+        $settings['swimlanes'] = Swimlanes::normalize($board, $validated);
+        $board->update(['settings' => $settings]);
+
+        return back()->with('success', 'Swimlanes saved.');
     }
 
     /**
@@ -1061,6 +1085,7 @@ class BoardController extends Controller
                 'itemType',
                 'priority',
                 'labels',
+                'release:id,name,status,release_date',
                 'parent:id,key,title,board_id',
                 'watchers:id,name,email,avatar',
                 'outgoingLinks.targetItem:id,key,title,board_id',

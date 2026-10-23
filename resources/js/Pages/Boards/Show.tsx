@@ -48,9 +48,14 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { buildLanes, Lane, MODE_LABELS, SwimlaneMode } from '@/lib/swimlanes';
+import { toast } from 'sonner';
 import {
     Plus,
     MoreHorizontal,
@@ -100,6 +105,7 @@ import {
     Link2,
     SlidersHorizontal,
     Ban,
+    Rows3,
 } from 'lucide-react';
 import { useState, useRef, useEffect, DragEvent, FormEvent, useCallback, useMemo } from 'react';
 import { Link } from '@inertiajs/react';
@@ -877,6 +883,142 @@ function BoardColumnComponent({
                 />
             </div>
         </section>
+    );
+}
+
+// Swimlanes: rows across the board; cards placed by laneOf (lib/swimlanes.ts).
+function SwimlaneBoard({
+    columns,
+    lanes,
+    laneOf,
+    showEmptyLanes,
+    workspace,
+    project,
+    board,
+    projectUsers,
+    onEditItem,
+    onDragStart,
+    onDragEnd,
+    onDropCell,
+}: {
+    columns: (BoardColumn & { items: Item[] })[];
+    lanes: Lane[];
+    laneOf: (item: Item) => string;
+    showEmptyLanes: boolean;
+    workspace: Workspace;
+    project: Project;
+    board: Board;
+    projectUsers: User[];
+    onEditItem: (item: Item) => void;
+    onDragStart: (e: DragEvent, item: Item) => void;
+    onDragEnd: () => void;
+    onDropCell: (e: DragEvent, column: BoardColumn, lane: Lane) => void;
+}) {
+    const storageKey = `board-${board.id}-collapsed-lanes`;
+    const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+        try {
+            return new Set(JSON.parse(localStorage.getItem(storageKey) ?? '[]'));
+        } catch {
+            return new Set();
+        }
+    });
+    const [over, setOver] = useState<string | null>(null);
+    const toggle = (id: string) => setCollapsed((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        try { localStorage.setItem(storageKey, JSON.stringify([...next])); } catch { /* private mode */ }
+        return next;
+    });
+
+    // Subtasks shown under their parent (same column) follow the parent's lane.
+    const cells = useMemo(() => {
+        const map = new Map<string, { top: Item[]; subs: Map<number, Item[]> }>();
+        for (const column of columns) {
+            const items = column.items ?? [];
+            const ids = new Set(items.map((i) => i.id));
+            const byId = new Map(items.map((i) => [i.id, i]));
+            const nested = (i: Item) => i.item_type?.slug === 'subtask' && i.parent_id != null && ids.has(i.parent_id);
+            for (const item of items) {
+                const owner = nested(item) ? byId.get(item.parent_id!)! : item;
+                const key = `${laneOf(owner)}|${column.id}`;
+                const cell = map.get(key) ?? { top: [] as Item[], subs: new Map<number, Item[]>() };
+                if (nested(item)) cell.subs.set(item.parent_id!, [...(cell.subs.get(item.parent_id!) ?? []), item]);
+                else cell.top.push(item);
+                map.set(key, cell);
+            }
+        }
+        return map;
+    }, [columns, laneOf]);
+
+    const laneCount = (lane: Lane) => columns.reduce((n, c) => n + (cells.get(`${lane.id}|${c.id}`)?.top.length ?? 0), 0);
+    const visible = lanes.filter((lane) => showEmptyLanes || laneCount(lane) > 0);
+    const width = 'w-[272px]';
+
+    return (
+        <div className="flex-1 min-h-0 overflow-auto bg-background">
+            <div className="inline-flex min-w-full flex-col gap-2 p-[14px_20px_20px]">
+                <div className="sticky top-0 z-10 -mt-[14px] flex gap-3 bg-background pt-[14px] pb-1">
+                    {columns.map((c) => (
+                        <div key={c.id} className={cn(width, 'shrink-0 rounded-md bg-muted/60 dark:bg-secondary/30 px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.03em] text-muted-foreground')}>
+                            {c.name} <span className="ml-1">{c.items?.length ?? 0}</span>
+                        </div>
+                    ))}
+                </div>
+
+                {visible.map((lane) => {
+                    const count = laneCount(lane);
+                    const isCollapsed = collapsed.has(lane.id);
+                    return (
+                        <section key={lane.id} aria-label={`Lane ${lane.name}`} className="rounded-md border border-border/60">
+                            <button
+                                type="button"
+                                onClick={() => toggle(lane.id)}
+                                aria-expanded={!isCollapsed}
+                                className="sticky left-0 flex w-max max-w-full items-center gap-2 px-3 py-2 text-sm font-semibold hover:text-foreground"
+                            >
+                                <ChevronRight className={cn('size-4 text-muted-foreground transition-transform', !isCollapsed && 'rotate-90')} />
+                                {lane.color && <span className="size-2.5 rounded-full" style={{ backgroundColor: lane.color }} />}
+                                <span>{lane.name}</span>
+                                <span className="text-xs font-medium text-muted-foreground">{count} {count === 1 ? 'card' : 'cards'}</span>
+                            </button>
+                            {!isCollapsed && (
+                                <div className="flex gap-3 px-0 pb-2">
+                                    {columns.map((column) => {
+                                        const cell = cells.get(`${lane.id}|${column.id}`);
+                                        const key = `${lane.id}|${column.id}`;
+                                        return (
+                                            <div
+                                                key={column.id}
+                                                onDragOver={(e) => { e.preventDefault(); setOver(key); }}
+                                                onDragLeave={() => setOver((o) => (o === key ? null : o))}
+                                                onDrop={(e) => { setOver(null); onDropCell(e, column, lane); }}
+                                                className={cn(width, 'shrink-0 min-h-[56px] flex flex-col gap-1.5 rounded-md bg-muted/40 dark:bg-secondary/20 p-1.5 transition-colors', over === key && 'bg-primary/[0.07] ring-2 ring-primary/30')}
+                                            >
+                                                {cell?.top.map((item) => (
+                                                    <ItemCard
+                                                        key={item.id}
+                                                        item={item}
+                                                        workspace={workspace}
+                                                        project={project}
+                                                        board={board}
+                                                        projectUsers={projectUsers}
+                                                        subtasks={cell.subs.get(item.id)}
+                                                        onEdit={onEditItem}
+                                                        onDragStart={onDragStart}
+                                                        onDragEnd={onDragEnd}
+                                                    />
+                                                ))}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </section>
+                    );
+                })}
+                {visible.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">No cards match the current filters.</p>}
+            </div>
+        </div>
     );
 }
 
@@ -1953,16 +2095,21 @@ export default function BoardsShow({
         window.localStorage.setItem(key, currentView);
     }, [currentView, project.id, board.id]);
 
+    const draggedElement = useRef<HTMLElement | null>(null);
     const handleDragStart = (e: DragEvent, item: Item) => {
         setDraggedItem(item);
         e.dataTransfer.effectAllowed = 'move';
         // Add visual feedback
         if (e.currentTarget instanceof HTMLElement) {
             e.currentTarget.style.opacity = '0.5';
+            draggedElement.current = e.currentTarget;
         }
     };
 
     const handleDragEnd = () => {
+        // Undo the fade even when the drop changed nothing (same column, refused lane, cancel).
+        if (draggedElement.current) draggedElement.current.style.opacity = '';
+        draggedElement.current = null;
         setDraggedItem(null);
         setDragOverColumn(null);
     };
@@ -1984,19 +2131,59 @@ export default function BoardsShow({
             { preserveScroll: true },
         );
 
+    const dropToColumn = (item: Item, column: BoardColumn) => {
+        if (item.column_id === column.id) return;
+        const doneIds = new Set(board.columns.filter((c) => c.is_done_column).map((c) => c.id));
+        const open = column.is_done_column ? boardTree.descendants(item.id).filter((d) => !doneIds.has(d.column_id as number)) : [];
+        if (open.length > 0) {
+            setCompletePrompt({ item, column, openCount: open.length });
+        } else {
+            moveItem(item, column);
+        }
+    };
+
     const handleDrop = (e: DragEvent, column: BoardColumn) => {
         e.preventDefault();
-        if (draggedItem && draggedItem.column_id !== column.id) {
-            const doneIds = new Set(board.columns.filter((c) => c.is_done_column).map((c) => c.id));
-            const open = column.is_done_column ? boardTree.descendants(draggedItem.id).filter((d) => !doneIds.has(d.column_id as number)) : [];
-            if (open.length > 0) {
-                setCompletePrompt({ item: draggedItem, column, openCount: open.length });
-            } else {
-                moveItem(draggedItem, column);
-            }
-        }
+        if (draggedItem) dropToColumn(draggedItem, column);
         setDraggedItem(null);
         setDragOverColumn(null);
+    };
+
+    // ── Swimlanes ────────────────────────────────────────────────────────
+    const boardLanes = board.settings?.swimlanes ?? null;
+    const laneStorageKey = `board-${board.id}-lane-mode`;
+    const [laneMode, setLaneModeState] = useState<SwimlaneMode>(() => {
+        try {
+            const stored = localStorage.getItem(laneStorageKey) as SwimlaneMode | null;
+            if (stored && stored in MODE_LABELS) return stored;
+        } catch { /* ignore */ }
+        return boardLanes?.mode ?? 'none';
+    });
+    const setLaneMode = (mode: SwimlaneMode) => {
+        setLaneModeState(mode);
+        try { localStorage.setItem(laneStorageKey, mode); } catch { /* ignore */ }
+    };
+
+    const handleLaneDrop = (e: DragEvent, column: BoardColumn, lane: Lane, laneOf: (item: Item) => string, lanes: Lane[]) => {
+        e.preventDefault();
+        const item = draggedItem;
+        setDraggedItem(null);
+        setDragOverColumn(null);
+        if (!item) return;
+        if (laneOf(item) !== lane.id) {
+            if (lane.assign) {
+                // Grouped lanes: the drop sets that field (assignee, priority, type, fix version), then the column.
+                router.patch(
+                    route('boards.items.update', [workspace.slug, project.slug, board.slug, item.id]),
+                    { [lane.assign.field]: lane.assign.value },
+                    { preserveScroll: true, onSuccess: () => dropToColumn(item, column) },
+                );
+                return;
+            }
+            const home = lanes.find((l) => l.id === laneOf(item));
+            toast.info(`Lanes follow each card’s fields — ${item.key} stays in “${home?.name ?? 'its lane'}”.`);
+        }
+        dropToColumn(item, column);
     };
 
     // Filter items based on search + filter controls
@@ -2046,6 +2233,9 @@ export default function BoardsShow({
                 return quickFilters.every((filter) => matchesQuickFilter(item, filter));
             }) || [],
     }));
+
+    // Lanes for the chosen mode (null = plain columns, e.g. "custom" without lanes set up)
+    const laneModel = buildLanes(laneMode, boardLanes, filteredColumns.flatMap((c) => c.items ?? []), { priorities, itemTypes });
 
     // Possible parents for a new issue: top-level issues and first-level subtasks (3 levels max),
     // each followed by its children.
@@ -2156,6 +2346,46 @@ export default function BoardsShow({
                     {/* push search + filter to the right */}
                     <div className="flex-1" />
 
+
+                        {/* Swimlanes (personal choice; board default from settings) */}
+                        {currentView === 'kanban' && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <button
+                                        className={cn(
+                                            'inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[4px] text-[13px] font-medium border cursor-pointer transition-colors',
+                                            laneMode !== 'none' ? 'border-primary/40 bg-primary/5 text-foreground' : 'border-border bg-background text-muted-foreground hover:text-foreground',
+                                        )}
+                                        aria-label="Swimlanes"
+                                    >
+                                        <Rows3 className="size-[14px]" />
+                                        <span className="hidden sm:inline">{laneMode === 'none' ? 'Lanes' : MODE_LABELS[laneMode]}</span>
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56">
+                                    <DropdownMenuLabel>Swimlanes</DropdownMenuLabel>
+                                    <DropdownMenuRadioGroup value={laneMode} onValueChange={(v) => setLaneMode(v as SwimlaneMode)}>
+                                        {(['none', 'custom', 'assignee', 'priority', 'type', 'release'] as SwimlaneMode[])
+                                            .filter((m) => m !== 'custom' || (boardLanes?.lanes?.length ?? 0) > 0)
+                                            .map((m) => (
+                                                <DropdownMenuRadioItem key={m} value={m}>
+                                                    {m === 'custom' ? `${MODE_LABELS.custom} (${boardLanes?.lanes.length})` : MODE_LABELS[m]}
+                                                </DropdownMenuRadioItem>
+                                            ))}
+                                    </DropdownMenuRadioGroup>
+                                    {canManageSprints && (
+                                        <>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem asChild>
+                                                <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug]) + '#swimlanes'}>
+                                                    {(boardLanes?.lanes?.length ?? 0) > 0 ? 'Edit custom lanes…' : 'Create custom lanes…'}
+                                                </Link>
+                                            </DropdownMenuItem>
+                                        </>
+                                    )}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
 
                         {/* Filter */}
                         <Popover open={filterOpen} onOpenChange={setFilterOpen}>
@@ -2495,7 +2725,24 @@ export default function BoardsShow({
                 </div>
 
                 {/* View Content */}
-                {currentView === 'kanban' && (
+                {currentView === 'kanban' && laneModel && (
+                    <SwimlaneBoard
+                        columns={filteredColumns}
+                        lanes={laneModel.lanes}
+                        laneOf={laneModel.laneOf}
+                        showEmptyLanes={laneMode === 'custom'}
+                        workspace={workspace}
+                        project={project}
+                        board={board}
+                        projectUsers={projectUsers}
+                        onEditItem={setEditingItem}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
+                        onDropCell={(e, column, lane) => handleLaneDrop(e, column, lane, laneModel.laneOf, laneModel.lanes)}
+                    />
+                )}
+
+                {currentView === 'kanban' && !laneModel && (
                     <div className="flex-1 min-h-0 overflow-hidden bg-background">
                         <div className="flex h-full min-h-0 items-stretch gap-3 overflow-x-auto overflow-y-hidden p-[14px_20px_20px]">
                             {filteredColumns.map((column) => (

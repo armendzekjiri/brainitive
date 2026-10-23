@@ -76,6 +76,19 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.27.0',
+        title: 'Swimlanes on Boards',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'Split the board into rows: board settings → Swimlanes. Add as many lanes as you like, each with its own conditions — priority, type, label, assignee, fix version or overdue. A card goes into the first lane that matches, everything else into the last lane.',
+            'Example: “🔥 Urgent” (Highest or High) → “Bugs” → “Everything else”.',
+            'Everyone can switch for themselves in the board toolbar: your custom lanes, or lanes by assignee, priority, type or fix version. Lanes collapse with one click.',
+            'In the “by assignee / priority / type / fix version” lanes, dragging a card into another lane changes that field too.',
+            'Fixed: a dragged card no longer stays faded when it’s dropped back where it was.',
+        ]
+    },
+    {
         version: 'v1.26.0',
         title: 'Releases and Fix Versions',
         tag: 'Feature',

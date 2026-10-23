@@ -274,6 +274,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('boards/{board:slug}', [BoardController::class, 'update'])->name('boards.update');
             Route::delete('boards/{board:slug}', [BoardController::class, 'destroy'])->name('boards.destroy');
             Route::post('boards/{board:slug}/columns', [BoardController::class, 'storeColumn'])->name('boards.columns.store');
+            Route::put('boards/{board:slug}/swimlanes', [BoardController::class, 'updateSwimlanes'])->name('boards.swimlanes.update');
             Route::post('boards/{board:slug}/columns/reorder', [BoardController::class, 'reorderColumns'])->name('boards.columns.reorder');
             Route::post('boards/{board:slug}/items/reorder', [BoardController::class, 'reorderItems'])->name('boards.items.reorder');
             Route::put('boards/{board:slug}/columns/{column}', [BoardController::class, 'updateColumn'])->name('boards.columns.update');
