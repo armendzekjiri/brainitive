@@ -83,6 +83,17 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.34.1',
+        title: 'Security hardening',
+        tag: 'Security',
+        date: '2026-10-23',
+        items: [
+            'Email verification links are now signed and expire; opening one no longer signs you in — you log in as usual afterwards. Older, unsigned links stop working: request a new one from the verification screen.',
+            'Password reset emails always link to the official app address.',
+            'Stronger protection against password guessing: repeated failed logins lock the account for a while, whatever network they come from.',
+        ]
+    },
+    {
         version: 'v1.34.0',
         title: 'Lead generation forms',
         tag: 'Feature',

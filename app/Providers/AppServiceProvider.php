@@ -26,6 +26,7 @@ use App\Policies\SnippetPolicy;
 use App\Policies\WorkspacePolicy;
 use App\Support\Admin\InstanceMailConfig;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
@@ -51,6 +52,11 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         InstanceSettings::flushCache();
+
+        // Reset links carry a secret token: build them from APP_URL, never from the request's
+        // Host / X-Forwarded-Host (host-header poisoning would send the token elsewhere).
+        ResetPassword::createUrlUsing(fn ($user, string $token) => rtrim((string) (config('app.url') ?: url('/')), '/')
+            .route('password.reset', ['token' => $token, 'email' => $user->getEmailForPasswordReset()], false));
 
         Vite::prefetch(concurrency: 3);
 

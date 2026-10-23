@@ -20,7 +20,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // Self-hosting behind a reverse proxy: TRUSTED_PROXIES=* (or a comma-separated list)
+        // Self-hosting behind a reverse proxy: TRUSTED_PROXIES = the proxy's address(es) / CIDR ranges.
+        // `*` trusts X-Forwarded-* from ANY client (spoofable IPs and hosts) — only when nothing
+        // can reach the app except through the proxy.
         if ($trustedProxies = env('TRUSTED_PROXIES')) {
             $middleware->trustProxies(at: $trustedProxies === '*' ? '*' : array_map('trim', explode(',', $trustedProxies)));
         }

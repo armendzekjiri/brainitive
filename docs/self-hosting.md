@@ -77,7 +77,9 @@ certificate. Certificates live in the `caddy_data` volume.
 
 **Option B — behind your own reverse proxy** (nginx, Traefik, Cloudflare Tunnel): keep
 `SERVER_NAME=:80`, proxy to port `HTTP_PORT`, set `APP_URL=https://…` and
-`TRUSTED_PROXIES=*` (or your proxy's IP) so links and cookies use HTTPS.
+`TRUSTED_PROXIES` to your proxy's IP or network (e.g. `172.16.0.0/12` for a proxy on the Docker
+network) so links and cookies use HTTPS. Avoid `*` unless the app port is reachable only through
+the proxy — with `*`, any client can fake its IP (and so dodge login rate limits).
 
 ## Updating
 
