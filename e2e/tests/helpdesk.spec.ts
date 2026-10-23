@@ -113,6 +113,7 @@ test.describe('helpdesk', () => {
     });
 
     test('customer submits the public form, the agent replies and moves it, the customer answers in the portal', async ({ page, browser }) => {
+        test.slow(); // guest + agent sessions, two reloads
         const hd = await createHelpdesk(page, uid('Journey desk'), {
             project: await ownProject(page),
             fields: [{ label: 'Order number', type: 'text', required: true }, { label: 'Product area', type: 'select', options: ['Web app', 'API'], onCard: true }],

@@ -13,7 +13,8 @@ export default defineConfig({
     forbidOnly: CI,
     retries: CI ? 1 : 0,
     workers: CI ? 4 : undefined,
-    timeout: 45_000,
+    // CI runners are ~3× slower than a dev machine; multi-session journeys need the room
+    timeout: CI ? 90_000 : 45_000,
     expect: { timeout: 10_000 },
     reporter: CI ? [['github'], ['html', { open: 'never', outputFolder: `./playwright-report/${PORT}` }]] : [['list'], ['html', { open: 'never', outputFolder: `./playwright-report/${PORT}` }]],
     use: {

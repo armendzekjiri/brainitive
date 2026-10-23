@@ -99,12 +99,29 @@ jobs:
     name: Ready for main
     needs: smoke-dev
     runs-on: ubuntu-latest
+    # only this job may open the release PR (repo setting: Actions can create PRs)
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
     steps:
-      - name: Summary
+      - name: Open or update the PR pre-release → main
         run: |
-          {
-            echo "### pre-release is green"
-            echo
-            echo "Commit \`${GITHUB_SHA::7}\` passed the test gate and runs on https://dev.brainitive.app."
-            echo "Open or update the PR **pre-release → main** to deploy it to production."
-          } >> "$GITHUB_STEP_SUMMARY"
+          # what main doesn't have yet, newest first (merge commits = the PRs that came in)
+          changes=$(gh api "repos/$GH_REPO/compare/main...$GITHUB_SHA" --jq '[.commits[] | select(.parents | length > 1) | .commit.message | split("\n") | select(.[0] | startswith("Merge pull request")) | "- #" + (.[0] | capture("#(?<n>[0-9]+)").n) + " " + (.[2] // "")] | reverse | .[]')
+          [ -n "$changes" ] || changes="- (no merged PRs, direct commits only)"
+          body=$(printf '%s\n\n%s\n\n%s\n%s\n' \
+            "All checks passed on \`${GITHUB_SHA::7}\`: tests, e2e, deploy to https://dev.brainitive.app and its smoke test." \
+            "**Merging this deploys to production.**" \
+            "### Coming to production" \
+            "$changes")
+          pr=$(gh pr list --base main --head pre-release --state open --json number --jq '.[0].number')
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --body "$body"
+            echo "Updated PR #$pr" >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh pr create --base main --head pre-release --title "Release: pre-release → main" --body "$body"
+            echo "Opened the release PR" >> "$GITHUB_STEP_SUMMARY"
+          fi
