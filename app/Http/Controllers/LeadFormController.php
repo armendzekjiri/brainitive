@@ -253,7 +253,12 @@ class LeadFormController extends Controller
 
         $steps = [];
         foreach ($leadForm->definition['steps'] ?? [] as $i => $step) {
-            $steps[] = ['index' => $i, 'title' => $step['title'], 'sessions' => (int) ($reached[$i] ?? ($i === 0 ? ($totals['start'] ?? 0) : 0))];
+            $steps[] = [
+                'index' => $i,
+                'title' => $step['title'],
+                'conditional' => ! empty($step['visible_if']), // skipped by some visitors: not a drop-off
+                'sessions' => (int) ($reached[$i] ?? ($i === 0 ? ($totals['start'] ?? 0) : 0)),
+            ];
         }
 
         $views = (int) ($totals['view'] ?? 0);

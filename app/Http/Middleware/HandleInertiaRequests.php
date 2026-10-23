@@ -136,6 +136,9 @@ class HandleInertiaRequests extends Middleware
                         $q->select('id', 'project_id', 'name', 'slug', 'description', 'position')
                             ->orderBy('position');
                     },
+                    'leadForms' => function ($q) {
+                        $q->select('id', 'project_id', 'name', 'slug', 'status', 'position');
+                    },
                     'pages' => function ($q) use ($user) {
                         $q->visibleTo($user)
                             ->with(['children' => self::pageTreeRecursive($user, 7)])

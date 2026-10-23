@@ -161,6 +161,7 @@ class ProjectController extends Controller
             'helpdesks' => function ($query) {
                 $query->orderBy('created_at', 'desc');
             },
+            'leadForms:id,project_id,name,slug,status,position',
         ]);
 
         $project->pages->load(['children' => function ($query) use ($request) {

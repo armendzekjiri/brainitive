@@ -83,6 +83,7 @@ import {
     GripVertical,
     Headphones,
     LifeBuoy,
+    Magnet,
     Moon,
     Sun,
     CalendarDays,
@@ -103,6 +104,7 @@ import {
 import { flattenPagesForParentSelect } from '@/lib/pageTree';
 import { GlobalCreateModal } from '@/components/GlobalCreateModal';
 import CreateProjectDialog, { openCreateProject } from '@/components/projects/CreateProjectDialog';
+import LeadFormTemplatePicker from '@/components/leadForms/LeadFormTemplatePicker';
 
 interface Props extends PropsWithChildren {
     title?: string;
@@ -456,7 +458,7 @@ function ProjectContent({
     onAddItem: (projectId: number, parentId?: number) => void;
     currentPageUuid?: string | null;
 }) {
-    const hasContent = (project.boards && project.boards.length > 0) || (project.task_lists && project.task_lists.length > 0) || (project.plans && project.plans.length > 0) || (project.pages && project.pages.length > 0) || (project.helpdesks && project.helpdesks.length > 0);
+    const hasContent = (project.boards && project.boards.length > 0) || (project.task_lists && project.task_lists.length > 0) || (project.plans && project.plans.length > 0) || (project.pages && project.pages.length > 0) || (project.helpdesks && project.helpdesks.length > 0) || (project.lead_forms?.length ?? 0) > 0;
     const [boardsOpen, setBoardsOpen] = useExpandedState(`project-${project.id}-boards`, true);
     const [listsOpen, setListsOpen] = useExpandedState(`project-${project.id}-lists`, true);
     const [plansOpen, setPlansOpen] = useExpandedState(`project-${project.id}-plans`, true);
@@ -464,6 +466,7 @@ function ProjectContent({
     const [whiteboardsOpen, setWhiteboardsOpen] = useExpandedState(`project-${project.id}-whiteboards`, true);
     const [foldersOpen, setFoldersOpen] = useExpandedState(`project-${project.id}-folders`, true);
     const [helpdesksOpen, setHelpdesksOpen] = useExpandedState(`project-${project.id}-helpdesks`, true);
+    const [leadFormsOpen, setLeadFormsOpen] = useExpandedState(`project-${project.id}-lead-forms`, true);
 
     if (!hasContent) {
         return (
@@ -598,10 +601,36 @@ function ProjectContent({
                 </>
             )}
 
+            {/* Lead forms (BRAI-93) */}
+            {(project.lead_forms?.length ?? 0) > 0 && (
+                <>
+                    {((project.boards?.length ?? 0) > 0 || (project.task_lists?.length ?? 0) > 0 || (project.plans?.length ?? 0) > 0 || (project.helpdesks?.length ?? 0) > 0) && <div className="border-t border-border/50 my-1.5" />}
+                    <button
+                        onClick={() => setLeadFormsOpen(!leadFormsOpen)}
+                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
+                    >
+                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${leadFormsOpen ? 'rotate-90' : ''}`} />
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Lead forms</span>
+                    </button>
+                    {leadFormsOpen && project.lead_forms!.map((leadForm) => (
+                        <SidebarMenuItem key={leadForm.id} className="pl-5">
+                            <Link
+                                href={route('lead-forms.show', [workspace.slug, project.slug, leadForm.slug])}
+                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                            >
+                                <Magnet className="size-4 shrink-0" />
+                                <span className="min-w-0 flex-1 truncate">{leadForm.name}</span>
+                                {leadForm.status === 'published' && <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" title="Live" />}
+                            </Link>
+                        </SidebarMenuItem>
+                    ))}
+                </>
+            )}
+
             {/* Pages */}
             {rootDocs.length > 0 && (
                 <>
-                    {((project.boards?.length ?? 0) > 0 || (project.helpdesks?.length ?? 0) > 0) && <div className="border-t border-border/50 my-1.5" />}
+                    {((project.boards?.length ?? 0) > 0 || (project.helpdesks?.length ?? 0) > 0 || (project.lead_forms?.length ?? 0) > 0) && <div className="border-t border-border/50 my-1.5" />}
                     <button
                         onClick={() => setPagesOpen(!pagesOpen)}
                         className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
@@ -694,7 +723,7 @@ interface CreateItemModalProps {
 }
 
 function CreateItemModal({ open, onClose, workspace, project, parentId, parentType = 'project' }: CreateItemModalProps) {
-    const [itemType, setItemType] = useState<'page' | 'board' | 'folder' | 'excalidraw' | 'helpdesk' | 'list' | 'plan' | null>(null);
+    const [itemType, setItemType] = useState<'page' | 'board' | 'folder' | 'excalidraw' | 'helpdesk' | 'leadform' | 'list' | 'plan' | null>(null);
     const { planTemplates = [] } = usePage<PageProps>().props;
 
     const pageForm = useForm({
@@ -798,10 +827,10 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
 
     return (
         <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-            <DialogContent className={cn('sm:max-w-md', itemType === 'plan' && 'sm:max-w-lg')}>
+            <DialogContent className={cn('sm:max-w-md', itemType === 'plan' && 'sm:max-w-lg', itemType === 'leadform' && 'sm:max-w-4xl')}>
                 <DialogHeader>
                     <DialogTitle>
-                        {itemType === null ? 'Create New' : itemType === 'board' ? 'Create Board' : itemType === 'folder' ? 'Create Folder' : itemType === 'excalidraw' ? 'Create Whiteboard' : itemType === 'helpdesk' ? 'Create Helpdesk' : itemType === 'list' ? 'Create List' : itemType === 'plan' ? 'Create Plan' : 'Create Page'}
+                        {itemType === null ? 'Create New' : itemType === 'board' ? 'Create Board' : itemType === 'folder' ? 'Create Folder' : itemType === 'excalidraw' ? 'Create Whiteboard' : itemType === 'helpdesk' ? 'Create Helpdesk' : itemType === 'leadform' ? 'Create Lead Form' : itemType === 'list' ? 'Create List' : itemType === 'plan' ? 'Create Plan' : 'Create Page'}
                     </DialogTitle>
                     <DialogDescription>
                         {itemType === null
@@ -810,6 +839,8 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                                 ? 'Create a whiteboard to draw and save diagrams.'
                                 : itemType === 'helpdesk'
                                     ? 'Create a helpdesk to manage customer support tickets.'
+                                    : itemType === 'leadform'
+                                    ? 'Start from a template — multi-step questions, icon cards and its own leads board. You can change everything later.'
                                     : itemType === 'list'
                                         ? 'Create a task list to track to-dos with due dates and assignees.'
                                         : itemType === 'plan'
@@ -890,6 +921,18 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                         {parentType === 'project' && (
                             <button
                                 type="button"
+                                onClick={() => setItemType('leadform')}
+                                className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors"
+                            >
+                                <div className="size-12 rounded-lg bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300 flex items-center justify-center">
+                                    <Magnet className="size-6" />
+                                </div>
+                                <span className="text-sm font-medium">Lead form</span>
+                            </button>
+                        )}
+                        {parentType === 'project' && (
+                            <button
+                                type="button"
                                 onClick={() => setItemType('list')}
                                 className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors"
                             >
@@ -934,6 +977,16 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                             </Button>
                         </div>
                     </form>
+                ) : itemType === 'leadform' ? (
+                    <LeadFormTemplatePicker
+                        workspaceSlug={workspace.slug}
+                        projectSlug={project.slug}
+                        onBack={() => setItemType(null)}
+                        onCreated={() => {
+                            setItemType(null);
+                            onClose();
+                        }}
+                    />
                 ) : itemType === 'helpdesk' ? (
                     <form onSubmit={handleCreateHelpdesk} className="space-y-4 py-2">
                         <div className="space-y-2">
@@ -1420,7 +1473,7 @@ function ProjectItem({
         if (isProjectActive) setIsOpen(true);
     }, [isProjectActive]);
 
-    const hasContent = (project.boards && project.boards.length > 0) || (project.pages && project.pages.length > 0) || (project.helpdesks && project.helpdesks.length > 0);
+    const hasContent = (project.boards && project.boards.length > 0) || (project.pages && project.pages.length > 0) || (project.helpdesks && project.helpdesks.length > 0) || (project.lead_forms?.length ?? 0) > 0;
 
     return (
         <Collapsible open={isOpen} onOpenChange={setIsOpen} className="group/collapsible">
@@ -1471,6 +1524,18 @@ function ProjectItem({
                                 >
                                     <LifeBuoy className="size-4 shrink-0" />
                                     <span className="min-w-0 truncate">{helpdesk.name}</span>
+                                </Link>
+                            ))}
+
+                            {/* Lead forms */}
+                            {project.lead_forms?.map((leadForm) => (
+                                <Link
+                                    key={leadForm.id}
+                                    href={route('lead-forms.show', [workspace.slug, project.slug, leadForm.slug])}
+                                    className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                                >
+                                    <Magnet className="size-4 shrink-0" />
+                                    <span className="min-w-0 truncate">{leadForm.name}</span>
                                 </Link>
                             ))}
 
