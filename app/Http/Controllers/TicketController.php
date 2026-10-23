@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketContact;
+use App\Models\TicketReply;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\TicketAssignedNotification;
@@ -618,7 +619,17 @@ class TicketController extends Controller
 
         return Inertia::render('Tickets/PublicShow', [
             'attachments_enabled' => empty(($ticket->helpdesk?->settings ?? [])['default_field_attachments']['hidden']),
-            'ticket' => $ticket,
+            // only what the visitor's page shows — no internal ids, metadata or assignee
+            'ticket' => [
+                'uuid' => $ticket->uuid,
+                'key' => $ticket->key,
+                'subject' => $ticket->subject,
+                'description' => $ticket->description,
+                'created_at' => $ticket->created_at?->toIso8601String(),
+                'column' => $ticket->column ? ['name' => $ticket->column->name, 'color' => $ticket->column->color, 'is_done_column' => (bool) $ticket->column->is_done_column] : null,
+                'helpdesk' => ['uuid' => $ticket->helpdesk?->uuid],
+                'replies' => $ticket->replies->map(fn ($reply) => self::publicReply($reply))->values(),
+            ],
             'access_token' => $accessToken,
             'app_name' => config('app.name'),
             'app_logo_url' => asset('images/logo.png'),
@@ -641,8 +652,23 @@ class TicketController extends Controller
             ->get();
 
         return response()->json([
-            'replies' => $replies,
+            'replies' => $replies->map(fn ($reply) => self::publicReply($reply))->values(),
             'access_token' => $ticket->publicAccessToken(),
         ]);
+    }
+
+    /** A reply as the visitor sees it (portal page + JSON). */
+    private static function publicReply(TicketReply $reply): array
+    {
+        return [
+            'id' => $reply->id,
+            'body' => $reply->body,
+            'created_at' => $reply->created_at?->toIso8601String(),
+            'ticket_contact_id' => $reply->ticket_contact_id,
+            'contact' => $reply->contact ? ['name' => $reply->contact->name, 'email' => $reply->contact->email] : null,
+            'attachments' => $reply->relationLoaded('attachments')
+                ? $reply->attachments->map(fn ($a) => ['id' => $a->id, 'original_filename' => $a->original_filename, 'url' => asset('storage/'.$a->path)])->values()->all()
+                : [],
+        ];
     }
 }

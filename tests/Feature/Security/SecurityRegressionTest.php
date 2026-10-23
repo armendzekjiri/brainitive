@@ -11,6 +11,7 @@ use App\Models\BookmarkItem;
 use App\Models\Helpdesk;
 use App\Models\Item;
 use App\Models\ItemType;
+use App\Models\Plan;
 use App\Models\Project;
 use App\Models\SnippetCollection;
 use App\Models\TaskList;
@@ -450,5 +451,22 @@ class SecurityRegressionTest extends TestCase
         $this->assertFalse(Uploads::isUnknownType('ticket-attachments/1/abc.pdf'));
         $this->assertFalse(Uploads::isUnknownType('.gitignore'));
         $this->assertTrue(Uploads::isActive('ticket-attachments/1/abc.xhtm'));
+    }
+
+    public function test_shared_plans_and_the_ticket_portal_only_send_what_they_show(): void
+    {
+        $plan = Plan::factory()->create([
+            'project_id' => $this->project->id, 'created_by' => $this->editor->id, 'share_token' => str()->random(40),
+            'data' => ['rows' => [['id' => 'r1', 'name' => 'Launch', 'who' => 'Jane', 'notes' => 'Budget cut to 50k', 'start' => '2026-11-01', 'end' => '2026-11-05']], 'dependencies' => []],
+        ]);
+        $this->get(route('plans.public', $plan->share_token))->assertOk()->assertDontSee('Budget cut to 50k')->assertSee('Jane');
+
+        $helpdesk = $this->helpdesk();
+        $ticket = $this->submitTicket($helpdesk, 'x@example.com');
+        Ticket::where('uuid', $ticket['ticket_uuid'])->update(['metadata' => json_encode(['internal' => 'agent-only'])]);
+        $this->get(route('helpdesks.tickets.show-public', $ticket['ticket_uuid']).'?token='.$ticket['access_token'])
+            ->assertOk()
+            ->assertDontSee('agent-only')
+            ->assertInertia(fn ($page) => $page->has('ticket.subject')->missing('ticket.metadata')->missing('ticket.assigned_to')->missing('ticket.id'));
     }
 }
