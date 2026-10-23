@@ -45,13 +45,17 @@ const SKIP_LINK = /\/(logout|login\/(google|github)|calendar\/connections\/googl
 /** Submit-like buttons inside a dialog: fill the form first. */
 const SUBMIT = /^(create|save|add|submit|send|invite|publish|confirm|continue|next|done|apply|update|start|import|upload|post|reply)\b/i;
 
+/** One visit per page type: ids, uuids, tokens and slugs (every workspace, project, board …) collapse. */
 export const pattern = (url: URL) =>
     url.pathname
         .replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?=\/|$)/gi, '/:uuid')
         .replace(/\/\d+(?=\/|$)/g, '/:id')
-        .replace(/\/(s|r|invite|changelog)\/[^/]+/, '/$1/:token');
+        .replace(/\/(s|r|invite|changelog|f|support)\/[^/]+/, '/$1/:token')
+        .replace(/\/(workspaces|projects|boards|task-lists|bookmarks|snippets|helpdesks|lead-forms|plans|releases|pages)\/(?!create\b|list\b|:)[^/]+/g, '/$1/:slug');
 
 type Control = { index: number; name: string };
+/** A control inside an open menu / dialog, found again by role + accessible name (positions shift). */
+type InnerControl = { name: string; role: string; label: string };
 
 export class Crawler {
     readonly results: ClickResult[] = [];
@@ -211,16 +215,16 @@ export class Crawler {
 
     /** Click every item of the menu `reopen` opens. */
     private async menuPass(href: string, reopen: () => Promise<void>, via: string) {
-        const items = await this.inner('[role="menu"]:visible');
+        const scope = '[role="menu"]:visible';
+        const items = await this.inner(scope);
         for (const item of items) {
             await reopen();
             if ((await this.openState()) !== 'menu') return;
-            const loc = this.page.locator('[role="menu"]:visible').locator(CONTROLS).nth(item.index);
-            const opened = await this.click(href, loc, item.name, false, via);
+            const opened = await this.click(href, this.innerLocator(scope, item), item.name, false, via);
             // a menu item that opens a dialog (Rename…, Create…): fill + submit it as well
             if (opened === 'dialog') await this.dialogPass(href, async () => {
                 await reopen();
-                await this.page.locator('[role="menu"]:visible').locator(CONTROLS).nth(item.index).click({ timeout: 3_000 }).catch(() => {});
+                await this.innerLocator(scope, item).click({ timeout: 3_000 }).catch(() => {});
                 await this.settle();
             }, `${via} › ${item.name}`);
         }
@@ -233,9 +237,8 @@ export class Crawler {
         for (const item of items) {
             await reopen();
             if ((await this.openState()) !== 'dialog') return;
-            if (SUBMIT.test(item.name.replace(/^\w+ "/, ''))) await this.fillForm(scope);
-            const loc = this.page.locator(scope).locator(CONTROLS).nth(item.index);
-            await this.click(href, loc, item.name, false, via);
+            if (SUBMIT.test(item.label)) await this.fillForm(scope);
+            await this.click(href, this.innerLocator(scope, item), item.name, false, via);
         }
     }
 
@@ -276,14 +279,26 @@ export class Crawler {
         );
     }
 
-    /** The visible, enabled controls of an open menu / dialog (index = position among all of them). */
-    private async inner(scope: string): Promise<Control[]> {
-        return this.page.locator(scope).locator(CONTROLS).evaluateAll((els) =>
+    /** The visible, enabled, named controls of an open menu / dialog (the newest one when nested). */
+    private async inner(scope: string): Promise<InnerControl[]> {
+        const list = await this.page.locator(scope).last().locator(CONTROLS).evaluateAll((els) =>
             els
-                .map((e, index) => ({ e, index }))
-                .filter(({ e }) => (e as HTMLElement).checkVisibility?.() !== false && !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true')
-                .map(({ e, index }) => ({ index, name: `${e.getAttribute('role') || e.tagName.toLowerCase()} "${(e.getAttribute('aria-label') || (e as HTMLElement).innerText || e.tagName).replace(/\s+/g, ' ').trim().slice(0, 60)}"` })),
+                .filter((e) => (e as HTMLElement).checkVisibility?.() !== false && !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true')
+                .map((e) => {
+                    const tag = e.tagName.toLowerCase();
+                    const type = (e.getAttribute('type') ?? '').toLowerCase();
+                    const role = e.getAttribute('role') || (tag === 'select' ? 'combobox' : tag === 'input' ? (type === 'radio' ? 'radio' : 'checkbox') : tag === 'a' ? 'link' : 'button');
+                    const label = (e.getAttribute('aria-label') || (e as HTMLElement).innerText || e.getAttribute('title') || '').replace(/\s+/g, ' ').trim();
+                    return { role, label, name: `${role} "${label.slice(0, 60)}"` };
+                })
+                .filter((c) => c.label !== ''),
         );
+        // one entry per role + label (lists repeat e.g. "Remove" per row; the first one stands for them)
+        return list.filter((c, i) => list.findIndex((d) => d.role === c.role && d.label === c.label) === i);
+    }
+
+    private innerLocator(scope: string, item: InnerControl): Locator {
+        return this.page.locator(scope).last().getByRole(item.role as Parameters<Page['getByRole']>[0], { name: item.label, exact: true }).first();
     }
 
     /** The tagged control again — re-tagging after a reload (the order of controls is stable). */
@@ -303,8 +318,7 @@ export class Crawler {
         const before = this.page.url();
         this.reset();
         try {
-            await target.scrollIntoViewIfNeeded({ timeout: 2_000 });
-            await target.click({ timeout: 3_000 });
+            await target.click({ timeout: 4_000 });
         } catch (e) {
             if (!silent) this.results.push({ page: href, control: name, via, outcome: 'failed', detail: `not clickable: ${(e as Error).message.split('\n')[0]}` });
             return 'failed';
