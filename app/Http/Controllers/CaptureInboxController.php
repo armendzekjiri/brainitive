@@ -26,7 +26,8 @@ class CaptureInboxController extends Controller
     {
         $user = $request->user();
         $state = in_array($request->query('state'), Capture::STATES, true) ? $request->query('state') : 'inbox';
-        $search = trim((string) $request->query('q', ''));
+        $q = $request->query('q');
+        $search = is_string($q) ? mb_substr(trim($q), 0, 255) : '';
 
         $page = Capture::ownedBy($user)
             ->inState($state)
@@ -40,7 +41,7 @@ class CaptureInboxController extends Controller
             ->withQueryString();
 
         $captures = collect($page->items());
-        $locations = CaptureConversion::locations($captures);
+        $locations = CaptureConversion::locations($captures, $user);
 
         $counts = [];
         foreach (Capture::STATES as $s) {
@@ -142,7 +143,7 @@ class CaptureInboxController extends Controller
         return response()->json([
             'replayed' => $result['replayed'],
             'location' => $result['location'],
-            'capture' => $this->present($capture, CaptureConversion::location($capture)),
+            'capture' => $this->present($capture, CaptureConversion::location($capture, $request->user())),
         ], $result['replayed'] ? 200 : 201);
     }
 

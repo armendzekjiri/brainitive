@@ -14,6 +14,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -58,7 +59,7 @@ class CaptureConversion
             $locked = Capture::whereKey($capture->id)->lockForUpdate()->firstOrFail();
 
             if ($locked->processed_at !== null) {
-                return ['capture' => $locked, 'location' => self::location($locked), 'replayed' => true];
+                return ['capture' => $locked, 'location' => self::location($locked, $user), 'replayed' => true];
             }
             if ($locked->archived_at !== null) {
                 throw ValidationException::withMessages(['capture' => 'Restore this capture before organizing it.']);
@@ -88,15 +89,29 @@ class CaptureConversion
         });
     }
 
+    /** The same view rules as the pages the targets live on. */
+    private static function canView(\Illuminate\Contracts\Auth\Access\Gate $gate, User $user, string $type, Model $target): bool
+    {
+        return match ($type) {
+            'issue', 'page' => $gate->allows('view', $target),
+            'task' => $target->taskList !== null && $gate->allows('view', $target->taskList),
+            'bookmark' => $target->bookmark !== null && $gate->allows('view', $target->bookmark),
+            'snippet' => $target->collection?->workspace !== null && $user->hasWorkspaceAccess($target->collection->workspace),
+            default => false,
+        };
+    }
+
     /**
-     * The created content's current location, or the snapshot taken at conversion when it was
-     * deleted since (`available: false`).
+     * The created content's current location — only while `$user` can still open it. Deleted,
+     * moved out of reach or no longer accessible: the snapshot taken at conversion (what the
+     * user saw then), without a link (`available: false`). Owning a capture never reveals the
+     * target's current title, board, project or workspace.
      *
      * @return array<string, mixed>|null
      */
-    public static function location(Capture $capture): ?array
+    public static function location(Capture $capture, User $user): ?array
     {
-        return self::locations(collect([$capture]))[$capture->id] ?? null;
+        return self::locations(collect([$capture]), $user)[$capture->id] ?? null;
     }
 
     /**
@@ -105,13 +120,14 @@ class CaptureConversion
      * @param  Collection<int, Capture>  $captures
      * @return array<int, array<string, mixed>> capture id → location
      */
-    public static function locations(Collection $captures): array
+    public static function locations(Collection $captures, User $user): array
     {
+        $gate = Gate::forUser($user);
         $result = [];
 
         $captures->filter(fn (Capture $c) => $c->target_type && $c->target_id && isset(self::TARGETS[$c->target_type]))
             ->groupBy('target_type')
-            ->each(function (Collection $group, string $type) use (&$result) {
+            ->each(function (Collection $group, string $type) use (&$result, $gate, $user) {
                 /** @var class-string<Model> $class */
                 $class = self::TARGETS[$type];
                 $targets = $class::query()->with(self::LOCATOR_RELATIONS[$type])
@@ -121,9 +137,9 @@ class CaptureConversion
 
                 foreach ($group as $capture) {
                     $target = $targets->get($capture->target_id);
-                    $result[$capture->id] = $target
+                    $result[$capture->id] = $target && self::canView($gate, $user, $type, $target)
                         ? ResourceLocator::locate($target) + ['available' => true]
-                        : ($capture->target_location ?? ['type' => $type, 'title' => '', 'breadcrumb' => '', 'url' => null]) + ['available' => false];
+                        : ['url' => null, 'available' => false] + ($capture->target_location ?? ['type' => $type, 'title' => '', 'breadcrumb' => '']);
                 }
             });
 

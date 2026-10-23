@@ -1,7 +1,7 @@
 # Universal quick capture: private inbox + convert to content (BRAI-70)
 
 **Branch:** feat/quick-capture
-**Status:** in-progress
+**Status:** done
 **Started:** 2026-10-24
 **Board card:** BRAI-70 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-172
 

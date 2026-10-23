@@ -949,6 +949,7 @@ export interface CaptureDestinationWorkspace {
 /** Result of POST captures.convert. */
 export interface CaptureConversionResult {
     replayed: boolean;
-    location: { type: string; title: string; breadcrumb: string; url: string };
+    /** `url` is null when the created content is gone or no longer accessible to you. */
+    location: { type: string; title: string; breadcrumb: string; url: string | null };
     capture: Capture;
 }

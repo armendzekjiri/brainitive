@@ -91,6 +91,28 @@ App bugs it found (all fixed, each with a test). Patterns to keep:
   been 640 since 2026-10-23 (`www-data` reads it through `webdev`). An own FPM pool for production
   would isolate it fully.
 
+### Git worktrees with a symlinked `vendor/` run the MAIN checkout's code (2026-10-24)
+PHP resolves `__DIR__` through symlinks, so a worktree whose `vendor` links to the main checkout
+autoloads `App\`, `Database\` and `Tests\` classes **from the main checkout**, and PHPUnit even
+boots the main checkout's app (`Application::inferBasePath()` = dirname of vendor's real path):
+its routes, migrations and code. New classes are "not found", changed ones silently run the old
+version — tests can pass without testing your change. Fix without touching `vendor`: an
+`auto_prepend_file` (via `PHP_INI_SCAN_DIR=":<dir>"` with one ini line) that sets
+`$_ENV['APP_BASE_PATH']` to the worktree, requires `vendor/autoload.php` and prepends a PSR-4
+loader for those namespaces pointing at the worktree (only when `getcwd()` is inside it). The env
+var is inherited by `artisan test`'s PHPUnit process and by the e2e server. Check with
+`(new ReflectionClass(SomeController::class))->getFileName()`.
+
+### Quick capture: conversion is idempotent by row lock, not by request id (BRAI-70)
+`CaptureConversion::convert` locks the capture (`lockForUpdate`) inside one transaction; a capture
+that is already processed returns its target (`replayed`, HTTP 200) whatever the second request
+asked for, so a double click or a retry never creates a second item. A failure anywhere (policy,
+validation, `ProjectIssues` without columns, the final update) rolls the target back and leaves
+the capture in the inbox. Inbox ownership grants nothing: the destination's own policy is checked
+through `ContentCapture::authorize`. The UI calls the feature **Captures** because the sidebar's
+"Inbox" is notifications. The **C** shortcut goes through `isCaptureShortcut()` (`lib/captures.ts`):
+no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open dialogs or menus.
+
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
 means adding its param to `BoardViewConfig::PARAM_KEYS` + `normalize()` (allowlist) and, if it

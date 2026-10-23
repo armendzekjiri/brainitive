@@ -154,6 +154,10 @@ class CaptureInboxTest extends TestCase
 
         $this->actingAs($this->owner)->get(route('captures.index', ['q' => 'kafka']))
             ->assertInertia(fn (AssertableInertia $p) => $p->where('search', 'kafka')->has('captures', 3));
+
+        // a malformed query is ignored, never a 500
+        $this->actingAs($this->owner)->get('/captures?q[]=kafka')
+            ->assertOk()->assertInertia(fn (AssertableInertia $p) => $p->where('search', '')->has('captures', 4));
     }
 
     public function test_tabs_list_newest_first(): void

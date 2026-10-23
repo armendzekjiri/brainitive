@@ -152,12 +152,16 @@ export function ConvertCaptureDialog({ capture, open, onOpenChange, onConverted 
                         </div>
                         <DialogFooter className="gap-2 sm:gap-0">
                             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-                            <Button asChild>
-                                <a href={result.location.url}>
-                                    <ExternalLink className="h-4 w-4" />
-                                    Open {result.location.type}
-                                </a>
-                            </Button>
+                            {result.location.url ? (
+                                <Button asChild>
+                                    <a href={result.location.url}>
+                                        <ExternalLink className="h-4 w-4" />
+                                        Open {result.location.type}
+                                    </a>
+                                </Button>
+                            ) : (
+                                <p className="self-center text-sm text-muted-foreground">It is no longer available to you.</p>
+                            )}
                         </DialogFooter>
                     </div>
                 ) : (

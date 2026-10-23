@@ -356,10 +356,33 @@ class CaptureConversionTest extends TestCase
         $this->get(route('captures.index', ['state' => 'processed']))
             ->assertInertia(fn ($p) => $p->where('captures.0.target.url', $url)->where('captures.0.target.available', true)->where('counts.inbox', 0));
 
-        // deleted since: the snapshot stays, marked unavailable
+        // deleted since: the snapshot title stays, marked unavailable, without a link
         Item::sole()->delete();
         $this->get(route('captures.index', ['state' => 'processed']))
-            ->assertInertia(fn ($p) => $p->where('captures.0.target.url', $url)->where('captures.0.target.available', false));
+            ->assertInertia(fn ($p) => $p->where('captures.0.target.title', 'Ship it')->where('captures.0.target.url', null)->where('captures.0.target.available', false));
+    }
+
+    public function test_lost_access_hides_the_targets_current_details(): void
+    {
+        $capture = $this->capture($this->editor, ['text' => 'Original title']);
+        $this->actingAs($this->editor);
+        $this->convert($capture, 'issue', $this->board->id)->assertCreated();
+
+        // others rename it, then the editor leaves the project
+        Item::sole()->update(['title' => 'Renamed secretly']);
+        $this->project->users()->detach($this->editor->id);
+
+        $this->get(route('captures.index', ['state' => 'processed']))
+            ->assertInertia(fn ($p) => $p->where('captures.0.target.available', false)
+                ->where('captures.0.target.title', 'Original title')
+                ->where('captures.0.target.url', null));
+
+        // the replay of a retry doesn't reveal it either
+        $this->convert($capture, 'issue', $this->board->id, ['title' => 'x'])->assertOk()
+            ->assertJsonPath('location.title', 'Original title')
+            ->assertJsonPath('location.url', null)
+            ->assertJsonPath('capture.target.available', false);
+        $this->assertStringNotContainsString('Renamed secretly', $this->get(route('captures.index', ['state' => 'processed']))->getContent());
     }
 
     public function test_destinations_list_only_writable_targets(): void
