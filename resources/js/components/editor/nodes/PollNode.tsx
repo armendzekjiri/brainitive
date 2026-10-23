@@ -10,7 +10,8 @@ import {
     SerializedLexicalNode,
     Spread,
 } from 'lexical';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import axios from 'axios';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { mergeRegister } from '@lexical/utils';
@@ -40,9 +41,28 @@ export type SerializedPollNode = Spread<
     {
         question: string;
         options: PollOption[];
+        pollId?: string;
     },
     SerializedLexicalNode
 >;
+
+/**
+ * Where the poll lives (set by the editor host): votes are stored per doc / issue on the
+ * server, so readers can vote without editing the document. Null = voting not available
+ * (e.g. comments, ticket replies).
+ */
+export const PollScopeContext = createContext<{ type: 'page' | 'item'; id: string } | null>(null);
+
+interface PollResults {
+    counts: Record<string, number>;
+    total: number;
+    my_vote: string | null;
+}
+
+/** Polls saved before pollId existed: derive a stable id from their option uids. */
+function stablePollId(pollId: string | undefined, options: PollOption[]): string {
+    return pollId || `o-${options.map((o) => o.uid).join('-')}`.slice(0, 120);
+}
 
 function generateUID(): string {
     return Math.random().toString(36).substring(2, 9);
@@ -59,8 +79,8 @@ function $convertPollElement(domNode: Node): DOMConversionOutput | null {
     const stateRaw = el.getAttribute('data-poll-state');
     if (!stateRaw) return null;
     try {
-        const { question, options } = JSON.parse(stateRaw) as { question: string; options: PollOption[] };
-        const node = $createPollNode(question ?? 'What do you think?', options);
+        const { question, options, pollId } = JSON.parse(stateRaw) as { question: string; options: PollOption[]; pollId?: string };
+        const node = $createPollNode(question ?? 'What do you think?', options, pollId);
         return { node };
     } catch {
         return null;
@@ -70,10 +90,12 @@ function $convertPollElement(domNode: Node): DOMConversionOutput | null {
 function PollComponent({
     question,
     options,
+    pollId,
     nodeKey,
 }: {
     question: string;
     options: PollOption[];
+    pollId: string;
     nodeKey: NodeKey;
 }) {
     const [editor] = useLexicalComposerContext();
@@ -82,9 +104,31 @@ function PollComponent({
     const [isEditing, setIsEditing] = useState(false);
     const [editQuestion, setEditQuestion] = useState(question);
     const [editOptions, setEditOptions] = useState<PollOption[]>(options);
-    const [votedOption, setVotedOption] = useState<string | null>(null);
+    const scope = useContext(PollScopeContext);
+    const [results, setResults] = useState<PollResults | null>(null);
+    const [voting, setVoting] = useState(false);
+    const [voteError, setVoteError] = useState<string | null>(null);
+    const [editable, setEditable] = useState(editor.isEditable());
 
-    const totalVotes = options.reduce((sum, opt) => sum + opt.votes.length, 0);
+    useEffect(() => editor.registerEditableListener(setEditable), [editor]);
+
+    const pollUrl = scope ? `/polls/${scope.type}/${encodeURIComponent(scope.id)}/${encodeURIComponent(pollId)}` : null;
+
+    useEffect(() => {
+        if (!pollUrl) return;
+        let cancelled = false;
+        axios
+            .get<PollResults>(pollUrl)
+            .then(({ data }) => !cancelled && setResults(data))
+            .catch(() => !cancelled && setVoteError('Couldn’t load the votes.'));
+        return () => {
+            cancelled = true;
+        };
+    }, [pollUrl]);
+
+    const votedOption = results?.my_vote && options.some((o) => o.uid === results.my_vote) ? results.my_vote : null;
+    const countFor = (uid: string) => results?.counts?.[uid] ?? 0;
+    const totalVotes = options.reduce((sum, opt) => sum + countFor(opt.uid), 0);
 
     const onDelete = useCallback(
         (payload: KeyboardEvent) => {
@@ -139,21 +183,16 @@ function PollComponent({
         );
     }, [clearSelection, editor, isSelected, nodeKey, onDelete, setSelected, isEditing]);
 
+    /** Vote, change the vote (another option) or take it back (same option again). */
     const handleVote = (optionUid: string) => {
-        if (votedOption) return; // Already voted
-
-        setVotedOption(optionUid);
-        editor.update(() => {
-            const node = $getNodeByKey(nodeKey);
-            if ($isPollNode(node)) {
-                const newOptions = options.map(opt =>
-                    opt.uid === optionUid
-                        ? { ...opt, votes: [...opt.votes, 'user'] }
-                        : opt
-                );
-                node.setOptions(newOptions);
-            }
-        });
+        if (!pollUrl || voting) return;
+        setVoting(true);
+        setVoteError(null);
+        axios
+            .post<PollResults>(pollUrl, { option_uid: votedOption === optionUid ? null : optionUid })
+            .then(({ data }) => setResults(data))
+            .catch(() => setVoteError('Your vote wasn’t saved. Try again.'))
+            .finally(() => setVoting(false));
     };
 
     const handleSave = () => {
@@ -161,7 +200,8 @@ function PollComponent({
             const node = $getNodeByKey(nodeKey);
             if ($isPollNode(node)) {
                 node.setQuestion(editQuestion);
-                node.setOptions(editOptions.filter(opt => opt.text.trim()));
+                // Votes live on the server now; never store them in the document.
+                node.setOptions(editOptions.filter(opt => opt.text.trim()).map(opt => ({ ...opt, votes: [] })));
             }
         });
         setIsEditing(false);
@@ -277,6 +317,7 @@ function PollComponent({
         >
             <div className="flex justify-between items-start mb-3">
                 <h4 className="font-medium">{question || 'Poll Question'}</h4>
+                {editable && (
                 <button
                     type="button"
                     onClick={(e) => {
@@ -288,11 +329,14 @@ function PollComponent({
                 >
                     Edit
                 </button>
+                )}
             </div>
             <div className="space-y-2">
                 {options.map((opt) => {
-                    const percentage = totalVotes > 0 ? (opt.votes.length / totalVotes) * 100 : 0;
+                    const count = countFor(opt.uid);
+                    const percentage = totalVotes > 0 ? (count / totalVotes) * 100 : 0;
                     const isVoted = votedOption === opt.uid;
+                    const showResults = !!votedOption;
 
                     return (
                         <button
@@ -303,22 +347,26 @@ function PollComponent({
                                 e.stopPropagation();
                                 handleVote(opt.uid);
                             }}
-                            disabled={!!votedOption}
+                            disabled={!pollUrl || voting}
+                            title={isVoted ? 'Click again to take your vote back' : undefined}
                             className={`w-full relative overflow-hidden text-left px-3 py-2 border rounded-md transition-all ${
                                 isVoted ? 'border-primary bg-primary/5' : 'hover:border-primary/50'
-                            } ${votedOption ? 'cursor-default' : 'cursor-pointer'}`}
+                            } ${pollUrl ? 'cursor-pointer' : 'cursor-default'}`}
                         >
-                            {votedOption && (
+                            {showResults && (
                                 <div
                                     className="absolute inset-0 bg-primary/10 transition-all"
                                     style={{ width: `${percentage}%` }}
                                 />
                             )}
                             <div className="relative flex justify-between items-center">
-                                <span className="text-sm">{opt.text}</span>
-                                {votedOption && (
+                                <span className="text-sm">
+                                    {opt.text}
+                                    {isVoted && <span className="ml-2 text-xs text-primary">Your vote</span>}
+                                </span>
+                                {showResults && (
                                     <span className="text-xs text-muted-foreground">
-                                        {opt.votes.length} vote{opt.votes.length !== 1 ? 's' : ''} ({Math.round(percentage)}%)
+                                        {count} vote{count !== 1 ? 's' : ''} ({Math.round(percentage)}%)
                                     </span>
                                 )}
                             </div>
@@ -326,11 +374,16 @@ function PollComponent({
                     );
                 })}
             </div>
-            {totalVotes > 0 && (
-                <p className="text-xs text-muted-foreground mt-2">
-                    {totalVotes} total vote{totalVotes !== 1 ? 's' : ''}
-                </p>
-            )}
+            <p className="text-xs text-muted-foreground mt-2">
+                {!pollUrl
+                    ? 'Voting works in docs and issue descriptions.'
+                    : votedOption
+                      ? `${totalVotes} vote${totalVotes !== 1 ? 's' : ''} · click another option to change your vote`
+                      : totalVotes > 0
+                        ? `${totalVotes} vote${totalVotes !== 1 ? 's' : ''} · vote to see the results`
+                        : 'No votes yet'}
+            </p>
+            {voteError && <p className="text-xs text-destructive mt-1">{voteError}</p>}
         </div>
     );
 }
@@ -338,17 +391,18 @@ function PollComponent({
 export class PollNode extends DecoratorNode<JSX.Element> {
     __question: string;
     __options: PollOption[];
+    __pollId: string;
 
     static getType(): string {
         return 'poll';
     }
 
     static clone(node: PollNode): PollNode {
-        return new PollNode(node.__question, node.__options, node.__key);
+        return new PollNode(node.__question, node.__options, node.__key, node.__pollId);
     }
 
     static importJSON(serializedNode: SerializedPollNode): PollNode {
-        return $createPollNode(serializedNode.question, serializedNode.options);
+        return $createPollNode(serializedNode.question, serializedNode.options, serializedNode.pollId);
     }
 
     constructor(
@@ -357,11 +411,13 @@ export class PollNode extends DecoratorNode<JSX.Element> {
             { uid: generateUID(), text: 'Option 1', votes: [] },
             { uid: generateUID(), text: 'Option 2', votes: [] },
         ],
-        key?: NodeKey
+        key?: NodeKey,
+        pollId?: string,
     ) {
         super(key);
         this.__question = question;
         this.__options = options;
+        this.__pollId = stablePollId(pollId, options);
     }
 
     exportJSON(): SerializedPollNode {
@@ -370,6 +426,7 @@ export class PollNode extends DecoratorNode<JSX.Element> {
             version: 1,
             question: this.__question,
             options: this.__options,
+            pollId: this.__pollId,
         };
     }
 
@@ -378,7 +435,7 @@ export class PollNode extends DecoratorNode<JSX.Element> {
         element.setAttribute('data-lexical-poll', 'true');
         element.setAttribute(
             'data-poll-state',
-            JSON.stringify({ question: this.__question, options: this.__options })
+            JSON.stringify({ question: this.__question, options: this.__options, pollId: this.__pollId })
         );
         element.className = 'poll';
         // Fallback for non-Lexical viewers
@@ -429,6 +486,7 @@ export class PollNode extends DecoratorNode<JSX.Element> {
             <PollComponent
                 question={this.__question}
                 options={this.__options}
+                pollId={this.__pollId}
                 nodeKey={this.getKey()}
             />
         );
@@ -437,9 +495,11 @@ export class PollNode extends DecoratorNode<JSX.Element> {
 
 export function $createPollNode(
     question: string = 'What do you think?',
-    options?: PollOption[]
+    options?: PollOption[],
+    pollId?: string,
 ): PollNode {
-    return $applyNodeReplacement(new PollNode(question, options));
+    // New polls get their own id; old ones derive it from their option uids.
+    return $applyNodeReplacement(new PollNode(question, options, undefined, pollId ?? (options ? undefined : `p-${generateUID()}${generateUID()}`)));
 }
 
 export function $isPollNode(

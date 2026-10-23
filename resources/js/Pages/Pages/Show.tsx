@@ -1455,6 +1455,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                                     content={extractHtmlContent((isEditing ? editSource.content : page.content) as any)}
                                     onChange={handleUpdateContent}
                                     editable={isEditing}
+                                    pollScope={{ type: 'page', id: page.uuid }}
                                     placeholder="Start writing, or press / for commands…"
                                     showToolbar={isEditing && showFormattingToolbar}
                                     minHeight="400px"

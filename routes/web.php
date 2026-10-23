@@ -17,6 +17,7 @@ use App\Http\Controllers\PageController;
 use App\Http\Controllers\PageStickyNoteController;
 use App\Http\Controllers\PageVersionController;
 use App\Http\Controllers\PlanController;
+use App\Http\Controllers\PollVoteController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\PublicPlanController;
@@ -127,6 +128,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // My Work — assigned items across all workspaces
     Route::get('/my-work', [MyWorkController::class, 'index'])->name('my-work.index');
+
+    // Poll votes (polls inside docs / issue descriptions)
+    Route::get('/polls/{scopeType}/{scopeId}/{pollId}', [PollVoteController::class, 'show'])
+        ->whereIn('scopeType', ['page', 'item'])->where('pollId', '[A-Za-z0-9:_-]{1,120}')->name('polls.show');
+    Route::post('/polls/{scopeType}/{scopeId}/{pollId}', [PollVoteController::class, 'vote'])
+        ->whereIn('scopeType', ['page', 'item'])->where('pollId', '[A-Za-z0-9:_-]{1,120}')->middleware('throttle:60,1')->name('polls.vote');
 
     // Calendar — personal calendar across all workspaces
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar.index');
