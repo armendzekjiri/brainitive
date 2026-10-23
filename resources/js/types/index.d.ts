@@ -75,8 +75,19 @@ export interface Project {
     workspace?: Workspace;
     boards_count?: number;
     pages_count?: number;
+    /** Lead generation forms (BRAI-93), in the sidebar next to the helpdesks */
+    lead_forms?: LeadFormSummary[];
     created_at: string;
     updated_at: string;
+}
+
+export interface LeadFormSummary {
+    id: number;
+    project_id: number;
+    name: string;
+    slug: string;
+    status: 'draft' | 'published';
+    position: number;
 }
 
 export interface Board {

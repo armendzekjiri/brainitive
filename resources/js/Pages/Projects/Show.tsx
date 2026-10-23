@@ -11,8 +11,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
     LayoutGrid, Plus, Settings, ArrowRight, Kanban, FileText, Folder,
-    ChevronRight, PencilRuler, Headphones, Calendar, Key, Users, List, GanttChart,
+    ChevronRight, PencilRuler, Headphones, Calendar, Key, Users, List, GanttChart, Magnet,
 } from 'lucide-react';
+import LeadFormTemplatePicker from '@/components/leadForms/LeadFormTemplatePicker';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { useState } from 'react';
@@ -41,6 +42,7 @@ interface Props extends PageProps {
 export default function ProjectsShow({ workspace, project, canUpdate = false, canCreatePages = false, aiConfigured = false }: Props) {
     const [createBoardDialogOpen, setCreateBoardDialogOpen] = useState(false);
     const [createHelpdeskDialogOpen, setCreateHelpdeskDialogOpen] = useState(false);
+    const [createLeadFormOpen, setCreateLeadFormOpen] = useState(false);
     const [createListDialogOpen, setCreateListDialogOpen] = useState(false);
     const [createPlanDialogOpen, setCreatePlanDialogOpen] = useState(false);
     const { planTemplates = [] } = usePage<PageProps>().props;
@@ -282,6 +284,35 @@ export default function ProjectsShow({ workspace, project, canUpdate = false, ca
                         )}
                     </section>
 
+                    {/* Lead forms (BRAI-93) */}
+                    <section>
+                        <div className="mb-3 flex items-center justify-between">
+                            <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide"><Magnet className="size-4" />Lead forms</h2>
+                            {canUpdate && <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs text-muted-foreground" onClick={() => setCreateLeadFormOpen(true)}><Plus className="size-3.5" />Add</Button>}
+                        </div>
+                        {(project.lead_forms?.length ?? 0) === 0 ? (
+                            <Card className="border-dashed bg-card/50"><CardContent className="flex flex-col items-center justify-center py-10"><div className="size-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4"><Magnet className="size-7 text-primary" /></div><p className="text-sm font-medium mb-1">No lead forms yet</p><p className="text-xs text-muted-foreground mb-4">Collect leads with a multi-step form — every submission lands on its own board.</p>{canUpdate && <Button size="sm" className="gap-2" onClick={() => setCreateLeadFormOpen(true)}><Plus className="size-4" />Create lead form</Button>}</CardContent></Card>
+                        ) : (
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                                {project.lead_forms!.map((lf) => (
+                                    <Link key={lf.id} href={route('lead-forms.show', [workspace.slug, project.slug, lf.slug])}>
+                                        <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 group">
+                                            <CardContent className="p-4">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10"><Magnet className="size-5 text-primary" /></div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h3 className="font-semibold truncate group-hover:text-primary transition-colors">{lf.name}</h3>
+                                                        <Badge variant="secondary" className={cn('mt-1 text-xs', lf.status === 'published' && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300')}>{lf.status === 'published' ? 'Live' : 'Draft'}</Badge>
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </Link>
+                                ))}
+                            </div>
+                        )}
+                    </section>
+
                     {/* Documents */}
                     <section>
                         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide"><FileText className="size-4" />Documents</h2>
@@ -315,6 +346,12 @@ export default function ProjectsShow({ workspace, project, canUpdate = false, ca
                 </div>
 
                 {/* Create dialogs */}
+                <Dialog open={createLeadFormOpen} onOpenChange={setCreateLeadFormOpen}>
+                    <DialogContent className="sm:max-w-4xl">
+                        <DialogHeader><DialogTitle>Create Lead Form</DialogTitle><DialogDescription>Start from a template — multi-step questions, icon cards and its own leads board. You can change everything later.</DialogDescription></DialogHeader>
+                        {createLeadFormOpen && <LeadFormTemplatePicker workspaceSlug={workspace.slug} projectSlug={project.slug} onCreated={() => setCreateLeadFormOpen(false)} />}
+                    </DialogContent>
+                </Dialog>
                 <Dialog open={createHelpdeskDialogOpen} onOpenChange={setCreateHelpdeskDialogOpen}>
                     <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader><DialogTitle>Create Helpdesk</DialogTitle><DialogDescription>Start from a template — support desk, contact form, registration, applications and more.</DialogDescription></DialogHeader>

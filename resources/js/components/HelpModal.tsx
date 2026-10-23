@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { LayoutGrid, FileText, PencilRuler, BookMarked, BrainCircuit, X, History, Sparkles, GanttChart, ListChecks, CalendarDays, Bot } from 'lucide-react';
+import { LayoutGrid, FileText, PencilRuler, BookMarked, BrainCircuit, X, History, Sparkles, GanttChart, ListChecks, CalendarDays, Bot, Magnet } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface HelpModalProps {
@@ -66,6 +66,13 @@ const WELCOME_FEATURES = [
         where: 'Sidebar → Bookmarks / Snippets',
     },
     {
+        icon: Magnet,
+        tone: 'bg-rose-500/10 text-rose-500',
+        title: 'Lead forms',
+        description: 'Multi-step lead forms with icon cards, conditional questions and your branding — every submission becomes a card on the form’s own leads board.',
+        where: 'Project → Add content → Lead form · share at /f/your-name or embed it',
+    },
+    {
         icon: Bot,
         tone: 'bg-slate-500/10 text-slate-500',
         title: 'AI & MCP',
@@ -75,6 +82,22 @@ const WELCOME_FEATURES = [
 ];
 
 const CHANGELOG = [
+    {
+        version: 'v1.34.0',
+        title: 'Lead generation forms',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'New in every project: Lead forms (Add content → Lead form). Each form has its own leads board — every submission lands there as a card, like helpdesk tickets.',
+            'Start from 12 templates (demo request, contact sales, free trial, newsletter, agency brief, quote request, real estate, consultation, webinar, event lead capture, course enrolment, job interest pool) or a blank form.',
+            'Build it your way: several steps, 12 question types, answer cards with icons or emoji, and logic — show a question or a whole step only for certain answers. Live preview on desktop and mobile; changes save automatically.',
+            'Make it yours: colours and presets, font, corners, button style, layout (card, split with an image, full), progress bar or steps, your logo and a cover image.',
+            'Share it at brainitive.app/f/your-name or embed it on your website (the snippet resizes itself). Hidden questions fill from the link (?campaign=…) and UTM tags are saved with each lead.',
+            'After submit: a thank-you screen or your own page, a confirmation email to the lead and a notification to the team members you pick.',
+            'Analytics: views, starts, submissions, conversion per day and how far visitors get through the steps.',
+            'Webhooks: send every new lead to Zapier, Make or your CRM (signed), and let other tools push leads onto the board with a token.',
+        ]
+    },
     {
         version: 'v1.33.0',
         title: 'Helpdesk templates: support desks, forms, registrations and more',

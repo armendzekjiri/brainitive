@@ -159,6 +159,14 @@ class Project extends Model
     }
 
     /**
+     * Lead generation forms (BRAI-93), each with its own leads board.
+     */
+    public function leadForms(): HasMany
+    {
+        return $this->hasMany(LeadForm::class)->orderBy('position')->orderBy('id');
+    }
+
+    /**
      * Get all pages in this project (root level).
      */
     public function pages(): HasMany

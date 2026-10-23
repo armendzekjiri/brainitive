@@ -15,6 +15,7 @@ export interface NotificationData {
         | 'ticket_created'
         | 'ticket_reply'
         | 'ticket_assigned'
+        | 'lead_created'
         | string;
     item_key?: string;
     item_title?: string;
@@ -40,6 +41,11 @@ export interface NotificationData {
     contact_email?: string;
     actor_name?: string;
     actor_avatar?: string;
+    // lead_created (BRAI-93)
+    form_name?: string;
+    lead_number?: number;
+    lead_name?: string;
+    lead_url?: string;
 }
 
 /** Who did it: a user, or the customer for helpdesk tickets. */
@@ -48,13 +54,14 @@ export function notificationActor(d: NotificationData): string {
 }
 
 export function notificationUrl(d: NotificationData): string | undefined {
-    return d.ticket_url ?? d.item_url ?? d.context_url ?? d.page_url;
+    return d.ticket_url ?? d.lead_url ?? d.item_url ?? d.context_url ?? d.page_url;
 }
 
 /** Second line under the sentence. */
 export function notificationDetail(d: NotificationData): string | undefined {
     if (d.type === 'task_digest') return d.titles?.join(', ');
     if (d.type === 'ticket_reply') return d.reply_preview || d.ticket_subject;
+    if (d.type === 'lead_created') return d.form_name;
     return d.ticket_subject ?? d.item_title ?? d.page_name;
 }
 
@@ -133,6 +140,12 @@ export function NotificationMessage({
             return (
                 <>
                     {actor} opened ticket {link(d.ticket_url, d.ticket_key)}
+                </>
+            );
+        case 'lead_created':
+            return (
+                <>
+                    New lead {link(d.lead_url, `#${d.lead_number ?? ''}`)} <span className="font-medium">{d.lead_name}</span>
                 </>
             );
         case 'ticket_reply':

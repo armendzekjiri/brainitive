@@ -24,6 +24,8 @@ AI client ──OAuth2.1/Bearer──▶ routes/ai.php  ──▶ BrainitiveServ
 CLI       ──Bearer token────▶ routes/api.php  ──▶ CliController
 Browser extension ──OAuth2.1 (capture scope)──▶ routes/api.php /api/ext/v1 ──▶ Extension\*Controller
 External site ──▶ routes/web.php (cors, no CSRF) ──▶ Helpdesk widget/portal
+Visitor / iframe ──▶ routes/web.php /f/{slug} (no CSRF) ──▶ PublicLeadFormController
+Other tools ──Bearer inbound token──▶ routes/api.php /api/lead-forms/{uuid}/inbound
 ```
 
 - **No API layer for the app itself.** Inertia passes controller props straight to React.
@@ -122,6 +124,15 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Ticket links** (`tickets.show`) render `Helpdesks/Show` with `openTicketId`; there is no separate ticket page.
 - **Support page:** `/support/{public_slug}` (`HelpdeskWidgetController::supportPage`) renders the embed form full-page with branding; the address is set under Helpdesk settings → Embed.
 - **Notifications UI:** every notification type is rendered by `components/NotificationMessage.tsx` (bell dropdown + `/notifications`). A new notification type needs a case there.
+
+### Lead forms (BRAI-93)
+- **Models:** `LeadForm` (route key `slug`, public address `public_slug`), `LeadFormColumn` (its leads board), `Lead` (a card; `answers` by field id), `LeadFormEvent` (anonymous analytics: view/start/step/submit per visit session)
+- **Format:** `app/Support/LeadForms/LeadFormDefinition.php` — steps → fields (12 types, choice options with lucide icon names or emoji), `visible_if` conditions on steps and fields (only earlier fields). `normalize()` repairs builder input; `validateAnswers()` validates only *visible* fields. The browser mirror is `resources/js/lib/leadForms.ts` (`visibleSteps`, `passes`) — change both together.
+- **Theme / settings:** `LeadFormOptions` (whitelisted keys + defaults; `publicSettings()` strips webhook / notify / email settings from public props). **Templates:** `LeadFormTemplates` (blank + 12, with board columns).
+- **Intake:** `LeadIntake::create()` (public submit and inbound webhook) → first column, next number (`takeLeadNumber`, row lock), contact copied from fields with `maps_to`, then `NewLeadNotification` (picked members), `LeadConfirmationNotification` (lead), queued `DeliverLeadWebhook` (HMAC `X-Brainitive-Signature`, `OutboundUrl`).
+- **Controllers:** `LeadFormController` (CRUD, builder autosave JSON `PUT`, publish, columns, assets, inbound token, analytics JSON, template catalog), `LeadController` (move / update / delete leads), `PublicLeadFormController` (`/f/{slug}`, `/f/{slug}/embed` with `frame-ancestors *`, submit with honeypot, events), `LeadFormInboundController` (API).
+- **Policy:** `LeadFormPolicy` — members view; workspace admins + project admins/editors build and work leads; project admins delete.
+- **Pages:** `Pages/LeadForms/Show.tsx` (tabs Leads / Builder / Share / Analytics / Settings, components in `components/leadForms/`), `Pages/LeadForms/Public.tsx` (no layout; renders `LeadFormRenderer`, also used as the builder preview).
 
 ### Snippets
 - **Models:** `SnippetCollection` (policy target), `Snippet`

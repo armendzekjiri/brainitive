@@ -29,6 +29,15 @@ Deployments are matched by window: what reached the deployed ref after the previ
 deploy to that environment (`github_connections.deployments`). Keep processing idempotent
 (upserts keyed by item+kind+repo+identifier) — GitHub redelivers.
 
+### Lead form logic lives twice
+Which steps / questions a visitor sees is evaluated in the browser (`lib/leadForms.ts`) *and*
+on submit (`LeadFormDefinition::visibleFields`) — hidden questions are never validated and
+their answers are dropped. Keep the operators identical (a condition on a hidden question
+counts as unanswered). Lead answers are keyed by field id; `leads.meta.labels` keeps the
+question labels at submit time so answers to deleted questions stay readable.
+`/f/*` is CSRF-exempt (stateless submit + events); deleting a form clears `public_slug`
+and renames `slug`, because both unique indexes include soft-deleted rows.
+
 ### Production deploys never run seeders
 `deploy.yml` runs `migrate --force` only; `docker/entrypoint.sh` seeds item types and
 priorities, the git-deployed server didn't. Reference rows the app needs (types, priorities)

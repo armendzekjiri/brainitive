@@ -44,6 +44,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 | Plan | Status |
 |---|---|
 | [Helpdesk templates (BRAI-92)](./feat-helpdesk-templates.md) | done |
+| [Lead Generation forms (BRAI-93)](./feat-lead-forms.md) | done |
 | [Template gallery + more project templates (BRAI-91)](./feat-template-gallery.md) | done |
 | [Project templates (BRAI-72)](./feat-project-templates.md) | done |
 | [Board custom fields (BRAI-77)](./feat-board-custom-fields.md) | done |

@@ -40,6 +40,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'widget/*',
             'portal/*',
+            'f/*', // public lead forms: submit + analytics events (stateless)
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
