@@ -76,6 +76,18 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.29.0',
+        title: 'My Day and a focus timer',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'My Work now starts with “My Day”: pick what you’ll work on today with the ☀ on any task — board issues and list tasks alike — and drag them into your order.',
+            'Planning never changes a task: status, due date and assignee stay as they are. Unfinished tasks only come back tomorrow when you click “Bring over”.',
+            'Focus timer: press ▶ on an issue in My Day. The timer shows in the top bar on every page and keeps running across tabs and devices.',
+            'Stop it to review the time (change it if you took a break, add a note) before it is logged on the issue — the same as “Log work”, and never twice.',
+        ]
+    },
+    {
         version: 'v1.28.0',
         title: 'Lists, redesigned — with reminders',
         tag: 'Feature',

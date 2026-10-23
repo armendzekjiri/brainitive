@@ -340,6 +340,32 @@ class Item extends Model
 
     public const MINUTES_PER_WEEK = 5 * self::MINUTES_PER_DAY;
 
+    /** Validation for a logged duration ("45m", "1h 30m", "1d"; at most a week per entry). */
+    public static function durationRules(): array
+    {
+        return ['required', 'string', 'max:50', function ($attribute, $value, $fail) {
+            $minutes = self::parseDuration($value);
+            if ($minutes === null || $minutes < 1 || $minutes > self::MINUTES_PER_WEEK) {
+                $fail('Use a duration like 45m, 1h 30m, 2h or 1d (max. 1w per entry).');
+            }
+        }];
+    }
+
+    /**
+     * Add worked minutes to the item and record a `work_logged` entry (by the signed-in user).
+     * Used by "Log work" and by stopping a focus timer.
+     */
+    public function logWork(int $minutes, ?string $note = null): void
+    {
+        $this->increment('time_spent', $minutes);
+
+        ActivityLog::log($this, 'work_logged', null, [
+            'minutes' => $minutes,
+            'total_minutes' => $this->time_spent,
+            'note' => $note,
+        ]);
+    }
+
     /**
      * Parse a Jira-style duration ("1w 2d 3h 30m", "1.5h", "90") into minutes.
      * A bare number is minutes. Returns null when the input isn't a duration.

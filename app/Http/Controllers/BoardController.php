@@ -488,23 +488,12 @@ class BoardController extends Controller
         $this->authorize('update', $item);
 
         $validated = $request->validate([
-            'time' => ['required', 'string', 'max:50', function ($attribute, $value, $fail) {
-                $minutes = Item::parseDuration($value);
-                if ($minutes === null || $minutes < 1 || $minutes > Item::MINUTES_PER_WEEK) {
-                    $fail('Use a duration like 45m, 1h 30m, 2h or 1d (max. 1w per entry).');
-                }
-            }],
+            'time' => Item::durationRules(),
             'note' => 'nullable|string|max:255',
         ]);
 
         $minutes = Item::parseDuration($validated['time']);
-        $item->increment('time_spent', $minutes);
-
-        ActivityLog::log($item, 'work_logged', null, [
-            'minutes' => $minutes,
-            'total_minutes' => $item->time_spent,
-            'note' => $validated['note'] ?? null,
-        ]);
+        $item->logWork($minutes, $validated['note'] ?? null);
 
         return back()->with('success', 'Work logged: '.Item::formatDuration($minutes).'.');
     }

@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [My Day + focus timer (BRAI-74, phase 1)](./feat-my-day-focus-timer.md) | done |
 | [Task lists redesign + due reminders (BRAI-89)](./feat-task-lists-redesign.md) | done |
 | [Fix: saved swimlanes don't show on the board](./fix-swimlanes-default-wins.md) | done |
 | [Fix: swimlane save state, errors, release order](./fix-swimlanes-save-state.md) | done |
