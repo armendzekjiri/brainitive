@@ -7,6 +7,7 @@ use App\Models\Item;
 use App\Models\Project;
 use App\Models\TaskList;
 use App\Models\TaskListItem;
+use App\Support\MyDay\MyDayPlan;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -263,10 +264,48 @@ class MyWorkController extends Controller
             return $boardCount + $listCount;
         };
 
+        // My Day (BRAI-74): the hand-picked plan for the user's local today, in their order.
+        $planDate = MyDayPlan::today($user);
+        $plan = MyDayPlan::forDate($user, $planDate, [
+            'board:id,project_id,name,slug',
+            'board.project:id,workspace_id,name,slug,key,color',
+            'board.project.workspace:id,name,slug',
+            'column:id,name,is_done_column',
+            'itemType',
+            'priority',
+            'assignee:id,name,email',
+        ], [
+            'taskList:id,project_id,name,slug',
+            'taskList.project:id,workspace_id,name,slug,key,color',
+            'taskList.project.workspace:id,name,slug',
+            'assignee:id,name,email',
+        ]);
+        $myDay = $plan->map(function (array $row) {
+            $work = $row['work'];
+            $project = $work instanceof Item ? $work->board->project : $work->taskList->project;
+
+            return [
+                'item' => $work instanceof Item ? $this->mapBoardItem($work) : $this->mapListItem($work),
+                'project' => [
+                    'id' => $project->id,
+                    'name' => $project->name,
+                    'slug' => $project->slug,
+                    'color' => $project->color,
+                    'workspace' => $project->workspace ? ['id' => $project->workspace->id, 'name' => $project->workspace->name, 'slug' => $project->workspace->slug] : null,
+                ],
+            ];
+        })->values();
+
         return Inertia::render('MyWork/Index', [
             'scope' => $scope,
             'filter' => $filter,
             'projects' => $projectsPayload,
+            'myDay' => [
+                'date' => $planDate,
+                'rows' => $myDay,
+                'keys' => $plan->map(fn (array $row) => $row['entry']->work_type.':'.$row['entry']->work_id)->values(),
+                'carryOverCount' => MyDayPlan::carryOverCandidates($user, $planDate)->count(),
+            ],
             'counts' => [
                 'all' => $countFor($scope, 'all'),
                 'today' => $countFor($scope, 'today'),

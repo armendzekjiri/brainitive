@@ -400,6 +400,8 @@ export type PageProps<
         success?: string;
         error?: string;
     };
+    /** Running focus timer (BRAI-74), null when none. */
+    activeTimer?: ActiveTimer | null;
     // Shared layout data
     workspaces?: Workspace[];
     currentWorkspace?: Workspace & {
@@ -464,6 +466,23 @@ export interface MyWorkItem {
     item_type?: ItemType | null;
     priority?: ItemPriority | null;
     assignee?: User | null;
+}
+
+/** The running focus timer (shared prop). `item` is null when the user can no longer open it. */
+export interface ActiveTimer {
+    id: number;
+    started_at: string;
+    elapsed_seconds: number;
+    elapsed_minutes: number;
+    item: { id: number; key: string; title: string; url: string | null } | null;
+}
+
+/** Today's hand-picked plan on My Work (BRAI-74). `keys` = "board:12" / "list:5". */
+export interface MyDayPlan {
+    date: string;
+    rows: { item: MyWorkItem; project: Pick<MyWorkProject, 'id' | 'name' | 'slug' | 'color' | 'workspace'> }[];
+    keys: string[];
+    carryOverCount: number;
 }
 
 /** My Work page: project with assigned items */

@@ -1,6 +1,9 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
-import { PageProps, MyWorkProject, MyWorkItem } from '@/types';
+import { PageProps, MyWorkProject, MyWorkItem, MyDayPlan } from '@/types';
+import MyDaySection from '@/components/MyDaySection';
+import { toast } from 'sonner';
+import { Sun } from 'lucide-react';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -23,6 +26,7 @@ interface Props extends PageProps {
     projects: MyWorkProject[];
     counts: { all: number; today: number; overdue: number; week: number };
     scopeCounts: { assigned: number; created: number };
+    myDay: MyDayPlan;
 }
 
 const filters: { key: FilterKey; label: string; icon: typeof Calendar }[] = [
@@ -100,12 +104,42 @@ function PriorityBars({ color }: { color?: string }) {
     );
 }
 
+const ROW_GRID = 'md:grid-cols-[24px_58px_minmax(220px,1fr)_180px_30px_110px_74px_34px_32px]';
+
+/** ☀ — put a task on today's My Day or take it off. Never changes the task itself. */
+function MyDayToggle({ item, planned }: { item: MyWorkItem; planned: boolean }) {
+    const toggle = () => {
+        const data = { work_type: item.work_type, work_id: item.id };
+        const options = { preserveScroll: true, preserveState: true, onError: () => toast.error('Could not update My Day.') };
+        if (planned) router.delete(route('my-day.destroy'), { data, ...options });
+        else router.post(route('my-day.store'), data, options);
+    };
+
+    return (
+        <button
+            type="button"
+            onClick={toggle}
+            aria-pressed={planned}
+            aria-label={planned ? `Remove “${item.title}” from My Day` : `Add “${item.title}” to My Day`}
+            title={planned ? 'Remove from My Day' : 'Add to My Day'}
+            className={cn(
+                'grid size-7 place-items-center rounded-md transition-colors hover:bg-secondary',
+                planned ? 'text-amber-500' : 'text-muted-foreground/40 hover:text-amber-500 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100',
+            )}
+        >
+            <Sun className={cn('size-4', planned && 'fill-current')} />
+        </button>
+    );
+}
+
 function ItemRow({
     item,
     project,
+    planned,
 }: {
     item: MyWorkItem;
     project: MyWorkProject;
+    planned: boolean;
 }) {
     const workspaceSlug = project.workspace?.slug;
     const projectSlug = project.slug;
@@ -122,11 +156,12 @@ function ItemRow({
     const sourceLabel = item.source.type === 'list' ? 'List' : 'Board';
 
     return (
-        <Link
-            href={href}
+        // The title link stretches over the whole row; the ☀ button sits above it (no button inside a link).
+        <div
             className={cn(
-                'group grid gap-2 border-b border-border/70 px-3.5 py-[9px] text-[12.5px] transition-colors last:border-b-0 hover:bg-background',
-                'md:grid-cols-[24px_58px_minmax(220px,1fr)_180px_30px_110px_74px_34px] md:items-center md:gap-2.5',
+                'group relative grid gap-2 border-b border-border/70 px-3.5 py-[9px] text-[12.5px] transition-colors last:border-b-0 hover:bg-background',
+                ROW_GRID,
+                'md:items-center md:gap-2.5',
                 isDone && 'opacity-70',
             )}
         >
@@ -145,14 +180,15 @@ function ItemRow({
             </span>
 
             <span className="min-w-0">
-                <span
+                <Link
+                    href={href}
                     className={cn(
-                        'block truncate font-medium leading-5 text-foreground group-hover:text-primary',
+                        'block truncate font-medium leading-5 text-foreground outline-none after:absolute after:inset-0 group-hover:text-primary focus-visible:after:rounded-sm focus-visible:after:ring-2 focus-visible:after:ring-ring',
                         isDone && 'line-through text-muted-foreground',
                     )}
                 >
                     {item.title || 'Untitled'}
-                </span>
+                </Link>
                 <span className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground md:hidden">
                     <span>{sourceLabel}: {item.source.name}</span>
                     <span>{statusName}</span>
@@ -198,11 +234,16 @@ function ItemRow({
                 <PriorityBars color={item.priority?.color} />
                 <span className="truncate">{item.priority?.name || 'No priority'}</span>
             </span>
-        </Link>
+
+            <span className="relative z-10 flex justify-end">
+                <MyDayToggle item={item} planned={planned} />
+            </span>
+        </div>
     );
 }
 
-export default function MyWorkIndex({ auth, scope, filter, projects, counts, scopeCounts }: Props) {
+export default function MyWorkIndex({ auth, scope, filter, projects, counts, scopeCounts, myDay }: Props) {
+    const plannedKeys = new Set(myDay.keys);
     const totalItems = projects.reduce((acc, p) => acc + p.items.length, 0);
     const visibleDone = projects.reduce((acc, p) => acc + p.items.filter((item) => item.completed_at).length, 0);
     const firstName = auth.user.name?.split(' ')[0] || 'there';
@@ -268,6 +309,8 @@ export default function MyWorkIndex({ auth, scope, filter, projects, counts, sco
                         </div>
                     </div>
                 </div>
+
+                <MyDaySection plan={myDay} />
 
                 <div className="flex flex-wrap items-center gap-2">
                     <div className="inline-flex rounded-[7px] border border-border bg-secondary p-[3px]">
@@ -373,7 +416,7 @@ export default function MyWorkIndex({ auth, scope, filter, projects, counts, sco
                                         {project.items.length !== 1 ? 's' : ''}
                                     </Badge>
                                 </header>
-                                <div className="hidden grid-cols-[24px_58px_minmax(220px,1fr)_180px_30px_110px_74px_34px] gap-2.5 border-b border-border/70 bg-muted/20 px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground md:grid">
+                                <div className={cn('hidden gap-2.5 border-b border-border/70 bg-muted/20 px-3.5 py-2 text-[10.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground md:grid', ROW_GRID)}>
                                     <span />
                                     <span>Key</span>
                                     <span>Work</span>
@@ -382,6 +425,7 @@ export default function MyWorkIndex({ auth, scope, filter, projects, counts, sco
                                     <span>Status</span>
                                     <span>Due</span>
                                     <span />
+                                    <span />
                                 </div>
                                 <div>
                                     {project.items.map((item) => (
@@ -389,6 +433,7 @@ export default function MyWorkIndex({ auth, scope, filter, projects, counts, sco
                                             key={`${item.work_type}-${item.id}`}
                                             item={item}
                                             project={project}
+                                            planned={plannedKeys.has(`${item.work_type}:${item.id}`)}
                                         />
                                     ))}
                                 </div>

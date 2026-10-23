@@ -11,6 +11,7 @@ use App\Http\Controllers\FileController;
 use App\Http\Controllers\HelpdeskController;
 use App\Http\Controllers\HelpdeskWidgetController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\MyDayController;
 use App\Http\Controllers\MyWorkController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OnboardingController;
@@ -34,6 +35,7 @@ use App\Http\Controllers\TaskListController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\WhiteboardController;
 use App\Http\Controllers\WorkspaceController;
+use App\Http\Controllers\WorkTimerController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -138,6 +140,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // My Work — assigned items across all workspaces
     Route::get('/my-work', [MyWorkController::class, 'index'])->name('my-work.index');
+    Route::post('/my-day', [MyDayController::class, 'store'])->name('my-day.store');
+    Route::delete('/my-day', [MyDayController::class, 'destroy'])->name('my-day.destroy');
+    Route::post('/my-day/reorder', [MyDayController::class, 'reorder'])->name('my-day.reorder');
+    Route::post('/my-day/carry-over', [MyDayController::class, 'carryOver'])->name('my-day.carry-over');
+    Route::post('/work-timer', [WorkTimerController::class, 'start'])->name('work-timer.start');
+    Route::post('/work-timer/stop', [WorkTimerController::class, 'stop'])->name('work-timer.stop');
+    Route::delete('/work-timer', [WorkTimerController::class, 'discard'])->name('work-timer.discard');
 
     // Share links for docs and issues (people who can edit them)
     Route::get('/share-links', [ShareLinkController::class, 'index'])->name('share-links.index');

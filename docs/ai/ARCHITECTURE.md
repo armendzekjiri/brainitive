@@ -155,6 +155,15 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 
 ### MyWork, Search, Notifications, Files
 - **MyWork:** `MyWorkController` → `Pages/MyWork/` — cross-workspace "assigned to me" dashboard
+  - **My Day** (BRAI-74): `MyDayEntry` (`my_day_entries`: user + board item / list task + local
+    `plan_date` + position), `MyDayController` (`my-day.*`: add / remove / reorder /
+    carry-over), `Support/MyDay/MyDayPlan` (today in the user's zone, resolves entries to
+    work the user can still open, carry-over candidates). UI: `components/MyDaySection.tsx`
+    on top of My Work + ☀ toggle on every row. Never changes the task itself.
+  - **Focus timer:** `WorkTimer` (`work_timers`, unique `user_id` = one running timer),
+    `WorkTimerController` (`work-timer.start/stop/discard`), shared prop `activeTimer` →
+    `components/WorkTimerPill.tsx` in the top bar. Stop logs through `Item::logWork()` (also
+    used by `BoardController::logWork`) after a review; board items only.
 - **Search:** `SearchController` (invokable) → `/search` (workspaces, projects, boards, plans, issues, documents, snippets, bookmarks; optional `project` param ranks that project first)
 - **GitHub development panel (BRAI-61):** per-project webhook (`GithubConnection`, settings in `ProjectGithubController` → Projects/Edit "Integrations", `components/projects/GithubIntegrationCard.tsx`). `POST /api/webhooks/github/{uuid}` (`GithubWebhookController`: HMAC check, `GithubDelivery` dedupe) → `ProcessGithubDelivery` job → `Support/Github/DevelopmentSync` writes `ItemDevLink` rows (branch / commit / pull_request / deployment) for keys found by `IssueKeys`. Shown by `ItemDevelopment` in the item-details JSON and `components/item/DevelopmentPanel.tsx`.
 - **Swimlanes (BRAI-87):** setup in `board.settings.swimlanes` (validated by `Support/Boards/Swimlanes`, saved via `BoardController@updateSwimlanes`), builder `components/board/SwimlaneSettings.tsx` on Boards/Edit, rules + grouping in `resources/js/lib/swimlanes.ts`, rendering `SwimlaneBoard` in Boards/Show (personal mode in localStorage `board-{id}-lane-mode`).

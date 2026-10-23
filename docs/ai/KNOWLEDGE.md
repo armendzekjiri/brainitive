@@ -292,6 +292,11 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **Item soft deletes don't cascade.** The `parent_id` FK cascades only on hard deletes, so
   `destroyItem` soft-deletes `descendantIds()` explicitly. Before that, a deleted issue's
   subtasks stayed behind, although the confirm dialog said they'd be deleted.
+- **Focus timers can't double-log.** `work_timers.user_id` is unique (two tabs can't start two
+  timers), and stopping deletes the timer row and calls `Item::logWork()` in one transaction
+  — a retried stop finds no timer and logs nothing. Stop / discard carry the `timer_id` the
+  user reviewed, so a stale tab can't log onto (or delete) a timer started later elsewhere. Only board items have a work log
+  (`items.time_spent`); list tasks can be on My Day but can't be timed.
 - **The app runs in UTC; task dates and times are the user's wall clock.** `due_date` /
   `due_time` / `start_*` on items and list tasks have no zone. Anything that turns them into a
   moment (reminders, "today", the morning digest) must use the recipient's

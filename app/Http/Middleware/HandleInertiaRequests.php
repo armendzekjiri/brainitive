@@ -9,6 +9,7 @@ use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Models\WorkTimer;
 use App\Support\Plans\PlanTemplates;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -233,6 +234,8 @@ class HandleInertiaRequests extends Middleware
                 'user' => $user,
                 'isInstanceAdmin' => fn () => (bool) $user?->isInstanceAdmin(),
             ],
+            // The running focus timer (BRAI-74), shown as a pill in the top bar on every page.
+            'activeTimer' => fn () => $user ? WorkTimer::where('user_id', $user->id)->first()?->payload($user) : null,
             'workspaces' => $workspaces,
             'currentWorkspace' => $currentWorkspace,
             'currentProjectId' => $currentProjectId,
