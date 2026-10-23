@@ -48,6 +48,14 @@ feature branch ──PR──▶ pre-release ──(green)──PR──▶ main
   Brainitive card goes to **Testing** once it's live there.
 - **Deploy** (`deploy.yml`): `needs: tests`, then fast-forwards the server to `github.sha`,
   never to a newer commit nobody tested.
+- **Branch protection:**
+  - `pre-release` takes PRs only, with **Pint, Frontend (types + build), PHPUnit (PostgreSQL)
+    and E2E (Chromium)** green.
+  - `main` takes PRs only, with **Ready for main** green (the release PR the workflow opens).
+  - Neither can be force-pushed or deleted.
+  - Admins can override in an emergency (`enforce_admins` is off).
+  - Renaming a CI job means updating the required check names
+    (`gh api repos/{owner}/{repo}/branches/<b>/protection`).
 - **Hotfix** straight into `main` (emergencies only): merge `main` back into `pre-release`
   right away.
 
