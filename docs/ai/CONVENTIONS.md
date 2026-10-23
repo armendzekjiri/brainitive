@@ -57,7 +57,7 @@ Use hex directly on public pages; app interior uses shadcn/ui CSS variables (lig
 | Migrations | snake_case + timestamp | `create_boards_table.php` |
 | Page components | PascalCase | `Pages/Boards/Show.tsx` |
 | UI components (shadcn) | kebab-case | `components/ui/dropdown-menu.tsx` |
-| Custom components | PascalCase | `components/SearchModal.tsx` |
+| Custom components | PascalCase | `components/CommandPalette.tsx` |
 | Hooks | camelCase, `use` prefix | `hooks/use-mobile.tsx` |
 | Routes | dot-notation, **always named** | `tickets.replies.store` |
 | DB tables | snake_case plural | `board_columns` |

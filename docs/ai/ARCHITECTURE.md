@@ -145,7 +145,8 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 
 ### MyWork, Search, Notifications, Files
 - **MyWork:** `MyWorkController` → `Pages/MyWork/` — cross-workspace "assigned to me" dashboard
-- **Search:** `SearchController` (invokable) → `/search`
+- **Search:** `SearchController` (invokable) → `/search` (workspaces, projects, boards, plans, issues, documents, snippets, bookmarks; optional `project` param ranks that project first)
+- **Command palette (BRAI-83):** `components/CommandPalette.tsx` is the only launcher — ⌘K/Ctrl+K, Ctrl+. opens command mode (`>`); commands are defined in `AppLayout`. Recent destinations live in localStorage as `{type,id}` per user and are resolved/permission-filtered by `CommandPaletteController@recent` (`POST /command-palette/recent`).
 - **Notifications:** `NotificationController` (DB-backed list + unread count + mark read) → `Pages/Notifications/`; delivery = `database` + optional `WebPushChannel`. Push subscriptions via `PushSubscriptionController`. See the [add-notification skill](./skills/add-notification.md). **Web push requires `VAPID_*` keys in `.env`** — without them the frontend can't subscribe and nothing is ever delivered (see [`KNOWLEDGE.md`](./KNOWLEDGE.md)).
 - **Files:** `FileController` — `/upload/image`, `/upload/document` (public disk, UUID names)
 
