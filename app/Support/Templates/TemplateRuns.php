@@ -36,6 +36,8 @@ class TemplateRuns
         $builtins = array_map(fn ($template) => [
             'id' => 'builtin:'.$template['key'],
             'source' => 'builtin',
+            'category' => $template['category'],
+            'tags' => $template['tags'],
             'name' => $template['name'],
             'description' => $template['description'],
             'icon' => $template['icon'],
@@ -55,6 +57,8 @@ class TemplateRuns
             ->map(fn (ProjectTemplate $template) => [
                 'id' => 'template:'.$template->uuid,
                 'source' => 'workspace',
+                'category' => 'workspace',
+                'tags' => [],
                 'name' => $template->name,
                 'description' => $template->description,
                 'icon' => 'layout-template',
@@ -67,6 +71,22 @@ class TemplateRuns
             ])->values()->all();
 
         return [...$builtins, ...$saved];
+    }
+
+    /**
+     * Gallery categories: the built-in ones, plus "Your workspace" when it has templates.
+     *
+     * @param  list<array<string, mixed>>  $catalog
+     * @return list<array{key: string, name: string}>
+     */
+    public static function categories(array $catalog): array
+    {
+        $categories = array_map(fn ($key, $name) => ['key' => $key, 'name' => $name], array_keys(BuiltinTemplates::CATEGORIES), BuiltinTemplates::CATEGORIES);
+        if (in_array('workspace', array_column($catalog, 'category'), true)) {
+            array_unshift($categories, ['key' => 'workspace', 'name' => 'Your workspace']);
+        }
+
+        return $categories;
     }
 
     /**

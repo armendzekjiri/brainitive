@@ -73,7 +73,7 @@ class ProjectTemplatesTest extends TestCase
     public function test_every_built_in_template_creates_a_usable_project(): void
     {
         foreach (BuiltinTemplates::all() as $index => $template) {
-            $key = 'T'.chr(65 + $index);
+            $key = 'T'.chr(65 + intdiv($index, 26)).chr(65 + $index % 26);
             $this->createFromTemplate('builtin:'.$template['key'], ['name' => $template['name'], 'key' => $key])
                 ->assertSessionHasNoErrors()
                 ->assertRedirect();
@@ -429,11 +429,72 @@ class ProjectTemplatesTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Projects/Create')
                 ->where('templates.0.id', 'builtin:software-development')
+                ->where('templates.0.category', 'software')
                 ->where('templates.0.summary.boards.0.columns', ['Backlog', 'To Do', 'In Progress', 'In Review', 'Done'])
-                ->where('templates.4.name', 'Agency project')
-                ->where('templates.4.can_delete', false)
-                ->missing('templates.4.document'));
+                ->where('templates.'.count(BuiltinTemplates::all()).'.name', 'Agency project')
+                ->where('templates.'.count(BuiltinTemplates::all()).'.category', 'workspace')
+                ->where('templates.'.count(BuiltinTemplates::all()).'.can_delete', false)
+                ->missing('templates.'.count(BuiltinTemplates::all()).'.document')
+                ->where('categories.0.key', 'workspace'));
         $this->assertFileExists(resource_path('js/Pages/Projects/Create.tsx'));
+    }
+
+    public function test_gallery_catalog_lists_categories_and_detail_data(): void
+    {
+        $response = $this->actingAs($this->editor)->getJson(route('project-templates.catalog', $this->workspace))->assertOk();
+
+        $categories = array_column($response->json('categories'), 'key');
+        $this->assertSame(array_keys(BuiltinTemplates::CATEGORIES), $categories, 'No "Your workspace" category without saved templates.');
+        foreach ($response->json('templates') as $template) {
+            $this->assertContains($template['category'], $categories, "{$template['name']} has a known category");
+            $this->assertNotEmpty($template['summary']['boards']);
+        }
+        $software = collect($response->json('templates'))->firstWhere('id', 'builtin:software-development');
+        $this->assertContains('Epic', $software['summary']['issue_types']);
+        $this->assertSame('Project setup', $software['summary']['sample_issues'][0]['title']);
+        $this->assertContains('Definition of done', $software['summary']['doc_names']);
+
+        $this->actingAs($this->viewer)->getJson(route('project-templates.catalog', $this->workspace))->assertForbidden();
+        $this->actingAs(User::factory()->create())->getJson(route('project-templates.catalog', $this->workspace))->assertForbidden();
+    }
+
+    public function test_built_in_documents_survive_normalization_unchanged(): void
+    {
+        foreach (BuiltinTemplates::all() as $template) {
+            $raw = BuiltinTemplates::raw($template['key']);
+            $doc = BuiltinTemplates::document($template['key']);
+            $name = $template['key'];
+
+            foreach (['labels', 'fields', 'boards', 'items', 'links', 'pages', 'task_lists', 'plans'] as $section) {
+                $this->assertCount(count($raw[$section] ?? []), $doc[$section], "{$name}: {$section}");
+            }
+            foreach ($raw['items'] ?? [] as $i => $item) {
+                $kept = $doc['items'][$i];
+                $this->assertSame($item['column'], $kept['column'], "{$name}: column of {$item['ref']}");
+                $this->assertSame($item['parent'] ?? null, $kept['parent'], "{$name}: parent of {$item['ref']}");
+                $this->assertSame(count($item['labels'] ?? []), count($kept['labels']), "{$name}: labels of {$item['ref']}");
+                $this->assertSame(array_keys($item['fields'] ?? []), array_keys($kept['fields']), "{$name}: field values of {$item['ref']}");
+                $this->assertSame($item['type'] ?? null, $kept['type'], "{$name}: type of {$item['ref']}");
+            }
+            foreach ($raw['boards'] as $b => $board) {
+                foreach ($board['swimlanes']['lanes'] ?? [] as $l => $lane) {
+                    $this->assertSame(count($lane['rules']['labels'] ?? []), count($doc['boards'][$b]['swimlanes']['lanes'][$l]['rules']['labels']), "{$name}: lane {$lane['name']}");
+                }
+            }
+            foreach ($raw['plans'] ?? [] as $p => $plan) {
+                $this->assertCount(count($plan['dependencies'] ?? []), $doc['plans'][$p]['dependencies'], "{$name}: plan dependencies");
+                foreach ($plan['rows'] as $r => $row) {
+                    $this->assertSame($row['item'] ?? null, $doc['plans'][$p]['rows'][$r]['item'], "{$name}: plan row {$row['id']}");
+                }
+            }
+        }
+    }
+
+    public function test_more_than_fifteen_built_ins_ship_across_all_categories(): void
+    {
+        $templates = BuiltinTemplates::all();
+        $this->assertGreaterThanOrEqual(15, count($templates));
+        $this->assertSame(array_keys(BuiltinTemplates::CATEGORIES), array_values(array_unique(array_column($templates, 'category'))));
     }
 
     // ── Format compatibility ─────────────────────────────────────────────────

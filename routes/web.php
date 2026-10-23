@@ -244,6 +244,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('projects/{project:slug}/move-preview', [ProjectController::class, 'movePreview'])->name('projects.move.preview')->scopeBindings();
         Route::post('projects/{project:slug}/move', [ProjectController::class, 'move'])->name('projects.move')->scopeBindings();
 
+        Route::get('project-templates', [ProjectTemplateController::class, 'catalog'])->name('project-templates.catalog');
         Route::delete('project-templates/{projectTemplate}', [ProjectTemplateController::class, 'destroy'])->name('project-templates.destroy');
 
         // Labels (nested under projects)

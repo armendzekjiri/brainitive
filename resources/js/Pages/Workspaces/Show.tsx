@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { openCreateProject } from '@/components/projects/CreateProjectDialog';
 import { Head, Link } from '@inertiajs/react';
 import { PageProps, Workspace, Project, Bookmark, SnippetCollection, User } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -170,9 +171,7 @@ export default function WorkspacesShow({ workspace, userRole, stats, upcomingDue
                                 </Link>
                             )}
                             {canCreateProjects && (
-                                <Link href={route('projects.create', workspace.slug)}>
-                                    <Button size="sm" className="h-8 gap-1.5 bg-white text-primary hover:bg-white/90"><Plus className="size-3.5" />New project</Button>
-                                </Link>
+                                <Button size="sm" className="h-8 gap-1.5 bg-white text-primary hover:bg-white/90" onClick={() => openCreateProject()}><Plus className="size-3.5" />New project</Button>
                             )}
                         </div>
                     </div>
@@ -228,9 +227,9 @@ export default function WorkspacesShow({ workspace, userRole, stats, upcomingDue
                             <div className="mb-3 flex items-center justify-between">
                                 <h2 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wide">All projects</h2>
                                 {canCreateProjects && projects.length > 0 && (
-                                    <Link href={route('projects.create', workspace.slug)} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+                                    <button type="button" onClick={() => openCreateProject()} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
                                         <Plus className="size-3.5" />New project
-                                    </Link>
+                                    </button>
                                 )}
                             </div>
 
@@ -243,9 +242,7 @@ export default function WorkspacesShow({ workspace, userRole, stats, upcomingDue
                                         <h3 className="text-lg font-semibold mb-2">No projects yet</h3>
                                         <p className="text-muted-foreground text-center max-w-md mb-6 text-sm">Create your first project to manage boards, documents, and tasks.</p>
                                         {canCreateProjects && (
-                                            <Link href={route('projects.create', workspace.slug)}>
-                                                <Button className="gap-2"><Plus className="size-4" />Create project</Button>
-                                            </Link>
+                                            <Button className="gap-2" onClick={() => openCreateProject()}><Plus className="size-4" />Create project</Button>
                                         )}
                                     </CardContent>
                                 </Card>

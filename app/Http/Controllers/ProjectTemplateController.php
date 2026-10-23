@@ -8,6 +8,7 @@ use App\Models\Workspace;
 use App\Support\Templates\TemplateCapture;
 use App\Support\Templates\TemplateDocument;
 use App\Support\Templates\TemplateException;
+use App\Support\Templates\TemplateRuns;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,6 +22,21 @@ use Illuminate\Validation\ValidationException;
  */
 class ProjectTemplateController extends Controller
 {
+    /**
+     * The template gallery for the "New project" popup (loaded when it opens).
+     */
+    public function catalog(Request $request, Workspace $workspace): JsonResponse
+    {
+        $this->authorize('createProjects', $workspace);
+
+        $templates = TemplateRuns::catalog($workspace, $request->user());
+
+        return response()->json([
+            'categories' => TemplateRuns::categories($templates),
+            'templates' => $templates,
+        ]);
+    }
+
     /**
      * What saving this project as a template would include (for the preview in the dialog).
      */

@@ -76,6 +76,18 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.32.0',
+        title: 'Template gallery with 20 templates',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            '“New project” now opens a template gallery: browse by category (Software, Marketing, Agency & clients, HR & people, Sales, Operations & finance, Personal & team) or search.',
+            'Open a template to see exactly what you get: the workflow, issue types, fields, labels, starter issues, docs, checklists and plans.',
+            '16 new templates, including Bug tracking, Release & DevOps, Marketing campaign, Content calendar, Social media, Event planning, Client onboarding, Design requests, Recruiting, Employee onboarding, Sales pipeline, Budget approvals, Office & IT requests, Personal tasks, Team OKRs and Meeting notes.',
+            'Templates saved in your workspace show up under “Your workspace”. You can also create a project from the command palette (⌘K → Create Project).',
+        ]
+    },
+    {
         version: 'v1.31.0',
         title: 'Project templates',
         tag: 'Feature',

@@ -367,6 +367,7 @@ Pages work like Confluence. Keep these rules when touching pages:
   column, …) needs a capture line in `TemplateCapture`, a field in `TemplateDocument`, and a
   create line in `TemplateInstantiator` — plus a test in `ProjectTemplatesTest`. Anything
   personal or secret (people, comments, tokens, integrations) stays out on purpose.
+- **A new built-in template** = a builder method in the matching `Support/Templates/Builtin/*Templates` class (refs, day offsets, default types/priorities by `slug:`) plus one line in `BuiltinTemplates::TEMPLATES` (name, category, icon, description, tags). The loop test creates a project from every built-in.
 - **Never instantiate outside `TemplateRuns::createProject()`** — it keeps the run record
   (idempotency) and turns failures into a message; the project is created in one transaction.
 

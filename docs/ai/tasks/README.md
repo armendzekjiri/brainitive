@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Template gallery + more project templates (BRAI-91)](./feat-template-gallery.md) | done |
 | [Project templates (BRAI-72)](./feat-project-templates.md) | done |
 | [Board custom fields (BRAI-77)](./feat-board-custom-fields.md) | done |
 | [My Day + focus timer (BRAI-74, phase 1)](./feat-my-day-focus-timer.md) | done |
