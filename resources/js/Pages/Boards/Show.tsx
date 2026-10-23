@@ -2152,13 +2152,18 @@ export default function BoardsShow({
     // ── Swimlanes ────────────────────────────────────────────────────────
     const boardLanes = board.settings?.swimlanes ?? null;
     const laneStorageKey = `board-${board.id}-lane-mode`;
-    const [laneMode, setLaneModeState] = useState<SwimlaneMode>(() => {
+    const [chosenLaneMode, setLaneModeState] = useState<SwimlaneMode>(() => {
         try {
             const stored = localStorage.getItem(laneStorageKey) as SwimlaneMode | null;
-            if (stored && stored in MODE_LABELS) return stored;
+            if (stored && Object.prototype.hasOwnProperty.call(MODE_LABELS, stored)) return stored;
         } catch { /* ignore */ }
         return boardLanes?.mode ?? 'none';
     });
+    // A remembered "custom" choice is void once the board has no custom lanes any more.
+    const hasCustomLanes = (boardLanes?.lanes?.length ?? 0) > 0;
+    const laneMode: SwimlaneMode = chosenLaneMode === 'custom' && !hasCustomLanes
+        ? (boardLanes?.mode && boardLanes.mode !== 'custom' ? boardLanes.mode : 'none')
+        : chosenLaneMode;
     const setLaneMode = (mode: SwimlaneMode) => {
         setLaneModeState(mode);
         try { localStorage.setItem(laneStorageKey, mode); } catch { /* ignore */ }
@@ -2176,7 +2181,11 @@ export default function BoardsShow({
                 router.patch(
                     route('boards.items.update', [workspace.slug, project.slug, board.slug, item.id]),
                     { [lane.assign.field]: lane.assign.value },
-                    { preserveScroll: true, onSuccess: () => dropToColumn(item, column) },
+                    {
+                        preserveScroll: true,
+                        onSuccess: () => dropToColumn(item, column),
+                        onError: (errors) => toast.error(Object.values(errors)[0] ?? `Could not move ${item.key} to “${lane.name}”.`),
+                    },
                 );
                 return;
             }
@@ -2366,7 +2375,7 @@ export default function BoardsShow({
                                     <DropdownMenuLabel>Swimlanes</DropdownMenuLabel>
                                     <DropdownMenuRadioGroup value={laneMode} onValueChange={(v) => setLaneMode(v as SwimlaneMode)}>
                                         {(['none', 'custom', 'assignee', 'priority', 'type', 'release'] as SwimlaneMode[])
-                                            .filter((m) => m !== 'custom' || (boardLanes?.lanes?.length ?? 0) > 0)
+                                            .filter((m) => m !== 'custom' || hasCustomLanes)
                                             .map((m) => (
                                                 <DropdownMenuRadioItem key={m} value={m}>
                                                     {m === 'custom' ? `${MODE_LABELS.custom} (${boardLanes?.lanes.length})` : MODE_LABELS[m]}

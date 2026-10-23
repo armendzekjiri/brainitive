@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Fix: swimlane save state, errors, release order](./fix-swimlanes-save-state.md) | done |
 | [Review agents adapted from ECC](./chore-ecc-agents.md) | done |
 | [Swimlanes on boards (BRAI-87)](./feat-swimlanes.md) | done |
 | [Releases / fix versions + release notes (BRAI-76)](./feat-releases.md) | done |

@@ -76,7 +76,7 @@ class ReleaseController extends Controller
                 'url' => $i->board ? route('boards.show', [$workspace->slug, $project->slug, $i->board->slug]).'#item-'.$i->id : null,
             ])->values(),
             'otherReleases' => $project->releases()->where('status', Release::STATUS_UNRELEASED)->whereKeyNot($release->id)
-                ->orderBy('release_date')->get(['id', 'name']),
+                ->orderByRaw('release_date is null')->orderBy('release_date')->orderBy('id')->get(['id', 'name']),
             'canManage' => $request->user()->can('update', $release),
         ]);
     }

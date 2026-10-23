@@ -51,6 +51,30 @@ export const REST_LANE_ID = 'rest';
 
 export const emptyConfig = (): SwimlaneConfig => ({ mode: 'none', rest_name: 'Everything else', lanes: [] });
 
+const RULE_KEYS = ['priority_ids', 'type_ids', 'label_ids', 'assignee_ids', 'release_ids'] as const;
+
+/**
+ * The shape Swimlanes::normalize() stores: rule keys in a fixed order, no empty conditions,
+ * `overdue` only when true, trimmed names. Lets the settings page compare its edits with the
+ * saved config (the server sends a lane without conditions back as `[]`, not `{}`).
+ */
+export function canonicalConfig(config: SwimlaneConfig | null | undefined): SwimlaneConfig {
+    const c = config ?? emptyConfig();
+    return {
+        mode: c.mode,
+        rest_name: c.rest_name?.trim() || 'Everything else',
+        lanes: (c.lanes ?? []).map((lane) => {
+            const rules: LaneRules = {};
+            for (const key of RULE_KEYS) {
+                const values = [...new Set(lane.rules?.[key] ?? [])];
+                if (values.length) rules[key] = values;
+            }
+            if (lane.rules?.overdue) rules.overdue = true;
+            return { id: lane.id, name: lane.name.trim(), color: lane.color?.toLowerCase() ?? null, rules };
+        }),
+    };
+}
+
 export function isOverdue(item: Item, today = new Date()): boolean {
     if (!item.due_date || item.completed_at) return false;
     const due = new Date(item.due_date.slice(0, 10) + 'T23:59:59');
