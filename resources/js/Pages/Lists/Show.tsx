@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import {
-    CheckCircle2, Circle, Plus, MoreHorizontal, Trash2, Bell, BellRing,
+    CheckCircle2, Circle, Plus, MoreHorizontal, Trash2, Copy, Bell, BellRing,
     Calendar, RefreshCw, User as UserIcon, ChevronDown, ChevronRight,
     Edit2, List, AlignLeft, X, Check,
 } from 'lucide-react';
@@ -209,6 +209,9 @@ function ItemRow({
                         members={members}
                         onUpdate={(data) => onUpdate(item.id, data)}
                         onDelete={() => onDelete(item.id)}
+                        onDuplicate={() =>
+                            router.post(route('task-lists.items.duplicate', [workspace.slug, project.slug, taskList.slug, item.id]), {}, { preserveScroll: true })
+                        }
                     />
                 </div>
             </div>
@@ -243,11 +246,13 @@ function ItemContextMenu({
     members,
     onUpdate,
     onDelete,
+    onDuplicate,
 }: {
     item: TaskListItem;
     members: User[];
     onUpdate: (data: Partial<TaskListItem>) => void;
     onDelete: () => void;
+    onDuplicate: () => void;
 }) {
     return (
         <DropdownMenu>
@@ -308,6 +313,9 @@ function ItemContextMenu({
                 </div>
 
                 <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-xs" onClick={onDuplicate}>
+                    <Copy className="size-3.5 mr-2" /> Duplicate
+                </DropdownMenuItem>
                 <DropdownMenuItem
                     className="text-destructive focus:text-destructive text-xs"
                     onClick={onDelete}

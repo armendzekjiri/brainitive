@@ -107,6 +107,7 @@ import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { Comment, Attachment } from '@/types';
 import { ItemTypeIcon } from '@/components/ItemTypeIcon';
 import { LabelChip, PriorityIndicator, TypeBadge, AssigneeAvatar, priorityMeta, itemAccentColor } from '@/components/board/ItemPrimitives';
+import DuplicateItemDialog from '@/components/item/DuplicateItemDialog';
 import { useItemDetail, ItemDetailMain, ItemDetailSidebar, ItemFilePreviewDialog, type ProjectItemLite } from '@/components/item/ItemDetail';
 import { BoardHeader } from '@/components/board/BoardHeader';
 import { ActiveSprintBar, type SprintSummary } from '@/components/board/ActiveSprintBar';
@@ -156,6 +157,7 @@ function ItemCard({
     const [assignOpen, setAssignOpen] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const subtaskCount = item.children_count ?? 0;
+    const [duplicating, setDuplicating] = useState(false);
 
     const assign = (userId: number | null) => {
         setAssignOpen(false);
@@ -340,6 +342,7 @@ function ItemCard({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(item); }}>Edit</DropdownMenuItem>
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setDuplicating(true); }}>Duplicate…</DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                         onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
@@ -347,6 +350,14 @@ function ItemCard({
                     >Delete</DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
+
+            <DuplicateItemDialog
+                open={duplicating}
+                onOpenChange={setDuplicating}
+                url={route('boards.items.duplicate', [workspace.slug, project.slug, board.slug, item.id])}
+                itemKey={item.key}
+                subtaskCount={subtaskCount}
+            />
 
             {/* Delete confirmation */}
             <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>

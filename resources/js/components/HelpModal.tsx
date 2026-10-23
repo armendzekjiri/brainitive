@@ -76,6 +76,17 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.19.0',
+        title: 'Duplicate Issues and Tasks',
+        tag: 'Enhancement',
+        date: '2026-10-23',
+        items: [
+            'Duplicate an issue from its card menu or the issue panel. With subtasks you choose: copy them too, or only the issue.',
+            'The copy keeps description, type, priority, assignee, dates, estimate and labels; comments, attachments, watchers, logged time and history start fresh.',
+            'Tasks in lists can be duplicated too; the copy appears right below the original.',
+        ]
+    },
+    {
         version: 'v1.18.1',
         title: 'Friendly Error Pages',
         tag: 'Patch',

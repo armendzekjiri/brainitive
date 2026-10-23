@@ -7,6 +7,7 @@ use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 
@@ -184,6 +185,27 @@ class TaskListController extends Controller
         $item->update($validated);
 
         return back();
+    }
+
+    /**
+     * Duplicate a task right below the original, as a new open task.
+     */
+    public function duplicateItem(Request $request, Workspace $workspace, Project $project, TaskList $taskList, TaskListItem $item)
+    {
+        $this->authorize('manageItems', $taskList);
+
+        $copy = $item->replicate(['uuid', 'created_by', 'created_at', 'updated_at']);
+        $copy->title = Str::limit('Copy of '.$item->title, 500, '');
+        $copy->status = 'todo';
+        $copy->created_by = $request->user()->id;
+        $copy->position = $item->position + 1;
+
+        DB::transaction(function () use ($taskList, $item, $copy) {
+            $taskList->items()->where('position', '>', $item->position)->increment('position');
+            $copy->save();
+        });
+
+        return back()->with('success', 'Task duplicated.');
     }
 
     public function destroyItem(Request $request, Workspace $workspace, Project $project, TaskList $taskList, TaskListItem $item)
