@@ -38,7 +38,8 @@ We work in releases, not single PRs:
 **Every feature or change ships with e2e tests:** journeys in `e2e/tests/` for what a user can now
 do, or what was broken, next to PHPUnit. See `e2e/README.md`; use `npm run e2e:ui` to watch them.
 Parallel checkouts (worktrees) use their own databases: `TEST_DB_SUFFIX=<name>` for PHPUnit
-(`brainitive_test_<name>`) and `E2E_PORT=<port>` for e2e.
+(`brainitive_test_<name>`) and `E2E_PORT=<port>` for e2e. A worktree needs a **real copy of
+`vendor`**: a symlinked `vendor` runs the main checkout's code (KNOWLEDGE).
 
 ### Release flow: pre-release → main (BRAI-95)
 **Nothing goes straight to `main`.** `main` is production: every push to it deploys.

@@ -98,12 +98,11 @@ PHP resolves `__DIR__` through symlinks, so a worktree whose `vendor` links to t
 autoloads `App\`, `Database\` and `Tests\` classes **from the main checkout**, and PHPUnit even
 boots the main checkout's app (`Application::inferBasePath()` = dirname of vendor's real path):
 its routes, migrations and code. New classes are "not found", changed ones silently run the old
-version — tests can pass without testing your change. Fix without touching `vendor`: an
-`auto_prepend_file` (via `PHP_INI_SCAN_DIR=":<dir>"` with one ini line) that sets
-`$_ENV['APP_BASE_PATH']` to the worktree, requires `vendor/autoload.php` and prepends a PSR-4
-loader for those namespaces pointing at the worktree (only when `getcwd()` is inside it). The env
-var is inherited by `artisan test`'s PHPUnit process and by the e2e server. Check with
-`(new ReflectionClass(SomeController::class))->getFileName()`.
+version — tests can pass without testing your change. **Give every worktree a real copy:**
+`cp -R <main>/vendor vendor` (then `composer dump-autoload -o` there); `node_modules` may stay a
+symlink. Check with `(new ReflectionClass(SomeController::class))->getFileName()`: it must point
+into the worktree. (BRAI-70 worked around it with an `auto_prepend_file` that sets
+`APP_BASE_PATH`; the copy is simpler.)
 
 ### Quick capture: conversion is idempotent by row lock, not by request id (BRAI-70)
 `CaptureConversion::convert` locks the capture (`lockForUpdate`) inside one transaction; a capture
