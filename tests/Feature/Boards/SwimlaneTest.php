@@ -73,4 +73,23 @@ class SwimlaneTest extends TestCase
         $this->save($this->editor, ['mode' => 'assignee', 'lanes' => []])->assertSessionHasNoErrors();
         $this->assertSame(1, $this->board->fresh()->settings['something']);
     }
+
+    public function test_fix_version_choices_list_undated_releases_last(): void
+    {
+        $make = fn (string $name, ?string $date, string $status = Release::STATUS_UNRELEASED) => Release::factory()->create([
+            'project_id' => $this->project->id, 'name' => $name, 'release_date' => $date, 'status' => $status,
+        ]);
+        $make('Someday', null);
+        $make('Later', '2026-12-01');
+        $make('Sooner', '2026-11-01');
+        $make('Shipped', '2026-10-01', Release::STATUS_RELEASED);
+        $make('Old', '2026-01-01', Release::STATUS_ARCHIVED);
+
+        // SQLite sorts NULL first and Postgres last; the query must not depend on either.
+        $this->actingAs($this->editor)->get(route('boards.edit', [$this->workspace->slug, $this->project->slug, $this->board->slug]))
+            ->assertInertia(fn (AssertableInertia $p) => $p->where(
+                'laneOptions.releases',
+                fn ($releases) => collect($releases)->pluck('name')->all() === ['Sooner', 'Later', 'Someday', 'Shipped'],
+            ));
+    }
 }

@@ -5,11 +5,12 @@ import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { CustomLane, LaneRules, MODE_LABELS, SwimlaneConfig, SwimlaneMode, describeRules, emptyConfig } from '@/lib/swimlanes';
+import { CustomLane, LaneRules, MODE_LABELS, SwimlaneConfig, SwimlaneMode, canonicalConfig, describeRules } from '@/lib/swimlanes';
 import type { Board, Project, Workspace } from '@/types';
 import { router } from '@inertiajs/react';
 import { ArrowDown, ArrowUp, ChevronDown, Plus, Rows3, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 
 export interface LaneOptions {
     priorities: { id: number; name: string; color?: string | null }[];
@@ -76,10 +77,10 @@ function RulePicker({ label, value, options, onChange }: {
 }
 
 export default function SwimlaneSettings({ workspace, project, board, options }: { workspace: Workspace; project: Project; board: Board; options: LaneOptions }) {
-    const initial = useMemo(() => board.settings?.swimlanes ?? emptyConfig(), [board.settings]);
+    const initial = useMemo(() => canonicalConfig(board.settings?.swimlanes), [board.settings]);
     const [config, setConfig] = useState<SwimlaneConfig>(initial);
     const [saving, setSaving] = useState(false);
-    const dirty = JSON.stringify(config) !== JSON.stringify(initial);
+    const dirty = JSON.stringify(canonicalConfig(config)) !== JSON.stringify(initial);
 
     const choices: Record<RuleKey, { label: string; options: { id: number; name: string; color?: string | null }[] }> = {
         priority_ids: { label: 'Priority', options: options.priorities },
@@ -117,6 +118,12 @@ export default function SwimlaneSettings({ workspace, project, board, options }:
         router.put(route('boards.swimlanes.update', [workspace.slug, project.slug, board.slug]), config as never, {
             preserveScroll: true,
             preserveState: true,
+            onSuccess: (page) => {
+                // Continue from what the server stored (it drops unknown ids and empty conditions).
+                setConfig(canonicalConfig((page.props.board as Board).settings?.swimlanes));
+                toast.success('Swimlanes saved.');
+            },
+            onError: (errors) => toast.error(Object.values(errors)[0] ?? 'Could not save the swimlanes.'),
             onFinish: () => setSaving(false),
         });
     };

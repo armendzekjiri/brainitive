@@ -142,7 +142,10 @@ class BoardController extends Controller
                 'types' => ItemType::forProject($project)->orderBy('id')->get(['id', 'name', 'slug', 'color']),
                 'labels' => $project->labels()->orderBy('name')->get(['id', 'name', 'color']),
                 'users' => $project->workspace->users()->orderBy('name')->get(['users.id', 'name']),
-                'releases' => Release::where('project_id', $project->id)->where('status', '!=', Release::STATUS_ARCHIVED)->orderBy('release_date')->get(['id', 'name', 'status']),
+                // Same order as the issue's "Fix version" picker (undated last on SQLite and Postgres alike)
+                'releases' => Release::where('project_id', $project->id)->where('status', '!=', Release::STATUS_ARCHIVED)
+                    ->orderByRaw("case status when 'unreleased' then 0 else 1 end")->orderByRaw('release_date is null')->orderBy('release_date')->orderByDesc('id')
+                    ->get(['id', 'name', 'status']),
             ],
         ]);
     }
@@ -471,7 +474,7 @@ class BoardController extends Controller
             // Options for the "Fix version" field: open and shipped releases, plus the current one.
             'releases' => Release::where('project_id', $item->board->project_id)
                 ->where(fn ($q) => $q->where('status', '!=', Release::STATUS_ARCHIVED)->orWhere('id', $item->release_id))
-                ->orderByRaw("case status when 'unreleased' then 0 else 1 end")->orderBy('release_date')->orderByDesc('id')
+                ->orderByRaw("case status when 'unreleased' then 0 else 1 end")->orderByRaw('release_date is null')->orderBy('release_date')->orderByDesc('id')
                 ->limit(100)->get(['id', 'name', 'status']),
             'release_id' => $item->release_id,
         ]);

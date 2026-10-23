@@ -76,6 +76,18 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.27.1',
+        title: 'Swimlane fixes',
+        tag: 'Patch',
+        date: '2026-10-23',
+        items: [
+            'Saving swimlanes now confirms it, and “Unsaved changes” goes away after the save.',
+            'If a swimlane save or a drag into a lane fails, you now see why instead of nothing happening.',
+            'If you picked “Custom lanes” and they were removed later, the board falls back to its default lanes.',
+            'Fix versions without a date are listed after the dated ones everywhere.',
+        ]
+    },
+    {
         version: 'v1.27.0',
         title: 'Swimlanes on Boards',
         tag: 'Feature',
