@@ -6,6 +6,7 @@ use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BookmarkController;
 use App\Http\Controllers\CalendarConnectionController;
 use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\CommandPaletteController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\HelpdeskController;
 use App\Http\Controllers\HelpdeskWidgetController;
@@ -128,6 +129,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Global search (bookmarks, board items, documents)
     Route::get('/search', SearchController::class)->name('search');
+    Route::post('/command-palette/recent', [CommandPaletteController::class, 'recent'])->name('command-palette.recent');
 
     // My Work — assigned items across all workspaces
     Route::get('/my-work', [MyWorkController::class, 'index'])->name('my-work.index');

@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Board;
 use App\Models\Bookmark;
 use App\Models\Item;
 use App\Models\Page;
+use App\Models\Plan;
 use App\Models\Project;
 use App\Models\SnippetCollection;
 use App\Models\Workspace;
@@ -27,6 +29,8 @@ class SearchController extends Controller
             'bookmarks' => [],
             'items' => [],
             'pages' => [],
+            'boards' => [],
+            'plans' => [],
         ];
 
         if (strlen($q) < 2) {
@@ -40,6 +44,8 @@ class SearchController extends Controller
         }
 
         $term = '%'.preg_replace('/\s+/', '%', $q).'%';
+        // The palette passes the project being viewed; its results come first.
+        $contextProject = (int) $request->integer('project');
         // Projects the user can open (member, or workspace owner/admin) — not every project
         // in their workspaces.
         $projectIds = $user->accessibleProjectIds();
@@ -143,6 +149,8 @@ class SearchController extends Controller
                     ->orWhere('items.key', 'like', $term);
             })
             ->select('items.id', 'items.title', 'items.key', 'items.board_id', 'items.description', 'projects.slug as project_slug', 'projects.workspace_id', 'boards.slug as board_slug')
+            ->orderByRaw('case when projects.id = ? then 0 else 1 end', [$contextProject])
+            ->orderByDesc('items.updated_at')
             ->limit(10)
             ->get()
             ->map(function ($row) {
@@ -169,6 +177,7 @@ class SearchController extends Controller
                 $query->where('pages.name', 'like', $term);
             })
             ->select('pages.id', 'pages.name', 'pages.uuid', 'pages.project_id', 'projects.slug as project_slug', 'projects.workspace_id')
+            ->orderByRaw('case when projects.id = ? then 0 else 1 end', [$contextProject])
             ->limit(10)
             ->get()
             ->map(function ($row) {
@@ -185,7 +194,47 @@ class SearchController extends Controller
                 ];
             });
 
+        $boards = Board::query()
+            ->with('project:id,workspace_id,name,slug', 'project.workspace:id,slug,name')
+            ->whereIn('project_id', $projectIds)
+            ->where('name', 'like', $term)
+            ->orderByRaw('case when project_id = ? then 0 else 1 end', [$contextProject])
+            ->limit(25)
+            ->get()
+            ->filter(fn (Board $b) => $user->can('view', $b))
+            ->take(6)
+            ->values()
+            ->map(fn (Board $b) => [
+                'id' => $b->id,
+                'type' => 'board',
+                'title' => $b->name,
+                'subtitle' => $b->project->name.' · Board',
+                'url' => route('boards.show', [$b->project->workspace->slug, $b->project->slug, $b->slug]),
+                'workspace' => $b->project->workspace->name,
+            ]);
+
+        $plans = Plan::query()
+            ->with('project:id,workspace_id,name,slug', 'project.workspace:id,slug,name')
+            ->whereIn('project_id', $projectIds)
+            ->where('name', 'like', $term)
+            ->orderByRaw('case when project_id = ? then 0 else 1 end', [$contextProject])
+            ->limit(25)
+            ->get()
+            ->filter(fn (Plan $p) => $user->can('view', $p))
+            ->take(6)
+            ->values()
+            ->map(fn (Plan $p) => [
+                'id' => $p->id,
+                'type' => 'plan',
+                'title' => $p->name,
+                'subtitle' => $p->project->name.' · Plan',
+                'url' => route('plans.show', [$p->project->workspace->slug, $p->project->slug, $p->slug]),
+                'workspace' => $p->project->workspace->name,
+            ]);
+
         return response()->json([
+            'boards' => $boards,
+            'plans' => $plans,
             'workspaces' => $workspaces,
             'projects' => $projects,
             'snippets' => $snippets,

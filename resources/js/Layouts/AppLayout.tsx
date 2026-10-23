@@ -4,8 +4,7 @@ import { Toaster } from 'sonner';
 import React, { PropsWithChildren, useState, useRef, FormEvent, useEffect, useCallback, createContext, useContext } from 'react';
 import { PageProps, Workspace, Project, Board, TaskList, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn, Helpdesk, PlanSummary } from '@/types';
 import { cn } from '@/lib/utils';
-import { SearchModal } from '@/components/SearchModal';
-import { CommandPalette, CmdIcon, PaletteCommand } from '@/components/CommandPalette';
+import { CommandPalette, CmdIcon, PaletteCommand, useRecentTracking } from '@/components/CommandPalette';
 import { QuickCreateSnippetModal } from '@/components/QuickCreateSnippetModal';
 import { QuickCreateBookmarkModal } from '@/components/QuickCreateBookmarkModal';
 import { GlobalStickyNotes } from '@/components/GlobalStickyNotes';
@@ -1914,8 +1913,10 @@ export default function AppLayout({ children, title }: Props) {
     const { workspaces = [], currentWorkspace, currentProjectId, currentBoardId } = usePage<PageProps>().props;
     const [sidebarWidth, setSidebarWidth] = useState(getInitialSidebarWidth);
     const [createTaskModalOpen, setCreateTaskModalOpen] = useState(false);
-    const [searchModalOpen, setSearchModalOpen] = useState(false);
     const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+    const [paletteQuery, setPaletteQuery] = useState('');
+    const { resolvedTheme, toggleTheme } = useTheme();
+    useRecentTracking();
     const [quickCreateSnippetOpen, setQuickCreateSnippetOpen] = useState(false);
     const [quickCreateBookmarkOpen, setQuickCreateBookmarkOpen] = useState(false);
     const [helpModalOpen, setHelpModalOpen] = useState(false);
@@ -1924,17 +1925,21 @@ export default function AppLayout({ children, title }: Props) {
     const [preSelectedColumnId, setPreSelectedColumnId] = useState<number | undefined>();
     const [defaultCreateType, setDefaultCreateType] = useState<GlobalCreateType>('task');
 
-    const onOpenSearch = useCallback(() => setSearchModalOpen(true), []);
+    const openPalette = useCallback((initialQuery = '') => {
+        setPaletteQuery(initialQuery);
+        setCommandPaletteOpen(true);
+    }, []);
+    const onOpenSearch = useCallback(() => openPalette(), [openPalette]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            // Leave shortcuts an editor already handled (e.g. Excalidraw's ⌘K link) and IME input alone.
+            if (e.defaultPrevented || e.isComposing || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
+            if ((e.target as HTMLElement | null)?.closest?.('.excalidraw')) return;
             const key = e.key.toLowerCase();
-            if (key === 'k' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
+            if (key === 'k' || key === '.') {
                 e.preventDefault();
-                setSearchModalOpen((open) => !open);
-            }
-            if (e.key === '.' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
+                setPaletteQuery(key === '.' ? '>' : '');
                 setCommandPaletteOpen((open) => !open);
             }
         };
@@ -1981,11 +1986,58 @@ export default function AppLayout({ children, title }: Props) {
         // ── Navigation ──────────────────────────────────────────────────────
         ...(currentWorkspace ? [
             {
+                id: 'nav-workspace',
+                label: `Go to ${currentWorkspace.name}`,
+                description: 'Projects of this workspace',
+                keywords: 'home workspace projects',
+                icon: <CmdIcon><Home className="size-4" /></CmdIcon>,
+                group: 'Go to',
+                action: () => router.visit(route('workspaces.show', currentWorkspace.slug)),
+            },
+        ] as PaletteCommand[] : []),
+        {
+            id: 'nav-my-work',
+            label: 'Go to My Work',
+            description: 'Issues assigned to you',
+            keywords: 'assigned tasks todo',
+            icon: <CmdIcon><FolderKanban className="size-4" /></CmdIcon>,
+            group: 'Go to',
+            action: () => router.visit(route('my-work.index')),
+        },
+        {
+            id: 'nav-calendar',
+            label: 'Go to Calendar',
+            description: 'Due dates and connected calendars',
+            keywords: 'schedule events google',
+            icon: <CmdIcon><CalendarDays className="size-4" /></CmdIcon>,
+            group: 'Go to',
+            action: () => router.visit(route('calendar.index')),
+        },
+        {
+            id: 'nav-inbox',
+            label: 'Go to Inbox',
+            description: 'All notifications',
+            keywords: 'notifications mentions',
+            icon: <CmdIcon><Bell className="size-4" /></CmdIcon>,
+            group: 'Go to',
+            action: () => router.visit(route('notifications.page')),
+        },
+        {
+            id: 'nav-workspaces',
+            label: 'Switch workspace',
+            description: 'All your workspaces',
+            keywords: 'workspaces change',
+            icon: <CmdIcon><ChevronsUpDown className="size-4" /></CmdIcon>,
+            group: 'Go to',
+            action: () => router.visit(route('workspaces.index')),
+        },
+        ...(currentWorkspace ? [
+            {
                 id: 'nav-bookmarks',
                 label: 'Go to Bookmarks',
                 description: 'Open your bookmark collections',
                 icon: <CmdIcon color="#0969da"><BookmarkIcon className="size-4" /></CmdIcon>,
-                group: 'Navigation',
+                group: 'Go to',
                 action: () => router.visit(route('bookmarks.index', currentWorkspace.slug)),
             },
             {
@@ -1993,7 +2045,7 @@ export default function AppLayout({ children, title }: Props) {
                 label: 'Go to Snippets',
                 description: 'Open your code snippet collections',
                 icon: <CmdIcon color="#1a7f37"><Code2 className="size-4" /></CmdIcon>,
-                group: 'Navigation',
+                group: 'Go to',
                 action: () => router.visit(route('snippets.index', currentWorkspace.slug)),
             },
         ] as PaletteCommand[] : []),
@@ -2002,39 +2054,44 @@ export default function AppLayout({ children, title }: Props) {
         ...(currentWorkspace ? [
             {
                 id: 'create-item',
-                label: 'Create Item',
+                label: 'Create Issue',
+                keywords: 'new add issue task card',
                 description: 'Create a new task or item on a board',
                 icon: <CmdIcon color="#0E83DC"><CheckSquare className="size-4" /></CmdIcon>,
                 group: 'Create',
-                action: () => { setCommandPaletteOpen(false); openCreateTaskModal(undefined, undefined, undefined, 'task'); },
+                action: () => { openCreateTaskModal(undefined, undefined, undefined, 'task'); },
             },
             {
                 id: 'create-page',
                 label: 'Create Page',
+                keywords: 'new add document doc',
                 description: 'Create a new document page',
                 icon: <CmdIcon color="#22c55e"><FileText className="size-4" /></CmdIcon>,
                 group: 'Create',
-                action: () => { setCommandPaletteOpen(false); openCreateTaskModal(undefined, undefined, undefined, 'page'); },
+                action: () => { openCreateTaskModal(undefined, undefined, undefined, 'page'); },
             },
             {
                 id: 'create-whiteboard',
                 label: 'Create Whiteboard',
+                keywords: 'new add draw excalidraw',
                 description: 'Create a new Excalidraw whiteboard',
                 icon: <CmdIcon color="#8b5cf6"><PencilRuler className="size-4" /></CmdIcon>,
                 group: 'Create',
-                action: () => { setCommandPaletteOpen(false); openCreateTaskModal(undefined, undefined, undefined, 'whiteboard'); },
+                action: () => { openCreateTaskModal(undefined, undefined, undefined, 'whiteboard'); },
             },
             {
                 id: 'create-folder',
                 label: 'Create Folder',
+                keywords: 'new add wiki',
                 description: 'Create a new folder in the wiki',
                 icon: <CmdIcon color="#f59e0b"><Folder className="size-4" /></CmdIcon>,
                 group: 'Create',
-                action: () => { setCommandPaletteOpen(false); openCreateTaskModal(undefined, undefined, undefined, 'folder'); },
+                action: () => { openCreateTaskModal(undefined, undefined, undefined, 'folder'); },
             },
             {
                 id: 'create-snippet',
                 label: 'Create Snippet',
+                keywords: 'new add code paste',
                 description: 'Add a code snippet to a collection',
                 icon: <CmdIcon color="#1a7f37"><Code2 className="size-4" /></CmdIcon>,
                 group: 'Create',
@@ -2043,6 +2100,7 @@ export default function AppLayout({ children, title }: Props) {
             {
                 id: 'create-bookmark',
                 label: 'Create Bookmark',
+                keywords: 'new add link',
                 description: 'Add a link, to-do or note to a collection',
                 icon: <CmdIcon color="#0969da"><BookmarkIcon className="size-4" /></CmdIcon>,
                 group: 'Create',
@@ -2063,6 +2121,32 @@ export default function AppLayout({ children, title }: Props) {
             group: 'Actions',
             action: () =>
                 window.dispatchEvent(new CustomEvent('page-sticky-note:create')),
+        },
+        {
+            id: 'toggle-theme',
+            label: resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
+            keywords: 'theme dark light appearance',
+            icon: <CmdIcon>{resolvedTheme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}</CmdIcon>,
+            group: 'Actions',
+            action: toggleTheme,
+        },
+        {
+            id: 'open-help',
+            label: 'Help & what’s new',
+            description: 'Shortcuts, guides and the changelog',
+            keywords: 'changelog shortcuts docs',
+            icon: <CmdIcon><HelpCircle className="size-4" /></CmdIcon>,
+            group: 'Actions',
+            action: () => setHelpModalOpen(true),
+        },
+        {
+            id: 'account-settings',
+            label: 'Account settings',
+            description: 'Profile, password and connected accounts',
+            keywords: 'profile password preferences',
+            icon: <CmdIcon><Settings className="size-4" /></CmdIcon>,
+            group: 'Actions',
+            action: () => router.visit(route('profile.edit')),
         },
     ];
 
@@ -2100,14 +2184,11 @@ export default function AppLayout({ children, title }: Props) {
                 preSelectedColumnId={preSelectedColumnId}
                 defaultType={defaultCreateType}
             />
-            <SearchModal
-                open={searchModalOpen}
-                onOpenChange={setSearchModalOpen}
-            />
             <CommandPalette
                 open={commandPaletteOpen}
                 onOpenChange={setCommandPaletteOpen}
-                extraCommands={commandPaletteCommands}
+                initialQuery={paletteQuery}
+                commands={commandPaletteCommands}
             />
             {currentWorkspace && (
                 <>

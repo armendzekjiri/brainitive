@@ -76,6 +76,19 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.24.0',
+        title: 'One Command Palette',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'Press ⌘K (Ctrl+K) for one palette that searches and runs commands — the separate search window and Ctrl+. list are merged.',
+            'Recent: the boards, documents, plans, projects and issues you opened last are one keystroke away. They are only shown while you still have access.',
+            'Search now also finds boards and plans, and lists results from the project you’re in first.',
+            'Type “>” (or press Ctrl+.) for commands only: go to My Work, Calendar, Inbox or another workspace, create issues, pages or snippets, switch dark mode, open help.',
+            'Full keyboard use: arrows to move, Enter to open, Esc to close; works on phones from the search field at the top.',
+        ]
+    },
+    {
         version: 'v1.23.1',
         title: 'Priorities and Board Columns Fixed',
         tag: 'Fix',
