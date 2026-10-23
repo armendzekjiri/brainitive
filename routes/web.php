@@ -481,8 +481,9 @@ Route::middleware('auth')->group(function () {
 
     // Notifications
     Route::get('/notifications', [NotificationController::class, 'page'])->name('notifications.page');
-    Route::get('/api/notifications', [NotificationController::class, 'index'])->name('notifications.index');
-    Route::get('/api/notifications/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unread-count');
+    Route::get('/api/notifications', [NotificationController::class, 'index'])->middleware(ReadOnlySession::class)->name('notifications.index');
+    // polled every 30 s / fetched when the bell opens: read-only sessions (would race form submits)
+    Route::get('/api/notifications/unread-count', [NotificationController::class, 'unreadCount'])->middleware(ReadOnlySession::class)->name('notifications.unread-count');
     Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::post('/api/notifications/notify-mention', [NotificationController::class, 'notifyMention'])->middleware('throttle:60,1,notifications.notify-mention')->name('notifications.notify-mention');

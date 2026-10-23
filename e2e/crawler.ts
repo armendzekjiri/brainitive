@@ -270,7 +270,8 @@ export class Crawler {
     private async tag(): Promise<Control[]> {
         return this.page.$$eval(CONTROLS, (els) =>
             els
-                .filter((e) => (e as HTMLElement).checkVisibility?.() !== false && !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true')
+                // hidden form mirrors (Radix renders an aria-hidden native <select> behind each Select) are not controls
+                .filter((e) => (e as HTMLElement).checkVisibility?.() !== false && !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true' && !e.closest('[aria-hidden="true"]'))
                 .map((e, index) => {
                     const label = e.getAttribute('aria-label') || (e as HTMLElement).innerText || e.getAttribute('title') || e.getAttribute('name') || e.getAttribute('placeholder') || e.tagName.toLowerCase();
                     e.setAttribute('data-crawl', String(index));
@@ -283,7 +284,7 @@ export class Crawler {
     private async inner(scope: string): Promise<InnerControl[]> {
         const list = await this.page.locator(scope).last().locator(CONTROLS).evaluateAll((els) =>
             els
-                .filter((e) => (e as HTMLElement).checkVisibility?.() !== false && !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true')
+                .filter((e) => (e as HTMLElement).checkVisibility?.() !== false && !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true' && !e.closest('[aria-hidden="true"]'))
                 .map((e) => {
                     const tag = e.tagName.toLowerCase();
                     const type = (e.getAttribute('type') ?? '').toLowerCase();
