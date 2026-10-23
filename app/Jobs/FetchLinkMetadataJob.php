@@ -79,11 +79,19 @@ class FetchLinkMetadataJob implements ShouldQueue
 
             $response = Http::timeout(10)
                 ->connectTimeout(5)
-                ->withOptions($options + ['on_headers' => function ($headers) {
-                    if ((int) $headers->getHeaderLine('Content-Length') > 2_000_000) {
-                        throw new \RuntimeException('Response too large');
-                    }
-                }])
+                ->withOptions($options + [
+                    'on_headers' => function ($headers) {
+                        if ((int) $headers->getHeaderLine('Content-Length') > 2_000_000) {
+                            throw new \RuntimeException('Response too large');
+                        }
+                    },
+                    // also for chunked / wrong Content-Length: abort once 2 MB came in
+                    'progress' => function ($total, $downloaded) {
+                        if ($downloaded > 2_000_000) {
+                            throw new \RuntimeException('Response too large');
+                        }
+                    },
+                ])
                 ->withHeaders(['User-Agent' => 'Mozilla/5.0 (compatible; Brainitive/1.0)'])
                 ->get($url);
 

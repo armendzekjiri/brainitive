@@ -15,6 +15,12 @@ class PublicPlanController extends Controller
     public function show(string $token): Response
     {
         $plan = Plan::where('share_token', $token)->with('project:id,name,color')->firstOrFail();
+        $settings = PlanDocument::normalizeSettings($plan->settings);
+        $data = $plan->data ?? Plan::emptyData();
+
+        // Columns hidden in the plan (notes, who …) are not in the shared page at all — not just unshown
+        $hidden = array_keys(array_filter(['who' => ! $settings['columns']['who'], 'notes' => ! $settings['columns']['notes']]));
+        $data['rows'] = array_map(fn (array $row) => array_diff_key($row, array_flip($hidden)), $data['rows'] ?? []);
 
         return Inertia::render('Plans/Public', [
             'plan' => [
@@ -22,8 +28,8 @@ class PublicPlanController extends Controller
                 'description' => $plan->description,
                 'project' => $plan->project?->name,
                 'color' => $plan->project?->color,
-                'data' => $plan->data ?? Plan::emptyData(),
-                'settings' => PlanDocument::normalizeSettings($plan->settings),
+                'data' => $data,
+                'settings' => $settings,
                 'updated_at' => $plan->updated_at?->toIso8601String(),
             ],
         ]);
