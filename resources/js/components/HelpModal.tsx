@@ -76,6 +76,19 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.23.1',
+        title: 'Priorities and Board Columns Fixed',
+        tag: 'Fix',
+        date: '2026-10-23',
+        items: [
+            'Priorities work again: Highest, High, Medium, Low and Lowest are available on every board, and new issues start at Medium.',
+            'New columns appear right away. “New column” on the board now creates it in place — type a name, press Enter, add the next one.',
+            'Rename a column straight from its ⋯ menu on the board.',
+            'Board settings: added, renamed and deleted columns show without reloading, and “Edit column” always opens with that column’s values.',
+            'Two columns with the same name (or emoji-only names) no longer fail to save.',
+        ]
+    },
+    {
         version: 'v1.23.0',
         title: 'AI Connector: Comments, Sprints and Plans',
         tag: 'Feature',
