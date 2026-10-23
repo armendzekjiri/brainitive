@@ -55,6 +55,15 @@ Check [`skills/`](./skills) for a recipe first — it encodes the project's way 
 task so you don't reverse-engineer it. Follow [`CONVENTIONS.md`](./CONVENTIONS.md). Reuse
 existing patterns and files over inventing new ones.
 
+**Review the diff before the PR** with
+[skills/review-checklist.md](./skills/review-checklist.md) (backend, frontend, database,
+security). In Claude Code, run the matching subagents in `.claude/agents/` in parallel:
+`php-reviewer`, `frontend-reviewer`, `database-reviewer` (if there's a migration or query
+change) and `security-reviewer` (auth, public routes, uploads, tokens, dependencies). Fix
+every Critical and High finding, or say in the PR why it doesn't apply.
+If the ECC plugin is installed, use these project agents (no prefix), not the
+`ecc:*-reviewer` ones: the ECC versions don't know this repo's rules.
+
 ### 4 — Update the docs (the step that prevents staleness)
 Before opening the PR, update whatever your change invalidated:
 - New/renamed/moved module or entry points → **[`ARCHITECTURE.md`](./ARCHITECTURE.md)**

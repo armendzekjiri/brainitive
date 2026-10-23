@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Review agents adapted from ECC](./chore-ecc-agents.md) | done |
 | [Swimlanes on boards (BRAI-87)](./feat-swimlanes.md) | done |
 | [Releases / fix versions + release notes (BRAI-76)](./feat-releases.md) | done |
 | [Fix: wrong domain (BRAI-88)](./fix-domain-urls.md) | done |
