@@ -194,8 +194,10 @@ class HelpdeskController extends Controller
     /**
      * Helpdesk templates for the "New helpdesk" gallery.
      */
-    public function templates(): JsonResponse
+    public function templates(Workspace $workspace): JsonResponse
     {
+        $this->authorize('view', $workspace);
+
         return response()->json([
             'categories' => array_map(fn ($key, $name) => ['key' => $key, 'name' => $name], array_keys(HelpdeskTemplates::CATEGORIES), HelpdeskTemplates::CATEGORIES),
             'templates' => HelpdeskTemplates::catalog(),
@@ -212,7 +214,6 @@ class HelpdeskController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'settings' => 'nullable|array',
             ...HelpdeskForm::settingsRules(),
             'public_slug' => ['nullable', 'string', 'min:3', 'max:60', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', Rule::unique('helpdesks', 'public_slug')->ignore($helpdesk->id)],
         ], [

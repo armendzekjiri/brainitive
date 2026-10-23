@@ -100,6 +100,21 @@ class HelpdeskTemplatesTest extends TestCase
         $this->assertSame('Ticket type', $event['fields'][0]['label']);
         $this->assertSame('Checked in', $event['columns'][2]['name']);
         $this->assertTrue($event['columns'][2]['is_done']);
+
+        $this->actingAs($this->outsider)->getJson(route('helpdesk-templates.index', $this->workspace))->assertForbidden();
+    }
+
+    public function test_hidden_subject_keeps_a_subject_that_is_sent_and_limits_apply(): void
+    {
+        $this->create(['template' => 'volunteer-signup'])->assertSessionHasNoErrors();
+        $helpdesk = $this->helpdesk();
+        $areas = $helpdesk->fields->firstWhere('label', 'I’d like to help with');
+        $base = ['contact_email' => 'v@example.com', 'contact_name' => 'Vi'];
+
+        $this->submit($helpdesk, $base + ['field_'.$areas->name => json_encode(array_fill(0, 9, 'Mentoring'))])
+            ->assertStatus(422)->assertJsonValidationErrors(['field_'.$areas->name]);
+        $this->submit($helpdesk, $base + ['subject' => 'From our old form', 'field_'.$areas->name => json_encode(['Mentoring'])])->assertOk();
+        $this->assertSame('From our old form', Ticket::latest('id')->value('subject'));
     }
 
     public function test_event_registration_validates_on_the_server_and_fills_the_subject(): void
@@ -181,8 +196,10 @@ class HelpdeskTemplatesTest extends TestCase
         $this->assertSame('message', $config['texts']['after_submit']);
         $this->assertTrue($config['subject']['hidden']);
 
-        $this->actingAs($this->editor)->put(route('helpdesks.update', [$this->workspace->slug, $this->project->slug, $helpdesk->slug]), [
-            'name' => 'Desk', 'settings' => ['after_submit' => 'somewhere'],
-        ])->assertSessionHasErrors('settings.after_submit');
+        $update = fn (array $settings) => $this->actingAs($this->editor)->put(route('helpdesks.update', [$this->workspace->slug, $this->project->slug, $helpdesk->slug]), ['name' => 'Desk', 'settings' => $settings]);
+        $update(['after_submit' => 'somewhere'])->assertSessionHasErrors('settings.after_submit');
+        $update(['form_title' => str_repeat('x', 81)])->assertSessionHasErrors('settings.form_title');
+        $update(['anything' => str_repeat('x', 5000)])->assertSessionHasErrors('settings');
+        $this->assertArrayNotHasKey('anything', $helpdesk->fresh()->settings);
     }
 }

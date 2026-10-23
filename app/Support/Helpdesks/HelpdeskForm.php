@@ -15,6 +15,13 @@ class HelpdeskForm
 {
     public const AFTER_SUBMIT = ['portal', 'message'];
 
+    /** Every settings key a helpdesk may store; anything else sent to update() is dropped. */
+    public const SETTING_KEYS = [
+        'brand_color', 'button_text', 'button_position', 'welcome_message', 'logo_url',
+        'default_field_contact_name', 'default_field_description', 'default_field_attachments', 'default_field_subject',
+        'form_title', 'submit_label', 'message_placeholder', 'success_message', 'after_submit', 'auto_subject',
+    ];
+
     public const TEXT_LIMITS = [
         'form_title' => 80,
         'submit_label' => 40,
@@ -91,11 +98,12 @@ class HelpdeskForm
             $options = array_values(array_filter((array) $field->options, 'is_string'));
             $rules[$key] = match (self::type($field)) {
                 'number' => [$required, 'numeric'],
-                'date' => [$required, 'date'],
+                'date' => [$required, 'date_format:Y-m-d'],
                 'select', 'radio' => [$required, 'string', Rule::in($options)],
                 'checkboxes' => [$required, 'array', 'max:'.max(1, count($options))],
-                'checkbox' => [$field->is_required ? 'accepted' : 'nullable'],
+                'checkbox' => [$field->is_required ? 'accepted' : 'nullable', 'boolean'],
                 'file' => ['nullable'],
+                'rich_text' => [$required, 'string', 'max:200000'],
                 default => [$required, 'string', 'max:10000'],
             };
             if (self::type($field) === 'checkboxes') {
@@ -134,12 +142,24 @@ class HelpdeskForm
      */
     public static function settingsRules(): array
     {
-        $rules = [];
+        $rules = [
+            // Known keys only, small values: the public form config loads these on every page view
+            'settings' => ['nullable', 'array:'.implode(',', self::SETTING_KEYS)],
+            'settings.brand_color' => ['nullable', 'string', 'max:20'],
+            'settings.button_text' => ['nullable', 'string', 'max:40'],
+            'settings.button_position' => ['nullable', 'in:bottom-right,bottom-left'],
+            'settings.welcome_message' => ['nullable', 'string', 'max:500'],
+            'settings.logo_url' => ['nullable', 'string', 'max:2048'],
+            'settings.default_field_contact_name' => ['nullable', 'array:label,is_required,hidden'],
+            'settings.default_field_description' => ['nullable', 'array:label,is_required,hidden'],
+            'settings.default_field_attachments' => ['nullable', 'array:hidden'],
+            'settings.*.label' => ['nullable', 'string', 'max:60'],
+        ];
         foreach (self::TEXT_LIMITS as $key => $max) {
             $rules["settings.{$key}"] = ['nullable', 'string', "max:{$max}"];
         }
         $rules['settings.after_submit'] = ['nullable', Rule::in(self::AFTER_SUBMIT)];
-        $rules['settings.default_field_subject'] = ['nullable', 'array'];
+        $rules['settings.default_field_subject'] = ['nullable', 'array:label,hidden'];
         $rules['settings.default_field_subject.label'] = ['nullable', 'string', 'max:60'];
         $rules['settings.default_field_subject.hidden'] = ['nullable', 'boolean'];
 
