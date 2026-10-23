@@ -28,7 +28,10 @@ class Project extends Model
         'settings',
         'next_item_number',
         'next_ticket_number',
+        'changelog_token',
     ];
+
+    protected $hidden = ['changelog_token'];
 
     protected $appends = ['icon_display'];
 
@@ -273,5 +276,10 @@ class Project extends Model
     public function githubConnection(): HasOne
     {
         return $this->hasOne(GithubConnection::class);
+    }
+
+    public function releases(): HasMany
+    {
+        return $this->hasMany(Release::class);
     }
 }

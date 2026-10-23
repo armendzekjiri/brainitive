@@ -86,6 +86,7 @@ import {
     CalendarDays,
     GanttChart,
     ShieldCheck,
+    Rocket,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { ThemeMenu } from '@/components/ThemeMenu';
@@ -505,6 +506,17 @@ function ProjectContent({
                             </Link>
                         </SidebarMenuItem>
                     ))}
+                    {boardsOpen && (
+                        <SidebarMenuItem className="pl-5">
+                            <Link
+                                href={route('releases.index', [workspace.slug, project.slug])}
+                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                            >
+                                <Rocket className="size-4 shrink-0" />
+                                <span className="min-w-0 truncate">Releases</span>
+                            </Link>
+                        </SidebarMenuItem>
+                    )}
                 </>
             )}
 

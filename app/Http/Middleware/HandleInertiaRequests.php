@@ -164,7 +164,7 @@ class HandleInertiaRequests extends Middleware
             $workspaceSlug = $routeWorkspaceSlug;
 
             if (! $workspaceSlug && $this->shouldUseLastSidebarContext($request)) {
-                $workspaceSlug = $request->session()->get(self::LAST_WORKSPACE_SLUG_SESSION_KEY);
+                $workspaceSlug = ($request->hasSession() ? $request->session() : null)?->get(self::LAST_WORKSPACE_SLUG_SESSION_KEY);
             }
 
             if ($workspaceSlug && ! $workspaces->firstWhere('slug', $workspaceSlug)) {
@@ -214,7 +214,7 @@ class HandleInertiaRequests extends Middleware
             }
 
             if (! $currentProjectId) {
-                $lastProjectId = $request->session()->get(self::LAST_PROJECT_ID_SESSION_KEY);
+                $lastProjectId = ($request->hasSession() ? $request->session() : null)?->get(self::LAST_PROJECT_ID_SESSION_KEY);
                 $project = $lastProjectId
                     ? $currentWorkspace->projects->firstWhere('id', (int) $lastProjectId)
                     : null;
@@ -250,12 +250,12 @@ class HandleInertiaRequests extends Middleware
             ],
             'onboarding' => fn () => $user ? $this->onboardingProps($user) : null,
             'flash' => [
-                'success' => fn () => $request->session()->get('success'),
-                'error' => fn () => $request->session()->get('error'),
-                'invite_result' => fn () => $request->session()->get('invite_result'),
-                'invite_confirm_required' => fn () => $request->session()->get('invite_confirm_required'),
-                'invite_email' => fn () => $request->session()->get('invite_email'),
-                'invite_role' => fn () => $request->session()->get('invite_role'),
+                'success' => fn () => ($request->hasSession() ? $request->session() : null)?->get('success'),
+                'error' => fn () => ($request->hasSession() ? $request->session() : null)?->get('error'),
+                'invite_result' => fn () => ($request->hasSession() ? $request->session() : null)?->get('invite_result'),
+                'invite_confirm_required' => fn () => ($request->hasSession() ? $request->session() : null)?->get('invite_confirm_required'),
+                'invite_email' => fn () => ($request->hasSession() ? $request->session() : null)?->get('invite_email'),
+                'invite_role' => fn () => ($request->hasSession() ? $request->session() : null)?->get('invite_role'),
             ],
         ];
     }

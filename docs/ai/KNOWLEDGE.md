@@ -17,6 +17,11 @@ project board, not Jira issues. When a user references one, start with the Brain
 board tools. Only check Jira/Atlassian if the user explicitly asks for that external
 tracker.
 
+### Shared Inertia props must work without a session
+A 405 (wrong HTTP method) is rendered before any route middleware, so there is no session.
+`HandleInertiaRequests` flash props read `$request->hasSession()` first — otherwise the error
+page itself crashed with a 500 (fixed with BRAI-76, test in ErrorPagesTest).
+
 ### GitHub webhooks are stateless API routes
 `/api/webhooks/github/{uuid}` lives in `routes/api.php` (no session/CSRF); the per-project
 secret (encrypted column) is the only auth, checked with `hash_equals` over the raw body.

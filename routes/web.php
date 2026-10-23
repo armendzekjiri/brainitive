@@ -23,7 +23,9 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectGithubController;
 use App\Http\Controllers\PublicPlanController;
+use App\Http\Controllers\PublicReleaseController;
 use App\Http\Controllers\PushSubscriptionController;
+use App\Http\Controllers\ReleaseController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ShareLinkController;
 use App\Http\Controllers\SnippetController;
@@ -97,6 +99,8 @@ Route::get('/share/bookmarks/{uuid}', [BookmarkController::class, 'showPublic'])
 Route::get('/share/snippets/{uuid}', [SnippetController::class, 'showPublicSnippet'])->name('snippets.public.show');
 Route::get('/share/plans/{token}', [PublicPlanController::class, 'show'])->name('plans.public');
 // Read-only link to one doc / issue (ShareLink); no login
+Route::get('/r/{token}', [PublicReleaseController::class, 'show'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:120,1')->name('releases.public');
+Route::get('/changelog/{token}', [PublicReleaseController::class, 'changelog'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:120,1')->name('changelog.public');
 Route::get('/s/{token}', [ShareLinkController::class, 'show'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:120,1')->name('share.show');
 Route::get('/share/snippet-collections/{uuid}', [SnippetController::class, 'showPublicCollection'])->name('snippet-collections.public.show');
 
@@ -294,6 +298,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
             // Task Lists (nested under projects)
             Route::post('plans', [PlanController::class, 'store'])->name('plans.store');
+            Route::get('releases', [ReleaseController::class, 'index'])->name('releases.index');
+            Route::post('releases', [ReleaseController::class, 'store'])->name('releases.store');
+            Route::get('releases/{release}', [ReleaseController::class, 'show'])->whereNumber('release')->name('releases.show');
+            Route::put('releases/{release}', [ReleaseController::class, 'update'])->whereNumber('release')->name('releases.update');
+            Route::delete('releases/{release}', [ReleaseController::class, 'destroy'])->whereNumber('release')->name('releases.destroy');
+            Route::post('releases/{release}/release', [ReleaseController::class, 'release'])->whereNumber('release')->name('releases.release');
+            Route::post('releases/{release}/status', [ReleaseController::class, 'setStatus'])->whereNumber('release')->name('releases.status');
+            Route::post('releases/{release}/items', [ReleaseController::class, 'addItems'])->whereNumber('release')->name('releases.items.add');
+            Route::delete('releases/{release}/items/{item}', [ReleaseController::class, 'removeItem'])->whereNumber('release')->name('releases.items.remove');
+            Route::get('releases/{release}/candidates', [ReleaseController::class, 'candidates'])->whereNumber('release')->name('releases.candidates');
+            Route::get('releases/{release}/notes/draft', [ReleaseController::class, 'draftNotes'])->whereNumber('release')->name('releases.notes.draft');
+            Route::put('releases/{release}/notes', [ReleaseController::class, 'saveNotes'])->whereNumber('release')->name('releases.notes.save');
+            Route::post('releases/{release}/publish', [ReleaseController::class, 'publish'])->whereNumber('release')->name('releases.publish');
+            Route::delete('releases/{release}/publish', [ReleaseController::class, 'unpublish'])->whereNumber('release')->name('releases.unpublish');
             Route::get('plans/{plan:slug}', [PlanController::class, 'show'])->name('plans.show');
             Route::patch('plans/{plan:slug}', [PlanController::class, 'update'])->name('plans.update');
             Route::delete('plans/{plan:slug}', [PlanController::class, 'destroy'])->name('plans.destroy');
