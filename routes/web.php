@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin;
 use App\Http\Controllers\AiController;
 use App\Http\Controllers\BoardController;
+use App\Http\Controllers\BoardViewController;
 use App\Http\Controllers\BookmarkController;
 use App\Http\Controllers\CalendarConnectionController;
 use App\Http\Controllers\CalendarController;
@@ -293,6 +294,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('boards', [BoardController::class, 'store'])->name('boards.store');
             Route::get('boards/{board:slug}/items', [BoardController::class, 'rootItemsJson'])->name('boards.root-items');
             Route::get('boards/{board:slug}', [BoardController::class, 'show'])->name('boards.show');
+            // Saved views (BRAI-78)
+            Route::post('boards/{board:slug}/views', [BoardViewController::class, 'store'])->name('boards.views.store');
+            Route::post('boards/{board:slug}/views/default', [BoardViewController::class, 'setDefault'])->name('boards.views.default');
+            Route::get('boards/{board:slug}/views/{boardView}', [BoardViewController::class, 'open'])->whereNumber('boardView')->name('boards.views.open');
+            Route::patch('boards/{board:slug}/views/{boardView}', [BoardViewController::class, 'update'])->whereNumber('boardView')->name('boards.views.update');
+            Route::post('boards/{board:slug}/views/{boardView}/duplicate', [BoardViewController::class, 'duplicate'])->whereNumber('boardView')->name('boards.views.duplicate');
+            Route::delete('boards/{board:slug}/views/{boardView}', [BoardViewController::class, 'destroy'])->whereNumber('boardView')->name('boards.views.destroy');
             Route::post('github', [ProjectGithubController::class, 'store'])->name('projects.github.store');
             Route::post('github/rotate', [ProjectGithubController::class, 'rotate'])->name('projects.github.rotate');
             Route::delete('github', [ProjectGithubController::class, 'destroy'])->name('projects.github.destroy');

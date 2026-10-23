@@ -29,6 +29,28 @@ Deployments are matched by window: what reached the deployed ref after the previ
 deploy to that environment (`github_connections.deployments`). Keep processing idempotent
 (upserts keyed by item+kind+repo+identifier) — GitHub redelivers.
 
+### Saved board views store the URL params
+A saved view is the board's own query string, not a second filter language: adding a board filter
+means adding its param to `BoardViewConfig::PARAM_KEYS` + `normalize()` (allowlist) and, if it
+references ids, to `sanitize()` — and to `boardFilterParams()` / `currentViewParams` in
+Boards/Show. `assignee=me` stays literal so it resolves for each viewer. A shared view never grants
+board access (every policy check starts with BoardPolicy::view).
+
+- **No redirect to the default view.** `BoardController::show` applies it in place
+  (`appliedViewParams`) and the page writes the params + `bv` into the URL before its URL-backed
+  state reads them. A redirect would drop `#item-N`: Inertia only keeps the hash when the response
+  URL equals the request URL. A bare `history.replaceState` isn't enough on a full page load either:
+  Inertia's first-page init runs after the page renders and puts `page.url` back, so the page also
+  calls `router.replace({ url })` (client-side visit, no request) once on mount.
+- **While `bv>0` the URL is the whole truth:** a missing `hide` / `view` means "none" / kanban, and
+  nothing is read from or written to the remembered (localStorage) columns and tab — opening a
+  teammate's view must not change your own board.
+- **POST / PATCH / DELETE keep component state in Inertia 2** (`router.get` doesn't). Actions that
+  land on a different URL (save as new, duplicate, delete) pass `preserveState: false`, or the board
+  keeps the old filters under the new URL.
+- Compare views on normalized params: the server stores `quick` in its fixed order, so the client
+  serializes it in the same order (`QUICK_FILTERS`), not click order.
+
 ### Explicit route binders run before implicit ones
 In `Route::bind('page' | 'bookmark', …)` the `{workspace}` / `{project}` parameters are still raw
 slugs — an `instanceof Project` check there is always false. `AppServiceProvider::routeProject()` /

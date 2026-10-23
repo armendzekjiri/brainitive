@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\Attachment;
 use App\Models\Board;
 use App\Models\BoardColumn;
+use App\Models\BoardView;
 use App\Models\Item;
 use App\Models\ItemField;
 use App\Models\ItemLink;
@@ -19,6 +20,7 @@ use App\Models\Workspace;
 use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
 use App\Rules\ProjectMember;
+use App\Support\Boards\BoardViewConfig;
 use App\Support\Boards\ItemComments;
 use App\Support\Boards\ItemFieldValues;
 use App\Support\Boards\ItemMentions;
@@ -74,6 +76,34 @@ class BoardController extends Controller
     public function show(Request $request, Workspace $workspace, Project $project, Board $board): Response
     {
         $this->authorize('view', $board);
+        $user = $request->user();
+
+        // Saved views (BRAI-78): the plain board URL shows the personal default view (bv=0 or any
+        // view param = "show exactly this"). Applied in place, not by redirect: a redirect would
+        // lose #item-N links on Inertia visits — the page puts the params into the URL itself.
+        $canUpdateBoard = $user->can('update', $board);
+        $savedViews = $board->views()->visibleTo($user)->with('user:id,name')->get();
+        $defaultViewId = DB::table('board_view_defaults')->where('user_id', $user->id)->where('board_id', $board->id)->value('board_view_id');
+        $requestedViewId = $request->integer('bv') ?: null;
+        $activeViewId = $requestedViewId;
+        $hasViewParams = $request->has('bv') || collect($request->query())->keys()->contains(fn ($key) => BoardViewConfig::isViewParam((string) $key));
+        if ($defaultViewId && ! $hasViewParams) {
+            $activeViewId = $defaultViewId;
+        }
+
+        // The open view is compared against what the board actually shows: its sanitized params
+        $activeView = $activeViewId ? $savedViews->firstWhere('id', $activeViewId) : null;
+        $activeParams = null;
+        $appliedViewParams = null;
+        if ($activeView) {
+            ['params' => $activeParams, 'dropped' => $dropped] = BoardViewConfig::sanitize((array) $activeView->config, $board);
+            if ($activeView->id !== $requestedViewId) {
+                $appliedViewParams = $activeParams;
+                if ($note = BoardViewConfig::droppedNote($activeView->name, $dropped)) {
+                    session()->now('warning', $note);
+                }
+            }
+        }
 
         // Scrum boards show the running sprint only (no sprint running → empty board)
         $activeSprint = $board->isScrum() ? $board->activeSprint()->first() : null;
@@ -120,6 +150,20 @@ class BoardController extends Controller
             'canEditItems' => $request->user()->can('update', $board),
             'activeSprint' => $activeSprint?->only(['id', 'name', 'goal', 'start_date', 'end_date']),
             'canManageSprints' => $request->user()->can('update', $board),
+            // can_edit = BoardViewPolicy::update, without re-checking the board per view (authorized above)
+            'savedViews' => $savedViews->map(fn (BoardView $view) => [
+                'id' => $view->id,
+                'name' => $view->name,
+                'is_shared' => $view->is_shared,
+                'is_own' => $view->user_id === $user->id,
+                'owner' => $view->user?->name,
+                'params' => (object) ($view->id === $activeView?->id ? $activeParams : $view->params()),
+                'can_edit' => $view->is_shared ? $canUpdateBoard : $view->user_id === $user->id,
+            ])->values(),
+            'activeViewId' => $activeView?->id,
+            'appliedViewParams' => $appliedViewParams === null ? null : (object) $appliedViewParams,
+            'defaultViewId' => $defaultViewId,
+            'canShareViews' => $canUpdateBoard,
             'plannedSprints' => $board->isScrum()
                 ? $board->sprints()->where('status', Sprint::STATUS_PLANNED)->get(['id', 'name'])
                 : [],

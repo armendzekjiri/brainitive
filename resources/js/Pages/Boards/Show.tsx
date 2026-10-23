@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, router, useForm } from '@inertiajs/react';
-import { PageProps, Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User, Label as LabelType, ItemField } from '@/types';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
+import { PageProps, Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User, Label as LabelType, ItemField, SavedBoardView } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -127,6 +127,7 @@ import {
     matchesFieldFilter, readFieldFilters, serializeFieldFilter, type FieldFilter, type FieldFilters, type SortDirection,
 } from '@/lib/customFields';
 import { ActiveSprintBar, type SprintSummary } from '@/components/board/ActiveSprintBar';
+import SavedViewsMenu from '@/components/board/SavedViewsMenu';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -147,6 +148,13 @@ interface Props extends PageProps {
     canManageFields?: boolean;
     /** May change issues (custom field values are read-only otherwise). */
     canEditItems?: boolean;
+    /** Saved views (BRAI-78): own personal + shared views of this board. */
+    savedViews?: SavedBoardView[];
+    activeViewId?: number | null;
+    /** The default view the server applied to a plain board URL — the page writes it into the URL. */
+    appliedViewParams?: Record<string, string> | null;
+    defaultViewId?: number | null;
+    canShareViews?: boolean;
 }
 
 // Item Card Component — redesigned (utility-first dense kanban)
@@ -617,18 +625,65 @@ function readBoardFilters(): BoardFilters {
     };
 }
 
+/** The filters as URL params ('' = not set) — the format saved board views store too. */
+function boardFilterParams(filters: BoardFilters, fields: ItemField[] = [], fieldFilters: FieldFilters = {}): Record<string, string> {
+    const params: Record<string, string> = {};
+    fields.forEach((field) => { params[fieldParam(field.id)] = serializeFieldFilter(fieldFilters[field.id]); });
+    params.q = filters.q.trim();
+    params.assignee = filters.assignee === 'any' ? '' : filters.assignee;
+    params.status = filters.status.join(',');
+    params.labels = filters.labels.join(',');
+    params.priority = filters.priority.join(',');
+    params.type = filters.type.join(',');
+    // fixed order (as the server stores it), not click order — keeps saved-view comparisons stable
+    params.quick = QUICK_FILTERS.filter((f) => filters.quick.includes(f)).join(',');
+    return params;
+}
+
+/** A saved view is open (`?bv=<id>`): the URL alone describes the board, nothing comes from the remembered setup. */
+function inSavedView(): boolean {
+    if (typeof window === 'undefined') return false;
+    return Number(new URLSearchParams(window.location.search).get('bv') ?? 0) > 0;
+}
+
+/** The default view the server applied to the plain board URL: write its params (+ bv) into the URL, keeping #item-N. */
+function applyViewParamsToUrl(params: Record<string, string>, viewId: number) {
+    const url = new URL(window.location.href);
+    for (const [key, value] of Object.entries(params)) if (value) url.searchParams.set(key, value);
+    url.searchParams.set('bv', String(viewId));
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.href);
+}
+
+type BoardLayout = 'kanban' | 'list' | 'gantt' | 'calendar';
+const BOARD_LAYOUTS: BoardLayout[] = ['kanban', 'list', 'gantt', 'calendar'];
+
+/** `?view=` (saved views, backlog/report links) wins; outside a saved view the remembered tab follows. */
+function readBoardLayout(storageKey: string): BoardLayout {
+    if (typeof window === 'undefined') return 'kanban';
+    const fromUrl = new URLSearchParams(window.location.search).get('view');
+    let stored: string | null = null;
+    if (!inSavedView()) {
+        try { stored = window.localStorage.getItem(storageKey); } catch { /* private mode */ }
+    }
+    const layout = (fromUrl ?? stored) as BoardLayout | null;
+    return layout && BOARD_LAYOUTS.includes(layout) ? layout : 'kanban';
+}
+
+function writeBoardLayout(storageKey: string, layout: BoardLayout) {
+    if (!inSavedView()) {
+        try { window.localStorage.setItem(storageKey, layout); } catch { /* private mode */ }
+    }
+    const url = new URL(window.location.href);
+    if (layout === 'kanban') url.searchParams.delete('view'); else url.searchParams.set('view', layout);
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.href);
+}
+
 /** Mirror the filters into the query string without an Inertia visit (keeps other params). */
 function writeBoardFilters(filters: BoardFilters, fields: ItemField[] = [], fieldFilters: FieldFilters = {}) {
     const url = new URL(window.location.href);
-    const set = (key: string, value: string) => (value ? url.searchParams.set(key, value) : url.searchParams.delete(key));
-    fields.forEach((field) => set(fieldParam(field.id), serializeFieldFilter(fieldFilters[field.id])));
-    set('q', filters.q.trim());
-    set('assignee', filters.assignee === 'any' ? '' : filters.assignee);
-    set('status', filters.status.join(','));
-    set('labels', filters.labels.join(','));
-    set('priority', filters.priority.join(','));
-    set('type', filters.type.join(','));
-    set('quick', filters.quick.join(','));
+    for (const [key, value] of Object.entries(boardFilterParams(filters, fields, fieldFilters))) {
+        if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
+    }
     if (url.href !== window.location.href) {
         window.history.replaceState(window.history.state, '', url.href);
     }
@@ -1186,6 +1241,27 @@ function writeListSort(sort: ListSort | null) {
     if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.href);
 }
 
+/** Hidden custom-field columns of the list: `?hide=` (saved views) wins over the stored choice. */
+function readHiddenFields(boardId: number): number[] {
+    const fromUrl = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('hide');
+    if (fromUrl !== null) return parseIds(fromUrl);
+    if (inSavedView()) return []; // the view shows all columns
+    try {
+        const stored = JSON.parse(window.localStorage.getItem(`board-${boardId}-list-hidden-fields`) ?? '[]');
+        return Array.isArray(stored) ? stored.filter((n) => Number.isInteger(n)) : [];
+    } catch { return []; }
+}
+
+function writeHiddenFields(boardId: number, ids: number[]) {
+    // a saved view's columns never become your remembered choice for the plain board
+    if (!inSavedView()) {
+        try { window.localStorage.setItem(`board-${boardId}-list-hidden-fields`, JSON.stringify(ids)); } catch { /* private mode */ }
+    }
+    const url = new URL(window.location.href);
+    if (ids.length) url.searchParams.set('hide', ids.join(',')); else url.searchParams.delete('hide');
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.href);
+}
+
 function SortHeader({ label, sortKey, sort, onSort, className }: {
     label: string; sortKey: ListSortKey; sort: ListSort | null; onSort: (key: ListSortKey) => void; className?: string;
 }) {
@@ -1223,6 +1299,10 @@ function ListView({
     board,
     onEditItem,
     customFields,
+    sort,
+    setSort,
+    hiddenFieldIds,
+    setHiddenFieldIds,
 }: {
     columns: (BoardColumn & { items: Item[] })[];
     workspace: Workspace;
@@ -1230,27 +1310,19 @@ function ListView({
     board: Board;
     onEditItem: (item: Item) => void;
     customFields: ItemField[];
+    /** Kept by the page (URL + saved views). */
+    sort: ListSort | null;
+    setSort: React.Dispatch<React.SetStateAction<ListSort | null>>;
+    hiddenFieldIds: number[];
+    setHiddenFieldIds: React.Dispatch<React.SetStateAction<number[]>>;
 }) {
     const allItems = columns.flatMap(col => col.items.map(item => ({ ...item, columnName: col.name })));
 
     // Hidden custom field columns, per board and person (new fields show up by default)
-    const hiddenKey = `board-${board.id}-list-hidden-fields`;
-    const [hiddenFieldIds, setHiddenFieldIds] = useState<number[]>(() => {
-        try {
-            const stored = JSON.parse(window.localStorage.getItem(hiddenKey) ?? '[]');
-            return Array.isArray(stored) ? stored.filter((n) => Number.isInteger(n)) : [];
-        } catch { return []; }
-    });
-    const toggleFieldColumn = (id: number) => setHiddenFieldIds((current) => {
-        const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
-        try { window.localStorage.setItem(hiddenKey, JSON.stringify(next)); } catch { /* private mode: keep it for this visit */ }
-        return next;
-    });
+    const toggleFieldColumn = (id: number) => setHiddenFieldIds((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
     const fieldColumns = customFields.filter((f) => !hiddenFieldIds.includes(f.id));
 
     // Sorting: click a header for ascending, again for descending, a third time to reset.
-    const [sort, setSort] = useState<ListSort | null>(readListSort);
-    useEffect(() => writeListSort(sort), [sort]);
     const onSort = (key: ListSortKey) => setSort((current) =>
         current?.key !== key ? { key, dir: 'asc' } : current.dir === 'asc' ? { key, dir: 'desc' } : null);
 
@@ -2171,7 +2243,27 @@ export default function BoardsShow({
     customFields = [],
     canManageFields = false,
     canEditItems = true,
+    savedViews = [],
+    activeViewId = null,
+    appliedViewParams = null,
+    defaultViewId = null,
+    canShareViews = false,
 }: Props) {
+    // The default view applied by the server: into the URL before any URL-backed state below reads
+    // it — then into Inertia's page too (a client-side visit, no request), or Inertia's first page
+    // load puts the plain URL back
+    useState(() => {
+        if (appliedViewParams && activeViewId && typeof window !== 'undefined') applyViewParamsToUrl(appliedViewParams, activeViewId);
+    });
+    useEffect(() => {
+        if (!appliedViewParams || !activeViewId) return;
+        const url = new URL(window.location.href);
+        for (const [key, value] of Object.entries(appliedViewParams)) if (value) url.searchParams.set(key, value);
+        url.searchParams.set('bv', String(activeViewId));
+        router.replace({ url: url.pathname + url.search + url.hash, preserveState: true, preserveScroll: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    const { flash } = usePage<PageProps>().props;
     const itemTypes = boardItemTypes;
     const [editingItem, setEditingItem] = useState<Item | null>(null);
 
@@ -2202,7 +2294,8 @@ export default function BoardsShow({
     // Filters live in the URL so a filtered board can be shared or bookmarked
     const initialFilters = useMemo(readBoardFilters, []);
     const [searchQuery, setSearchQuery] = useState(initialFilters.q);
-    const [currentView, setCurrentView] = useState<'kanban' | 'list' | 'gantt' | 'calendar'>('kanban');
+    const layoutKey = `board-view-${project.id}-${board.id}`;
+    const [currentView, setCurrentView] = useState<BoardLayout>(() => readBoardLayout(layoutKey));
     const [calendarDate, setCalendarDate] = useState(new Date());
     const [filterOpen, setFilterOpen] = useState(false);
     const [assigneeFilter, setAssigneeFilter] = useState<string>(initialFilters.assignee);
@@ -2223,6 +2316,12 @@ export default function BoardsShow({
         });
     const [createInColumnId, setCreateInColumnId] = useState<number | null>(null);
     const currentUserId = auth.user?.id;
+
+    // List sort + hidden list columns live here (URL-backed) so saved views can capture them
+    const [listSort, setListSort] = useState<ListSort | null>(readListSort);
+    useEffect(() => writeListSort(listSort), [listSort]);
+    const [hiddenFieldIds, setHiddenFieldIds] = useState<number[]>(() => readHiddenFields(board.id));
+    useEffect(() => writeHiddenFields(board.id, hiddenFieldIds), [board.id, hiddenFieldIds]);
 
     useEffect(() => {
         writeBoardFilters({
@@ -2251,23 +2350,20 @@ export default function BoardsShow({
         [assigneeFilter, statusFilter.length, labelFilter.length, priorityFilter.length, typeFilter.length, quickFilters.length, fieldFilters],
     );
 
-    // Persist board view preference per project so user sees same view next time
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        // ?view= (links from the backlog/reports tabs) wins over the remembered view
-        const fromUrl = new URLSearchParams(window.location.search).get('view');
-        const key = `board-view-${project.id}-${board.id}`;
-        const stored = (fromUrl ?? window.localStorage.getItem(key)) as 'kanban' | 'list' | 'gantt' | 'calendar' | null;
-        if (stored && ['kanban', 'list', 'gantt', 'calendar'].includes(stored)) {
-            setCurrentView(stored);
-        }
-    }, [project.id, board.id]);
+    // The layout tab lives in the URL too (and is remembered per board outside saved views)
+    useEffect(() => writeBoardLayout(layoutKey, currentView), [layoutKey, currentView]);
 
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const key = `board-view-${project.id}-${board.id}`;
-        window.localStorage.setItem(key, currentView);
-    }, [currentView, project.id, board.id]);
+    // What a saved view captures: the URL view params of the current board setup
+    const currentViewParams = useMemo<Record<string, string>>(() => {
+        const params = boardFilterParams({
+            q: searchQuery, assignee: assigneeFilter, status: statusFilter, labels: labelFilter,
+            priority: priorityFilter, type: typeFilter, quick: quickFilters,
+        }, customFields, fieldFilters);
+        params.sort = listSort ? `${listSort.dir === 'desc' ? '-' : ''}${listSort.key}` : '';
+        params.view = currentView;
+        params.hide = hiddenFieldIds.filter((id) => customFields.some((f) => f.id === id)).join(',');
+        return Object.fromEntries(Object.entries(params).filter(([, v]) => v !== ''));
+    }, [searchQuery, assigneeFilter, statusFilter, labelFilter, priorityFilter, typeFilter, quickFilters, customFields, fieldFilters, listSort, currentView, hiddenFieldIds]);
 
     const draggedElement = useRef<HTMLElement | null>(null);
     const handleDragStart = (e: DragEvent, item: Item) => {
@@ -2465,8 +2561,22 @@ export default function BoardsShow({
                     />
                 )}
 
-                {/* ─── Toolbar: search · people · quick filters ─── */}
+                {flash?.warning && (
+                    <div className="mx-6 mt-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200" role="status">
+                        {flash.warning}
+                    </div>
+                )}
+
+                {/* ─── Toolbar: saved views · search · people · quick filters ─── */}
                 <div className="flex items-center gap-3 px-6 py-3 flex-wrap shrink-0">
+                    <SavedViewsMenu
+                        views={savedViews}
+                        activeViewId={activeViewId}
+                        defaultViewId={defaultViewId}
+                        canShare={canShareViews}
+                        currentParams={currentViewParams}
+                        routeParams={[workspace.slug, project.slug, board.slug]}
+                    />
                     <div className="relative">
                         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-[14px] text-muted-foreground" />
                         <Input
@@ -2982,6 +3092,10 @@ export default function BoardsShow({
                         board={board}
                         onEditItem={setEditingItem}
                         customFields={customFields}
+                        sort={listSort}
+                        setSort={setListSort}
+                        hiddenFieldIds={hiddenFieldIds}
+                        setHiddenFieldIds={setHiddenFieldIds}
                     />
                 )}
 

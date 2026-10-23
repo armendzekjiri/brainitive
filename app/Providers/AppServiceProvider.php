@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\Board;
+use App\Models\BoardView;
 use App\Models\Bookmark;
 use App\Models\InstanceSettings;
 use App\Models\Item;
@@ -16,6 +17,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Policies\BoardPolicy;
+use App\Policies\BoardViewPolicy;
 use App\Policies\BookmarkPolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\LeadFormPolicy;
@@ -102,6 +104,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Workspace::class, WorkspacePolicy::class);
         Gate::policy(Project::class, ProjectPolicy::class);
         Gate::policy(Board::class, BoardPolicy::class);
+        Gate::policy(BoardView::class, BoardViewPolicy::class);
         Gate::policy(Release::class, ReleasePolicy::class);
         Gate::policy(Page::class, PagePolicy::class);
         Gate::policy(Bookmark::class, BookmarkPolicy::class);
