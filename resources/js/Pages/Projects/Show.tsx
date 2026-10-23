@@ -17,6 +17,7 @@ import { ProjectIcon } from '@/components/ProjectIcon';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { safeHtmlProp } from '@/lib/sanitize';
+import ProjectAiAssistant from '@/components/projects/ProjectAiAssistant';
 
 type PageWithChildren = PageType & { children?: PageWithChildren[] };
 
@@ -31,9 +32,12 @@ interface Props extends PageProps {
         creator?: { id: number; name: string; avatar?: string | null; avatar_display?: string | null };
         users_count?: number;
     };
+    canUpdate?: boolean;
+    canCreatePages?: boolean;
+    aiConfigured?: boolean;
 }
 
-export default function ProjectsShow({ workspace, project }: Props) {
+export default function ProjectsShow({ workspace, project, canUpdate = false, canCreatePages = false, aiConfigured = false }: Props) {
     const [createBoardDialogOpen, setCreateBoardDialogOpen] = useState(false);
     const [createHelpdeskDialogOpen, setCreateHelpdeskDialogOpen] = useState(false);
     const [createListDialogOpen, setCreateListDialogOpen] = useState(false);
@@ -156,6 +160,8 @@ export default function ProjectsShow({ workspace, project }: Props) {
                             </CardContent>
                         </Card>
                     )}
+
+                    <ProjectAiAssistant workspace={workspace} project={project} aiConfigured={aiConfigured} canUpdate={canUpdate} canCreatePages={canCreatePages} />
 
                     {/* Boards */}
                     <section>

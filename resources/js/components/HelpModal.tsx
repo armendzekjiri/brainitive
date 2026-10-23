@@ -76,6 +76,18 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.20.0',
+        title: 'AI That Knows Your Project',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'The AI writer in issues and docs now gets the project’s name and description as background, so rewrites and prompts fit your project.',
+            'New AI assistant on the project overview: summarize the project, draft a task, or write an implementation prompt — all from the project description.',
+            'You review every result first, then copy it, save it as a draft doc, or (summary) use it as the project description after confirming.',
+            'If the description is too short, the assistant tells you where to add more context. @mentions now also work in issue descriptions.',
+        ]
+    },
+    {
         version: 'v1.19.1',
         title: 'Polls That Count',
         tag: 'Patch',

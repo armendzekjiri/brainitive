@@ -2153,6 +2153,7 @@ function ToolbarPlugin({
     workspaceSlug,
     itemTitle,
     projectName,
+    projectId,
     stickyToolbar = false,
     stickyTopOffset = 52,
     documentMode = false,
@@ -2161,6 +2162,7 @@ function ToolbarPlugin({
     workspaceSlug?: string;
     itemTitle?: string;
     projectName?: string;
+    projectId?: number;
     stickyToolbar?: boolean;
     stickyTopOffset?: number;
     documentMode?: boolean;
@@ -2237,6 +2239,7 @@ function ToolbarPlugin({
                 title: itemTitle || undefined,
                 is_selection: generatePrompt ? false : aiMode === 'selection',
                 generate_prompt: generatePrompt ?? false,
+                project_id: projectId || undefined,
             });
             if (res.data.success) {
                 setAiResult(res.data.content);
@@ -3328,7 +3331,7 @@ export function RichLexicalEditor({
             <PollScopeContext.Provider value={pollScope}>
             <RichLexicalOnChangeContext.Provider value={onChange}>
                 <div className={cn("border rounded-lg overflow-hidden bg-white dark:bg-card", documentMode && "bg-transparent dark:bg-transparent", className)}>
-                    <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} projectName={projectName} stickyToolbar={stickyToolbar} stickyTopOffset={stickyTopOffset} documentMode={documentMode} />
+                    <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} projectName={projectName} projectId={projectId} stickyToolbar={stickyToolbar} stickyTopOffset={stickyTopOffset} documentMode={documentMode} />
                     <div
                         className={cn("relative", maxHeight && "overflow-y-auto")}
                         style={maxHeight ? { maxHeight } : undefined}

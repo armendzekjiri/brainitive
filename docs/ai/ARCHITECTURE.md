@@ -156,6 +156,7 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
   - **Shared helpers:** `app/Mcp/Tools/Concerns/InteractsWithBrainitive` (slug→model resolution + policy enforcement, so the AI can only touch what the user can), `ResolvesCalendarConnections`.
   - **Support:** `app/Support/Mcp/` — `ResourceLocator` (the `location` object every write returns), `PageContentConverter` (Markdown↔editor format), `CalendarFormatter`.
   - To add a tool, see the [add-mcp-tool skill](./skills/add-mcp-tool.md).
+- **In-app AI (workspace AI settings):** `AiController` — `generate` (editor toolbar; optional `project_id` adds the project's name + description as context), `projectAssist` / `saveProjectAssist` (project overview assistant: summary / task / implementation prompt → review → copy, draft doc or replace description). All calls go through the private `chat()` helper (SSRF-guarded via `OutboundUrl`). UI: `components/projects/ProjectAiAssistant.tsx`.
 
 ### CLI API
 - **Controller:** `CliController` — `routes/api.php`: `/cli/login` issues a Passport token; `auth:api`-guarded `/cli/...` endpoints expose workspaces + task lists (JSON).

@@ -178,6 +178,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('ai/settings', [AiController::class, 'saveSettings'])->name('ai.settings.save');
         Route::post('ai/models', [AiController::class, 'fetchModels'])->name('ai.models');
         Route::post('ai/generate', [AiController::class, 'generate'])->name('ai.generate');
+        Route::post('projects/{project:slug}/ai/assist', [AiController::class, 'projectAssist'])->name('ai.project-assist')->scopeBindings()->middleware('throttle:20,1');
+        Route::post('projects/{project:slug}/ai/save-doc', [AiController::class, 'saveProjectAssist'])->name('ai.project-assist.save')->scopeBindings();
 
         // Bookmarks (workspace level)
         Route::get('bookmarks', [BookmarkController::class, 'index'])->name('bookmarks.index');
