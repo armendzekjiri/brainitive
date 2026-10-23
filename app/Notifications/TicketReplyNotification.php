@@ -104,8 +104,8 @@ class TicketReplyNotification extends Notification implements ShouldQueue
             return (new MailMessage)
                 ->subject($subject)
                 ->line($line)
-                ->line('Ticket: '.$this->ticket->subject)
-                ->line(Str::limit(strip_tags($this->reply->body), 200))
+                ->line('Ticket: '.$this->plainSubject())
+                ->line(NewLeadNotification::plain(Str::limit(strip_tags($this->reply->body), 200)))
                 ->action('View ticket', $url);
         }
 
@@ -127,7 +127,7 @@ class TicketReplyNotification extends Notification implements ShouldQueue
         return (new MailMessage)
             ->subject($subject)
             ->line($line)
-            ->line(Str::limit(strip_tags($this->reply->body), 200))
+            ->line(NewLeadNotification::plain(Str::limit(strip_tags($this->reply->body), 200)))
             ->action('View ticket', $url);
     }
 

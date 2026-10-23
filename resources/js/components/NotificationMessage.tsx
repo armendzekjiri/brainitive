@@ -56,10 +56,11 @@ export function notificationActor(d: NotificationData): string {
 /** Only links into this app: a relative path or an absolute URL on this origin. */
 export function safeAppHref(url: string | undefined): string | undefined {
     if (!url) return undefined;
-    if (url.startsWith('/') && !url.startsWith('//') && !url.includes('\\')) return url;
     try {
+        // always parse (browsers strip tabs / newlines, so "/\t/evil.com" means //evil.com)
         const parsed = new URL(url, window.location.origin);
-        return parsed.origin === window.location.origin && /^https?:$/.test(parsed.protocol) ? parsed.href : undefined;
+        if (parsed.origin !== window.location.origin || !/^https?:$/.test(parsed.protocol)) return undefined;
+        return parsed.pathname + parsed.search + parsed.hash;
     } catch {
         return undefined;
     }

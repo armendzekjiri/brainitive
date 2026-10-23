@@ -39,7 +39,7 @@ class PlanPolicy
     private function canEdit(User $user, Project $project): bool
     {
         $workspaceRole = $user->workspaceRole($project->workspace);
-        if (in_array($workspaceRole, ['owner', 'admin'], true) || ($workspaceRole === 'editor' && $user->hasProjectAccess($project))) {
+        if (in_array($workspaceRole, ['owner', 'admin'], true)) {
             return true;
         }
 

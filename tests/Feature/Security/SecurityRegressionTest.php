@@ -20,6 +20,7 @@ use App\Models\Workspace;
 use App\Notifications\TicketCreatedNotification;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\OutboundUrl;
+use App\Support\Uploads;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -418,5 +419,34 @@ class SecurityRegressionTest extends TestCase
         $this->actingAs($this->editor)->post($route, ['type' => 'link', 'title' => 'x', 'url' => 'javascript:alert(document.cookie)'])->assertSessionHasErrors('url');
         $this->actingAs($this->editor)->post($route, ['type' => 'link', 'title' => 'x', 'url' => ' DATA:text/html,<script>alert(1)</script>'])->assertSessionHasErrors('url');
         $this->actingAs($this->editor)->post($route, ['type' => 'link', 'title' => 'ok', 'url' => 'https://example.com'])->assertSessionHasNoErrors();
+    }
+
+    public function test_batch_3_review_bypasses_stay_closed(): void
+    {
+        // bookmark links: an allowlist, so browser-stripped characters can't smuggle a scheme in
+        $this->workspace->users()->updateExistingPivot($this->editor->id, ['role' => 'editor']);
+        $bookmark = Bookmark::create(['workspace_id' => $this->workspace->id, 'name' => 'L', 'slug' => 'l', 'visibility' => 'public', 'created_by' => $this->editor->id]);
+        foreach (["java\tscript:alert(1)", "jav\nascript:alert(1)", "\x01javascript:alert(1)", 'ftp://example.com'] as $url) {
+            $this->actingAs($this->editor)->post(route('bookmarks.items.store', [$this->workspace->slug, $bookmark->slug]), ['type' => 'link', 'title' => 'x', 'url' => $url])->assertSessionHasErrors('url');
+        }
+
+        // MCP markdown: control characters and backslashes never make a link
+        foreach (["[x](\x01javascript:alert(1))", '[x](\\\\evil.com)', '[x](/\\evil.com)'] as $md) {
+            $this->assertStringNotContainsString('href=', PageContentConverter::markdownToHtml($md), $md);
+        }
+
+        // legacy icon file names may be sent back unchanged
+        Storage::fake('public');
+        $admin = User::factory()->create();
+        $this->workspace->addUser($admin, 'admin');
+        $this->project->forceFill(['icon' => 'project-icons/'.$this->project->id.'/icon.PNG'])->save();
+        $this->actingAs($admin)->put(route('projects.update', [$this->workspace->slug, $this->project->slug]), [
+            'name' => 'Renamed', 'icon' => 'project-icons/'.$this->project->id.'/icon.PNG',
+        ])->assertSessionHasNoErrors();
+        $this->assertSame('Renamed', $this->project->fresh()->name);
+
+        // the attachment audit flags any non-allowlisted extension (files stored before the allowlist)
+        $this->assertTrue(Uploads::isActive('ticket-attachments/1/abc.rss'));
+        $this->assertFalse(Uploads::isActive('ticket-attachments/1/abc.pdf'));
     }
 }

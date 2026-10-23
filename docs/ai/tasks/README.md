@@ -48,6 +48,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 | [Security hardening, batch 1](./fix-security-hotfix-1.md) | done |
 | [Security hardening, batch 2](./fix-security-batch-2.md) | done |
 | [Security hardening, batch 3](./fix-security-batch-3.md) | done |
+| [Security hardening, batch 4](./fix-security-batch-4.md) | done |
 | [Template gallery + more project templates (BRAI-91)](./feat-template-gallery.md) | done |
 | [Project templates (BRAI-72)](./feat-project-templates.md) | done |
 | [Board custom fields (BRAI-77)](./feat-board-custom-fields.md) | done |

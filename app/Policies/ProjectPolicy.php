@@ -86,7 +86,7 @@ class ProjectPolicy
     {
         // Workspace admin can create boards
         $workspaceRole = $user->workspaceRole($project->workspace);
-        if ($workspaceRole === 'admin' || ($workspaceRole === 'editor' && $user->hasProjectAccess($project))) {
+        if ($workspaceRole === 'admin') {
             return true;
         }
 

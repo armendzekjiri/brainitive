@@ -296,7 +296,8 @@ class ProjectController extends Controller
         }
         // an icon is an emoji / icon name, or a file of THIS project — a path to any other file
         // would later be deleted from the public disk when a new icon is uploaded
-        if (! empty($validated['icon']) && (str_contains($validated['icon'], '/') || str_contains($validated['icon'], '\\'))
+        if (! empty($validated['icon']) && $validated['icon'] !== $project->getRawOriginal('icon')
+            && (str_contains($validated['icon'], '/') || str_contains($validated['icon'], '\\'))
             && ! self::ownIconPath($project, $validated['icon'])) {
             throw ValidationException::withMessages(['icon' => 'Upload the icon image instead of linking a file.']);
         }
@@ -631,6 +632,6 @@ class ProjectController extends Controller
     /** project-icons/{id}/icon.<ext> — the only file an icon may point to (and so be deleted). */
     private static function ownIconPath(Project $project, string $path): bool
     {
-        return (bool) preg_match('#^project-icons/'.$project->id.'/icon\.(png|jpe?g|gif|webp)$#', $path);
+        return (bool) preg_match('#^project-icons/'.$project->id.'/icon(\.[a-z0-9]{1,5})?$#i', $path);
     }
 }

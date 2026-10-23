@@ -615,7 +615,7 @@ class BoardController extends Controller
             $item->load('watchers');
             $actorId = $request->user()->id;
 
-            foreach ($item->watchers as $watcher) {
+            foreach ($item->watchers->filter(fn ($w) => $w->hasProjectAccess($project)) as $watcher) {
                 // Don't notify the person who performed the move
                 if ($watcher->id === $actorId) {
                     continue;
@@ -641,9 +641,13 @@ class BoardController extends Controller
         $this->authorize('view', $item);
 
         $validated = $request->validate([
-            'user_id' => ['required', 'integer', new ProjectMember($project)],
+            'user_id' => ['required', 'integer', 'exists:users,id'],
             'watch' => 'required|boolean',
         ]);
+        // adding someone needs them in the project; removing a former member must still work
+        if ($validated['watch']) {
+            $request->validate(['user_id' => [new ProjectMember($project)]]);
+        }
 
         // anyone who can see the item may (un)watch it themselves; managing others takes edit rights
         if ((int) $validated['user_id'] !== $request->user()->id) {

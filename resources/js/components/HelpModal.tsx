@@ -83,6 +83,19 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.34.2',
+        title: 'More security hardening',
+        tag: 'Security',
+        date: '2026-10-23',
+        items: [
+            'Profile → Connected apps: see which AI apps, the browser extension and the CLI can access your account, and disconnect any of them. Changing your password disconnects them all.',
+            'Invited people join a workspace once their email address is verified.',
+            'Project viewers are read-only in their project, whatever their workspace role.',
+            'Mentions, notifications and bookmark links only open safe addresses; file uploads and exports are stricter about what can run in your browser.',
+            'Connecting an AI app shows where you will be sent back to — only continue if you started the connection yourself.',
+        ]
+    },
+    {
         version: 'v1.34.1',
         title: 'Security hardening',
         tag: 'Security',

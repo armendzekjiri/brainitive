@@ -32,6 +32,7 @@ class Uploads
         'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'heic', 'heif', 'tif', 'tiff', 'ico',
         'mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'mp4', 'm4v', 'mov', 'webm', 'avi', 'mkv',
         'psd', 'ai', 'sketch', 'fig', 'dwg', 'stl', 'obj',
+        'jfif', 'xlsm', 'docm', 'msg', 'epub', 'yml', 'yaml', 'xz', 'mpeg', 'mpg', 'opus',
     ];
 
     private const IMAGE = ['jpeg' => 'jpg', 'jpg' => 'jpg', 'png' => 'png', 'gif' => 'gif', 'webp' => 'webp', 'bmp' => 'bmp', 'avif' => 'avif'];
@@ -69,6 +70,7 @@ class Uploads
         return Str::limit($name !== '' ? $name : 'file', 250, '');
     }
 
+    /** Anything a browser might render as a page: known active types and every extension not in SAFE. */
     public static function isActive(string $path): bool
     {
         $name = strtolower(basename($path));
@@ -78,7 +80,8 @@ class Uploads
                 return true;
             }
         }
+        $ext = pathinfo($name, PATHINFO_EXTENSION);
 
-        return false;
+        return $ext !== '' && $ext !== 'bin' && ! in_array($ext, self::SAFE, true);
     }
 }

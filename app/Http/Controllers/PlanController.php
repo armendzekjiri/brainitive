@@ -281,6 +281,7 @@ class PlanController extends Controller
         $this->authorize('createItems', $board);
 
         $members = $workspace->users()->get(['users.id', 'users.name'])
+            ->filter(fn ($user) => $user->hasProjectAccess($project))
             ->keyBy(fn ($user) => mb_strtolower(trim($user->name)));
 
         try {

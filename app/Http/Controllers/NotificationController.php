@@ -122,19 +122,22 @@ class NotificationController extends Controller
      */
     public static function appPath(string $url): ?string
     {
-        $url = trim($url);
-        if (str_starts_with($url, '/') && ! str_starts_with($url, '//') && ! str_contains($url, '\\')) {
-            return $url;
-        }
-        $parts = parse_url($url);
-        if (! $parts || ! in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)) {
+        // browsers drop tab / CR / LF inside URLs ("/\t/evil.com" → //evil.com): reject them outright
+        if ($url === '' || preg_match('/[\x00-\x20\x7f\\\\]/', $url)) {
             return null;
         }
-        $hosts = array_filter([parse_url((string) config('app.url'), PHP_URL_HOST), request()->getHost()]);
-        if (! in_array(strtolower($parts['host'] ?? ''), array_map('strtolower', $hosts), true)) {
-            return null;
+        if (! str_starts_with($url, '/')) {
+            $parts = parse_url($url);
+            if (! $parts || ! in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true) || isset($parts['user'])) {
+                return null;
+            }
+            $hosts = array_filter([parse_url((string) config('app.url'), PHP_URL_HOST), request()->getHost()]);
+            if (! in_array(strtolower($parts['host'] ?? ''), array_map('strtolower', $hosts), true)) {
+                return null;
+            }
+            $url = ($parts['path'] ?? '/').(isset($parts['query']) ? '?'.$parts['query'] : '');
         }
 
-        return ($parts['path'] ?? '/').(isset($parts['query']) ? '?'.$parts['query'] : '');
+        return preg_match('#^/(?![/\\\\])#', $url) ? $url : null;
     }
 }

@@ -68,8 +68,10 @@ class AccessControlTest extends TestCase
         $this->actingAs($this->workspaceEditor)->post(route('task-lists.items.store', [...$p, $taskList->slug]), ['title' => 'Spam'])->assertForbidden();
         $this->assertDatabaseMissing('items', ['title' => 'Spam']);
 
-        // once they belong to the project, the workspace role applies again
+        // inside a project the project role decides: a viewer stays read-only, an editor may write
         $this->project->users()->attach($this->workspaceEditor->id, ['role' => 'viewer']);
+        $this->actingAs($this->workspaceEditor)->post(route('boards.items.store', [...$p, $this->board->slug]), ['title' => 'Spam', 'column_id' => $column])->assertForbidden();
+        $this->project->users()->updateExistingPivot($this->workspaceEditor->id, ['role' => 'editor']);
         $this->actingAs($this->workspaceEditor)->post(route('boards.items.store', [...$p, $this->board->slug]), ['title' => 'Allowed', 'column_id' => $column])->assertSessionHasNoErrors();
         $this->assertDatabaseHas('items', ['title' => 'Allowed']);
     }

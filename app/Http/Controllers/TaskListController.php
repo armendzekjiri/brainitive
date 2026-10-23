@@ -6,6 +6,7 @@ use App\Models\Project;
 use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\Workspace;
+use App\Rules\ProjectMember;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -126,7 +127,7 @@ class TaskListController extends Controller
             'title' => 'required|string|max:500',
             'description' => 'nullable|array',
             // Only people in this workspace can be assigned.
-            'assignee_id' => ['nullable', 'integer', Rule::in($this->memberIds($workspace))],
+            'assignee_id' => ['nullable', 'integer', Rule::in($this->memberIds($workspace)), new ProjectMember($taskList->project)],
             'due_date' => 'nullable|date',
             'due_time' => 'nullable|date_format:H:i',
             'start_date' => 'nullable|date',
@@ -164,7 +165,7 @@ class TaskListController extends Controller
             'description' => 'nullable|array',
             'status' => 'sometimes|in:todo,done',
             // Only people in this workspace can be assigned.
-            'assignee_id' => ['nullable', 'integer', Rule::in($this->memberIds($workspace))],
+            'assignee_id' => ['nullable', 'integer', Rule::in($this->memberIds($workspace)), new ProjectMember($taskList->project)],
             'due_date' => 'nullable|date',
             'due_time' => 'nullable|date_format:H:i',
             'start_date' => 'nullable|date',

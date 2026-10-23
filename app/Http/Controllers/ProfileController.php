@@ -24,6 +24,7 @@ class ProfileController extends Controller
         return Inertia::render('Profile/Edit', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail && InstanceSettings::requiresEmailVerification(),
             'status' => session('status'),
+            'connectedApps' => $this->connectedApps($request),
         ]);
     }
 
@@ -93,5 +94,43 @@ class ProfileController extends Controller
         $request->session()->regenerateToken();
 
         return Redirect::to('/');
+    }
+
+    /**
+     * Apps holding an active token for this account (MCP connectors, the browser extension, the CLI),
+     * one row per app.
+     *
+     * @return list<array{client_id: string, name: string, scopes: list<string>, last_issued: ?string, expires_at: ?string, tokens: int}>
+     */
+    private function connectedApps(Request $request): array
+    {
+        return $request->user()->tokens()
+            ->with('client:id,name')
+            ->where('revoked', false)
+            ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+            ->latest()
+            ->get()
+            ->groupBy('client_id')
+            ->map(fn ($tokens) => [
+                'client_id' => (string) $tokens->first()->client_id,
+                'name' => $tokens->first()->client?->name ?? 'Unknown app',
+                'scopes' => $tokens->pluck('scopes')->flatten()->unique()->values()->all(),
+                'last_issued' => $tokens->first()->created_at?->toIso8601String(),
+                'expires_at' => $tokens->max('expires_at')?->toIso8601String(),
+                'tokens' => $tokens->count(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /** Disconnect an app: revoke all of this account's tokens (and refresh tokens) for it. */
+    public function disconnectApp(Request $request, string $clientId): RedirectResponse
+    {
+        foreach ($request->user()->tokens()->where('client_id', $clientId)->where('revoked', false)->get() as $token) {
+            $token->revoke();
+            $token->refreshToken?->revoke();
+        }
+
+        return back()->with('status', 'app-disconnected');
     }
 }

@@ -2,6 +2,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import { PageProps } from '@/types';
 import { Head } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import ConnectedAppsForm, { ConnectedApp } from './Partials/ConnectedAppsForm';
 import DeleteUserForm from './Partials/DeleteUserForm';
 import NotificationSettingsForm from './Partials/NotificationSettingsForm';
 import TaskDigestSetting from './Partials/TaskDigestSetting';
@@ -11,7 +12,8 @@ import UpdateProfileInformationForm from './Partials/UpdateProfileInformationFor
 export default function Edit({
     mustVerifyEmail,
     status,
-}: PageProps<{ mustVerifyEmail: boolean; status?: string }>) {
+    connectedApps = [],
+}: PageProps<{ mustVerifyEmail: boolean; status?: string; connectedApps?: ConnectedApp[] }>) {
     return (
         <AppLayout>
             <Head title="Profile" />
@@ -54,6 +56,16 @@ export default function Edit({
                     </CardHeader>
                     <CardContent>
                         <UpdatePasswordForm className="max-w-xl" />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Connected apps</CardTitle>
+                        <CardDescription>AI connectors (MCP), the browser extension and the CLI that can access your account. Changing your password disconnects all of them.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ConnectedAppsForm apps={connectedApps} className="max-w-xl" />
                     </CardContent>
                 </Card>
 

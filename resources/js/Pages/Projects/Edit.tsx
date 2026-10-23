@@ -466,6 +466,7 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                     />
                                     <p className="text-xs text-muted-foreground">Short code for the project (e.g. PROJ, DEV). Unique per workspace.</p>
                                     {errors.key && <p className="text-sm text-destructive">{errors.key}</p>}
+                                    {errors.icon && <p className="text-sm text-destructive">{errors.icon}</p>}
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Color</Label>

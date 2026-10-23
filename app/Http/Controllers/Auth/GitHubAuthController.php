@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\WorkspaceInvitation;
+use App\Support\SignOutEverywhere;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -50,10 +51,17 @@ class GitHubAuthController extends Controller
             $user = User::query()->where('email', $email)->first();
 
             if ($user) {
+                // Someone may have registered this address without owning it: the provider
+                // proves the email, so the never-verified account is reset before linking
+                if ($user->email_verified_at === null) {
+                    $user->forceFill(['password' => bcrypt(str()->random(64))])->save();
+                    SignOutEverywhere::run($user);
+                }
                 $user->update([
                     'github_id' => $githubUser->getId(),
                     'email_verified_at' => $user->email_verified_at ?? now(),
                 ]);
+                WorkspaceInvitation::acceptPendingForUser($user);
             } else {
                 if (! WorkspaceInvitation::canSignUp($email)) {
                     return redirect()->route('login')->with('status', 'Sign-up is by invitation only. Ask a workspace admin to invite this email address.');

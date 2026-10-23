@@ -38,6 +38,12 @@ class CliController extends Controller
 
         $user = Auth::user();
 
+        if (! $user->hasVerifiedEmail()) {
+            Auth::logout();
+
+            return response()->json(['message' => 'Verify your email address first (check your inbox).'], 403);
+        }
+
         if ($user->isSuspended()) {
             Auth::logout();
             throw ValidationException::withMessages([

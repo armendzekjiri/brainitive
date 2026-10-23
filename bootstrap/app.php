@@ -3,6 +3,8 @@
 use App\Http\Middleware\AddCorsHeaders;
 use App\Http\Middleware\EnsureInstanceAdmin;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
+use App\Http\Middleware\FrameProtection;
+use App\Http\Middleware\GuardOAuthFlows;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -27,7 +29,10 @@ return Application::configure(basePath: dirname(__DIR__))
             $middleware->trustProxies(at: $trustedProxies === '*' ? '*' : array_map('trim', explode(',', $trustedProxies)));
         }
 
+        $middleware->append(GuardOAuthFlows::class);
+
         $middleware->web(append: [
+            FrameProtection::class,
             EnsureUserIsNotSuspended::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,

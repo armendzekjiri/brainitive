@@ -79,9 +79,11 @@ class AiController extends Controller
             ? Crypt::decryptString($settings['ai_api_key'])
             : null;
 
-        // Allow passing endpoint/key from request (for testing before save)
-        if ($request->filled('ai_endpoint')) {
+        // Allow passing endpoint/key from request (for testing before save). The saved key is
+        // only ever sent to the saved endpoint — a new endpoint needs its key typed in again.
+        if ($request->filled('ai_endpoint') && rtrim((string) $request->input('ai_endpoint'), '/') !== rtrim((string) $endpoint, '/')) {
             $endpoint = $request->input('ai_endpoint');
+            $apiKey = null;
         }
         if ($request->filled('ai_api_key')) {
             $apiKey = $request->input('ai_api_key');

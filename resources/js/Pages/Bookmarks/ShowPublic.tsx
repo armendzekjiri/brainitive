@@ -1,3 +1,4 @@
+import { safeExternalHref } from '@/lib/sanitize';
 import { Head } from '@inertiajs/react';
 import { Bookmark, BookmarkItem } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -139,7 +140,7 @@ export default function BookmarksShowPublic({ bookmark }: Props) {
                                         {links.map((item) => (
                                             <li key={item.id}>
                                                 <a
-                                                    href={item.url || '#'}
+                                                    href={safeExternalHref(item.url) ?? '#'}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="flex items-start gap-2 rounded-lg p-2 -mx-2 text-primary hover:bg-muted/50 transition-colors group"

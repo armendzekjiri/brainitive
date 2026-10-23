@@ -92,6 +92,19 @@
                 <p class="value">{{ $user->email }}</p>
             </div>
 
+            @php($redirectTo = (string) request()->query('redirect_uri', ''))
+            @php($redirectHost = parse_url($redirectTo, PHP_URL_HOST) ?: (parse_url($redirectTo, PHP_URL_SCHEME) ? parse_url($redirectTo, PHP_URL_SCHEME).'://' : ''))
+            @if($redirectHost)
+                <div class="panel">
+                    <p class="label">You'll be sent back to</p>
+                    <p class="value">{{ $redirectHost }}</p>
+                </div>
+                <p class="lead" style="font-size: .8rem">
+                    Only continue if you started connecting {{ $client->name }} yourself just now. The app named itself —
+                    check that the address above belongs to it.
+                </p>
+            @endif
+
             @if(count($scopes) > 0)
                 <p class="perm-title">This will allow it to:</p>
                 <ul class="perms">

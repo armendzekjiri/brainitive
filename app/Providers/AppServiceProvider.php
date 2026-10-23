@@ -14,6 +14,7 @@ use App\Models\Release;
 use App\Models\SnippetCollection;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Models\WorkspaceInvitation;
 use App\Policies\BoardPolicy;
 use App\Policies\BookmarkPolicy;
 use App\Policies\ItemPolicy;
@@ -26,6 +27,7 @@ use App\Policies\SnippetPolicy;
 use App\Policies\WorkspacePolicy;
 use App\Support\Admin\InstanceMailConfig;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Verified;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
@@ -80,6 +82,13 @@ class AppServiceProvider extends ServiceProvider
 
             if ($this->app->resolved('mail.manager')) {
                 InstanceMailConfig::apply();
+            }
+        });
+
+        // Joining invited workspaces needs a proven address (the link in the verification mail)
+        Event::listen(Verified::class, function (Verified $event) {
+            if ($event->user instanceof User) {
+                WorkspaceInvitation::acceptPendingForUser($event->user);
             }
         });
 

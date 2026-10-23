@@ -78,9 +78,9 @@ class BoardPolicy
     {
         $project = $board->project;
 
-        // Workspace admin, or workspace editor inside a project they belong to
+        // Workspace admin, or the project's own admins / editors (a project viewer stays read-only)
         $workspaceRole = $user->workspaceRole($project->workspace);
-        if ($workspaceRole === 'admin' || ($workspaceRole === 'editor' && $user->hasProjectAccess($project))) {
+        if ($workspaceRole === 'admin') {
             return true;
         }
 

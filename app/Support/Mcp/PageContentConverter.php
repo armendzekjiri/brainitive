@@ -370,7 +370,7 @@ class PageContentConverter
     private static function safeHref(string $href): ?string
     {
         $href = trim($href);
-        if ($href === '') {
+        if ($href === '' || preg_match('/[\x00-\x20\x7f\\\\]/', $href)) {
             return null;
         }
         if (preg_match('/^[a-z][a-z0-9+.-]*:/i', $href)) {
