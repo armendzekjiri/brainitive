@@ -7,6 +7,7 @@ use App\Models\Item;
 use App\Models\Project;
 use App\Models\Sprint;
 use App\Models\Workspace;
+use App\Support\Boards\SprintLifecycle;
 use App\Support\Boards\SprintReport;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -152,20 +153,11 @@ class SprintController extends Controller
             'end_date' => 'nullable|date|after:start_date',
         ]);
 
-        if (! $sprint->isPlanned()) {
-            return back()->withErrors(['sprint' => 'This sprint was already started.']);
+        try {
+            $sprint = SprintLifecycle::start($board, $sprint, $validated['start_date'] ?? null, $validated['end_date'] ?? null, $validated['goal'] ?? null, $validated['name'] ?? null);
+        } catch (\DomainException $e) {
+            return back()->withErrors(['sprint' => $e->getMessage()]);
         }
-        if ($board->activeSprint()->exists()) {
-            return back()->withErrors(['sprint' => 'Complete the active sprint before starting another one.']);
-        }
-        if (! $sprint->items()->exists()) {
-            return back()->withErrors(['sprint' => 'Add at least one issue to the sprint before starting it.']);
-        }
-
-        if (isset($validated['name'])) {
-            $sprint->name = $validated['name'];
-        }
-        $sprint->start($validated['start_date'] ?? null, $validated['end_date'] ?? null, $validated['goal'] ?? null);
 
         return redirect()
             ->route('boards.show', [$workspace->slug, $project->slug, $board->slug])
@@ -180,12 +172,13 @@ class SprintController extends Controller
             'move_open_to' => ['nullable', Rule::exists('sprints', 'id')->where('board_id', $board->id)->where('status', Sprint::STATUS_PLANNED)],
         ]);
 
-        if (! $sprint->isActive()) {
-            return back()->withErrors(['sprint' => 'Only the active sprint can be completed.']);
-        }
-
         $target = isset($validated['move_open_to']) ? Sprint::find($validated['move_open_to']) : null;
-        $moved = $sprint->complete($target);
+
+        try {
+            $moved = SprintLifecycle::complete($board, $sprint, $target);
+        } catch (\DomainException $e) {
+            return back()->withErrors(['sprint' => $e->getMessage()]);
+        }
 
         $where = $target ? $target->name : 'the backlog';
 

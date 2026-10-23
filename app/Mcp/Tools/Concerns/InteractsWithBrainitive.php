@@ -2,6 +2,8 @@
 
 namespace App\Mcp\Tools\Concerns;
 
+use App\Models\Board;
+use App\Models\Item;
 use App\Models\Project;
 use App\Models\Workspace;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -50,6 +52,40 @@ trait InteractsWithBrainitive
         }
 
         return $project;
+    }
+
+    /**
+     * Resolve a board (by slug) inside a project the user can open.
+     *
+     * @throws AuthorizationException
+     */
+    protected function boardForUser(Authenticatable $user, string $workspaceSlug, string $projectSlug, string $boardSlug): Board
+    {
+        $project = $this->projectForUser($user, $workspaceSlug, $projectSlug);
+        $board = $project->boards()->where('slug', $boardSlug)->first();
+
+        if (! $board) {
+            throw new AuthorizationException("No board named \"{$boardSlug}\" in this project.");
+        }
+
+        return $board;
+    }
+
+    /**
+     * Resolve an item by id that must sit on that board (no foreign ids).
+     *
+     * @throws AuthorizationException
+     */
+    protected function boardItemForUser(Authenticatable $user, string $workspaceSlug, string $projectSlug, string $boardSlug, int $itemId): Item
+    {
+        $board = $this->boardForUser($user, $workspaceSlug, $projectSlug, $boardSlug);
+        $item = $board->items()->find($itemId);
+
+        if (! $item) {
+            throw new AuthorizationException('No item with that id on this board. Call get_board to see item ids.');
+        }
+
+        return $item;
     }
 
     /**
