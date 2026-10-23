@@ -40,6 +40,10 @@ php artisan test           # PHPUnit          npm run build      # frontend buil
 | Codex / Cursor Cloud | [`/AGENTS.md`](../../AGENTS.md) |
 | Cursor | [`/.cursor/rules/*.mdc`](../../.cursor/rules) |
 
+Claude Code also has reviewer subagents in [`/.claude/agents/`](../../.claude/agents). They're
+thin wrappers around [`skills/review-checklist.md`](./skills/review-checklist.md), so the
+checklist stays the one copy every agent uses.
+
 ## Maintenance rule
 
 When something changes, update the doc that owns it — **conventions** → `CONVENTIONS.md`,

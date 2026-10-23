@@ -10,6 +10,7 @@ way** without reverse-engineering it. Each recipe assumes you've read
 | [add-inertia-page.md](./add-inertia-page.md) | Adding/changing a frontend page wired to a controller + typed props |
 | [add-mcp-tool.md](./add-mcp-tool.md) | Exposing a capability to AI clients via the MCP server |
 | [add-notification.md](./add-notification.md) | Notifying a user in-app + by browser push (and/or email) |
+| [review-checklist.md](./review-checklist.md) | Reviewing a diff before the PR (backend, frontend, database, security lanes; Claude Code subagents in `.claude/agents/`) |
 | [track-work-in-brainitive.md](./track-work-in-brainitive.md) | Tracking the task on the Brainitive board when MCP is connected (create card → Testing) |
 
 Adding a new recipe? Keep it concrete (real file paths, real snippets from this repo), link

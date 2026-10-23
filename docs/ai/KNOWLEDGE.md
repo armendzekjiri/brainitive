@@ -292,6 +292,9 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **Item soft deletes don't cascade.** The `parent_id` FK cascades only on hard deletes, so
   `destroyItem` soft-deletes `descendantIds()` explicitly. Before that, a deleted issue's
   subtasks stayed behind, although the confirm dialog said they'd be deleted.
+- **An empty JSON object comes back as `[]` from an `array` cast.** `(object) []` is stored
+  as `{}`, but the cast decodes with `json_decode(…, true)`, so React gets `[]`. Client code
+  that compares or spreads such values (`rules: {}` vs `rules: []`) must accept both.
 - **Share links expose only a whitelist.** `ShareLinkController::show` builds the payload
   field by field (title, content / description, status, type, priority, dates) and never
   serializes the model, so new columns can't leak into public pages. Docs share the live
