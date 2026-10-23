@@ -15,6 +15,7 @@ use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Tests\Feature\Boards\InteractsWithBoards;
 use Tests\TestCase;
@@ -383,6 +384,52 @@ class CaptureConversionTest extends TestCase
             ->assertJsonPath('location.url', null)
             ->assertJsonPath('capture.target.available', false);
         $this->assertStringNotContainsString('Renamed secretly', $this->get(route('captures.index', ['state' => 'processed']))->getContent());
+    }
+
+    public function test_soft_deleted_parents_make_the_target_unavailable_not_an_error(): void
+    {
+        $this->actingAs($this->editor);
+        $issue = $this->capture($this->editor, ['text' => 'On a board that goes away']);
+        $this->convert($issue, 'issue', $this->board->id)->assertCreated();
+        $task = $this->capture($this->editor, ['text' => 'In a project that goes away']);
+        $this->convert($task, 'task', $this->taskList->id)->assertCreated();
+        $page = $this->capture($this->editor, ['text' => 'Doc in that project']);
+        $this->convert($page, 'page', $this->project->id)->assertCreated();
+        $note = $this->capture($this->editor, ['text' => 'Bookmark note']);
+        $this->convert($note, 'bookmark', $this->bookmark->id)->assertCreated();
+
+        $this->get(route('captures.index', ['state' => 'processed']))
+            ->assertInertia(fn ($p) => $p->has('captures', 4)
+                ->where('captures', fn ($rows) => collect($rows)->every(fn ($r) => $r['target']['available'] === true)));
+
+        $this->board->delete();
+        $this->project->delete();
+        $this->bookmark->delete();
+
+        $this->get(route('captures.index', ['state' => 'processed']))->assertOk()
+            ->assertInertia(fn ($p) => $p->has('captures', 4)
+                ->where('captures', fn ($rows) => collect($rows)->every(fn ($r) => $r['target']['available'] === false && $r['target']['url'] === null)));
+        $this->convert($issue, 'issue', $this->board->id, ['title' => 'retry'])->assertOk()->assertJsonPath('replayed', true);
+    }
+
+    public function test_processed_list_needs_a_fixed_number_of_queries(): void
+    {
+        $this->actingAs($this->editor);
+        foreach (range(1, 3) as $i) {
+            $this->convert($this->capture($this->editor, ['text' => "Issue {$i}"]), 'issue', $this->board->id)->assertCreated();
+        }
+        $count = function (): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->get(route('captures.index', ['state' => 'processed']))->assertOk();
+
+            return count(DB::getQueryLog());
+        };
+        $few = $count();
+        foreach (range(4, 12) as $i) {
+            $this->convert($this->capture($this->editor, ['text' => "Issue {$i}"]), 'issue', $this->board->id)->assertCreated();
+        }
+        $this->assertSame($few, $count(), 'query count grows with the number of processed captures');
     }
 
     public function test_destinations_list_only_writable_targets(): void

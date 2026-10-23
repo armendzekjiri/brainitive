@@ -14,7 +14,6 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -89,18 +88,6 @@ class CaptureConversion
         });
     }
 
-    /** The same view rules as the pages the targets live on. */
-    private static function canView(\Illuminate\Contracts\Auth\Access\Gate $gate, User $user, string $type, Model $target): bool
-    {
-        return match ($type) {
-            'issue', 'page' => $gate->allows('view', $target),
-            'task' => $target->taskList !== null && $gate->allows('view', $target->taskList),
-            'bookmark' => $target->bookmark !== null && $gate->allows('view', $target->bookmark),
-            'snippet' => $target->collection?->workspace !== null && $user->hasWorkspaceAccess($target->collection->workspace),
-            default => false,
-        };
-    }
-
     /**
      * The created content's current location — only while `$user` can still open it. Deleted,
      * moved out of reach or no longer accessible: the snapshot taken at conversion (what the
@@ -122,22 +109,23 @@ class CaptureConversion
      */
     public static function locations(Collection $captures, User $user): array
     {
-        $gate = Gate::forUser($user);
         $result = [];
+        $access = new CaptureAccess($user);
 
         $captures->filter(fn (Capture $c) => $c->target_type && $c->target_id && isset(self::TARGETS[$c->target_type]))
             ->groupBy('target_type')
-            ->each(function (Collection $group, string $type) use (&$result, $gate, $user) {
+            ->each(function (Collection $group, string $type) use (&$result, $access) {
                 /** @var class-string<Model> $class */
                 $class = self::TARGETS[$type];
                 $targets = $class::query()->with(self::LOCATOR_RELATIONS[$type])
                     ->whereKey($group->pluck('target_id')->unique()->all())
                     ->get()
                     ->keyBy(fn (Model $m) => $m->getKey());
+                $visible = $access->visible($type, $targets);
 
                 foreach ($group as $capture) {
                     $target = $targets->get($capture->target_id);
-                    $result[$capture->id] = $target && self::canView($gate, $user, $type, $target)
+                    $result[$capture->id] = $target && isset($visible[$target->getKey()])
                         ? ResourceLocator::locate($target) + ['available' => true]
                         : ['url' => null, 'available' => false] + ($capture->target_location ?? ['type' => $type, 'title' => '', 'breadcrumb' => '']);
                 }
