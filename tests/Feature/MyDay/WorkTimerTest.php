@@ -35,7 +35,7 @@ class WorkTimerTest extends TestCase
 
     public function test_one_running_timer_per_user_shown_on_every_page(): void
     {
-        $a = $this->item(['key' => 'BRAI-1', 'title' => 'Write tests']);
+        $a = $this->item(['key' => 'BRAI-99', 'title' => 'Write tests']); // a key the counter won't hand out
         $b = $this->item();
 
         $this->actingAs($this->editor)->post(route('work-timer.start'), ['item_id' => $a->id])->assertSessionHasNoErrors();
@@ -43,7 +43,7 @@ class WorkTimerTest extends TestCase
 
         $this->assertSame($a->id, WorkTimer::sole()->item_id);
         $this->get(route('my-work.index'))->assertInertia(fn (AssertableInertia $p) => $p
-            ->where('activeTimer.item.key', 'BRAI-1')
+            ->where('activeTimer.item.key', 'BRAI-99')
             ->where('activeTimer.item.title', 'Write tests'));
     }
 

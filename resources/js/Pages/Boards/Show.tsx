@@ -2269,12 +2269,16 @@ export default function BoardsShow({
 
     // Links like …/boards/x#item-123 (search, command palette, AI connector) open that issue;
     // one that isn't on the board right now (e.g. outside the running sprint) opens its own page.
+    // The listener is registered once: it reads the *current* board through a ref, so cards
+    // created after the page loaded open in the dialog too (BRAI-97).
+    const columnsRef = useRef(board.columns);
+    columnsRef.current = board.columns;
     useEffect(() => {
         const openFromHash = () => {
             const match = window.location.hash.match(/^#item-(\d+)$/);
             if (!match) return;
             const id = Number(match[1]);
-            const found = board.columns.flatMap((c) => c.items ?? []).find((i) => i.id === id);
+            const found = columnsRef.current.flatMap((c) => c.items ?? []).find((i) => i.id === id);
             if (found) setEditingItem(found);
             else router.visit(route('boards.items.show', [workspace.slug, project.slug, board.slug, id]));
         };

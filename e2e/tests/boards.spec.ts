@@ -38,6 +38,19 @@ test.describe('cards and the issue dialog', () => {
         await expect(card(page, title, 'To Do')).toBeVisible();
     });
 
+    test('a #item link to a card created after the page loaded opens it in the dialog', async ({ page }) => {
+        // regression BRAI-97: the hash handler only knew the cards of the first load
+        const title = uid('fresh-link');
+        await page.goto(urls.board());
+        await createCard(page, title);
+        const id = await openIssueId(await openCard(page, title));
+        await closeIssue(page);
+
+        await page.evaluate((issue) => { window.location.hash = `item-${issue}`; }, id);
+        await expect(page.getByRole('dialog', { name: new RegExp(`^Edit [A-Z]+-\\d+: ${title}`) })).toBeVisible();
+        expect(new URL(page.url()).pathname).toBe(urls.board()); // stayed on the board
+    });
+
     test('edit the title and the description; both persist', async ({ page }) => {
         const title = uid('edit');
         const renamed = `${title} renamed`;
