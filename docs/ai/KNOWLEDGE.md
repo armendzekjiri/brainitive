@@ -257,7 +257,9 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `Route::fallback(fn () => abort(404))` at the end of `routes/web.php`. And route-model
   binding throws before `HandleInertiaRequests` shares props, so the responder shares them
   itself.
-- **Import paths must match git's case, not the Mac's.** `resources/js/components/` and
+- **Import paths must match git's case, not the Mac's** (guarded by
+  `tests/Unit/ImportPathCaseTest.php`, which reads `git ls-files`, so run the tests after
+  `git add`). `resources/js/components/` and
   `Components/` are two folders on Linux (one on macOS). Check with
   `git ls-files | grep -i <name>` before importing, e.g. `@/Components/ApplicationLogo`, but
   `@/components/ui/button`.
