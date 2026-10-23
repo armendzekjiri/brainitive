@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { router, Link } from '@inertiajs/react';
+import CompleteSubtasksDialog from '@/components/item/CompleteSubtasksDialog';
 import DuplicateItemDialog from '@/components/item/DuplicateItemDialog';
+import { itemTree, MAX_ITEM_DEPTH } from '@/lib/itemTree';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -328,14 +330,29 @@ export function useItemDetail(args: UseItemDetailArgs) {
     // after mutation even though `item` may be a state snapshot in the popup).
     const live = allBoardItems.find((i) => i.id === item?.id) ?? item;
     const subtasks = useMemo(
-        () => allBoardItems.filter((i) => i.parent_id === item?.id && i.item_type?.slug === 'subtask'),
+        () => allBoardItems.filter((i) => i.parent_id === item?.id),
         [allBoardItems, item?.id],
     );
     const doneSubtasks = subtasks.filter((s) => !!s.completed_at).length;
-    const rootItemsForParent = useMemo(
-        () => allBoardItems.filter((i) => !i.parent_id && i.id !== item?.id),
-        [allBoardItems, item?.id],
+    // Nesting (issue → subtask → sub-subtask): computed from the board's items.
+    const tree = useMemo(() => itemTree(allBoardItems), [allBoardItems]);
+    const itemDepth = item ? tree.depth(item.id) : 0;
+    const canHaveSubtasks = itemDepth < MAX_ITEM_DEPTH;
+    const ancestors = useMemo(() => (item ? tree.ancestors(item.id) : []), [tree, item?.id]);
+    const doneColumnIds = useMemo(() => new Set(columns.filter((c) => c.is_done_column).map((c) => c.id)), [columns]);
+    const openDescendants = useMemo(
+        () => (item ? tree.descendants(item.id).filter((d) => !doneColumnIds.has(d.column_id as number)) : []),
+        [tree, item?.id, doneColumnIds],
     );
+    /** Valid parents: not itself or below it, and the result stays within 3 levels. */
+    const rootItemsForParent = useMemo(() => {
+        if (!item) return [];
+        const own = new Set([item.id, ...tree.descendants(item.id).map((d) => d.id)]);
+        const height = tree.height(item.id);
+        return allBoardItems
+            .filter((i) => !own.has(i.id) && tree.depth(i.id) + 1 + height <= MAX_ITEM_DEPTH)
+            .map((i) => ({ ...i, depth: tree.depth(i.id) }));
+    }, [allBoardItems, tree, item?.id]);
 
     // ── Lazy details: comments, attachments and history come from their own endpoint ──
     const [history, setHistory] = useState<ItemHistoryEntry[]>([]);
@@ -487,13 +504,26 @@ export function useItemDetail(args: UseItemDetailArgs) {
         setIsEditingDescription(false);
     };
 
-    const handleMoveToColumn = (newColId: string) => {
-        setColumnId(newColId);
+    const [completePrompt, setCompletePrompt] = useState<{ columnId: number } | null>(null);
+
+    const moveToColumn = (columnId: number, withSubtasks = false) => {
         if (!item) return;
+        setColumnId(String(columnId));
         router.patch(route('boards.items.move', [workspace.slug, project.slug, board.slug, item.id]), {
-            column_id: parseInt(newColId),
+            column_id: columnId,
             position: 0,
+            with_subtasks: withSubtasks,
         }, { preserveScroll: true });
+    };
+
+    const handleMoveToColumn = (newColId: string) => {
+        const columnId = parseInt(newColId);
+        // Done column + open subtasks below: ask first.
+        if (doneColumnIds.has(columnId) && openDescendants.length > 0) {
+            setCompletePrompt({ columnId });
+            return;
+        }
+        moveToColumn(columnId);
     };
 
     const toggleLabel = (labelId: number) => {
@@ -655,6 +685,7 @@ export function useItemDetail(args: UseItemDetailArgs) {
         // subtasks
         subtasks, doneSubtasks, subtaskTypeId, rootItemsForParent,
         newSubtaskTitle, setNewSubtaskTitle, handleCreateSubtask,
+        canHaveSubtasks, ancestors, openDescendants, completePrompt, setCompletePrompt, moveToColumn,
         // watchers
         watcherIds, toggleWatcher,
         // file preview
@@ -844,6 +875,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
         editorContent, savedDescription, editorKey, isEditingDescription,
         handleEditorChange, startEditDescription, saveDescription, cancelDescription, handleCheckboxToggle,
         subtasks, doneSubtasks, subtaskTypeId, newSubtaskTitle, setNewSubtaskTitle, handleCreateSubtask, onOpenItem,
+        canHaveSubtasks, ancestors,
         linkDialogOpen, setLinkDialogOpen, linkType, setLinkType, targetItemId, setTargetItemId,
         linkTypeOptions, inverseLinkType, linkableItems, handleCreateLink, handleDeleteLink,
         localAttachments, isUploading, fileInputRef, handleFileUpload, handleDeleteAttachment, setFilePreview,
@@ -857,6 +889,18 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
     return (
         <div className={cn('px-8 py-6 space-y-0', className)}>
             {/* Title */}
+            {ancestors.length > 0 && (
+                <nav className="mb-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground" aria-label="Parent issues">
+                    {ancestors.map((a, i) => (
+                        <span key={a.id} className="flex items-center gap-1">
+                            {i > 0 && <span>/</span>}
+                            <button type="button" className="hover:text-foreground hover:underline" onClick={() => onOpenItem(a)}>
+                                <span className="font-mono">{a.key}</span> {a.title}
+                            </button>
+                        </span>
+                    ))}
+                </nav>
+            )}
             <div className="mb-0">
                 {isEditingTitle ? (
                     <div className="flex items-center gap-2">
@@ -963,7 +1007,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
             </section>
 
             {/* Subtasks */}
-            {item.item_type?.slug !== 'subtask' && (
+            {canHaveSubtasks && (
                 <section className="py-5 border-t border-border/60">
                     <h2 className="text-sm font-semibold flex items-center gap-2 mb-3">
                         <CheckSquare className="size-4 text-muted-foreground" />
@@ -1280,6 +1324,7 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
         selectedLabels, labelSearch, setLabelSearch, labelPopoverOpen, setLabelPopoverOpen,
         newLabelName, setNewLabelName, filteredLabels, toggleLabel, handleCreateLabel,
             workspace, project, board, subtasks,
+            completePrompt, setCompletePrompt, moveToColumn, openDescendants,
     } = d;
     const [duplicating, setDuplicating] = useState(false);
     const [detailsOpen, setDetailsOpen] = useState(true);
@@ -1396,6 +1441,7 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                             <SelectItem value="none" disabled={isSubtaskType}>None</SelectItem>
                             {rootItemsForParent.map((r) => (
                                 <SelectItem key={r.id} value={r.id.toString()}>
+                                    {r.depth > 0 && <span className="text-muted-foreground">{'↳ '.padStart(r.depth * 2 + 1, '\u00a0')}</span>}
                                     <span className="font-mono text-xs">{r.key}</span> {r.title}
                                 </SelectItem>
                             ))}
@@ -1630,6 +1676,17 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                 <br />
                 Updated {formatDistanceToNow(new Date((live ?? item).updated_at), { addSuffix: true })}
             </p>
+            <CompleteSubtasksDialog
+                open={completePrompt !== null}
+                itemKey={item.key}
+                openCount={openDescendants.length}
+                columnName={columns.find((c) => c.id === completePrompt?.columnId)?.name ?? 'Done'}
+                onCancel={() => setCompletePrompt(null)}
+                onChoose={(withSubtasks) => {
+                    if (completePrompt) moveToColumn(completePrompt.columnId, withSubtasks);
+                    setCompletePrompt(null);
+                }}
+            />
             <div className="border-t pt-3">
                 <Button variant="ghost" size="sm" className="h-8 gap-2 text-muted-foreground hover:text-foreground" onClick={() => setDuplicating(true)}>
                     <Copy className="size-3.5" /> Duplicate

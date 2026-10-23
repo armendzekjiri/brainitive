@@ -270,3 +270,6 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `pollScope` to `RichLexicalEditor`; without one (comments, tickets) the poll shows "voting
   works in docs and issue descriptions". Old polls without `pollId` derive it from their
   option uids. The old in-document `votes` arrays are ignored and cleared on the next edit.
+- **Item soft deletes don't cascade.** The `parent_id` FK cascades only on hard deletes, so
+  `destroyItem` soft-deletes `descendantIds()` explicitly. Before that, a deleted issue's
+  subtasks stayed behind, although the confirm dialog said they'd be deleted.

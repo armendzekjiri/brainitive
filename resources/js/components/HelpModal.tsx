@@ -76,6 +76,18 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.21.0',
+        title: 'Nested Subtasks',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'Subtasks can have their own subtasks — up to three levels (issue → subtask → sub-subtask). Add them from the subtask’s panel.',
+            'The issue panel shows where an issue sits (parent path above the title); the Parent field and the Create dialogs offer issues and first-level subtasks.',
+            'Moving an issue to Done with open subtasks asks whether to complete them too.',
+            'Deleting an issue now removes all of its subtasks, and moving it to another sprint or board takes the whole tree along.',
+        ]
+    },
+    {
         version: 'v1.20.0',
         title: 'AI That Knows Your Project',
         tag: 'Feature',

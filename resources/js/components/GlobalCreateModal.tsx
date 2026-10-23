@@ -70,7 +70,7 @@ const TYPE_CONFIG: Record<CreateType, { label: string; icon: React.ReactNode; co
     folder:     { label: 'Folder',     icon: <FolderOpen className="size-4" />,   color: 'text-amber-500'   },
 };
 
-interface RootItem { id: number; key: string; title: string; }
+interface RootItem { id: number; key: string; title: string; depth?: number; }
 
 interface Props {
     open: boolean;
@@ -419,6 +419,7 @@ export function GlobalCreateModal({
                                                 <SelectItem value="__none__"><span className="text-muted-foreground">None</span></SelectItem>
                                                 {rootItems.map((item) => (
                                                     <SelectItem key={item.id} value={String(item.id)}>
+                                                        {item.depth ? <span className="text-muted-foreground">{'\u00a0\u00a0↳ '}</span> : null}
                                                         <span className="font-mono text-xs text-muted-foreground mr-1.5">{item.key}</span>
                                                         {item.title}
                                                     </SelectItem>
