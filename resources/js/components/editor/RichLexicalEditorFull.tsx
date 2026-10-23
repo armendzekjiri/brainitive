@@ -181,6 +181,7 @@ import {
     StickyNoteNode,
     $createStickyNoteNode,
     PollNode,
+    PollScopeContext,
     $createPollNode,
     PageBreakNode,
     $createPageBreakNode,
@@ -3245,6 +3246,8 @@ interface RichLexicalEditorProps {
     mentionContextUrl?: string;
     mentionContextTitle?: string;
     mentionContextType?: 'page' | 'item' | 'comment';
+    /** Where polls in this content store their votes (doc / issue). Omit = no voting. */
+    pollScope?: { type: 'page' | 'item'; id: string } | null;
 }
 
 export function RichLexicalEditor({
@@ -3268,6 +3271,7 @@ export function RichLexicalEditor({
     mentionContextUrl,
     mentionContextTitle,
     mentionContextType = 'page',
+    pollScope = null,
 }: RichLexicalEditorProps) {
     const [floatingAnchorElem, setFloatingAnchorElem] = useState<HTMLDivElement | null>(null);
     // Shared ref: true while InitialContentPlugin is loading content — prevents HtmlOnChangePlugin
@@ -3321,6 +3325,7 @@ export function RichLexicalEditor({
 
     return (
         <LexicalComposer initialConfig={initialConfig}>
+            <PollScopeContext.Provider value={pollScope}>
             <RichLexicalOnChangeContext.Provider value={onChange}>
                 <div className={cn("border rounded-lg overflow-hidden bg-white dark:bg-card", documentMode && "bg-transparent dark:bg-transparent", className)}>
                     <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} projectName={projectName} stickyToolbar={stickyToolbar} stickyTopOffset={stickyTopOffset} documentMode={documentMode} />
@@ -3384,6 +3389,7 @@ export function RichLexicalEditor({
                     )}
                 </div>
             </RichLexicalOnChangeContext.Provider>
+            </PollScopeContext.Provider>
         </LexicalComposer>
     );
 }

@@ -261,3 +261,10 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `Components/` are two folders on Linux (one on macOS). Check with
   `git ls-files | grep -i <name>` before importing, e.g. `@/Components/ApplicationLogo`, but
   `@/components/ui/button`.
+- **Poll votes live in `poll_votes`, not in the document.** `PollNode` keeps only the
+  question, options and a `pollId`. Votes are stored per `(scope_type, scope_id, poll_id,
+  user)`, with scope `page` (uuid) or `item` (id), via `PollVoteController` (`polls.*`).
+  Anyone who can `view` the doc or issue can vote. The editor host passes
+  `pollScope` to `RichLexicalEditor`; without one (comments, tickets) the poll shows "voting
+  works in docs and issue descriptions". Old polls without `pollId` derive it from their
+  option uids. The old in-document `votes` arrays are ignored and cleared on the next edit.

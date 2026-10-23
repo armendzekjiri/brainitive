@@ -76,6 +76,17 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.19.1',
+        title: 'Polls That Count',
+        tag: 'Patch',
+        date: '2026-10-23',
+        items: [
+            'Polls in docs and issue descriptions now save votes for everyone who can read them — no edit mode needed.',
+            'One vote per person: click another option to change it, or the same one again to take it back. Results show after you vote and stay after a reload.',
+            'The poll’s Edit button only shows while you edit the doc or description.',
+        ]
+    },
+    {
         version: 'v1.19.0',
         title: 'Duplicate Issues and Tasks',
         tag: 'Enhancement',

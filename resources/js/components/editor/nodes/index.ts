@@ -6,7 +6,7 @@ export { TweetNode, $createTweetNode, $isTweetNode } from './TweetNode';
 export { ExcalidrawNode, $createExcalidrawNode, $isExcalidrawNode } from './ExcalidrawNode';
 export { EquationNode, $createEquationNode, $isEquationNode } from './EquationNode';
 export { StickyNoteNode, $createStickyNoteNode, $isStickyNoteNode } from './StickyNoteNode';
-export { PollNode, $createPollNode, $isPollNode } from './PollNode';
+export { PollNode, PollScopeContext, $createPollNode, $isPollNode } from './PollNode';
 export { PageBreakNode, $createPageBreakNode, $isPageBreakNode } from './PageBreakNode';
 export {
     LayoutContainerNode,

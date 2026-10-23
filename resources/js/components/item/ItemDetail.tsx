@@ -918,6 +918,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                         <RichLexicalEditor
                             key={`edit-${editorKey}`}
                             content={editorContent}
+                            pollScope={{ type: 'item', id: String(item.id) }}
                             onChange={handleEditorChange}
                             placeholder="Add a description…"
                             editable={true}
@@ -942,6 +943,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                             <RichLexicalEditor
                                 key={`view-${editorKey}`}
                                 content={savedDescription}
+                                pollScope={{ type: 'item', id: String(item.id) }}
                                 onChange={() => { }}
                                 editable={false}
                                 showToolbar={false}
