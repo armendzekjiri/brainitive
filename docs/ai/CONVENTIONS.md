@@ -357,6 +357,19 @@ Pages work like Confluence. Keep these rules when touching pages:
   rows; Who is read-only once the issue has an assignee.
 - Reuse `ProjectIssues` for anything that shows or creates issues outside the board.
 
+## Project templates (BRAI-72)
+
+- **A template document never contains database ids.** Every object carries a local `ref`,
+  references use refs, dates are day offsets from day 0. Build documents only through
+  `TemplateCapture` / `BuiltinTemplates` and always pass them through
+  `TemplateDocument::normalize()` before use; never accept a document from a request.
+- **New project data that should travel with templates** (a new board setting, a new item
+  column, …) needs a capture line in `TemplateCapture`, a field in `TemplateDocument`, and a
+  create line in `TemplateInstantiator` — plus a test in `ProjectTemplatesTest`. Anything
+  personal or secret (people, comments, tokens, integrations) stays out on purpose.
+- **Never instantiate outside `TemplateRuns::createProject()`** — it keeps the run record
+  (idempotency) and turns failures into a message; the project is created in one transaction.
+
 ## Custom fields (BRAI-77)
 
 - **Write values only through `App\Support\Boards\ItemFieldValues::apply()`** — it validates

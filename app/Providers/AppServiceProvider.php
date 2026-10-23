@@ -8,6 +8,7 @@ use App\Models\InstanceSettings;
 use App\Models\Item;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\ProjectTemplate;
 use App\Models\Release;
 use App\Models\SnippetCollection;
 use App\Models\User;
@@ -17,6 +18,7 @@ use App\Policies\BookmarkPolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\PagePolicy;
 use App\Policies\ProjectPolicy;
+use App\Policies\ProjectTemplatePolicy;
 use App\Policies\ReleasePolicy;
 use App\Policies\SnippetPolicy;
 use App\Policies\WorkspacePolicy;
@@ -88,6 +90,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Bookmark::class, BookmarkPolicy::class);
         Gate::policy(Item::class, ItemPolicy::class);
         Gate::policy(SnippetCollection::class, SnippetPolicy::class);
+        Gate::policy(ProjectTemplate::class, ProjectTemplatePolicy::class);
 
         // Resolve page from project's allPages() so child pages (e.g. documents inside folders) are found
         Route::bind('page', function (string $value, $route) {

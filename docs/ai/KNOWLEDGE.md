@@ -309,6 +309,28 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **An empty JSON object comes back as `[]` from an `array` cast.** `(object) []` is stored
   as `{}`, but the cast decodes with `json_decode(…, true)`, so React gets `[]`. Client code
   that compares or spreads such values (`rules: {}` vs `rules: []`) must accept both.
+- **Project templates copy structure, never people or history.** Captured: labels, project
+  item types (Lucide icon names only), custom fields, boards + columns + swimlanes, and by
+  choice issues (no assignee / reporter), published docs (live content, never drafts —
+  docs under an unpublished parent move up), task lists (reset to "todo", no assignee) and
+  plans (no "Who", no share token). Mentions become text, whiteboard issue cards lose their
+  issue link, inline-diagram embeds are dropped, archived custom-field options aren't kept.
+  Sprints, releases, helpdesks and integrations never travel. Day 0 = the earliest captured
+  date (issue start / due, custom date fields, tasks, plan bars), or today when there is none.
+- **Saving a template shares its content with every project creator of the workspace**, also
+  people who aren't members of the source project (only published docs, issues, lists and
+  plans that were included). That's why only workspace admins save templates, and the save
+  dialog says so.
+- **On PostgreSQL, two tests fail on `main` too** (`CommandPaletteTest` search ranking,
+  `GithubDevelopmentTest` signatures) and `ItemCommentToolsTest` pagination is flaky in the
+  full run; SQLite (the default test DB) is green.
+- **Issue keys start at KEY-2 in blank projects.** `projects.next_item_number` stores the
+  last number used and `getNextItemKey()` increments first, but the column defaults to 1.
+  Template-created projects set it to 0 (first issue KEY-1). Fixing the blank-project path
+  needs a default of 0 (existing projects must keep their counter).
+- **The `projects/{project:slug}` route group isn't scope-bound** (labels, item types,
+  fields, templates): a project of another workspace binds by slug. Controllers there must
+  check `$project->workspace_id === $workspace->id` when the workspace matters (templates do).
 - **Custom field values are typed rows, not strings** (unlike helpdesk `ticket_field_values`).
   `item_field_values` has one column per type; "empty" means *no row*, so a budget of 0 or an
   unticked "Needs QA" stays distinct from "not filled in". Changing a field's type is refused

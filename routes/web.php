@@ -24,6 +24,7 @@ use App\Http\Controllers\PollVoteController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectGithubController;
+use App\Http\Controllers\ProjectTemplateController;
 use App\Http\Controllers\PublicPlanController;
 use App\Http\Controllers\PublicReleaseController;
 use App\Http\Controllers\PushSubscriptionController;
@@ -243,6 +244,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('projects/{project:slug}/move-preview', [ProjectController::class, 'movePreview'])->name('projects.move.preview')->scopeBindings();
         Route::post('projects/{project:slug}/move', [ProjectController::class, 'move'])->name('projects.move')->scopeBindings();
 
+        Route::delete('project-templates/{projectTemplate}', [ProjectTemplateController::class, 'destroy'])->name('project-templates.destroy');
+
         // Labels (nested under projects)
         Route::prefix('projects/{project:slug}')->group(function () {
             Route::get('labels', [ProjectController::class, 'labelsJson'])->name('projects.labels.index');
@@ -255,6 +258,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('item-types/{itemType}', [ProjectController::class, 'updateItemType'])->name('projects.item-types.update');
             Route::delete('item-types/{itemType}', [ProjectController::class, 'destroyItemType'])->name('projects.item-types.destroy');
             // Custom fields for board issues (the controller checks the field belongs to the project)
+            // Save the project as a workspace template (BRAI-72)
+            Route::get('template-preview', [ProjectTemplateController::class, 'preview'])->name('projects.templates.preview');
+            Route::post('save-as-template', [ProjectTemplateController::class, 'store'])->name('projects.templates.store');
             Route::post('fields', [ItemFieldController::class, 'store'])->name('projects.fields.store');
             Route::post('fields/reorder', [ItemFieldController::class, 'reorder'])->name('projects.fields.reorder');
             Route::put('fields/{itemField}', [ItemFieldController::class, 'update'])->whereNumber('itemField')->name('projects.fields.update');
