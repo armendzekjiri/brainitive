@@ -1,7 +1,7 @@
 # Lead Generation forms (BRAI-93)
 
 **Branch:** feat/lead-forms
-**Status:** in-progress
+**Status:** in-review
 **Started:** 2026-10-23
 **Board card:** BRAI-93 — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-202
 
@@ -40,7 +40,7 @@ visible_if: { field: <field id>, op: equals|not_equals|includes|gt|lt|answered|n
 ```
 Field types: `short_text, long_text, email, phone, number, date, select, choice` (single, cards
 with icons), `multi_choice`, `rating` (1–5), `consent`, `hidden` (filled from `?key=` URL param).
-Logic is evaluated the same way on the server (`LeadFormLogic`) and in the browser
+Logic is evaluated the same way on the server (`LeadFormDefinition::visibleFields`) and in the browser
 (`lib/leadForms.ts`): hidden steps / fields are skipped and never validated.
 
 ## Endpoints

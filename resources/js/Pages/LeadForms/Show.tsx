@@ -38,7 +38,9 @@ interface Props {
  */
 export default function Show({ workspace, project, form: initialForm, columns, members, can, tab: initialTab }: Props) {
     const [form, setForm] = useState(initialForm);
-    const [tab, setTab] = useState<Tab>(() => (TABS.some((t) => t.id === initialTab) ? (initialTab as Tab) : initialForm.leads_count > 0 || !can.update ? 'leads' : 'builder'));
+    const [tab, setTab] = useState<Tab>(() =>
+        TABS.some((t) => t.id === initialTab) && (initialTab !== 'settings' || can.update) ? (initialTab as Tab) : initialForm.leads_count > 0 || !can.update ? 'leads' : 'builder',
+    );
     const routeParams = useMemo<[string, string, string]>(() => [workspace.slug, project.slug, form.slug], [workspace.slug, project.slug, form.slug]);
 
     useEffect(() => setForm(initialForm), [initialForm]);
@@ -92,7 +94,7 @@ export default function Show({ workspace, project, form: initialForm, columns, m
                     <div className="ml-auto flex items-center gap-2">
                         {live && form.public_url ? (
                             <Button variant="outline" size="sm" className="gap-1.5" asChild>
-                                <a href={form.public_url} target="_blank" rel="noreferrer">
+                                <a href={form.public_url} target="_blank" rel="noopener noreferrer">
                                     <ExternalLink className="size-4" />
                                     Open form
                                 </a>

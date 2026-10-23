@@ -50,7 +50,8 @@ return new class extends Migration
             $table->id();
             $table->uuid('uuid')->unique();
             $table->foreignId('lead_form_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('column_id')->constrained('lead_form_columns')->cascadeOnDelete();
+            // leads are moved before a column is deleted; never cascade them away
+            $table->foreignId('column_id')->constrained('lead_form_columns')->restrictOnDelete();
             $table->unsignedInteger('number');
             $table->string('name')->nullable();
             $table->string('email')->nullable();
@@ -80,6 +81,7 @@ return new class extends Migration
 
             $table->index(['lead_form_id', 'type', 'created_at']);
             $table->index(['lead_form_id', 'session_id']);
+            $table->index('created_at'); // pruning (LeadFormEvent::prunable)
         });
     }
 

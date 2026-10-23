@@ -26,6 +26,14 @@ const PRESETS: { name: string; theme: Partial<LeadFormTheme> }[] = [
 
 type Selection = { step: number; field: number | null };
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+type Part = 'definition' | 'theme' | 'settings';
+
+/** Keys the server derived (from the label) for questions that have none yet. */
+function withServerKeys(local: LeadFormDefinition, server: LeadFormDefinition): LeadFormDefinition {
+    const keys = new Map(server.steps.flatMap((s) => s.fields).map((f) => [f.id, f.key]));
+    if (!local.steps.some((s) => s.fields.some((f) => !f.key && keys.get(f.id)))) return local;
+    return { ...local, steps: local.steps.map((s) => ({ ...s, fields: s.fields.map((f) => (!f.key && keys.get(f.id) ? { ...f, key: keys.get(f.id)! } : f)) })) };
+}
 
 type Texts = Pick<LeadFormSettings, 'intro_title' | 'intro_text' | 'next_label' | 'back_label' | 'submit_label' | 'after_submit' | 'thank_you_title' | 'thank_you_message' | 'redirect_url' | 'show_branding'>;
 const TEXT_KEYS: (keyof Texts)[] = ['intro_title', 'intro_text', 'next_label', 'back_label', 'submit_label', 'after_submit', 'thank_you_title', 'thank_you_message', 'redirect_url', 'show_branding'];
@@ -46,53 +54,75 @@ export default function FormBuilder({ form, routeParams, canUpdate, onSaved }: P
     const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
     const [saveState, setSaveState] = useState<SaveState>('idle');
     const [saveError, setSaveError] = useState<string | null>(null);
-    const revision = useRef(0);
-    const dirty = useRef<Set<'definition' | 'theme' | 'settings'>>(new Set());
+    const dirty = useRef<Set<Part>>(new Set());
+    const failed = useRef<Map<Part, string>>(new Map());
+    const inFlight = useRef(false);
     const timer = useRef<number>();
 
     const step: LeadStep | undefined = definition.steps[selection.step];
     const field: LeadField | undefined = selection.field !== null ? step?.fields[selection.field] : undefined;
 
-    // ── autosave ──
-    const schedule = (part: 'definition' | 'theme' | 'settings') => {
+    // ── autosave: one request at a time, each part on its own (a bad setting never blocks question edits) ──
+    const latest = useRef({ definition, theme, texts, routeParams, onSaved });
+    latest.current = { definition, theme, texts, routeParams, onSaved };
+
+    const showStatus = () => {
+        const error = failed.current.values().next().value as string | undefined;
+        setSaveError(error ?? null);
+        setSaveState(error ? 'error' : dirty.current.size || inFlight.current ? 'saving' : 'saved');
+    };
+
+    // Only reads refs, so it is safe to call after unmount (leaving the Builder tab)
+    const flush = async () => {
+        window.clearTimeout(timer.current);
+        if (inFlight.current) return; // the running loop picks up new edits
+        inFlight.current = true;
+        try {
+            while (dirty.current.size) {
+                const part = dirty.current.values().next().value as Part;
+                dirty.current.delete(part);
+                const now = latest.current;
+                if (part === 'settings' && now.texts.after_submit === 'redirect' && !now.texts.redirect_url?.trim()) {
+                    failed.current.set(part, 'Enter the page to send people to after they submit (Texts).');
+                    continue;
+                }
+                const value = part === 'definition' ? now.definition : part === 'theme' ? now.theme : now.texts;
+                try {
+                    const { data } = await window.axios.put(route('lead-forms.update', now.routeParams), { [part]: value });
+                    failed.current.delete(part);
+                    latest.current.onSaved(data.form);
+                    // Never replace what the user is typing with the trimmed server copy: only take
+                    // the keys the server derived for questions that had none
+                    if (part === 'definition') setDefinition((d) => withServerKeys(d, data.form.definition));
+                } catch (e: unknown) {
+                    const errors = (e as { response?: { data?: { errors?: Record<string, string[]> } } }).response?.data?.errors;
+                    failed.current.set(part, errors ? (Object.values(errors)[0]?.[0] ?? 'Could not save.') : 'Could not save — check your connection.');
+                }
+            }
+        } finally {
+            inFlight.current = false;
+        }
+        showStatus();
+    };
+
+    const schedule = (part: Part) => {
         if (!canUpdate) return;
-        revision.current += 1;
         dirty.current.add(part);
         setSaveState('saving');
         window.clearTimeout(timer.current);
         timer.current = window.setTimeout(() => void flush(), 700);
     };
 
-    const latest = useRef({ definition, theme, texts });
-    latest.current = { definition, theme, texts };
-
-    const flush = async () => {
-        const parts = new Set(dirty.current);
-        dirty.current.clear();
-        const sentAt = revision.current;
-        const payload: Record<string, unknown> = {};
-        if (parts.has('definition')) payload.definition = latest.current.definition;
-        if (parts.has('theme')) payload.theme = latest.current.theme;
-        if (parts.has('settings')) payload.settings = latest.current.texts;
-        try {
-            const { data } = await window.axios.put(route('lead-forms.update', routeParams), payload);
-            onSaved(data.form);
-            // Take the server's normalised version (keys, ids) unless more edits came in meanwhile
-            if (revision.current === sentAt && parts.has('definition')) setDefinition(data.form.definition);
-            setSaveError(null);
-            setSaveState(revision.current === sentAt ? 'saved' : 'saving');
-        } catch (e: unknown) {
-            parts.forEach((p) => dirty.current.add(p));
-            const errors = (e as { response?: { data?: { errors?: Record<string, string[]> } } }).response?.data?.errors;
-            setSaveError(errors ? Object.values(errors)[0]?.[0] ?? 'Could not save.' : 'Could not save — check your connection.');
-            setSaveState('error');
-        }
-    };
-
-    useEffect(() => () => window.clearTimeout(timer.current), []);
+    // Leaving the Builder tab unmounts it: save what is pending instead of dropping it
+    useEffect(
+        () => () => {
+            if (dirty.current.size) void flush();
+        },
+        [], // eslint-disable-line react-hooks/exhaustive-deps
+    );
     useEffect(() => {
         const warn = (e: BeforeUnloadEvent) => {
-            if (dirty.current.size) e.preventDefault();
+            if (dirty.current.size || failed.current.size || inFlight.current) e.preventDefault();
         };
         window.addEventListener('beforeunload', warn);
         return () => window.removeEventListener('beforeunload', warn);
@@ -221,6 +251,21 @@ export default function FormBuilder({ form, routeParams, canUpdate, onSaved }: P
         setSelection({ step: Math.max(0, selection.step - 1), field: null });
     };
 
+    // Conditions that pointed at a removed answer would never match again: drop them
+    const changeOptions = (options: LeadField['options']) => {
+        if (!field) return;
+        const ids = new Set(options.map((o) => o.id));
+        const stale = (c?: LeadField['visible_if']) => !!c && c.field === field.id && CHOICE_TYPES.includes(field.type) && c.value !== null && ['equals', 'not_equals'].includes(c.op) && !ids.has(c.value);
+        updateDefinition((d) => {
+            d.steps[selection.step].fields[selection.field!].options = options;
+            for (const s of d.steps) {
+                if (stale(s.visible_if)) s.visible_if = null;
+                for (const f of s.fields) if (stale(f.visible_if)) f.visible_if = null;
+            }
+            return d;
+        });
+    };
+
     const changeType = (type: LeadFieldType) => {
         if (!field) return;
         const fresh = newField(type);
@@ -248,7 +293,7 @@ export default function FormBuilder({ form, routeParams, canUpdate, onSaved }: P
     return (
         <div className="flex h-full min-h-0">
             {/* ── outline ── */}
-            <aside className="flex w-72 shrink-0 flex-col border-r bg-background">
+            <aside className="hidden w-72 shrink-0 flex-col border-r bg-background md:flex">
                 <div className="flex-1 space-y-3 overflow-y-auto p-3">
                     {definition.steps.map((s, si) => (
                         <div key={s.id} className={cn('rounded-lg border bg-card transition', selection.step === si && selection.field === null && 'border-primary ring-1 ring-primary/30')}>
@@ -316,6 +361,9 @@ export default function FormBuilder({ form, routeParams, canUpdate, onSaved }: P
                         {device === 'desktop' ? <Monitor className="inline size-3.5" /> : <Smartphone className="inline size-3.5" />} Live preview — try it out
                     </span>
                 </div>
+                <p className="border-b bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300 md:hidden">
+                    Editing questions and design needs a larger screen — here you can try the form.
+                </p>
                 <div className="flex-1 overflow-auto p-4">
                     <div className={cn('mx-auto overflow-hidden rounded-xl border bg-background shadow-sm transition-all', device === 'mobile' ? 'w-[390px]' : 'w-full max-w-5xl')}>
                         <LeadFormRenderer name={form.name} definition={definition} theme={theme} settings={previewSettings} previewStep={selection.step} />
@@ -324,7 +372,7 @@ export default function FormBuilder({ form, routeParams, canUpdate, onSaved }: P
             </section>
 
             {/* ── inspector ── */}
-            <aside className="flex w-80 shrink-0 flex-col border-l bg-background">
+            <aside className="hidden w-80 shrink-0 flex-col border-l bg-background md:flex">
                 <div className="border-b p-2">
                     <Segmented
                         value={panel}
@@ -398,7 +446,7 @@ export default function FormBuilder({ form, routeParams, canUpdate, onSaved }: P
                                             ]}
                                         />
                                     )}
-                                    <OptionsEditor field={field} onChange={(options) => updateField({ options })} />
+                                    <OptionsEditor field={field} onChange={changeOptions} />
                                 </Section>
                             )}
 

@@ -15,10 +15,13 @@ use App\Support\LeadForms\LeadFormDefinition;
 use App\Support\LeadForms\LeadFormTemplates;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class LeadFormsTest extends TestCase
@@ -373,6 +376,126 @@ class LeadFormsTest extends TestCase
         $this->actingAs($this->viewer)->getJson(route('lead-form-templates.index', $this->workspace))
             ->assertOk()->assertJsonPath('templates.1.key', 'demo_request')->assertJsonStructure(['categories', 'templates' => [['key', 'name', 'steps', 'columns']]]);
         $this->actingAs($this->outsider)->getJson(route('lead-form-templates.index', $this->workspace))->assertForbidden();
+    }
+
+    // ── review regressions ───────────────────────────────────────────────────
+
+    public function test_members_open_the_board_outsiders_do_not_even_after_a_type_change(): void
+    {
+        $form = $this->form(publicSlug: 'demo');
+        $this->postJson(route('lead-forms.submit', 'demo'), ['answers' => $this->demoAnswers()])->assertOk();
+
+        // goal was a single choice; make it multiple choice, and team size a rating
+        $definition = $form->fresh()->definition;
+        $definition['steps'][0]['fields'][0]['type'] = 'multi_choice';
+        $definition['steps'][0]['fields'][1]['type'] = 'rating';
+        $this->actingAs($this->editor)->putJson($this->formRoute('lead-forms.update', $form), ['definition' => $definition])->assertOk();
+
+        $this->actingAs($this->viewer)->get($this->formRoute('lead-forms.show', $form))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('LeadForms/Show')
+                ->where('can.update', false)
+                ->where('columns.0.total', 1)
+                ->where('columns.0.leads.0.answers.0.display', 'Grow sales')
+                ->missing('form.settings.webhook_url')
+                ->missing('form.settings.notify_user_ids'));
+
+        $this->actingAs($this->outsider)->get($this->formRoute('lead-forms.show', $form))->assertForbidden();
+    }
+
+    public function test_public_page_and_embed_render_published_forms(): void
+    {
+        $this->form(publicSlug: 'demo');
+
+        $this->get(route('lead-forms.public', 'demo'))->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('LeadForms/Public')->where('embed', false)->missing('form.settings.webhook_url'));
+        $this->get(route('lead-forms.embed', 'demo'))->assertOk()->assertHeader('Content-Security-Policy', 'frame-ancestors *');
+    }
+
+    public function test_forms_of_a_deleted_project_go_offline(): void
+    {
+        $form = $this->form(publicSlug: 'demo');
+        $token = $this->actingAs($this->editor)->postJson($this->formRoute('lead-forms.inbound-token', $form))->json('token');
+        auth()->logout();
+        $this->project->delete();
+
+        $this->get(route('lead-forms.public', 'demo'))->assertNotFound();
+        $this->postJson(route('lead-forms.submit', 'demo'), ['answers' => $this->demoAnswers()])->assertNotFound();
+        $this->postJson(route('lead-forms.inbound', $form->uuid), ['email' => 'x@example.com'], ['Authorization' => "Bearer {$token}"])->assertUnauthorized();
+        $this->assertSame(0, Lead::count());
+    }
+
+    public function test_inbound_consent_false_is_not_recorded_as_given(): void
+    {
+        $form = $this->form();
+        $token = $this->actingAs($this->editor)->postJson($this->formRoute('lead-forms.inbound-token', $form))->json('token');
+
+        $this->postJson(route('lead-forms.inbound', $form->uuid), ['email' => 'a@example.com', 'consent' => false], ['Authorization' => "Bearer {$token}"])->assertCreated();
+        $this->postJson(route('lead-forms.inbound', $form->uuid), ['email' => 'b@example.com', 'consent' => 'maybe'], ['Authorization' => "Bearer {$token}"])->assertStatus(422);
+
+        $this->assertArrayNotHasKey('f_consent', Lead::firstOrFail()->answers);
+    }
+
+    public function test_only_real_addresses_become_the_lead_email_and_confirmations_are_rate_limited(): void
+    {
+        $form = $this->form(publicSlug: 'demo');
+        $definition = $form->definition;
+        $definition['steps'][1]['fields'][1]['type'] = 'short_text'; // the email question, still mapped to email
+        $form->update(['definition' => LeadFormDefinition::normalize($definition), 'settings' => ['confirmation_email' => true] + $form->settings]);
+
+        $this->postJson(route('lead-forms.submit', 'demo'), ['answers' => ['f_email' => 'call me'] + $this->demoAnswers()])->assertOk();
+        $this->assertNull(Lead::firstOrFail()->email);
+
+        $this->postJson(route('lead-forms.submit', 'demo'), ['answers' => ['f_name' => 'Visit https://evil.example now'] + $this->demoAnswers()])->assertOk();
+        $this->postJson(route('lead-forms.submit', 'demo'), ['answers' => $this->demoAnswers()])->assertOk();
+        Notification::assertSentOnDemandTimes(LeadConfirmationNotification::class, 1);
+        $this->assertSame('there', LeadConfirmationNotification::safeName('Visit https://evil.example now'));
+        $this->assertSame('Jane', LeadConfirmationNotification::safeName('Jane'));
+    }
+
+    public function test_viewers_cannot_publish_manage_columns_tokens_or_assets(): void
+    {
+        Storage::fake('public');
+        $form = $this->form();
+        $column = $form->columns()->first();
+
+        $this->actingAs($this->viewer)->post($this->formRoute('lead-forms.publish', $form), ['public_slug' => 'mine'])->assertForbidden();
+        $this->actingAs($this->viewer)->postJson($this->formRoute('lead-forms.inbound-token', $form))->assertForbidden();
+        $this->actingAs($this->viewer)->post($this->formRoute('lead-forms.columns.store', $form), ['name' => 'X'])->assertForbidden();
+        $this->actingAs($this->viewer)->postJson($this->formRoute('lead-forms.assets', $form), ['file' => UploadedFile::fake()->image('logo.png')])->assertForbidden();
+        $this->actingAs($this->viewer)->put(route('lead-forms.columns.update', [$this->workspace->slug, $this->project->slug, $form->slug, $column->id]), ['name' => 'X'])->assertForbidden();
+    }
+
+    public function test_editors_manage_columns_and_upload_theme_images(): void
+    {
+        Storage::fake('public');
+        $form = $this->form();
+
+        $this->actingAs($this->editor)->post($this->formRoute('lead-forms.columns.store', $form), ['name' => 'Nurture', 'color' => '#123456'])->assertSessionHasNoErrors();
+        $nurture = $form->columns()->where('name', 'Nurture')->firstOrFail();
+        $this->actingAs($this->editor)->put(route('lead-forms.columns.update', [$this->workspace->slug, $this->project->slug, $form->slug, $nurture->id]), ['name' => 'Nurturing', 'is_done' => true])->assertSessionHasNoErrors();
+        $this->assertTrue($nurture->fresh()->is_done);
+
+        $ids = $form->columns()->pluck('id')->reverse()->values()->all();
+        $this->actingAs($this->editor)->post($this->formRoute('lead-forms.columns.reorder', $form), ['ids' => $ids])->assertSessionHasNoErrors();
+        $this->assertSame($ids, $form->columns()->pluck('id')->all());
+
+        $url = $this->actingAs($this->editor)->postJson($this->formRoute('lead-forms.assets', $form), ['file' => UploadedFile::fake()->image('logo.png')])->assertOk()->json('url');
+        $this->assertStringStartsWith('/storage/lead-forms/'.$form->uuid.'/', $url);
+        Storage::disk('public')->assertExists(substr($url, strlen('/storage/')));
+        $this->actingAs($this->editor)->postJson($this->formRoute('lead-forms.assets', $form), ['file' => UploadedFile::fake()->create('x.svg', 1, 'image/svg+xml')])->assertJsonValidationErrors('file');
+    }
+
+    public function test_old_analytics_events_are_pruned(): void
+    {
+        $form = $this->form(publicSlug: 'demo');
+        $old = LeadFormEvent::create(['lead_form_id' => $form->id, 'session_id' => 'old', 'type' => 'view']);
+        $old->forceFill(['created_at' => now()->subDays(120)])->save();
+        LeadFormEvent::create(['lead_form_id' => $form->id, 'session_id' => 'new', 'type' => 'view']);
+
+        $this->artisan('model:prune', ['--model' => [LeadFormEvent::class]])->assertSuccessful();
+        $this->assertSame(['new'], LeadFormEvent::pluck('session_id')->all());
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

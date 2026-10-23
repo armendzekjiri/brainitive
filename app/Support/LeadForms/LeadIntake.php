@@ -10,6 +10,7 @@ use App\Notifications\LeadConfirmationNotification;
 use App\Notifications\NewLeadNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * Turns validated answers into a lead card (public form and inbound webhook alike): first
@@ -60,14 +61,23 @@ class LeadIntake
     {
         $settings = LeadFormOptions::settings($form->settings);
         $project = $form->project;
+        if (! $project) {
+            return;
+        }
 
-        $recipients = User::whereIn('id', $settings['notify_user_ids'])->get()
-            ->filter(fn (User $user) => $user->hasProjectAccess($project));
+        // project members + workspace admins (= hasProjectAccess), resolved in two queries
+        $allowed = $project->users()->pluck('users.id')
+            ->merge($project->workspace?->users()->wherePivot('role', 'admin')->pluck('users.id') ?? [])
+            ->all();
+        $recipients = User::whereIn('id', array_intersect($settings['notify_user_ids'], $allowed))->get();
         if ($recipients->isNotEmpty()) {
             Notification::send($recipients, new NewLeadNotification($lead));
         }
 
-        if ($settings['confirmation_email'] && $lead->email) {
+        // One confirmation per address and form a day: the public form can't be used to mail-bomb
+        // someone else's inbox
+        $confirmKey = 'lead-confirmation:'.$form->id.':'.sha1(mb_strtolower((string) $lead->email));
+        if ($settings['confirmation_email'] && $lead->email && RateLimiter::attempt($confirmKey, 1, fn () => true, 86400)) {
             Notification::route('mail', $lead->email)->notify(new LeadConfirmationNotification($lead));
         }
 

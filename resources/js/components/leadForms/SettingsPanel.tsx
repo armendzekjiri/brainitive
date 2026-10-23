@@ -39,22 +39,25 @@ type Editable = {
     webhook_url: string;
 };
 
-export default function SettingsPanel({ form, members, routeParams, canUpdate, canDelete, onSaved }: Props) {
-    const initial = (): Editable => ({
+function editable(form: LeadFormPayload): Editable {
+    return {
         name: form.name,
         confirmation_email: !!form.settings.confirmation_email,
         confirmation_subject: form.settings.confirmation_subject ?? '',
         confirmation_body: form.settings.confirmation_body ?? '',
         notify_user_ids: form.settings.notify_user_ids ?? [],
         webhook_url: form.settings.webhook_url ?? '',
-    });
-    const [data, setData] = useState<Editable>(initial);
+    };
+}
+
+export default function SettingsPanel({ form, members, routeParams, canUpdate, canDelete, onSaved }: Props) {
+    const [data, setData] = useState<Editable>(() => editable(form));
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [saving, setSaving] = useState(false);
     const [token, setToken] = useState<string | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const hasEmailField = form.definition.steps.some((s) => s.fields.some((f) => f.maps_to === 'email'));
-    const changed = JSON.stringify(data) !== JSON.stringify(initial());
+    const changed = JSON.stringify(data) !== JSON.stringify(editable(form));
 
     const save = async () => {
         setSaving(true);
@@ -71,25 +74,36 @@ export default function SettingsPanel({ form, members, routeParams, canUpdate, c
                 },
             });
             onSaved(res.form);
+            setData(editable(res.form)); // the server trims / filters: compare against what it kept
             toast.success('Settings saved');
             if (res.form.name !== form.name) router.reload({ only: ['currentWorkspace'] });
         } catch (e: unknown) {
             const errs = (e as { response?: { data?: { errors?: Record<string, string[]> } } }).response?.data?.errors ?? {};
             setErrors(Object.fromEntries(Object.entries(errs).map(([k, v]) => [k.replace(/^settings\./, ''), v[0]])));
+            toast.error(Object.values(errs)[0]?.[0] ?? 'Could not save the settings.');
         } finally {
             setSaving(false);
         }
     };
 
     const rotate = async () => {
-        const { data: res } = await window.axios.post(route('lead-forms.inbound-token', routeParams));
-        setToken(res.token);
-        onSaved({ ...form, has_inbound_token: true });
+        try {
+            const { data: res } = await window.axios.post(route('lead-forms.inbound-token', routeParams));
+            setToken(res.token);
+            onSaved({ ...form, has_inbound_token: true });
+        } catch {
+            toast.error('Could not create a token — the old one still works.');
+        }
     };
     const revoke = async () => {
-        await window.axios.delete(route('lead-forms.inbound-token.revoke', routeParams));
-        setToken(null);
-        onSaved({ ...form, has_inbound_token: false });
+        try {
+            await window.axios.delete(route('lead-forms.inbound-token.revoke', routeParams));
+            setToken(null);
+            onSaved({ ...form, has_inbound_token: false });
+            toast.success('Inbound webhook turned off');
+        } catch {
+            toast.error('Could not turn it off — the token still works.');
+        }
     };
 
     const keys = form.definition.steps.flatMap((s) => s.fields).filter((f) => f.type !== 'consent');
@@ -106,8 +120,9 @@ export default function SettingsPanel({ form, members, routeParams, canUpdate, c
                 </CardHeader>
                 <CardContent>
                     <Field label="Form name">
-                        <Input value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} maxLength={255} />
+                        <Input value={data.name} onChange={(e) => setData({ ...data, name: e.target.value })} maxLength={255} aria-invalid={errors.name ? true : undefined} />
                     </Field>
+                    {errors.name && <p className="mt-1.5 text-xs text-destructive">{errors.name}</p>}
                 </CardContent>
             </Card>
 

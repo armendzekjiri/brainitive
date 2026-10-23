@@ -369,6 +369,8 @@ export interface LeadColumn {
     name: string;
     color: string | null;
     is_done: boolean;
+    /** All leads in the column; `leads` holds the first 200 */
+    total: number;
     leads: LeadCard[];
 }
 

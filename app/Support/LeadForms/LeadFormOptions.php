@@ -76,9 +76,9 @@ class LeadFormOptions
             'settings' => ['sometimes', 'array:'.implode(',', array_keys(self::SETTING_DEFAULTS))],
             'settings.intro_title' => ['sometimes', 'nullable', 'string', 'max:160'],
             'settings.intro_text' => ['sometimes', 'nullable', 'string', 'max:1000'],
-            'settings.next_label' => ['sometimes', 'string', 'max:40'],
-            'settings.back_label' => ['sometimes', 'string', 'max:40'],
-            'settings.submit_label' => ['sometimes', 'string', 'max:40'],
+            'settings.next_label' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'settings.back_label' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'settings.submit_label' => ['sometimes', 'nullable', 'string', 'max:40'],
             'settings.after_submit' => ['sometimes', Rule::in(['message', 'redirect'])],
             'settings.thank_you_title' => ['sometimes', 'nullable', 'string', 'max:160'],
             'settings.thank_you_message' => ['sometimes', 'nullable', 'string', 'max:2000'],
@@ -110,6 +110,9 @@ class LeadFormOptions
     {
         $settings = array_intersect_key(array_merge(self::SETTING_DEFAULTS, $stored ?? [], $changes), self::SETTING_DEFAULTS);
         $settings['notify_user_ids'] = array_values(array_unique(array_map('intval', (array) $settings['notify_user_ids'])));
+        foreach (['next_label', 'back_label', 'submit_label'] as $label) {
+            $settings[$label] = filled($settings[$label]) ? $settings[$label] : self::SETTING_DEFAULTS[$label]; // cleared → default
+        }
         foreach (['confirmation_email', 'show_branding'] as $flag) {
             $settings[$flag] = (bool) $settings[$flag];
         }

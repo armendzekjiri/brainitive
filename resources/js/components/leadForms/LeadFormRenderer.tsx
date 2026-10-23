@@ -78,10 +78,17 @@ export default function LeadFormRenderer({
     const started = useRef(false);
     const reported = useRef(new Set<number>());
     const topRef = useRef<HTMLDivElement>(null);
+    const advanceTimer = useRef<number>();
 
     const steps = useMemo(() => visibleSteps(definition, answers), [definition, answers]);
-    const current = steps[Math.min(position, steps.length - 1)];
-    const isLast = position >= steps.length - 1;
+    const at = Math.max(0, Math.min(position, steps.length - 1));
+    const current = steps[at];
+    const isLast = at >= steps.length - 1;
+    // Latest values for timers and async handlers (a pick advances 220 ms later)
+    const live = useRef({ answers, position: at });
+    live.current = { answers, position: at };
+
+    useEffect(() => () => window.clearTimeout(advanceTimer.current), []);
     const isPreview = previewStep !== undefined;
 
     // Builder: jump to the step being edited
@@ -121,6 +128,7 @@ export default function LeadFormRenderer({
             if (!isPreview) onEvent?.('start');
         }
         setAnswers((prev) => ({ ...prev, [field.id]: value }));
+        live.current = { ...live.current, answers: { ...live.current.answers, [field.id]: value } };
         setErrors((prev) => {
             if (!prev[field.id]) return prev;
             const rest = { ...prev };
@@ -131,16 +139,22 @@ export default function LeadFormRenderer({
 
     const scrollTop = () => topRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 
-    const next = async (override?: LeadAnswers) => {
-        if (!current) return;
-        const now = override ?? answers;
-        const stepErrs = stepErrors(current.fields, now);
+    const next = async () => {
+        window.clearTimeout(advanceTimer.current);
+        // Recompute from the latest answers: an answer can reveal or hide questions and steps
+        const now = live.current.answers;
+        const stepsNow = visibleSteps(definition, now);
+        const pos = Math.min(live.current.position, stepsNow.length - 1);
+        const cur = stepsNow[pos];
+        if (!cur) return;
+        const stepErrs = stepErrors(cur.fields, now);
         if (Object.keys(stepErrs).length) {
             setErrors(stepErrs);
             return;
         }
-        if (!isLast) {
-            setPosition((p) => p + 1);
+        if (pos < stepsNow.length - 1) {
+            setPosition(pos + 1);
+            live.current = { ...live.current, position: pos + 1 };
             scrollTop();
             return;
         }
@@ -158,7 +172,7 @@ export default function LeadFormRenderer({
                 const byField: Record<string, string> = {};
                 for (const [key, msg] of Object.entries(result.errors)) byField[key.replace(/^answers\./, '')] = msg;
                 setErrors(byField);
-                const firstStep = steps.findIndex((s) => s.fields.some((f) => byField[f.id]));
+                const firstStep = stepsNow.findIndex((s) => s.fields.some((f) => byField[f.id]));
                 if (firstStep >= 0) setPosition(firstStep);
                 setFormError(result.message ?? (firstStep < 0 ? 'Something went wrong. Please try again.' : null));
             }
@@ -171,15 +185,22 @@ export default function LeadFormRenderer({
 
     const back = () => {
         setErrors({});
-        setPosition((p) => Math.max(0, p - 1));
+        window.clearTimeout(advanceTimer.current);
+        setPosition(Math.max(0, at - 1));
         scrollTop();
     };
 
     // The only question of a step is a single choice: picking an answer moves on
     const pick = (field: LeadField, value: string) => {
         setAnswer(field, value);
-        const onlyQuestion = current && current.fields.filter((f) => f.type !== 'hidden').length === 1;
-        if (onlyQuestion && !isLast) window.setTimeout(() => void next({ ...answers, [field.id]: value }), 220);
+        window.clearTimeout(advanceTimer.current);
+        advanceTimer.current = window.setTimeout(() => {
+            // only when, with this answer, the step still has just this one question
+            const stepsNow = visibleSteps(definition, live.current.answers);
+            const pos = Math.min(live.current.position, stepsNow.length - 1);
+            const cur = stepsNow[pos];
+            if (cur && pos < stepsNow.length - 1 && cur.fields.filter((f) => f.type !== 'hidden').length === 1 && cur.fields.some((f) => f.id === field.id)) void next();
+        }, 220);
     };
 
     const onKeyDown = (e: KeyboardEvent<HTMLFormElement>) => {
@@ -394,27 +415,44 @@ function FieldInput({
     const inputClass = 'w-full px-3.5 py-2.5 text-[15px] outline-none transition focus:ring-4 placeholder:opacity-50';
     const id = `lf-${field.id}`;
 
-    const label = field.type !== 'consent' && (
-        <label htmlFor={id} className="mb-1.5 block text-sm font-medium">
+    // choice cards and ratings are groups, not one input: name them with aria-labelledby
+    const isGroup = ['choice', 'multi_choice', 'rating'].includes(field.type);
+    const labelText = (
+        <>
             {field.label}
             {field.required && <span style={{ color: theme.primary }}> *</span>}
-        </label>
+        </>
     );
+    const label =
+        field.type === 'consent' ? null : isGroup ? (
+            <p id={`${id}-label`} className="mb-1.5 block text-sm font-medium">
+                {labelText}
+            </p>
+        ) : (
+            <label htmlFor={id} className="mb-1.5 block text-sm font-medium">
+                {labelText}
+            </label>
+        );
+    const a11y = { 'aria-invalid': error ? true : undefined, 'aria-describedby': error ? `${id}-error` : undefined };
     const help = field.help && field.type !== 'consent' && (
         <p className="mt-1.5 text-xs" style={{ color: 'var(--lf-muted)' }}>
             {field.help}
         </p>
     );
-    const err = error && <p className="mt-1.5 text-xs font-medium text-red-600">{error}</p>;
+    const err = error && (
+        <p id={`${id}-error`} className="mt-1.5 text-xs font-medium text-red-600" role="alert">
+            {error}
+        </p>
+    );
 
     let control: ReactNode;
     switch (field.type) {
         case 'long_text':
-            control = <textarea id={id} rows={4} className={inputClass} style={inputStyle} placeholder={field.placeholder ?? ''} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />;
+            control = <textarea id={id} {...a11y} rows={4} className={inputClass} style={inputStyle} placeholder={field.placeholder ?? ''} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value)} />;
             break;
         case 'select':
             control = (
-                <select id={id} className={inputClass} style={inputStyle} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value || null)}>
+                <select id={id} {...a11y} className={inputClass} style={inputStyle} value={(value as string) ?? ''} onChange={(e) => onChange(e.target.value || null)}>
                     <option value="">{field.placeholder || 'Choose…'}</option>
                     {field.options.map((o) => (
                         <option key={o.id} value={o.id}>
@@ -437,7 +475,8 @@ function FieldInput({
             control = (
                 <div
                     role={multi ? 'group' : 'radiogroup'}
-                    aria-label={field.label}
+                    aria-labelledby={`${id}-label`}
+                    {...a11y}
                     className={cards ? `grid gap-2.5 ${field.options.length > 4 ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2'}` : 'space-y-2'}
                 >
                     {field.options.map((o) => {
@@ -493,7 +532,7 @@ function FieldInput({
         case 'rating': {
             const rating = Number(value) || 0;
             control = (
-                <div className="flex gap-1.5" role="radiogroup" aria-label={field.label}>
+                <div className="flex gap-1.5" role="radiogroup" aria-labelledby={`${id}-label`} {...a11y}>
                     {[1, 2, 3, 4, 5].map((n) => (
                         <button key={n} type="button" role="radio" aria-checked={rating === n} aria-label={`${n} of 5`} onClick={() => onChange(n)} className="p-0.5 transition hover:scale-110">
                             <Star className="size-8" style={{ color: n <= rating ? theme.primary : 'var(--lf-border)' }} fill={n <= rating ? theme.primary : 'transparent'} />
@@ -506,7 +545,7 @@ function FieldInput({
         case 'consent':
             control = (
                 <label htmlFor={id} className="flex cursor-pointer items-start gap-3 text-sm">
-                    <input id={id} type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 size-[18px] shrink-0" style={{ accentColor: theme.primary }} />
+                    <input id={id} {...a11y} type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} className="mt-0.5 size-[18px] shrink-0" style={{ accentColor: theme.primary }} />
                     <span>
                         {field.label}
                         {field.required && <span style={{ color: theme.primary }}> *</span>}
@@ -525,6 +564,7 @@ function FieldInput({
             control = (
                 <input
                     id={id}
+                    {...a11y}
                     type={type}
                     inputMode={field.type === 'number' ? 'decimal' : undefined}
                     autoComplete={autoComplete}

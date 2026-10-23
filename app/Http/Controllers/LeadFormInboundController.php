@@ -17,7 +17,7 @@ class LeadFormInboundController extends Controller
 {
     public function store(Request $request, string $uuid): JsonResponse
     {
-        $form = LeadForm::where('uuid', $uuid)->first();
+        $form = LeadForm::where('uuid', $uuid)->whereHas('project.workspace')->first();
         $token = (string) ($request->bearerToken() ?? $request->header('X-Brainitive-Token', ''));
 
         if (! $form || ! $form->inbound_token || $token === '' || ! hash_equals($form->inbound_token, hash('sha256', $token))) {

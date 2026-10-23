@@ -1,4 +1,4 @@
-import { ReactNode, useState } from 'react';
+import { ReactElement, ReactNode, cloneElement, isValidElement, useId, useState } from 'react';
 import { ArrowDown, ArrowUp, GitBranch, Plus, Smile, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,11 +21,18 @@ export function Section({ title, children, action }: { title: string; children: 
     );
 }
 
+/** A labelled control: the label is linked to a single input / textarea child. */
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
+    const fallbackId = useId();
+    const linkable = isValidElement(children) && typeof children.type !== 'string' ? true : isValidElement(children) && ['input', 'textarea', 'select'].includes(children.type as string);
+    const child = children as ReactElement<{ id?: string }>;
+    const id = linkable ? (child.props.id ?? fallbackId) : undefined;
     return (
         <div className="space-y-1.5">
-            <Label className="text-xs">{label}</Label>
-            {children}
+            <Label className="text-xs" htmlFor={id}>
+                {label}
+            </Label>
+            {linkable ? cloneElement(child, { id }) : children}
             {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
         </div>
     );

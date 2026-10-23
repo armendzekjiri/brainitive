@@ -215,6 +215,9 @@ class LeadFormDefinition
             if ($value === null || $value === '' || $value === []) {
                 continue;
             }
+            if ($field && $field['type'] === 'consent' && filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) === false) {
+                continue; // not given: no answer
+            }
             if ($field === null) {
                 if (in_array($key, self::MAPS, true) && is_scalar($value)) {
                     $contact[$key] = mb_substr(trim((string) $value), 0, $key === 'phone' ? 60 : 255);
@@ -267,7 +270,11 @@ class LeadFormDefinition
         foreach (self::fields($definition) as $field) {
             $value = $answers[$field['id']] ?? null;
             if ($field['maps_to'] && is_scalar($value) && $value !== '') {
-                $contact[$field['maps_to']] = mb_substr((string) $value, 0, $field['maps_to'] === 'phone' ? 60 : 255);
+                $text = mb_substr(trim((string) $value), 0, $field['maps_to'] === 'phone' ? 60 : 255);
+                if ($field['maps_to'] === 'email' && ! filter_var($text, FILTER_VALIDATE_EMAIL)) {
+                    continue; // e.g. a short text mapped to email: never mail a non-address
+                }
+                $contact[$field['maps_to']] = $field['maps_to'] === 'email' ? strtolower($text) : $text;
             }
         }
 
@@ -288,12 +295,17 @@ class LeadFormDefinition
     public static function display(array $field, mixed $value): string
     {
         $labels = array_column($field['options'] ?? [], 'label', 'id');
+        $label = fn ($v) => is_scalar($v) ? ($labels[(string) $v] ?? (string) $v) : '';
+
+        // Old answers keep their shape when a question's type changes later: never assume it
+        if (is_array($value)) {
+            return implode(', ', array_filter(array_map($label, $value), fn ($v) => $v !== ''));
+        }
 
         return match ($field['type']) {
-            'select', 'choice' => $labels[$value] ?? (string) $value,
-            'multi_choice' => implode(', ', array_map(fn ($id) => $labels[$id] ?? (string) $id, (array) $value)),
+            'select', 'choice', 'multi_choice' => $label($value),
             'consent' => $value ? 'Yes' : 'No',
-            'rating' => $value.' / 5',
+            'rating' => is_numeric($value) ? $value.' / 5' : (string) $value,
             default => is_scalar($value) ? (string) $value : '',
         };
     }
@@ -364,7 +376,7 @@ class LeadFormDefinition
             case 'rating':
                 return is_numeric($value) && (int) $value >= 1 && (int) $value <= 5 ? [true, (int) $value] : [false, 'Choose 1 to 5.'];
             case 'consent':
-                return [true, true];
+                return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) === true ? [true, true] : [false, 'Consent must be given (true).'];
             case 'long_text':
                 return is_string($value) && mb_strlen($value) <= 10000 ? [true, trim($value)] : [false, 'Use at most 10,000 characters.'];
             default: // short_text, hidden

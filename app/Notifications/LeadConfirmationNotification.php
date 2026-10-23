@@ -24,12 +24,26 @@ class LeadConfirmationNotification extends Notification implements ShouldQueue
         return ['mail'];
     }
 
+    /**
+     * The visitor's name goes into an email to an address they typed: short, and never a link
+     * or a host name (phishing text through our sender).
+     */
+    public static function safeName(?string $name): string
+    {
+        $name = NewLeadNotification::plain((string) $name);
+        if ($name === '' || mb_strlen($name) > 60 || preg_match('#://|www\.|@|\w\.[a-z]{2,}#i', $name)) {
+            return 'there';
+        }
+
+        return $name;
+    }
+
     public function toMail(object $notifiable): MailMessage
     {
         $form = $this->lead->form;
         $settings = LeadFormOptions::settings($form->settings);
         $vars = [
-            '{name}' => NewLeadNotification::plain($this->lead->name ?: 'there'),
+            '{name}' => self::safeName($this->lead->name),
             '{form}' => NewLeadNotification::plain($form->name),
         ];
 

@@ -1,7 +1,8 @@
 import { DragEvent, useEffect, useMemo, useState } from 'react';
 import { router } from '@inertiajs/react';
+import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
-import { Check, Mail, MoreHorizontal, Phone, Plus, Search, Trash2, Webhook, Building2, Inbox } from 'lucide-react';
+import { Check, Mail, MoreHorizontal, Phone, Plus, Search, Trash2, Webhook, Inbox } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,6 +40,10 @@ interface Props {
     canEditColumns: boolean;
     onGoToShare: () => void;
     isPublished: boolean;
+}
+
+function firstError(errors: Record<string, string>, fallback: string): string {
+    return Object.values(errors)[0] ?? fallback;
 }
 
 function initials(name: string): string {
@@ -79,7 +84,14 @@ export default function LeadsBoard({ columns: initial, members, routeParams, can
         router.patch(
             route('leads.move', [...routeParams, lead.id]),
             { column_id: columnId, ids: ordered.map((l) => l.id) },
-            { preserveScroll: true, preserveState: true, onError: () => setColumns(initial) },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onError: (errors) => {
+                    setColumns(initial);
+                    toast.error(firstError(errors, 'Could not move the lead.'));
+                },
+            },
         );
     };
 
@@ -97,6 +109,7 @@ export default function LeadsBoard({ columns: initial, members, routeParams, can
         router.post(columnRoute('lead-forms.columns.store'), { name: newColumn.trim(), color: COLUMN_COLORS[columns.length % COLUMN_COLORS.length] }, {
             preserveScroll: true,
             onSuccess: () => setNewColumn(null),
+            onError: (errors) => toast.error(firstError(errors, 'Could not add the column.')),
         });
     };
 
@@ -157,7 +170,7 @@ export default function LeadsBoard({ columns: initial, members, routeParams, can
                                     <span className="size-2.5 rounded-full" style={{ background: column.color || '#94a3b8' }} />
                                     <span className="truncate text-sm font-semibold">{column.name}</span>
                                     {column.is_done && <Check className="size-3.5 text-muted-foreground" aria-label="Done column" />}
-                                    <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{column.leads.length}</span>
+                                    <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{Math.max(column.total, column.leads.length)}</span>
                                     {canEditColumns && <ColumnMenu column={column} canDelete={columns.length > 1} routeFor={(name) => columnRoute(name, column)} />}
                                 </div>
                                 <div className="flex-1 space-y-2 overflow-y-auto px-2 pb-3">
@@ -177,8 +190,17 @@ export default function LeadsBoard({ columns: initial, members, routeParams, can
                                                 setDropTarget({ column: column.id, before: lead.id });
                                             }}
                                             onClick={() => setOpenUuid(lead.uuid)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault();
+                                                    setOpenUuid(lead.uuid);
+                                                }
+                                            }}
+                                            role="button"
+                                            tabIndex={0}
+                                            aria-label={`Lead #${lead.number}: ${leadTitle(lead)}`}
                                             className={cn(
-                                                'group cursor-pointer rounded-lg border bg-card p-3 shadow-sm transition hover:border-primary/40 hover:shadow',
+                                                'group cursor-pointer rounded-lg border bg-card p-3 shadow-sm transition hover:border-primary/40 hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                                                 dragged?.id === lead.id && 'opacity-40',
                                                 dropTarget?.before === lead.id && 'border-t-2 border-t-primary',
                                             )}
@@ -215,6 +237,9 @@ export default function LeadsBoard({ columns: initial, members, routeParams, can
                                             </div>
                                         </div>
                                     ))}
+                                    {column.total > column.leads.length && !query && (
+                                        <p className="px-2 py-2 text-center text-[11px] text-muted-foreground">Showing {column.leads.length} of {column.total} leads.</p>
+                                    )}
                                     {visible.length === 0 && <p className="px-2 py-6 text-center text-xs text-muted-foreground">{query ? 'No matches' : 'Drop leads here'}</p>}
                                 </div>
                             </div>
@@ -274,7 +299,8 @@ function ColumnMenu({ column, canDelete, routeFor }: { column: LeadColumn; canDe
     const [renaming, setRenaming] = useState(false);
     const [name, setName] = useState(column.name);
     const [confirm, setConfirm] = useState(false);
-    const update = (data: Record<string, string | number | boolean | null>) => router.put(routeFor('lead-forms.columns.update'), data, { preserveScroll: true });
+    const update = (data: Record<string, string | number | boolean | null>) =>
+        router.put(routeFor('lead-forms.columns.update'), data, { preserveScroll: true, onError: (errors) => toast.error(firstError(errors, 'Could not change the column.')) });
 
     if (renaming) {
         return (
@@ -332,7 +358,9 @@ function ColumnMenu({ column, canDelete, routeFor }: { column: LeadColumn; canDe
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => router.delete(routeFor('lead-forms.columns.destroy'), { preserveScroll: true })}>Delete</AlertDialogAction>
+                        <AlertDialogAction onClick={() => router.delete(routeFor('lead-forms.columns.destroy'), { preserveScroll: true, onError: (errors) => toast.error(firstError(errors, 'Could not delete the column.')) })}>
+                            Delete
+                        </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
@@ -366,7 +394,15 @@ function LeadSheet({
 
     if (!lead) return <Sheet open={false} onOpenChange={onClose} />;
 
-    const update = (data: Record<string, string | number | boolean | null>) => router.patch(route('leads.update', [...routeParams, lead.id]), data, { preserveScroll: true, preserveState: true });
+    const update = (data: Record<string, string | number | boolean | null>) =>
+        router.patch(route('leads.update', [...routeParams, lead.id]), data, {
+            preserveScroll: true,
+            preserveState: true,
+            onError: (errors) => {
+                toast.error(firstError(errors, 'Could not save the lead.'));
+                setContact({ name: lead.name ?? '', email: lead.email ?? '', phone: lead.phone ?? '', company: lead.company ?? '' });
+            },
+        });
     const saveContact = (key: keyof typeof contact) => {
         const value = contact[key].trim();
         if (value !== (lead[key] ?? '')) update({ [key]: value || null });
@@ -429,7 +465,7 @@ function LeadSheet({
                                 ['name', 'Name', null],
                                 ['email', 'Email', Mail],
                                 ['phone', 'Phone', Phone],
-                                ['company', 'Company', Building2],
+                                ['company', 'Company', null],
                             ] as const
                         ).map(([key, label, Icon]) => (
                             <div key={key} className="flex items-center gap-2">
@@ -443,8 +479,8 @@ function LeadSheet({
                                 />
                                 {Icon && contact[key] && (
                                     <a
-                                        href={key === 'email' ? `mailto:${contact[key]}` : key === 'phone' ? `tel:${contact[key]}` : undefined}
-                                        className={cn('rounded p-1.5 text-muted-foreground hover:bg-muted', key === 'company' && 'pointer-events-none')}
+                                        href={key === 'email' ? `mailto:${contact[key]}` : `tel:${contact[key]}`}
+                                        className="rounded p-1.5 text-muted-foreground hover:bg-muted"
                                         aria-label={`${label} ${contact[key]}`}
                                     >
                                         <Icon className="size-4" />

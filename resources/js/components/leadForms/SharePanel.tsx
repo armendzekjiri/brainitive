@@ -59,7 +59,7 @@ export default function SharePanel({ form, routeParams, canUpdate }: { form: Lea
     };
 
     const iframe = `<iframe src="${embedUrl}" title="${escapeAttr(form.name)}" style="width:100%;border:0;min-height:560px" loading="lazy" data-brainitive-form="${form.public_slug ?? slug}"></iframe>
-<script>window.addEventListener("message",function(e){var d=e.data||{};if(d.type!=="brainitive:lead-form:height")return;document.querySelectorAll('iframe[data-brainitive-form="'+d.slug+'"]').forEach(function(f){f.style.height=d.height+"px"})});</script>`;
+<script>window.addEventListener("message",function(e){var d=e.data||{};if(e.origin!=="${window.location.origin}"||d.type!=="brainitive:lead-form:height"||!/^[a-z0-9-]+$/.test(d.slug))return;document.querySelectorAll('iframe[data-brainitive-form="'+d.slug+'"]').forEach(function(f){f.style.height=Math.max(200,+d.height||0)+"px"})});</script>`;
 
     return (
         <div className="mx-auto max-w-3xl space-y-6 p-6">
@@ -97,7 +97,7 @@ export default function SharePanel({ form, routeParams, canUpdate }: { form: Lea
                             </div>
                             <CopyButton value={form.public_url} label="Copy link" />
                             <Button variant="outline" size="sm" className="gap-1.5" asChild>
-                                <a href={form.public_url} target="_blank" rel="noreferrer">
+                                <a href={form.public_url} target="_blank" rel="noopener noreferrer">
                                     <ExternalLink className="size-4" />
                                     Open
                                 </a>

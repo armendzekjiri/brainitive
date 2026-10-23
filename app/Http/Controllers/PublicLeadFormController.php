@@ -90,7 +90,8 @@ class PublicLeadFormController extends Controller
 
     private function published(string $publicSlug): LeadForm
     {
-        $form = LeadForm::where('public_slug', $publicSlug)->first();
+        // a form of a deleted project / workspace is offline too
+        $form = LeadForm::where('public_slug', $publicSlug)->whereHas('project.workspace')->first();
         abort_unless($form && $form->isPublished(), 404);
 
         return $form;

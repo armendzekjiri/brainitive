@@ -29,6 +29,8 @@ use Inertia\Response;
  */
 class LeadFormController extends Controller
 {
+    public const BOARD_LIMIT = 200;
+
     public const PUBLIC_SLUG = '/^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])$/';
 
     /** Template catalog for the picker. */
@@ -81,7 +83,8 @@ class LeadFormController extends Controller
         $this->authorize('view', $leadForm);
         $user = $request->user();
 
-        $leadForm->load(['columns.leads.assignee:id,name,email,avatar']);
+        // the first BOARD_LIMIT leads per column (board order); `total` tells the board how many there are
+        $leadForm->load(['columns' => fn ($q) => $q->withCount('leads'), 'columns.leads' => fn ($q) => $q->with('assignee:id,name,email,avatar')->limit(self::BOARD_LIMIT)]);
         $leadForm->columns->each(fn ($column) => $column->leads->each->setRelation('form', $leadForm));
         $canUpdate = $user->can('update', $leadForm);
 
@@ -94,6 +97,7 @@ class LeadFormController extends Controller
                 'name' => $column->name,
                 'color' => $column->color,
                 'is_done' => $column->is_done,
+                'total' => $column->leads_count,
                 'leads' => $column->leads->map(fn ($lead) => LeadController::present($lead))->values(),
             ])->values(),
             'members' => $this->members($project),
@@ -282,6 +286,9 @@ class LeadFormController extends Controller
     {
         $this->authorize('update', $leadForm);
         $validated = $request->validate($this->columnRules());
+        if ($leadForm->columns()->count() >= 30) {
+            throw ValidationException::withMessages(['name' => 'A board can have up to 30 columns.']);
+        }
 
         $leadForm->columns()->create([
             'name' => $validated['name'],
@@ -305,7 +312,7 @@ class LeadFormController extends Controller
     public function reorderColumns(Request $request, Workspace $workspace, Project $project, LeadForm $leadForm): RedirectResponse
     {
         $this->authorize('update', $leadForm);
-        $validated = $request->validate(['ids' => 'required|array', 'ids.*' => 'integer']);
+        $validated = $request->validate(['ids' => 'required|array|max:100', 'ids.*' => 'integer']);
 
         $ids = $leadForm->columns()->pluck('id')->all();
         DB::transaction(function () use ($validated, $ids) {
@@ -324,10 +331,12 @@ class LeadFormController extends Controller
 
         $target = $leadForm->columns()->whereKeyNot($column->id)->first();
         if (! $target) {
-            return back()->with('error', 'A board needs at least one column.');
+            throw ValidationException::withMessages(['column' => 'A board needs at least one column.']);
         }
 
         DB::transaction(function () use ($column, $target) {
+            // lock first: a lead submitted meanwhile can't land in the column being deleted
+            LeadFormColumn::whereKey($column->id)->lockForUpdate()->first();
             Lead::withTrashed()->where('column_id', $column->id)->update(['column_id' => $target->id]);
             $column->delete();
         });
@@ -351,7 +360,8 @@ class LeadFormController extends Controller
             'status' => $form->status,
             'definition' => $form->definition ?? ['version' => LeadFormDefinition::VERSION, 'steps' => []],
             'theme' => LeadFormOptions::theme($form->theme),
-            'settings' => LeadFormOptions::settings($form->settings),
+            // viewers don't get the webhook URL (often a secret capability URL) or who is notified
+            'settings' => $canUpdate ? LeadFormOptions::settings($form->settings) : LeadFormOptions::publicSettings(LeadFormOptions::settings($form->settings)),
             'public_url' => $form->public_slug ? route('lead-forms.public', $form->public_slug) : null,
             'embed_url' => $form->public_slug ? route('lead-forms.embed', $form->public_slug) : null,
             'inbound_url' => route('lead-forms.inbound', $form->uuid),
