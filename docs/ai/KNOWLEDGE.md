@@ -29,6 +29,47 @@ Deployments are matched by window: what reached the deployed ref after the previ
 deploy to that environment (`github_connections.deployments`). Keep processing idempotent
 (upserts keyed by item+kind+repo+identifier) — GitHub redelivers.
 
+### Explicit route binders run before implicit ones
+In `Route::bind('page' | 'bookmark', …)` the `{workspace}` / `{project}` parameters are still raw
+slugs — an `instanceof Project` check there is always false. `AppServiceProvider::routeProject()` /
+`routeWorkspace()` resolve them from the slugs so a page / bookmark only binds inside the URL's own
+project / workspace (before 2026-10-23 any page uuid bound under any project URL → cross-tenant reads).
+
+### Workspace editors need project access to write
+Policies give workspace *editors* edit rights only in projects they can open
+(`hasProjectAccess`) — workspace *admins* everywhere. A workspace editor outside a project must
+not create items, tasks, plans, releases or tickets there (CLI and extension included).
+User ids from requests (assignees, watchers) use `App\Rules\ProjectMember`, never just
+`exists:users,id` (that lets anyone look up any account). Notification links are app paths only
+(`NotificationController::appPath`, `safeAppHref` in `NotificationMessage.tsx`, `public/sw.js`).
+`Workspace::$hidden = ['settings']` (AI endpoint + encrypted key) — read AI config server-side.
+
+### Uploads keep only allowlisted extensions
+`Uploads::extension()` keeps a client extension only if it is in `Uploads::SAFE` (documents,
+archives, media); everything else is stored as `.bin`. It used to be a denylist, and `.xhtm`
+(served as application/xhtml+xml → script on our origin) slipped through. Exports of page HTML
+(PDF / HTML / Markdown) always go through `safeHtml()` — stored page HTML is not trusted.
+Visitor text in ticket mails goes through `NewLeadNotification::plain()` (Markdown renders links).
+
+### Accounts, invitations and connected apps
+- An email is "proven" only by `email_verified_at` (raw column — `hasVerifiedEmail()` is always
+  true when the instance doesn't require verification), a provider-verified social email, or the
+  invitation link. Sign-up no longer joins invited workspaces; the `Verified` listener in
+  `AppServiceProvider` (or `/invite/{token}`) does — guests opening an invite are sent back to it
+  after sign-up / login (`url.intended`). `acceptPendingForUser` skips existing memberships. A social login that matches a never-verified
+  account resets it (`SignOutEverywhere`) before linking; Google needs `email_verified`.
+- `App\Http\Middleware\GuardOAuthFlows` runs globally (for `/oauth/register`, which has no group)
+  AND in the web group — the `/oauth/authorize` verification check needs the session, and global
+  middleware runs before StartSession (`$request->user()` is null there). `POST /oauth/register` is throttled and https
+  redirect hosts must be in `mcp.allowed_redirect_hosts` (+ `MCP_REDIRECT_HOSTS`) or loopback —
+  the package's own `redirect_domains` stays `*` because it can't do wildcard hosts (extension
+  ids). Unverified users can't reach `/oauth/authorize`. The consent page shows the redirect host.
+- Password change / reset → `SignOutEverywhere` (sessions, remember token, all OAuth + CLI tokens).
+  Users revoke apps under Profile → Connected apps.
+- Web push endpoints must be a known push service (`PushSubscriptionController::PUSH_HOSTS`).
+- `FrameProtection` (web): pages without their own CSP get `frame-ancestors 'self'`; embeds keep
+  `frame-ancestors *`.
+
 ### Auth links and login limits (security hardening, 2026-10-23)
 - Email verification links are `signed:relative` temporary signed URLs (built in
   `VerifyEmailNotification`, host from `APP_URL`, signature over path + query only, so proxies /

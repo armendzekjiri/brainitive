@@ -24,7 +24,10 @@
 	# no access to our cookies or pages).
 	@uploads path /storage/*
 	header @uploads X-Content-Type-Options nosniff
-	@uploadedMarkup path_regexp uploadedMarkup (?i)^/storage/.*\.(html?|xhtml|xht|shtml|svgz?|xml|xsl)$
+	@uploadedMarkup {
+		path /storage/*
+		not path_regexp (?i)\.(pdf|png|jpe?g|gif|webp|avif|bmp|ico|heic|heif|tiff?|mp3|wav|ogg|oga|m4a|aac|flac|mp4|m4v|mov|webm|avi|mkv|zip|gz|tgz|7z|rar|bz2|tar|bin|docx?|xlsx?|pptx?|odt|ods|odp|csv|tsv|txt|md|json|rtf)$
+	}
 	header @uploadedMarkup Content-Security-Policy "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox"
 
 	{$CADDY_SERVER_EXTRA_DIRECTIVES}

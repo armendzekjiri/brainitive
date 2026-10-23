@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\TaskList;
 use App\Models\TaskListItem;
+use App\Rules\ProjectMember;
 use App\Support\AccountLoginThrottle;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -36,6 +37,12 @@ class CliController extends Controller
         AccountLoginThrottle::clear($validated['email']);
 
         $user = Auth::user();
+
+        if (! $user->hasVerifiedEmail()) {
+            Auth::logout();
+
+            return response()->json(['message' => 'Verify your email address first (check your inbox).'], 403);
+        }
 
         if ($user->isSuspended()) {
             Auth::logout();
@@ -148,7 +155,7 @@ class CliController extends Controller
 
         $validated = $request->validate([
             'title' => 'required|string|max:500',
-            'assignee_id' => 'nullable|integer|exists:users,id',
+            'assignee_id' => ['nullable', 'integer', new ProjectMember($taskList->project)],
             'due_date' => 'nullable|date',
             'recurrence' => 'nullable|in:daily,weekly,monthly,yearly',
         ]);
@@ -176,7 +183,7 @@ class CliController extends Controller
         $validated = $request->validate([
             'title' => 'sometimes|required|string|max:500',
             'status' => 'sometimes|in:todo,done',
-            'assignee_id' => 'nullable|integer|exists:users,id',
+            'assignee_id' => ['nullable', 'integer', new ProjectMember($taskList->project)],
             'due_date' => 'nullable|date',
             'recurrence' => 'nullable|in:daily,weekly,monthly,yearly',
         ]);

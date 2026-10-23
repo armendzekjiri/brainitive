@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -46,6 +47,7 @@ class Bookmark extends Model
         if (str_contains($icon, '/') || strlen($icon) > 30) {
             return asset('storage/'.$icon);
         }
+
         return $icon;
     }
 
@@ -97,7 +99,21 @@ class Bookmark extends Model
             return true;
         }
         $pivot = $this->collaborators()->where('user_id', $user->id)->first()?->pivot;
+
         return $pivot && $pivot->role === 'editor';
+    }
+
+    /**
+     * Collections the user may see (same rule as BookmarkPolicy::view): own, public, shared with
+     * them, or every one for a workspace admin.
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        return $query->where(fn ($q) => $q
+            ->where('created_by', $user->id)
+            ->orWhere('visibility', 'public')
+            ->orWhereHas('collaborators', fn ($c) => $c->where('user_id', $user->id))
+            ->orWhereHas('workspace.users', fn ($u) => $u->where('users.id', $user->id)->where('workspace_user.role', 'admin')));
     }
 
     public function isViewableBy(User $user): bool
@@ -108,6 +124,7 @@ class Bookmark extends Model
         if ($this->visibility === 'public') {
             return true;
         }
+
         return $this->collaborators()->where('user_id', $user->id)->exists();
     }
 }

@@ -128,8 +128,8 @@ Route::middleware('cors')->group(function () {
     Route::get('/widget/helpdesks/{helpdesk:uuid}/embed', [HelpdeskWidgetController::class, 'embed'])->name('helpdesks.widget.embed');
     Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets', [TicketController::class, 'storePublic'])->middleware('throttle:20,1')->name('helpdesks.tickets.store-public');
     Route::get('/widget/tickets/{ticket:uuid}', [TicketController::class, 'getPublicTicketJson'])->name('helpdesks.tickets.get-public');
-    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/replies', [TicketController::class, 'storePublicReply'])->name('helpdesks.tickets.replies.store-public');
-    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/attachments', [TicketController::class, 'storePublicAttachment'])->name('helpdesks.tickets.attachments.store-public');
+    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/replies', [TicketController::class, 'storePublicReply'])->middleware('throttle:20,1')->name('helpdesks.tickets.replies.store-public');
+    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/attachments', [TicketController::class, 'storePublicAttachment'])->middleware('throttle:20,1')->name('helpdesks.tickets.attachments.store-public');
     Route::get('/portal/tickets/{ticket:uuid}', [TicketController::class, 'showPublic'])->name('helpdesks.tickets.show-public');
     Route::get('/support/{publicSlug}', [HelpdeskWidgetController::class, 'supportPage'])->where('publicSlug', '[a-z0-9-]+')->name('helpdesks.support-page');
     Route::get('/portal/tickets/{ticket:uuid}/replies', [TicketController::class, 'publicReplies'])->name('helpdesks.tickets.replies.public');
@@ -214,7 +214,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('ai/settings', [AiController::class, 'getSettings'])->name('ai.settings');
         Route::post('ai/settings', [AiController::class, 'saveSettings'])->name('ai.settings.save');
         Route::post('ai/models', [AiController::class, 'fetchModels'])->name('ai.models');
-        Route::post('ai/generate', [AiController::class, 'generate'])->name('ai.generate');
+        Route::post('ai/generate', [AiController::class, 'generate'])->middleware('throttle:30,1')->name('ai.generate');
         Route::post('projects/{project:slug}/ai/assist', [AiController::class, 'projectAssist'])->name('ai.project-assist')->scopeBindings()->middleware('throttle:20,1');
         Route::post('projects/{project:slug}/ai/save-doc', [AiController::class, 'saveProjectAssist'])->name('ai.project-assist.save')->scopeBindings();
 
@@ -457,6 +457,7 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::patch('/profile/preferences', [ProfileController::class, 'updatePreferences'])->name('profile.preferences');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::delete('/profile/connected-apps/{clientId}', [ProfileController::class, 'disconnectApp'])->name('profile.connected-apps.destroy');
 
     // File uploads
     Route::post('/upload/image', [FileController::class, 'uploadImage'])->name('upload.image');
@@ -474,7 +475,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/api/notifications/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unread-count');
     Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
-    Route::post('/api/notifications/notify-mention', [NotificationController::class, 'notifyMention'])->name('notifications.notify-mention');
+    Route::post('/api/notifications/notify-mention', [NotificationController::class, 'notifyMention'])->middleware('throttle:60,1')->name('notifications.notify-mention');
 
     // Browser push subscriptions
     Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');

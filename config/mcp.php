@@ -15,8 +15,18 @@ return [
     */
 
     'redirect_domains' => [
-        '*',
+        '*', // the package only does prefix matching; App\Http\Middleware\GuardOAuthFlows enforces the host list below
     ],
+
+    /*
+    | Hosts an https redirect URI may use when a client registers itself (plus loopback). Wildcards
+    | cover the per-install browser-extension hosts. Add more with MCP_REDIRECT_HOSTS=a.com,*.b.com
+    */
+    'allowed_redirect_hosts' => array_values(array_filter(array_merge([
+        'claude.ai', 'claude.com', 'chatgpt.com', 'chat.openai.com', 'platform.openai.com',
+        'perplexity.ai', 'www.perplexity.ai', 'cursor.com', 'www.cursor.com', 'vscode.dev', 'insiders.vscode.dev',
+        '*.chromiumapp.org', '*.extensions.allizom.org',
+    ], array_map('trim', explode(',', (string) env('MCP_REDIRECT_HOSTS', '')))))),
 
     /*
     |--------------------------------------------------------------------------

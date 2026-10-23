@@ -31,7 +31,7 @@ class ListProjectMembersTool extends Tool
             return Response::error($e->getMessage());
         }
 
-        $members = $project->workspace->users()
+        $members = $project->accessibleUsers()
             ->get(['users.id', 'name', 'email'])
             ->map(fn ($m) => [
                 'name' => $m->name,

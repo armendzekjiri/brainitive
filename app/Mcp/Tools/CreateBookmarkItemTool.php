@@ -24,7 +24,7 @@ class CreateBookmarkItemTool extends Tool
             'bookmark' => 'required|string',
             'type' => 'required|in:link,note,todo',
             'title' => 'nullable|string|max:500',
-            'url' => 'nullable|string|max:2048|required_if:type,link',
+            'url' => ['nullable', 'string', 'max:2048', 'required_if:type,link', 'regex:#^https?://[^\s\x00-\x1f]+$#i'],
             'content' => 'nullable|string|max:10000',
         ]);
 
@@ -71,7 +71,7 @@ class CreateBookmarkItemTool extends Tool
         return [
             'created' => $schema->boolean(),
             'item_id' => $schema->integer(),
-            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+            'location' => ResourceLocator::outputSchema($schema),
         ];
     }
 

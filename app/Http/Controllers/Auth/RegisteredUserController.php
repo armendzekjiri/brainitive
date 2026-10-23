@@ -53,13 +53,13 @@ class RegisteredUserController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
-        // If they were invited to any workspace(s), add them automatically (invitation valid for 30 days)
-        WorkspaceInvitation::acceptPendingForUser($user);
+        // Pending invitations are accepted once the address is proven: when the email is verified
+        // (AppServiceProvider: Verified listener) or through the invitation link itself.
 
         event(new Registered($user));
 
         Auth::login($user);
 
-        return redirect(route('dashboard', absolute: false));
+        return redirect()->intended(route('dashboard', absolute: false));
     }
 }

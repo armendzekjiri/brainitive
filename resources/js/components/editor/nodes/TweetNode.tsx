@@ -12,6 +12,12 @@ import { Suspense, useCallback, useRef, useEffect, useState } from 'react';
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
 import { useLexicalNodeSelection } from '@lexical/react/useLexicalNodeSelection';
 import { mergeRegister } from '@lexical/utils';
+
+/** Tweet ids are numbers — anything else (pasted / imported JSON) is dropped. */
+function safeTweetId(id: unknown): string {
+    const value = String(id ?? '');
+    return /^\d{1,25}$/.test(value) ? value : '';
+}
 import {
     $getNodeByKey,
     $getSelection,
@@ -150,7 +156,7 @@ export class TweetNode extends DecoratorNode<JSX.Element> {
 
     constructor(id: string, key?: NodeKey) {
         super(key);
-        this.__id = id;
+        this.__id = safeTweetId(id);
     }
 
     exportJSON(): SerializedTweetNode {
@@ -163,7 +169,12 @@ export class TweetNode extends DecoratorNode<JSX.Element> {
 
     exportDOM(): DOMExportOutput {
         const element = document.createElement('div');
-        element.innerHTML = `<blockquote class="twitter-tweet"><a href="https://twitter.com/x/status/${this.__id}"></a></blockquote>`;
+        const quote = document.createElement('blockquote');
+        quote.className = 'twitter-tweet';
+        const link = document.createElement('a');
+        link.setAttribute('href', `https://twitter.com/x/status/${safeTweetId(this.__id)}`);
+        quote.appendChild(link);
+        element.appendChild(quote);
         return { element };
     }
 

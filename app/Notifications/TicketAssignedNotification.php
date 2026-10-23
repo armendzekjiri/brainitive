@@ -6,6 +6,7 @@ use App\Models\Ticket;
 use App\Models\User;
 use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class TicketAssignedNotification extends Notification
@@ -56,11 +57,11 @@ class TicketAssignedNotification extends Notification
         ]);
 
         return [
-            'type'         => 'ticket_assigned',
-            'ticket_key'   => $this->ticket->key,
+            'type' => 'ticket_assigned',
+            'ticket_key' => $this->ticket->key,
             'ticket_subject' => $this->ticket->subject,
-            'ticket_url'   => $url,
-            'actor_name'   => $this->actor->name,
+            'ticket_url' => $url,
+            'actor_name' => $this->actor->name,
             'actor_avatar' => $this->actor->avatar_display,
         ];
     }
@@ -81,10 +82,10 @@ class TicketAssignedNotification extends Notification
             $this->ticket->id,
         ]);
 
-        return (new \Illuminate\Notifications\Messages\MailMessage)
-            ->subject("Ticket {$this->ticket->key} assigned to you: {$this->ticket->subject}")
+        return (new MailMessage)
+            ->subject("Ticket {$this->ticket->key} assigned to you: ".NewLeadNotification::plain((string) $this->ticket->subject))
             ->line("{$this->actor->name} assigned you to ticket {$this->ticket->key}.")
-            ->line($this->ticket->subject)
+            ->line(NewLeadNotification::plain((string) $this->ticket->subject))
             ->action('View Ticket', $url);
     }
 }

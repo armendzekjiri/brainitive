@@ -121,7 +121,7 @@ trait InteractsWithBrainitive
         }
 
         $member = $project->workspace->users()->where('email', $assignee)->first();
-        if (! $member) {
+        if (! $member || ! $member->hasProjectAccess($project)) {
             throw new AuthorizationException("No workspace member found with email \"{$assignee}\". Use list_project_members to see who can be assigned, or pass \"me\".");
         }
 

@@ -67,7 +67,7 @@
                                             </tr>
                                         </table>
                                         <p style="margin: 0; font-size: 13px; color: #485E72; opacity: 0.7; line-height: 1.6;">
-                                            This invitation is valid for 30 days. If you sign up within that time, you'll join the workspace automatically. If you didn't expect this email, you can safely ignore it.
+                                            This invitation is valid for 30 days. Open the link above to join — you can create an account or sign in from there. If you didn't expect this email, you can safely ignore it.
                                         </p>
                                         <p style="margin: 20px 0 0 0; font-size: 12px; color: #C0C5C0; line-height: 1.5;">
                                             Button not working? Copy and paste this link into your browser:<br>

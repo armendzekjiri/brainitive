@@ -35,7 +35,7 @@ class OutboundUrl
         }
 
         foreach ($ips as $ip) {
-            if (! $allowPrivate && ! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE)) {
+            if (! $allowPrivate && (! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_GLOBAL_RANGE) || self::embedsIpv4($ip))) {
                 return null;
             }
         }
@@ -68,5 +68,18 @@ class OutboundUrl
         }
 
         return array_values(array_unique($ips));
+    }
+
+    /** NAT64 (64:ff9b::/96, 64:ff9b:1::/48), 6to4 (2002::/16), Teredo (2001::/32) reach IPv4 hosts behind a gateway. */
+    private static function embedsIpv4(string $ip): bool
+    {
+        if (! str_contains($ip, ':') || ($bin = @inet_pton($ip)) === false) {
+            return false;
+        }
+        $hex = bin2hex($bin);
+
+        return str_starts_with($hex, '0064ff9b')    // 64:ff9b::/32 (covers /96 and 64:ff9b:1::/48)
+            || str_starts_with($hex, '2002')        // 6to4
+            || str_starts_with($hex, '20010000');   // Teredo
     }
 }

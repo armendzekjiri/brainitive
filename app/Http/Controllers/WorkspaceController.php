@@ -95,8 +95,8 @@ class WorkspaceController extends Controller
                     ])
                     ->latest();
             },
-            'bookmarks' => function ($query) {
-                $query->limit(6)->orderBy('position');
+            'bookmarks' => function ($query) use ($request) {
+                $query->visibleTo($request->user())->limit(6)->orderBy('position');
             },
             'snippetCollections' => function ($query) {
                 $query->withCount('snippets')->limit(6);
@@ -212,7 +212,11 @@ class WorkspaceController extends Controller
             abort(404);
         }
 
-        $workspaceProjectIds = $workspace->projects()->pluck('id')->toArray();
+        // only what the viewer may open themselves — not every project of the workspace
+        $workspaceProjectIds = array_values(array_intersect(
+            $workspace->projects()->pluck('id')->all(),
+            $request->user()->accessibleProjectIds(),
+        ));
 
         $role = $user->workspaceRole($workspace);
 
@@ -441,6 +445,7 @@ class WorkspaceController extends Controller
                     ->withErrors(['email' => 'This user is already a member of this workspace.']);
             }
             $workspace->addUser($user, $validated['role'], $request->user());
+            $workspace->invitations()->forEmail($email)->whereNull('accepted_at')->update(['accepted_at' => now()]);
 
             return redirect()->back()
                 ->with('success', "{$user->name} has been added to the workspace.")
@@ -476,7 +481,7 @@ class WorkspaceController extends Controller
             ->notify(new WorkspaceInvitationNotification($invitation, $workspace, $request->user()));
 
         return redirect()->back()
-            ->with('success', "An invitation has been sent to {$email}. If they sign up within 30 days, they'll join this workspace automatically.")
+            ->with('success', "An invitation has been sent to {$email}. They join when they open the link in it (valid for 30 days).")
             ->with('invite_result', 'invitation_sent');
     }
 

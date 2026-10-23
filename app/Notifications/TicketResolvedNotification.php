@@ -32,7 +32,7 @@ class TicketResolvedNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         $mail = (new MailMessage)
-            ->subject("Resolved: {$this->ticket->subject} [{$this->ticket->key}]")
+            ->subject("Resolved: {$this->plainSubject()} [{$this->ticket->key}]")
             ->greeting($notifiable->name ? "Hi {$notifiable->name}," : 'Hi,')
             ->line("Your ticket {$this->ticket->key} has been resolved.");
 
@@ -44,5 +44,11 @@ class TicketResolvedNotification extends Notification
         return $mail
             ->action('View ticket', $this->ticket->publicUrl())
             ->line('If something is still not right, open the ticket and write us a reply.');
+    }
+
+    /** The visitor-written subject as plain text: no Markdown links, images or formatting in mails. */
+    private function plainSubject(): string
+    {
+        return NewLeadNotification::plain((string) $this->ticket->subject);
     }
 }

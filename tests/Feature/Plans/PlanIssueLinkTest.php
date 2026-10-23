@@ -202,17 +202,19 @@ class PlanIssueLinkTest extends TestCase
     {
         $item = $this->item(['title' => 'Locked']);
         $plan = $this->plan(['data' => $this->data([$this->row('r1', 'Locked', ['itemId' => $item->id])])]);
-        // Workspace editor without a project role can edit the plan but not this item
+        // A workspace editor who is only a project viewer is read-only in this project: neither the
+        // plan nor (through it) the linked item can be changed.
         $workspaceEditor = User::factory()->create();
         $this->workspace->addUser($workspaceEditor, 'editor');
+        $this->project->users()->attach($workspaceEditor->id, ['role' => 'viewer']);
 
         $this->actingAs($workspaceEditor)
             ->putJson($this->planRoute('plans.save', $plan), ['data' => $this->data([$this->row('r1', 'Renamed', ['itemId' => $item->id])])])
-            ->assertOk();
+            ->assertForbidden();
 
         $this->assertFalse($workspaceEditor->can('update', $item));
         $this->assertSame('Locked', $item->fresh()->title);
-        $this->assertSame('Renamed', $plan->fresh()->data['rows'][0]['name']);
+        $this->assertSame('Locked', $plan->fresh()->data['rows'][0]['name']);
     }
 
     private function member(string $projectRole, string $name): User

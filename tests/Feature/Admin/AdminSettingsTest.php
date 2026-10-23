@@ -8,6 +8,7 @@ use App\Models\WorkspaceInvitation;
 use Database\Seeders\InstanceSettingsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -115,7 +116,12 @@ class AdminSettingsTest extends TestCase
 
         $signUp('invited@example.com');
         $this->assertAuthenticated();
-        $this->assertTrue(User::where('email', 'invited@example.com')->firstOrFail()->hasWorkspaceAccess($this->workspace));
+        $invited = User::where('email', 'invited@example.com')->firstOrFail();
+
+        // the invited workspace is joined once the address is proven (verification link)
+        $this->assertFalse($invited->hasWorkspaceAccess($this->workspace));
+        $this->get(URL::temporarySignedRoute('verification.verify', now()->addHour(), ['id' => $invited->id, 'hash' => sha1($invited->email)], absolute: false));
+        $this->assertTrue($invited->fresh()->hasWorkspaceAccess($this->workspace));
     }
 
     public function test_fresh_installs_require_email_verification(): void

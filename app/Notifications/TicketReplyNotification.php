@@ -98,14 +98,14 @@ class TicketReplyNotification extends Notification implements ShouldQueue
         if ($notifiable instanceof TicketContact) {
             // Client: link to this ticket in the portal
             $url = $this->ticket->publicUrl();
-            $subject = "Reply on ticket {$this->ticket->key}: {$this->ticket->subject}";
+            $subject = "Reply on ticket {$this->ticket->key}: {$this->plainSubject()}";
             $line = 'Support has replied to your ticket.';
 
             return (new MailMessage)
                 ->subject($subject)
                 ->line($line)
-                ->line('Ticket: '.$this->ticket->subject)
-                ->line(Str::limit(strip_tags($this->reply->body), 200))
+                ->line('Ticket: '.$this->plainSubject())
+                ->line(NewLeadNotification::plain(Str::limit(strip_tags($this->reply->body), 200)))
                 ->action('View ticket', $url);
         }
 
@@ -121,13 +121,19 @@ class TicketReplyNotification extends Notification implements ShouldQueue
             : ($this->author instanceof TicketContact
                 ? ($this->author->name ?: $this->author->email)
                 : 'A user');
-        $subject = "Reply on ticket {$this->ticket->key}: {$this->ticket->subject}";
+        $subject = "Reply on ticket {$this->ticket->key}: {$this->plainSubject()}";
         $line = "{$actorName} replied to this ticket.";
 
         return (new MailMessage)
             ->subject($subject)
             ->line($line)
-            ->line(Str::limit(strip_tags($this->reply->body), 200))
+            ->line(NewLeadNotification::plain(Str::limit(strip_tags($this->reply->body), 200)))
             ->action('View ticket', $url);
+    }
+
+    /** The visitor-written subject as plain text: no Markdown links, images or formatting in mails. */
+    private function plainSubject(): string
+    {
+        return NewLeadNotification::plain((string) $this->ticket->subject);
     }
 }

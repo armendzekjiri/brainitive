@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
+use App\Rules\ProjectMember;
 use App\Support\Boards\ItemComments;
 use App\Support\Boards\ItemFieldValues;
 use App\Support\Boards\ItemMentions;
@@ -333,7 +334,7 @@ class BoardController extends Controller
             'column_id' => ['required', Rule::exists('board_columns', 'id')->where('board_id', $board->id)],
             'item_type_id' => 'nullable|exists:item_types,id',
             'priority_id' => 'nullable|exists:item_priorities,id',
-            'assigned_to' => 'nullable|exists:users,id',
+            'assigned_to' => ['nullable', 'integer', new ProjectMember($project)],
             'due_date' => 'nullable|date',
             'due_time' => 'nullable|date_format:H:i',
             'start_date' => 'nullable|date',
@@ -614,7 +615,7 @@ class BoardController extends Controller
             $item->load('watchers');
             $actorId = $request->user()->id;
 
-            foreach ($item->watchers as $watcher) {
+            foreach ($item->watchers->filter(fn ($w) => $w->hasProjectAccess($project)) as $watcher) {
                 // Don't notify the person who performed the move
                 if ($watcher->id === $actorId) {
                     continue;
@@ -640,9 +641,18 @@ class BoardController extends Controller
         $this->authorize('view', $item);
 
         $validated = $request->validate([
-            'user_id' => 'required|exists:users,id',
+            'user_id' => ['required', 'integer', 'exists:users,id'],
             'watch' => 'required|boolean',
         ]);
+        // adding someone needs them in the project; removing a former member must still work
+        if ($validated['watch']) {
+            $request->validate(['user_id' => [new ProjectMember($project)]]);
+        }
+
+        // anyone who can see the item may (un)watch it themselves; managing others takes edit rights
+        if ((int) $validated['user_id'] !== $request->user()->id) {
+            $this->authorize('update', $item);
+        }
 
         $user = User::findOrFail($validated['user_id']);
 
@@ -669,7 +679,7 @@ class BoardController extends Controller
             'description' => 'nullable|string',
             'item_type_id' => 'nullable|exists:item_types,id',
             'priority_id' => 'nullable|exists:item_priorities,id',
-            'assigned_to' => 'nullable|exists:users,id',
+            'assigned_to' => ['nullable', 'integer', new ProjectMember($project)],
             'start_date' => 'nullable|date',
             'start_time' => 'nullable|date_format:H:i',
             'due_date' => 'nullable|date',

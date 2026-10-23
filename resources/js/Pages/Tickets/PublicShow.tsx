@@ -25,6 +25,7 @@ interface Props extends PageProps {
     access_token: string;
     app_name: string;
     app_logo_url: string;
+    attachments_enabled?: boolean;
 }
 
 function stripHtml(html: string): string {
@@ -37,7 +38,7 @@ function isReplyBodyEmpty(html: string): boolean {
     return !stripHtml(html).trim();
 }
 
-export default function TicketsPublicShow({ ticket, access_token, app_name, app_logo_url }: Props) {
+export default function TicketsPublicShow({ ticket, access_token, app_name, app_logo_url, attachments_enabled = true }: Props) {
     const [replyBody, setReplyBody] = useState('');
     const [replyEditorKey, setReplyEditorKey] = useState(0);
     const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
@@ -294,7 +295,7 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
                                             contentKey={`public-reply-${replyEditorKey}`}
                                         />
                                     </div>
-                                    <div className="space-y-2">
+                                    {attachments_enabled && <div className="space-y-2">
                                         <input
                                             ref={replyFileInputRef}
                                             type="file"
@@ -344,7 +345,7 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
                                                 ))}
                                             </ul>
                                         )}
-                                    </div>
+                                    </div>}
                                     {error && (
                                         <p className="text-sm font-medium text-destructive">
                                             {error}

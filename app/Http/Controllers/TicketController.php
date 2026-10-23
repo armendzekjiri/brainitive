@@ -15,10 +15,12 @@ use App\Notifications\TicketAssignedNotification;
 use App\Notifications\TicketCreatedNotification;
 use App\Notifications\TicketReplyNotification;
 use App\Notifications\TicketResolvedNotification;
+use App\Rules\ProjectMember;
 use App\Support\Helpdesks\HelpdeskForm;
 use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -175,7 +177,10 @@ class TicketController extends Controller
         // with any email address).
         $accessToken = $ticket->publicAccessToken();
 
-        $contact->notify(new TicketCreatedNotification($ticket));
+        // The public form must not become a mail cannon: a few confirmations per address and hour
+        if (RateLimiter::attempt('ticket-confirmation:'.$helpdesk->id.':'.sha1(strtolower($contact->email)), 3, fn () => true, 3600)) {
+            $contact->notify(new TicketCreatedNotification($ticket));
+        }
 
         // Notify helpdesk admins (project admins)
         $admins = $project->admins()->get();
@@ -329,11 +334,17 @@ class TicketController extends Controller
     public function storePublicReply(Request $request, Helpdesk $helpdesk, Ticket $ticket)
     {
         $validated = $request->validate([
-            'body' => 'required|string',
+            'body' => 'required|string|max:50000',
             'access_token' => 'required|string',
-            'file' => 'nullable',
+            'file' => 'nullable|array|max:5',
             'file.*' => 'file|max:10240',
         ]);
+        if ($request->hasFile('file') && ! empty(($helpdesk->settings ?? [])['default_field_attachments']['hidden'])) {
+            abort(403, 'This helpdesk does not accept attachments.');
+        }
+        if ($request->hasFile('file') && $ticket->attachments()->where('uploaded_by_contact', true)->count() + count((array) $request->file('file')) > 20) {
+            abort(422, 'This request already has the maximum number of attachments.');
+        }
 
         $contact = $ticket->contact;
         if (! $contact || ! $ticket->verifyPublicAccessToken($validated['access_token'])) {
@@ -427,6 +438,12 @@ class TicketController extends Controller
         if (! $ticket->verifyPublicAccessToken($validated['access_token'])) {
             abort(403, 'Invalid access token');
         }
+        if (! empty(($helpdesk->settings ?? [])['default_field_attachments']['hidden'])) {
+            abort(403, 'This helpdesk does not accept attachments.');
+        }
+        if ($ticket->attachments()->where('uploaded_by_contact', true)->count() >= 20) {
+            abort(422, 'This request already has the maximum number of attachments.');
+        }
 
         $file = $request->file('file');
         $filename = Uploads::name($file);
@@ -479,9 +496,17 @@ class TicketController extends Controller
         $this->authorize('view', $ticket);
 
         $validated = $request->validate([
-            'user_id' => 'required|exists:users,id',
+            'user_id' => ['required', 'integer', 'exists:users,id'],
             'watch' => 'required|boolean',
         ]);
+        // anyone who can see the ticket may (un)watch it themselves; managing others takes edit
+        // rights, and only project members can be added (watchers get reply excerpts)
+        if ((int) $validated['user_id'] !== $request->user()->id) {
+            $this->authorize('update', $ticket);
+        }
+        if ($validated['watch']) {
+            $request->validate(['user_id' => [new ProjectMember($project)]]);
+        }
 
         $user = User::findOrFail($validated['user_id']);
 
@@ -569,7 +594,7 @@ class TicketController extends Controller
 
         $ticket->load([
             'column',
-            'helpdesk:id,uuid',
+            'helpdesk:id,uuid,settings',
             'replies' => function ($q) {
                 $q->where('is_internal_note', false)
                     ->with(['contact:id,name,email', 'attachments'])
@@ -592,6 +617,7 @@ class TicketController extends Controller
         }
 
         return Inertia::render('Tickets/PublicShow', [
+            'attachments_enabled' => empty(($ticket->helpdesk?->settings ?? [])['default_field_attachments']['hidden']),
             'ticket' => $ticket,
             'access_token' => $accessToken,
             'app_name' => config('app.name'),

@@ -61,6 +61,7 @@ class PageContentConverter
 
             if (trim($line) === '') {
                 $i++;
+
                 continue;
             }
 
@@ -75,6 +76,7 @@ class PageContentConverter
                 $i++;
                 $lang = $m[1] ? ' class="language-'.$m[1].'"' : '';
                 $html[] = '<pre><code'.$lang.'>'.self::esc(implode("\n", $code)).'</code></pre>';
+
                 continue;
             }
 
@@ -82,6 +84,7 @@ class PageContentConverter
             if (preg_match('/^(-{3,}|\*{3,}|_{3,})\s*$/', $line)) {
                 $html[] = '<hr>';
                 $i++;
+
                 continue;
             }
 
@@ -90,6 +93,7 @@ class PageContentConverter
                 $level = strlen($m[1]);
                 $html[] = "<h{$level}>".self::inline(trim($m[2]))."</h{$level}>";
                 $i++;
+
                 continue;
             }
 
@@ -101,6 +105,7 @@ class PageContentConverter
                     $i++;
                 }
                 $html[] = '<blockquote><p>'.self::inline(trim(implode(' ', $quote))).'</p></blockquote>';
+
                 continue;
             }
 
@@ -108,6 +113,7 @@ class PageContentConverter
             if (preg_match('/^\s*[-*+]\s+(.*)$/', $line)) {
                 [$items, $i] = self::collectList($lines, $i, $count, '/^\s*[-*+]\s+(.*)$/');
                 $html[] = '<ul>'.implode('', array_map(fn ($t) => '<li>'.self::inline($t).'</li>', $items)).'</ul>';
+
                 continue;
             }
 
@@ -115,6 +121,7 @@ class PageContentConverter
             if (preg_match('/^\s*\d+[.)]\s+(.*)$/', $line)) {
                 [$items, $i] = self::collectList($lines, $i, $count, '/^\s*\d+[.)]\s+(.*)$/');
                 $html[] = '<ol>'.implode('', array_map(fn ($t) => '<li>'.self::inline($t).'</li>', $items)).'</ol>';
+
                 continue;
             }
 
@@ -168,7 +175,9 @@ class PageContentConverter
             } elseif (Str::startsWith($token, '`')) {
                 $out .= '<code>'.self::esc($m[6][0]).'</code>';
             } elseif (Str::startsWith($token, '[')) {
-                $out .= '<a href="'.self::esc($m[8][0]).'">'.self::esc($m[7][0]).'</a>';
+                $out .= self::safeHref($m[8][0]) !== null
+                    ? '<a href="'.self::esc(self::safeHref($m[8][0])).'">'.self::esc($m[7][0]).'</a>'
+                    : self::esc($m[7][0]);
             } else {
                 $out .= '<em>'.self::esc($m[4][0] !== '' ? $m[4][0] : $m[5][0]).'</em>';
             }
@@ -260,6 +269,7 @@ class PageContentConverter
         foreach ($node->childNodes as $child) {
             if ($child->nodeType === XML_TEXT_NODE) {
                 $out .= $child->textContent;
+
                 continue;
             }
 
@@ -337,6 +347,7 @@ class PageContentConverter
         foreach ($nodes as $node) {
             if (($node['type'] ?? '') !== 'text') {
                 $out .= self::legacyInline($node['content'] ?? []);
+
                 continue;
             }
             $t = $node['text'] ?? '';
@@ -353,5 +364,19 @@ class PageContentConverter
         }
 
         return $out;
+    }
+
+    /** Link targets an AI client may write: http(s), mailto or a relative path — never javascript: & co. */
+    private static function safeHref(string $href): ?string
+    {
+        $href = trim($href);
+        if ($href === '' || preg_match('/[\x00-\x20\x7f\\\\]/', $href)) {
+            return null;
+        }
+        if (preg_match('/^[a-z][a-z0-9+.-]*:/i', $href)) {
+            return preg_match('#^(https?://|mailto:)#i', $href) ? $href : null;
+        }
+
+        return str_starts_with($href, '//') ? null : $href;
     }
 }

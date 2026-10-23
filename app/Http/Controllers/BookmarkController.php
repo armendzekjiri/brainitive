@@ -20,7 +20,7 @@ class BookmarkController extends Controller
     {
         $this->authorize('view', $workspace);
 
-        $bookmarks = $workspace->bookmarks()
+        $bookmarks = $workspace->bookmarks()->visibleTo($request->user())
             ->withCount([
                 'items as links_count' => fn ($q) => $q->where('type', 'link'),
                 'items as files_count' => fn ($q) => $q->where('type', 'file'),
@@ -42,7 +42,7 @@ class BookmarkController extends Controller
     {
         $this->authorize('view', $workspace);
 
-        $bookmarks = $workspace->bookmarks()
+        $bookmarks = $workspace->bookmarks()->visibleTo($request->user())
             ->select(['id', 'slug', 'name', 'icon', 'visibility'])
             ->orderBy('position')
             ->get();
@@ -240,7 +240,7 @@ class BookmarkController extends Controller
         $validated = $request->validate([
             'type' => 'required|in:link,todo,note,file',
             'title' => 'nullable|string|max:500',
-            'url' => 'nullable|string|max:2048',
+            'url' => ['nullable', 'string', 'max:2048', 'regex:#^https?://[^\s\x00-\x1f]+$#i'],
             'content' => 'nullable|string|max:10000',
         ]);
 
@@ -310,7 +310,7 @@ class BookmarkController extends Controller
 
         $validated = $request->validate([
             'title' => 'nullable|string|max:500',
-            'url' => 'nullable|string|max:2048',
+            'url' => ['nullable', 'string', 'max:2048', 'regex:#^https?://[^\s\x00-\x1f]+$#i'],
             'content' => 'nullable|string|max:10000',
             'is_completed' => 'boolean',
         ]);

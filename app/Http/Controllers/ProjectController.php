@@ -20,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -293,9 +294,16 @@ class ProjectController extends Controller
         if (array_key_exists('icon', $validated) && $validated['icon'] && str_contains($validated['icon'], 'storage/')) {
             $validated['icon'] = Str::after($validated['icon'], 'storage/');
         }
+        // an icon is an emoji / icon name, or a file of THIS project — a path to any other file
+        // would later be deleted from the public disk when a new icon is uploaded
+        if (! empty($validated['icon']) && $validated['icon'] !== $project->getRawOriginal('icon')
+            && (str_contains($validated['icon'], '/') || str_contains($validated['icon'], '\\'))
+            && ! self::ownIconPath($project, $validated['icon'])) {
+            throw ValidationException::withMessages(['icon' => 'Upload the icon image instead of linking a file.']);
+        }
 
         if ($request->hasFile('icon_image')) {
-            if ($project->icon && Storage::disk('public')->exists($project->icon)) {
+            if ($project->icon && self::ownIconPath($project, $project->icon) && Storage::disk('public')->exists($project->icon)) {
                 Storage::disk('public')->delete($project->icon);
             }
             $file = $request->file('icon_image');
@@ -619,5 +627,11 @@ class ProjectController extends Controller
         $itemType->delete();
 
         return back()->with('success', 'Item type deleted.');
+    }
+
+    /** project-icons/{id}/icon.<ext> — the only file an icon may point to (and so be deleted). */
+    private static function ownIconPath(Project $project, string $path): bool
+    {
+        return (bool) preg_match('#^project-icons/'.$project->id.'/icon(\.[a-z0-9]{1,5})?$#i', $path);
     }
 }

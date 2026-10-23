@@ -17,3 +17,14 @@ export function safeHtml(html: string | null | undefined): string {
 export function safeHtmlProp(html: string | null | undefined): { __html: string } {
     return { __html: safeHtml(html) };
 }
+
+/** An external link from user data: only http(s) URLs (after the browser's own parsing), else undefined. */
+export function safeExternalHref(url: string | null | undefined): string | undefined {
+    if (!url) return undefined;
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : undefined;
+    } catch {
+        return undefined;
+    }
+}

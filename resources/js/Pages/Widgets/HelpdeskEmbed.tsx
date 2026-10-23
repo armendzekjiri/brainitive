@@ -277,8 +277,11 @@ export default function HelpdeskEmbed({
                 return;
             }
 
-            // Redirect to the same portal ticket page as the link in the email
-            window.location.href = `${baseUrl}/portal/tickets/${data.ticket_uuid}?token=${encodeURIComponent(data.access_token)}`;
+            // Inside an iframe (embedded on a customer site) show the ticket in the embed itself — the
+            // portal page refuses to be framed by other sites. Full page: the same portal link as the email.
+            window.location.href = window.self !== window.top
+                ? `${baseUrl}/widget/helpdesks/${helpdesk_uuid}/embed?ticket=${encodeURIComponent(data.ticket_uuid)}&token=${encodeURIComponent(data.access_token)}`
+                : `${baseUrl}/portal/tickets/${data.ticket_uuid}?token=${encodeURIComponent(data.access_token)}`;
             return;
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Something went wrong');

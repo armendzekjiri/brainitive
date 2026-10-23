@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\InstanceSettings;
 use App\Models\User;
 use App\Models\WorkspaceInvitation;
+use App\Support\SignOutEverywhere;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -35,6 +37,12 @@ class GoogleAuthController extends Controller
 
         $googleUser = Socialite::driver('google')->user();
 
+        // Only an address Google has verified may sign in to / create an account by email
+        $raw = $googleUser->user ?? [];
+        if (! filter_var($raw['email_verified'] ?? $raw['verified_email'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            return redirect()->route('login')->with('status', 'Your Google email address is not verified. Verify it with Google, or sign up with email and password.');
+        }
+
         $user = User::query()->where('google_id', $googleUser->getId())->first();
 
         if ($user) {
@@ -43,10 +51,17 @@ class GoogleAuthController extends Controller
             $user = User::query()->where('email', $googleUser->getEmail())->first();
 
             if ($user) {
+                // Someone may have registered this address without owning it: the provider
+                // proves the email, so the never-verified account is reset before linking
+                if ($user->email_verified_at === null && InstanceSettings::requiresEmailVerification()) {
+                    $user->forceFill(['password' => bcrypt(str()->random(64))])->save();
+                    SignOutEverywhere::run($user);
+                }
                 $user->update([
                     'google_id' => $googleUser->getId(),
                     'email_verified_at' => $user->email_verified_at ?? now(),
                 ]);
+                WorkspaceInvitation::acceptPendingForUser($user);
             } else {
                 if (! WorkspaceInvitation::canSignUp($googleUser->getEmail())) {
                     return redirect()->route('login')->with('status', 'Sign-up is by invitation only. Ask a workspace admin to invite this email address.');

@@ -8,6 +8,7 @@ use App\Models\InstanceAdmin;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Admin\UserDeletion;
+use App\Support\SignOutEverywhere;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -291,13 +292,6 @@ class UserController extends Controller
      */
     private function signOutEverywhere(User $user): void
     {
-        if (config('session.driver') === 'database') {
-            DB::table(config('session.table', 'sessions'))->where('user_id', $user->id)->delete();
-        }
-
-        foreach ($user->tokens()->where('revoked', false)->get() as $token) {
-            $token->revoke();
-            $token->refreshToken?->revoke();
-        }
+        SignOutEverywhere::run($user);
     }
 }

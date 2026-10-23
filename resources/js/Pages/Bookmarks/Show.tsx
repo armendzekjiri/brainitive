@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { safeExternalHref } from '@/lib/sanitize';
 import { Head, Link, router } from '@inertiajs/react';
 import { PageProps, Workspace, Bookmark, BookmarkItem, User as UserType } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -726,7 +727,7 @@ export default function BookmarksShow({ workspace, bookmark, workspaceMembers, c
                                         <ul className="divide-y divide-border/50">
                                             {links.map((item) => (
                                                 <li key={item.id} className="group flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
-                                                    <a href={item.url || '#'} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 flex items-start gap-3 text-primary hover:underline">
+                                                    <a href={safeExternalHref(item.url) ?? '#'} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 flex items-start gap-3 text-primary hover:underline">
                                                         {item.metadata?.favicon_url ? (
                                                             <img src={item.metadata.favicon_url} alt="" className="size-5 shrink-0 rounded mt-0.5" />
                                                         ) : (

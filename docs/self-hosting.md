@@ -161,3 +161,10 @@ on start).
 Self-hosting is free under the [GNU AGPL-3.0](../LICENSE). If you modify Brainitive and offer
 it to others over a network, you must publish your changes under the same licence. For a
 commercial licence without that obligation, contact hello@brainitive.app.
+
+## Connecting AI apps (MCP)
+
+Apps register themselves when you connect them. Only redirect hosts of known clients (Claude,
+ChatGPT, Perplexity, Cursor, VS Code, the browser extension) and `localhost` are accepted. To allow
+another client, add its callback host: `MCP_REDIRECT_HOSTS=app.example.com,*.example.org`.
+
