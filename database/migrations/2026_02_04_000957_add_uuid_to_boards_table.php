@@ -1,5 +1,9 @@
 <?php
 
+use App\Models\Board;
+use App\Models\Item;
+use App\Models\Project;
+use App\Models\Workspace;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -18,8 +22,8 @@ return new class extends Migration
         });
 
         // Generate UUIDs for existing workspaces
-        \App\Models\Workspace::query()->update(['uuid' => null]);
-        foreach (\App\Models\Workspace::all() as $workspace) {
+        Workspace::query()->update(['uuid' => null]);
+        foreach (Workspace::all() as $workspace) {
             $workspace->uuid = Str::uuid();
             $workspace->save();
         }
@@ -35,8 +39,8 @@ return new class extends Migration
         });
 
         // Generate UUIDs for existing projects
-        \App\Models\Project::query()->update(['uuid' => null]);
-        foreach (\App\Models\Project::all() as $project) {
+        Project::query()->update(['uuid' => null]);
+        foreach (Project::all() as $project) {
             $project->uuid = Str::uuid();
             $project->save();
         }
@@ -52,8 +56,8 @@ return new class extends Migration
         });
 
         // Generate UUIDs for existing boards
-        \App\Models\Board::query()->update(['uuid' => null]);
-        foreach (\App\Models\Board::all() as $board) {
+        Board::query()->update(['uuid' => null]);
+        foreach (Board::all() as $board) {
             $board->uuid = Str::uuid();
             $board->save();
         }
@@ -69,8 +73,8 @@ return new class extends Migration
         });
 
         // Generate UUIDs for existing items
-        \App\Models\Item::query()->update(['uuid' => null]);
-        foreach (\App\Models\Item::all() as $item) {
+        Item::query()->update(['uuid' => null]);
+        foreach (Item::all() as $item) {
             $item->uuid = Str::uuid();
             $item->save();
         }

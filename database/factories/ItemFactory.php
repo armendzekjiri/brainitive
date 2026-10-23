@@ -4,12 +4,13 @@ namespace Database\Factories;
 
 use App\Models\Board;
 use App\Models\BoardColumn;
+use App\Models\Item;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Item>
+ * @extends Factory<Item>
  */
 class ItemFactory extends Factory
 {

@@ -74,7 +74,7 @@ class CreateBookmarkTool extends Tool
         return [
             'created' => $schema->boolean(),
             'bookmark_slug' => $schema->string(),
-            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+            'location' => ResourceLocator::outputSchema($schema),
         ];
     }
 

@@ -71,7 +71,7 @@ class CreateTaskTool extends Tool
         return [
             'created' => $schema->boolean(),
             'task_id' => $schema->integer(),
-            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+            'location' => ResourceLocator::outputSchema($schema),
         ];
     }
 

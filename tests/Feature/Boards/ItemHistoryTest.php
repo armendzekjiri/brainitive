@@ -3,10 +3,14 @@
 namespace Tests\Feature\Boards;
 
 use App\Models\ActivityLog;
+use App\Models\Board;
 use App\Models\Item;
 use App\Models\ItemPriority;
+use App\Models\Project;
+use App\Models\Workspace;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
 class ItemHistoryTest extends TestCase
@@ -198,17 +202,17 @@ class ItemHistoryTest extends TestCase
         $this->actingAs($this->editor);
         $item->update(['title' => 'Visible here']);
 
-        $otherWorkspace = \App\Models\Workspace::factory()->create();
+        $otherWorkspace = Workspace::factory()->create();
         $otherWorkspace->addUser($this->editor, 'admin');
-        $otherProject = \App\Models\Project::factory()->create(['workspace_id' => $otherWorkspace->id, 'created_by' => $this->editor->id]);
-        $otherBoard = \App\Models\Board::factory()->create(['project_id' => $otherProject->id, 'created_by' => $this->editor->id]);
+        $otherProject = Project::factory()->create(['workspace_id' => $otherWorkspace->id, 'created_by' => $this->editor->id]);
+        $otherBoard = Board::factory()->create(['project_id' => $otherProject->id, 'created_by' => $this->editor->id]);
         $secret = Item::factory()->create(['board_id' => $otherBoard->id, 'created_by' => $this->editor->id]);
         $secret->update(['title' => 'Secret elsewhere']);
 
         $this->actingAs($this->viewer)
             ->get(route('workspaces.members.profile', [$this->workspace->slug, $this->editor->id]))
             ->assertOk()
-            ->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page
+            ->assertInertia(fn (AssertableInertia $page) => $page
                 ->has('activityLogs', 1)
                 ->where('activityLogs.0.loggable_id', $item->id));
     }

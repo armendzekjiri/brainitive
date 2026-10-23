@@ -119,7 +119,7 @@ class CreateBoardItemTool extends Tool
             'column' => $schema->string(),
             'assignee' => $schema->string(),
             'due_date' => $schema->string(),
-            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+            'location' => ResourceLocator::outputSchema($schema),
         ];
     }
 

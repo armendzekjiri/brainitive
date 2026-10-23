@@ -76,7 +76,7 @@ class UpdateSnippetTool extends Tool
         return [
             'updated' => $schema->boolean(),
             'snippet_slug' => $schema->string(),
-            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+            'location' => ResourceLocator::outputSchema($schema),
         ];
     }
 

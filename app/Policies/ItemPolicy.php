@@ -30,6 +30,7 @@ class ItemPolicy
 
         // Project admin or editor can update
         $projectRole = $user->projectRole($project);
+
         return in_array($projectRole, ['admin', 'editor']);
     }
 

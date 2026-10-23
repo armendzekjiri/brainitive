@@ -2,6 +2,7 @@
 
 namespace App\Notifications\Concerns;
 
+use App\Models\User;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
 
@@ -15,7 +16,7 @@ trait SendsWebPush
     /** Append the WebPush channel when $notifiable can receive pushes. */
     protected function withWebPush(object $notifiable, array $channels): array
     {
-        if ($notifiable instanceof \App\Models\User) {
+        if ($notifiable instanceof User) {
             $channels[] = WebPushChannel::class;
         }
 

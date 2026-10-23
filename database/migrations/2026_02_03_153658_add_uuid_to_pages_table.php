@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 return new class extends Migration
 {
@@ -16,11 +17,11 @@ return new class extends Migration
         });
 
         // Generate UUIDs for existing pages
-        $pages = \DB::table('pages')->whereNull('uuid')->get();
+        $pages = DB::table('pages')->whereNull('uuid')->get();
         foreach ($pages as $page) {
-            \DB::table('pages')
+            DB::table('pages')
                 ->where('id', $page->id)
-                ->update(['uuid' => \Illuminate\Support\Str::uuid()->toString()]);
+                ->update(['uuid' => Str::uuid()->toString()]);
         }
 
         // Now make it unique

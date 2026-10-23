@@ -64,7 +64,7 @@ class ListCalendarEventsTool extends Tool
         return [
             'from' => $schema->string(),
             'to' => $schema->string(),
-            'events' => $schema->array()->items(\App\Support\Mcp\CalendarFormatter::eventSchema($schema)),
+            'events' => $schema->array()->items(CalendarFormatter::eventSchema($schema)),
             'count' => $schema->integer(),
         ];
     }

@@ -3,6 +3,7 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\ResolvesCalendarConnections;
+use App\Models\CalendarConnection;
 use App\Services\GoogleCalendarService;
 use App\Support\Mcp\CalendarFormatter;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -57,7 +58,7 @@ class CreateCalendarEventTool extends Tool
      *
      * @throws AuthorizationException
      */
-    private function resolveTargetCalendar($user, ?int $connectionId): \App\Models\CalendarConnection
+    private function resolveTargetCalendar($user, ?int $connectionId): CalendarConnection
     {
         if ($connectionId !== null) {
             return $this->connectionForUser($user, $connectionId, 'calendar');
@@ -81,7 +82,7 @@ class CreateCalendarEventTool extends Tool
     {
         return [
             'created' => $schema->boolean(),
-            'event' => \App\Support\Mcp\CalendarFormatter::eventSchema($schema),
+            'event' => CalendarFormatter::eventSchema($schema),
         ];
     }
 

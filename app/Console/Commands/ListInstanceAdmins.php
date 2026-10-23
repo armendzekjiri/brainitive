@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Models\InstanceAdmin;
-use App\Models\User;
 use Illuminate\Console\Command;
 
 class ListInstanceAdmins extends Command
@@ -32,6 +31,7 @@ class ListInstanceAdmins extends Command
         if ($admins->isEmpty()) {
             $this->warn('No instance admins found.');
             $this->info('Use php artisan make:instance-admin {email} to create one.');
+
             return Command::SUCCESS;
         }
 

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Boards;
 
+use App\Models\Board;
 use App\Models\Item;
 use App\Models\Sprint;
 use App\Support\Boards\SprintReport;
@@ -75,7 +76,7 @@ class SprintTest extends TestCase
 
     public function test_ranking_rejects_items_and_sprints_of_other_boards(): void
     {
-        $otherBoard = \App\Models\Board::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->editor->id]);
+        $otherBoard = Board::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->editor->id]);
         $foreignItem = Item::factory()->create(['board_id' => $otherBoard->id, 'created_by' => $this->editor->id]);
         $foreignSprint = Sprint::factory()->create(['board_id' => $otherBoard->id]);
 

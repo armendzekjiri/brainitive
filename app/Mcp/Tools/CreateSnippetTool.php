@@ -66,7 +66,7 @@ class CreateSnippetTool extends Tool
         return [
             'created' => $schema->boolean(),
             'snippet_slug' => $schema->string(),
-            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+            'location' => ResourceLocator::outputSchema($schema),
         ];
     }
 

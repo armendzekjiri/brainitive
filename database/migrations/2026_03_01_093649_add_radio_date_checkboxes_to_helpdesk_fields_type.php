@@ -13,13 +13,15 @@ return new class extends Migration
         $driver = DB::connection()->getDriverName();
 
         if ($driver === 'mysql') {
-            DB::statement("ALTER TABLE helpdesk_fields MODIFY COLUMN type VARCHAR(50) NOT NULL");
+            DB::statement('ALTER TABLE helpdesk_fields MODIFY COLUMN type VARCHAR(50) NOT NULL');
+
             return;
         }
 
         if ($driver === 'pgsql') {
             DB::statement('ALTER TABLE helpdesk_fields DROP CONSTRAINT IF EXISTS helpdesk_fields_type_check');
             DB::statement("ALTER TABLE helpdesk_fields ADD CONSTRAINT helpdesk_fields_type_check CHECK (type::text = ANY (ARRAY['text', 'rich_text', 'select', 'checkbox', 'file', 'number', 'radio', 'date', 'checkboxes']::text[]))");
+
             return;
         }
 
@@ -35,6 +37,7 @@ return new class extends Migration
 
         if ($driver === 'mysql') {
             DB::statement("ALTER TABLE helpdesk_fields MODIFY COLUMN type ENUM('text','rich_text','select','checkbox','file','number') NOT NULL");
+
             return;
         }
 

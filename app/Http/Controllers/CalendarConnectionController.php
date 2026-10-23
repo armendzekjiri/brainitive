@@ -130,6 +130,7 @@ class CalendarConnectionController extends Controller
         if (! $pending) {
             return response()->json(['pending' => null]);
         }
+
         return response()->json([
             'pending' => [
                 'provider' => $pending['provider'],
@@ -167,7 +168,9 @@ class CalendarConnectionController extends Controller
         $calendarsById = collect($pending['calendars'] ?? [])->keyBy('id');
         foreach ((array) ($validated['external_calendar_ids'] ?? []) as $calId) {
             $cal = $calendarsById->get($calId);
-            if (! $cal) continue;
+            if (! $cal) {
+                continue;
+            }
             $this->upsertConnection($pending, 'calendar', $cal['id'], array_merge($tokenFields, [
                 'external_calendar_name' => $cal['summary'],
                 'external_calendar_color' => $cal['backgroundColor'],
@@ -177,7 +180,9 @@ class CalendarConnectionController extends Controller
         $tasksById = collect($pending['task_lists'] ?? [])->keyBy('id');
         foreach ((array) ($validated['external_task_list_ids'] ?? []) as $listId) {
             $list = $tasksById->get($listId);
-            if (! $list) continue;
+            if (! $list) {
+                continue;
+            }
             $this->upsertConnection($pending, 'tasks', $list['id'], array_merge($tokenFields, [
                 'external_calendar_name' => $list['title'],
                 'external_calendar_color' => null,
@@ -234,6 +239,7 @@ class CalendarConnectionController extends Controller
     {
         abort_unless($connection->user_id === Auth::id(), 403);
         $connection->update(['is_active' => ! $connection->is_active]);
+
         return back();
     }
 
@@ -243,6 +249,7 @@ class CalendarConnectionController extends Controller
         abort_unless($connection->user_id === Auth::id(), 403);
         $connection->update(['access_token' => null, 'refresh_token' => null, 'is_active' => false]);
         $connection->delete();
+
         return back()->with('status', 'Calendar disconnected.');
     }
 
@@ -254,6 +261,7 @@ class CalendarConnectionController extends Controller
         if (! $event) {
             return response()->json(['error' => 'Event not found'], 404);
         }
+
         return response()->json(['event' => $event]);
     }
 
@@ -272,6 +280,7 @@ class CalendarConnectionController extends Controller
             'timezone' => 'nullable|string|max:64',
         ]);
         $service->updateEvent($connection, $eventId, $validated);
+
         return back();
     }
 
@@ -280,6 +289,7 @@ class CalendarConnectionController extends Controller
     {
         abort_unless($connection->user_id === Auth::id(), 403);
         $service->deleteEvent($connection, $eventId);
+
         return back();
     }
 
@@ -290,7 +300,10 @@ class CalendarConnectionController extends Controller
     {
         abort_unless($connection->user_id === Auth::id() && $connection->kind === 'tasks', 403);
         $task = $service->getTask($connection, $taskId);
-        if (! $task) return response()->json(['error' => 'Task not found'], 404);
+        if (! $task) {
+            return response()->json(['error' => 'Task not found'], 404);
+        }
+
         return response()->json(['task' => $task]);
     }
 
@@ -306,6 +319,7 @@ class CalendarConnectionController extends Controller
             'timezone' => 'nullable|string|max:64',
         ]);
         $service->createTask($connection, $validated);
+
         return back();
     }
 
@@ -321,6 +335,7 @@ class CalendarConnectionController extends Controller
             'timezone' => 'nullable|string|max:64',
         ]);
         $service->updateTask($connection, $taskId, $validated);
+
         return back();
     }
 
@@ -328,6 +343,7 @@ class CalendarConnectionController extends Controller
     {
         abort_unless($connection->user_id === Auth::id() && $connection->kind === 'tasks', 403);
         $service->deleteTask($connection, $taskId);
+
         return back();
     }
 
