@@ -1,5 +1,6 @@
 import { expect, test, uid, urls } from '../fixtures';
 import { createBlankProject, createWorkspace, openSettingsTab, projectKey } from '../helpers/workspaces-projects';
+import { card, createCard } from '../helpers/boards';
 import { SEED, USERS } from '../env';
 
 /**
@@ -122,6 +123,15 @@ test.describe('workspace members', () => {
 });
 
 test.describe('projects', () => {
+    test('the first issue of a new project is KEY-1', async ({ page }) => {
+        // regression BRAI-97: blank projects used to start at KEY-2
+        const workspace = await createWorkspace(page);
+        const project = await createBlankProject(page, workspace.slug);
+        const title = uid('first');
+        await createCard(page, title);
+        await expect(card(page, title).getByText(`${project.key}-1`, { exact: true })).toBeVisible();
+    });
+
     test('create a blank project from the "New project" popup: lands on its Main Board', async ({ page }) => {
         const workspace = await createWorkspace(page);
         const name = uid('Blank');

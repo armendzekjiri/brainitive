@@ -489,10 +489,10 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   people who aren't members of the source project (only published docs, issues, lists and
   plans that were included). That's why only workspace admins save templates, and the save
   dialog says so.
-- **Issue keys start at KEY-2 in blank projects.** `projects.next_item_number` stores the
-  last number used and `getNextItemKey()` increments first, but the column defaults to 1.
-  Template-created projects set it to 0 (first issue KEY-1). Fixing the blank-project path
-  needs a default of 0 (existing projects must keep their counter).
+- **`projects.next_item_number` holds the last issue number used.** `getNextItemKey()` bumps it
+  first, under a row lock. The default is 0 since BRAI-97, so the first issue is KEY-1; before
+  that, blank projects started at KEY-2. `next_ticket_number` is the other way round: it holds
+  the next number to use.
 - **The `projects/{project:slug}` route group isn't scope-bound** (labels, item types,
   fields, templates): a project of another workspace binds by slug. Controllers there must
   check `$project->workspace_id === $workspace->id` when the workspace matters (templates do).
