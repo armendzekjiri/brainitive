@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Lead Generation forms (BRAI-93)](./feat-lead-forms.md) | in-progress |
 | [Template gallery + more project templates (BRAI-91)](./feat-template-gallery.md) | done |
 | [Project templates (BRAI-72)](./feat-project-templates.md) | done |
 | [Board custom fields (BRAI-77)](./feat-board-custom-fields.md) | done |
