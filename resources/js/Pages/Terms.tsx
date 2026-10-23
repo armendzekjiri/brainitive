@@ -26,7 +26,7 @@ const sections = [
         icon: UserCheck,
         num: '4',
         title: 'Account and eligibility',
-        content: 'You must provide accurate and complete registration information and keep it up to date. You must be at least 13 years old, or the minimum age required in your jurisdiction. You are responsible for maintaining the confidentiality of your login credentials and for all activity that occurs under your account. Notify us immediately at hello@brainitive.com if you suspect unauthorised access.',
+        content: 'You must provide accurate and complete registration information and keep it up to date. You must be at least 13 years old, or the minimum age required in your jurisdiction. You are responsible for maintaining the confidentiality of your login credentials and for all activity that occurs under your account. Notify us immediately at hello@brainitive.app if you suspect unauthorised access.',
     },
     {
         icon: Users,
@@ -50,7 +50,7 @@ const sections = [
         icon: Lock,
         num: '8',
         title: 'Privacy',
-        content: 'Our Privacy Policy, available at brainitive.com/privacy, describes how we collect, use, and protect your personal data. It forms part of these Terms. By using the Service you acknowledge and agree to our Privacy Policy.',
+        content: 'Our Privacy Policy, available at www.brainitive.app/privacy, describes how we collect, use, and protect your personal data. It forms part of these Terms. By using the Service you acknowledge and agree to our Privacy Policy.',
     },
     {
         icon: AlertTriangle,
@@ -80,7 +80,7 @@ const sections = [
         icon: Mail,
         num: '13',
         title: 'Contact',
-        content: 'For questions about these Terms, contact us at legal@brainitive.com or at hello@brainitive.com.',
+        content: 'For questions about these Terms, contact us at legal@brainitive.app or at hello@brainitive.app.',
     },
 ];
 

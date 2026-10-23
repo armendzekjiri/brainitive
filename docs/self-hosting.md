@@ -2,7 +2,7 @@
 
 Brainitive is open source (AGPL-3.0) and runs on any machine with Docker. One image runs the
 web app, the queue worker and the scheduler; MariaDB and Redis run next to it.
-Don't want to run servers? [Brainitive Cloud](https://brainitive.com/#pricing) is the same
+Don't want to run servers? [Brainitive Cloud](https://www.brainitive.app/#pricing) is the same
 software, hosted and updated for you.
 
 ## Requirements
@@ -158,4 +158,4 @@ on start).
 
 Self-hosting is free under the [GNU AGPL-3.0](../LICENSE). If you modify Brainitive and offer
 it to others over a network, you must publish your changes under the same licence. For a
-commercial licence without that obligation, contact hello@brainitive.com.
+commercial licence without that obligation, contact hello@brainitive.app.

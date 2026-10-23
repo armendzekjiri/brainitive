@@ -8,7 +8,7 @@ const sections = [
         icon: Shield,
         num: '1',
         title: 'Introduction',
-        content: 'Brainitive ("we", "our", or "us") provides an all-in-one workspace platform for project management, Kanban boards, wiki-style documentation, and team collaboration. This Privacy Policy explains how we collect, use, disclose, and protect your personal information when you use Brainitive at brainitive.com and its related services.',
+        content: 'Brainitive ("we", "our", or "us") provides an all-in-one workspace platform for project management, Kanban boards, wiki-style documentation, and team collaboration. This Privacy Policy explains how we collect, use, disclose, and protect your personal information when you use Brainitive at www.brainitive.app and its related services.',
     },
     {
         icon: Database,
@@ -44,7 +44,7 @@ const sections = [
         icon: UserCheck,
         num: '7',
         title: 'Your rights',
-        content: 'You may access, correct, or delete your personal data directly in your account settings. You may also request a copy of your data or object to certain processing by contacting us at privacy@brainitive.com. If you are in the EEA or UK, you have rights under GDPR, including the right to lodge a complaint with a supervisory authority.',
+        content: 'You may access, correct, or delete your personal data directly in your account settings. You may also request a copy of your data or object to certain processing by contacting us at privacy@brainitive.app. If you are in the EEA or UK, you have rights under GDPR, including the right to lodge a complaint with a supervisory authority.',
     },
     {
         icon: Cookie,
@@ -68,7 +68,7 @@ const sections = [
         icon: Mail,
         num: '11',
         title: 'Contact',
-        content: 'For privacy questions or data requests, email us at privacy@brainitive.com. For general enquiries, reach us at hello@brainitive.com.',
+        content: 'For privacy questions or data requests, email us at privacy@brainitive.app. For general enquiries, reach us at hello@brainitive.app.',
     },
 ];
 

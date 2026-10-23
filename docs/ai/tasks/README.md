@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Fix: wrong domain (BRAI-88)](./fix-domain-urls.md) | done |
 | [GitHub development panel (BRAI-61)](./feat-github-development.md) | done |
 | [Command palette v2 (BRAI-83)](./feat-command-palette.md) | done |
 | [Fix: priorities and board columns (BRAI-84/85/86)](./fix-priorities-and-columns.md) | done |

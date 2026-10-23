@@ -15,7 +15,7 @@ const sections = [
         icon: CheckCircle,
         num: '2',
         title: 'Eligibility',
-        content: 'To be eligible for a refund under the 7-day guarantee, you must: (a) be making your first purchase of the plan in question, (b) submit your refund request within 7 calendar days of the original payment date, and (c) contact us via email at billing@brainitive.com with the email address associated with your account.',
+        content: 'To be eligible for a refund under the 7-day guarantee, you must: (a) be making your first purchase of the plan in question, (b) submit your refund request within 7 calendar days of the original payment date, and (c) contact us via email at billing@brainitive.app with the email address associated with your account.',
     },
     {
         icon: Clock,
@@ -27,7 +27,7 @@ const sections = [
         icon: CreditCard,
         num: '4',
         title: 'How to request a refund',
-        content: 'Send an email to billing@brainitive.com with the subject "Refund Request" and include: your account email address, the plan you purchased (Team or Business), the date of purchase, and a brief reason for the refund (optional). We will process your request within 5 business days. Refunds are returned to the original payment method.',
+        content: 'Send an email to billing@brainitive.app with the subject "Refund Request" and include: your account email address, the plan you purchased (Team or Business), the date of purchase, and a brief reason for the refund (optional). We will process your request within 5 business days. Refunds are returned to the original payment method.',
     },
     {
         icon: XCircle,
@@ -51,7 +51,7 @@ const sections = [
         icon: Mail,
         num: '8',
         title: 'Contact',
-        content: 'For any billing or refund enquiries, contact us at billing@brainitive.com. For general support, reach us at hello@brainitive.com. We typically respond within 1–2 business days.',
+        content: 'For any billing or refund enquiries, contact us at billing@brainitive.app. For general support, reach us at hello@brainitive.app. We typically respond within 1–2 business days.',
     },
 ];
 

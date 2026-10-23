@@ -76,6 +76,16 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.25.1',
+        title: 'Correct Website and Contact Addresses',
+        tag: 'Fix',
+        date: '2026-10-23',
+        items: [
+            'All links, the browser extension and the privacy, terms and refund pages now point to www.brainitive.app.',
+            'Contact addresses are now @brainitive.app (hello, privacy, billing, legal, security).',
+        ]
+    },
+    {
         version: 'v1.25.0',
         title: 'GitHub: Branches, Commits, PRs and Deployments on Issues',
         tag: 'Feature',
