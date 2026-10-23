@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://brainitive.com">Website</a> ·
-  <a href="https://brainitive.com/#pricing">Cloud</a> ·
+  <a href="https://www.brainitive.app">Website</a> ·
+  <a href="https://www.brainitive.app/#pricing">Cloud</a> ·
   <a href="docs/self-hosting.md">Self-hosting</a> ·
   <a href="CONTRIBUTING.md">Contributing</a> ·
   <a href="LICENSE">AGPL-3.0</a>
@@ -41,7 +41,7 @@
 
 **Brainitive Cloud** — hosted for you, updates and backups included. Free during early
 access; paid plans come later and are announced in advance. →
-[brainitive.com](https://brainitive.com/#pricing)
+[www.brainitive.app](https://www.brainitive.app/#pricing)
 
 **Self-hosted** — free and complete, on your own server:
 
@@ -73,7 +73,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 Brainitive is free software under the [GNU Affero General Public License v3.0](LICENSE). If
 you run a modified version for others over a network, you must make your changes available
 under the same licence. Commercial licences without that obligation are available —
-hello@brainitive.com.
+hello@brainitive.app.
 
 "Brainitive" and the logo are trademarks of the project owners; the licence covers the code,
 not the name.

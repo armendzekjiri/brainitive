@@ -8,7 +8,7 @@ export default defineConfig({
     manifest: ({ browser }) => ({
         name: 'Brainitive',
         description: 'Save pages, links, issues, docs and screenshots to Brainitive.',
-        homepage_url: 'https://brainitive.com',
+        homepage_url: 'https://www.brainitive.app',
         permissions: [
             'activeTab',
             'contextMenus',

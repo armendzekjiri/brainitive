@@ -322,7 +322,7 @@ function PricingSection() {
 
                     <RevealSection delay={320}>
                         <a
-                            href="mailto:hello@brainitive.com?subject=Brainitive%20Enterprise"
+                            href="mailto:hello@brainitive.app?subject=Brainitive%20Enterprise"
                             className="group h-full rounded-2xl border-2 border-border/70 bg-card/70 backdrop-blur-sm p-6 sm:p-7 flex flex-col transition-all duration-300 hover:border-[#0E83DC]/30 hover:bg-card hover:shadow-lg hover:shadow-[#485E72]/[0.06] dark:hover:shadow-black/20"
                         >
                             <div className="flex items-center justify-between gap-4">
@@ -441,7 +441,7 @@ function ProductTour() {
                                 <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
                                 <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
                                 <span className="ml-3 truncate rounded-md bg-background/80 px-3 py-0.5 text-[11px] text-[#485E72]/60 dark:text-slate-400">
-                                    brainitive.com &middot; {current.label}
+                                    www.brainitive.app &middot; {current.label}
                                 </span>
                             </div>
                             <div className="relative aspect-[1440/860] bg-background">

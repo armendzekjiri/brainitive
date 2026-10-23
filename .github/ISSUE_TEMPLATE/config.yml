@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/armendzekjiri/brainitive/security/advisories/new
     about: Please report security issues privately.
   - name: Cloud billing or account question
-    url: mailto:hello@brainitive.com
+    url: mailto:hello@brainitive.app
     about: For Brainitive Cloud accounts and invoices.

@@ -56,7 +56,7 @@ npm run zip:firefox    # also writes the sources zip AMO asks for
 
 | Store | Upload | Notes |
 |---|---|---|
-| Chrome Web Store | `brainitive-browser-extension-<v>-chrome.zip` | One-time $5 developer fee. Single purpose: "save web pages to your Brainitive workspace". Justify `activeTab`, `scripting`, `contextMenus`, `identity`, `storage`, `sidePanel` and the optional host permissions (self-hosted servers). Privacy policy: `https://brainitive.com/privacy` (section 9) |
+| Chrome Web Store | `brainitive-browser-extension-<v>-chrome.zip` | One-time $5 developer fee. Single purpose: "save web pages to your Brainitive workspace". Justify `activeTab`, `scripting`, `contextMenus`, `identity`, `storage`, `sidePanel` and the optional host permissions (self-hosted servers). Privacy policy: `https://www.brainitive.app/privacy` (section 9) |
 | Edge Add-ons | the Chrome zip | Free |
 | Firefox AMO | `…-firefox.zip` + `…-sources.zip` | Free. `data_collection_permissions` declares `websiteContent` (what you capture goes to your Brainitive server) |
 
