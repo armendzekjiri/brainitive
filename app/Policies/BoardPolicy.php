@@ -21,6 +21,7 @@ class BoardPolicy
 
         // Project admin or editor can create boards
         $projectRole = $user->projectRole($project);
+
         return in_array($projectRole, ['admin', 'editor']);
     }
 
@@ -47,6 +48,7 @@ class BoardPolicy
 
         // Project admin or editor can update
         $projectRole = $user->projectRole($project);
+
         return in_array($projectRole, ['admin', 'editor']);
     }
 
@@ -65,6 +67,7 @@ class BoardPolicy
 
         // Project admin can delete
         $projectRole = $user->projectRole($project);
+
         return $projectRole === 'admin';
     }
 
@@ -75,14 +78,15 @@ class BoardPolicy
     {
         $project = $board->project;
 
-        // Workspace admin or editor can create items
+        // Workspace admin, or workspace editor inside a project they belong to
         $workspaceRole = $user->workspaceRole($project->workspace);
-        if (in_array($workspaceRole, ['admin', 'editor'])) {
+        if ($workspaceRole === 'admin' || ($workspaceRole === 'editor' && $user->hasProjectAccess($project))) {
             return true;
         }
 
         // Project admin or editor can create items
         $projectRole = $user->projectRole($project);
+
         return in_array($projectRole, ['admin', 'editor']);
     }
 }

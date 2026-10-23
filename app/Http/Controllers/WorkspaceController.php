@@ -95,8 +95,8 @@ class WorkspaceController extends Controller
                     ])
                     ->latest();
             },
-            'bookmarks' => function ($query) {
-                $query->limit(6)->orderBy('position');
+            'bookmarks' => function ($query) use ($request) {
+                $query->visibleTo($request->user())->limit(6)->orderBy('position');
             },
             'snippetCollections' => function ($query) {
                 $query->withCount('snippets')->limit(6);
@@ -212,7 +212,11 @@ class WorkspaceController extends Controller
             abort(404);
         }
 
-        $workspaceProjectIds = $workspace->projects()->pluck('id')->toArray();
+        // only what the viewer may open themselves — not every project of the workspace
+        $workspaceProjectIds = array_values(array_intersect(
+            $workspace->projects()->pluck('id')->all(),
+            $request->user()->accessibleProjectIds(),
+        ));
 
         $role = $user->workspaceRole($workspace);
 

@@ -102,23 +102,65 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(LeadForm::class, LeadFormPolicy::class);
 
         // Resolve page from project's allPages() so child pages (e.g. documents inside folders) are found
+        // Explicit binders run BEFORE implicit binding, so {workspace} / {project} are still raw
+        // slugs here: resolve them ourselves. A page only binds inside the URL's own project —
+        // otherwise policies would check the page's project while the controller trusts the URL's.
         Route::bind('page', function (string $value, $route) {
-            $project = $route->parameter('project');
-            if ($project instanceof Project) {
-                return $project->allPages()->where('uuid', $value)->firstOrFail();
+            $project = self::routeProject($route);
+            if ($project === false) {
+                abort(404);
             }
 
-            return Page::where('uuid', $value)->firstOrFail();
+            return $project
+                ? $project->allPages()->where('uuid', $value)->firstOrFail()
+                : Page::where('uuid', $value)->firstOrFail();
         });
 
         // Resolve bookmark from workspace (slug) when in workspace context
         Route::bind('bookmark', function (string $value, $route) {
-            $workspace = $route->parameter('workspace');
-            if ($workspace instanceof Workspace) {
-                return $workspace->bookmarks()->where('slug', $value)->firstOrFail();
+            $workspace = self::routeWorkspace($route);
+            if ($workspace === false) {
+                abort(404);
             }
 
-            return Bookmark::where('slug', $value)->firstOrFail();
+            return $workspace
+                ? $workspace->bookmarks()->where('slug', $value)->firstOrFail()
+                : Bookmark::where('slug', $value)->firstOrFail();
         });
+    }
+
+    /**
+     * The {workspace} of a route (model or raw slug): null when the route has none, false when
+     * the slug matches no workspace.
+     */
+    private static function routeWorkspace($route): Workspace|false|null
+    {
+        $workspace = $route->parameter('workspace');
+        if ($workspace === null || $workspace instanceof Workspace) {
+            return $workspace;
+        }
+
+        return Workspace::where('slug', (string) $workspace)->first() ?? false;
+    }
+
+    /**
+     * The {project} of a route, scoped to its {workspace}: null when the route has none, false
+     * when it doesn't resolve.
+     */
+    private static function routeProject($route): Project|false|null
+    {
+        $project = $route->parameter('project');
+        if ($project === null || $project instanceof Project) {
+            return $project;
+        }
+        $workspace = self::routeWorkspace($route);
+        if ($workspace === false) {
+            return false;
+        }
+
+        return Project::query()
+            ->when($workspace, fn ($q) => $q->where('workspace_id', $workspace->id))
+            ->where('slug', (string) $project)
+            ->first() ?? false;
     }
 }

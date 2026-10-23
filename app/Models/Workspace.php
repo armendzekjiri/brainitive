@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
-use App\Models\SnippetCollection;
+
 class Workspace extends Model
 {
     use HasFactory, SoftDeletes;
@@ -34,6 +34,9 @@ class Workspace extends Model
         'settings',
     ];
 
+    /** AI endpoint / encrypted key live in settings: read them server-side, never send them to clients. */
+    protected $hidden = ['settings'];
+
     protected function casts(): array
     {
         return [
@@ -50,6 +53,7 @@ class Workspace extends Model
     public function getLogoDisplayAttribute(): ?string
     {
         $path = $this->attributes['logo'] ?? null;
+
         return $path ? asset('storage/'.$path) : null;
     }
 
@@ -57,6 +61,7 @@ class Workspace extends Model
     public function getHeaderImageDisplayAttribute(): ?string
     {
         $path = $this->attributes['header_image'] ?? null;
+
         return $path ? asset('storage/'.$path) : null;
     }
 

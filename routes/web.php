@@ -214,7 +214,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('ai/settings', [AiController::class, 'getSettings'])->name('ai.settings');
         Route::post('ai/settings', [AiController::class, 'saveSettings'])->name('ai.settings.save');
         Route::post('ai/models', [AiController::class, 'fetchModels'])->name('ai.models');
-        Route::post('ai/generate', [AiController::class, 'generate'])->name('ai.generate');
+        Route::post('ai/generate', [AiController::class, 'generate'])->middleware('throttle:30,1')->name('ai.generate');
         Route::post('projects/{project:slug}/ai/assist', [AiController::class, 'projectAssist'])->name('ai.project-assist')->scopeBindings()->middleware('throttle:20,1');
         Route::post('projects/{project:slug}/ai/save-doc', [AiController::class, 'saveProjectAssist'])->name('ai.project-assist.save')->scopeBindings();
 

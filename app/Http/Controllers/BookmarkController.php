@@ -20,7 +20,7 @@ class BookmarkController extends Controller
     {
         $this->authorize('view', $workspace);
 
-        $bookmarks = $workspace->bookmarks()
+        $bookmarks = $workspace->bookmarks()->visibleTo($request->user())
             ->withCount([
                 'items as links_count' => fn ($q) => $q->where('type', 'link'),
                 'items as files_count' => fn ($q) => $q->where('type', 'file'),
@@ -42,7 +42,7 @@ class BookmarkController extends Controller
     {
         $this->authorize('view', $workspace);
 
-        $bookmarks = $workspace->bookmarks()
+        $bookmarks = $workspace->bookmarks()->visibleTo($request->user())
             ->select(['id', 'slug', 'name', 'icon', 'visibility'])
             ->orderBy('position')
             ->get();

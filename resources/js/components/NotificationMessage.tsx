@@ -53,8 +53,20 @@ export function notificationActor(d: NotificationData): string {
     return d.actor_name || d.contact_name || d.contact_email || '';
 }
 
+/** Only links into this app: a relative path or an absolute URL on this origin. */
+export function safeAppHref(url: string | undefined): string | undefined {
+    if (!url) return undefined;
+    if (url.startsWith('/') && !url.startsWith('//') && !url.includes('\\')) return url;
+    try {
+        const parsed = new URL(url, window.location.origin);
+        return parsed.origin === window.location.origin && /^https?:$/.test(parsed.protocol) ? parsed.href : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 export function notificationUrl(d: NotificationData): string | undefined {
-    return d.ticket_url ?? d.lead_url ?? d.item_url ?? d.context_url ?? d.page_url;
+    return safeAppHref(d.ticket_url ?? d.lead_url ?? d.item_url ?? d.context_url ?? d.page_url);
 }
 
 /** Second line under the sentence. */
@@ -88,7 +100,7 @@ export function NotificationMessage({
     newTab?: boolean;
 }) {
     const link = (href: string | undefined, label: ReactNode) => (
-        <a href={href} className={linkClassName} onClick={onOpen} {...(newTab ? { target: '_blank', rel: 'noreferrer' } : {})}>
+        <a href={safeAppHref(href)} className={linkClassName} onClick={onOpen} {...(newTab ? { target: '_blank', rel: 'noreferrer' } : {})}>
             {label}
             <ExternalLink className={iconClassName} />
         </a>

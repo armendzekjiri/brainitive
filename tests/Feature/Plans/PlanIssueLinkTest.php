@@ -202,9 +202,11 @@ class PlanIssueLinkTest extends TestCase
     {
         $item = $this->item(['title' => 'Locked']);
         $plan = $this->plan(['data' => $this->data([$this->row('r1', 'Locked', ['itemId' => $item->id])])]);
-        // Workspace editor without a project role can edit the plan but not this item
+        // Workspace editor who is only a project viewer: can edit the plan (workspace role) but not
+        // this item (item edits need a project editor role). Without project access they can't do either.
         $workspaceEditor = User::factory()->create();
         $this->workspace->addUser($workspaceEditor, 'editor');
+        $this->project->users()->attach($workspaceEditor->id, ['role' => 'viewer']);
 
         $this->actingAs($workspaceEditor)
             ->putJson($this->planRoute('plans.save', $plan), ['data' => $this->data([$this->row('r1', 'Renamed', ['itemId' => $item->id])])])

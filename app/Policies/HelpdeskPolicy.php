@@ -21,6 +21,7 @@ class HelpdeskPolicy
 
         // Project admin or editor can create helpdesks
         $projectRole = $user->projectRole($project);
+
         return in_array($projectRole, ['admin', 'editor']);
     }
 
@@ -47,6 +48,7 @@ class HelpdeskPolicy
 
         // Project admin or editor can update
         $projectRole = $user->projectRole($project);
+
         return in_array($projectRole, ['admin', 'editor']);
     }
 
@@ -65,6 +67,7 @@ class HelpdeskPolicy
 
         // Project admin can delete
         $projectRole = $user->projectRole($project);
+
         return $projectRole === 'admin';
     }
 
@@ -77,12 +80,13 @@ class HelpdeskPolicy
 
         // Workspace admin or editor can create tickets
         $workspaceRole = $user->workspaceRole($project->workspace);
-        if (in_array($workspaceRole, ['admin', 'editor'])) {
+        if ($workspaceRole === 'admin' || ($workspaceRole === 'editor' && $user->hasProjectAccess($project))) {
             return true;
         }
 
         // Project admin or editor can create tickets
         $projectRole = $user->projectRole($project);
+
         return in_array($projectRole, ['admin', 'editor']);
     }
 }

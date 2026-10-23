@@ -29,6 +29,21 @@ Deployments are matched by window: what reached the deployed ref after the previ
 deploy to that environment (`github_connections.deployments`). Keep processing idempotent
 (upserts keyed by item+kind+repo+identifier) — GitHub redelivers.
 
+### Explicit route binders run before implicit ones
+In `Route::bind('page' | 'bookmark', …)` the `{workspace}` / `{project}` parameters are still raw
+slugs — an `instanceof Project` check there is always false. `AppServiceProvider::routeProject()` /
+`routeWorkspace()` resolve them from the slugs so a page / bookmark only binds inside the URL's own
+project / workspace (before 2026-10-23 any page uuid bound under any project URL → cross-tenant reads).
+
+### Workspace editors need project access to write
+Policies give workspace *editors* edit rights only in projects they can open
+(`hasProjectAccess`) — workspace *admins* everywhere. A workspace editor outside a project must
+not create items, tasks, plans, releases or tickets there (CLI and extension included).
+User ids from requests (assignees, watchers) use `App\Rules\ProjectMember`, never just
+`exists:users,id` (that lets anyone look up any account). Notification links are app paths only
+(`NotificationController::appPath`, `safeAppHref` in `NotificationMessage.tsx`, `public/sw.js`).
+`Workspace::$hidden = ['settings']` (AI endpoint + encrypted key) — read AI config server-side.
+
 ### Auth links and login limits (security hardening, 2026-10-23)
 - Email verification links are `signed:relative` temporary signed URLs (built in
   `VerifyEmailNotification`, host from `APP_URL`, signature over path + query only, so proxies /

@@ -545,6 +545,7 @@ class CalendarController extends Controller
 
         if ($validated['type'] === 'board_item') {
             $item = Item::whereIn('project_id', $projectIds)->findOrFail($validated['id']);
+            $this->authorize('update', $item);
             $item->update(array_filter([
                 'due_date' => $validated['due_date'] ?? $item->due_date,
                 'due_time' => $validated['due_time'] ?? $item->due_time,
@@ -555,6 +556,7 @@ class CalendarController extends Controller
             $item = TaskListItem::whereHas('taskList', function ($q) use ($projectIds) {
                 $q->whereIn('project_id', $projectIds);
             })->findOrFail($validated['id']);
+            $this->authorize('manageItems', $item->taskList);
             $item->update(array_filter([
                 'due_date' => $validated['due_date'] ?? $item->due_date,
                 'due_time' => $validated['due_time'] ?? $item->due_time,

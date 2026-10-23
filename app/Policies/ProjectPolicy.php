@@ -30,6 +30,7 @@ class ProjectPolicy
     public function create(User $user, Workspace $workspace): bool
     {
         $role = $user->workspaceRole($workspace);
+
         return in_array($role, ['admin', 'editor']);
     }
 
@@ -46,6 +47,7 @@ class ProjectPolicy
 
         // Project admin can update
         $projectRole = $user->projectRole($project);
+
         return $projectRole === 'admin';
     }
 
@@ -56,6 +58,7 @@ class ProjectPolicy
     {
         // Only workspace admin can delete projects
         $workspaceRole = $user->workspaceRole($project->workspace);
+
         return $workspaceRole === 'admin';
     }
 
@@ -72,6 +75,7 @@ class ProjectPolicy
 
         // Project admin can manage
         $projectRole = $user->projectRole($project);
+
         return $projectRole === 'admin';
     }
 
@@ -82,12 +86,13 @@ class ProjectPolicy
     {
         // Workspace admin can create boards
         $workspaceRole = $user->workspaceRole($project->workspace);
-        if (in_array($workspaceRole, ['admin', 'editor'])) {
+        if ($workspaceRole === 'admin' || ($workspaceRole === 'editor' && $user->hasProjectAccess($project))) {
             return true;
         }
 
         // Project admin or editor can create
         $projectRole = $user->projectRole($project);
+
         return in_array($projectRole, ['admin', 'editor']);
     }
 }
