@@ -15,6 +15,7 @@ use App\Notifications\TicketAssignedNotification;
 use App\Notifications\TicketCreatedNotification;
 use App\Notifications\TicketReplyNotification;
 use App\Notifications\TicketResolvedNotification;
+use App\Support\Helpdesks\HelpdeskForm;
 use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -118,13 +119,15 @@ class TicketController extends Controller
     {
         $project = $helpdesk->project;
 
-        // Public endpoint doesn't require authentication
-        $validated = $request->validate([
-            'subject' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'contact_email' => 'required|email|max:255',
-            'contact_name' => 'nullable|string|max:255',
-        ]);
+        // Public endpoint doesn't require authentication. Default fields and custom fields are
+        // checked here as configured — the browser checks are only a convenience (BRAI-92).
+        $helpdesk->load(['fields' => fn ($q) => $q->orderBy('position')]);
+        HelpdeskForm::prepare($request, $helpdesk);
+        $validated = $request->validate(HelpdeskForm::publicRules($helpdesk));
+        $subject = trim((string) ($validated['subject'] ?? ''));
+        if ($subject === '') {
+            $subject = HelpdeskForm::autoSubject($helpdesk, $validated['contact_name'] ?? null, $validated['contact_email']);
+        }
 
         // Find or create contact
         $contact = TicketContact::firstOrCreate(
@@ -145,7 +148,7 @@ class TicketController extends Controller
         $maxPosition = Ticket::where('column_id', $newColumn->id)->max('position') ?? 0;
 
         $ticket = $helpdesk->tickets()->create([
-            'subject' => $validated['subject'],
+            'subject' => $subject,
             'description' => $validated['description'] ?? null,
             'column_id' => $newColumn->id,
             'ticket_contact_id' => $contact->id,
@@ -153,16 +156,19 @@ class TicketController extends Controller
             'position' => $maxPosition + 1,
         ]);
 
-        // Process custom fields (public form fields — all fields, not just required)
-        $fields = $helpdesk->fields()->orderBy('position')->get();
-        foreach ($fields as $field) {
-            $value = $request->input('field_'.$field->name);
-            if ($value !== null && $value !== '') {
-                $ticket->fieldValues()->create([
-                    'helpdesk_field_id' => $field->id,
-                    'value' => is_array($value) ? json_encode($value) : $value,
-                ]);
+        // Process custom fields (validated above; file fields are uploads, not values)
+        foreach ($helpdesk->fields as $field) {
+            $value = $validated['field_'.$field->name] ?? null;
+            if ($value === null || $value === '' || $value === [] || HelpdeskForm::type($field) === 'file') {
+                continue;
             }
+            if (HelpdeskForm::type($field) === 'checkbox') {
+                $value = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? '1' : '0';
+            }
+            $ticket->fieldValues()->create([
+                'helpdesk_field_id' => $field->id,
+                'value' => is_array($value) ? json_encode(array_values($value)) : (string) $value,
+            ]);
         }
 
         // Token for this ticket only — never the contact's other tickets (anyone can submit
@@ -182,7 +188,7 @@ class TicketController extends Controller
             'ticket_key' => $ticket->key,
             'ticket_uuid' => $ticket->uuid,
             'access_token' => $accessToken,
-            'message' => 'Ticket submitted successfully. Check your email for updates.',
+            'message' => HelpdeskForm::texts($helpdesk)['success_message'],
         ]);
     }
 

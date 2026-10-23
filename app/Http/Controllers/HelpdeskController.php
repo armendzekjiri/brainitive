@@ -9,7 +9,11 @@ use App\Models\ItemPriority;
 use App\Models\Project;
 use App\Models\Ticket;
 use App\Models\Workspace;
+use App\Support\Helpdesks\HelpdeskForm;
+use App\Support\Helpdesks\HelpdeskTemplates;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -27,6 +31,8 @@ class HelpdeskController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
+            // A helpdesk template (BRAI-92): columns, form fields and form texts
+            'template' => ['nullable', 'string', Rule::in(HelpdeskTemplates::keys())],
         ]);
 
         $slug = Str::slug($validated['name']);
@@ -37,13 +43,24 @@ class HelpdeskController extends Controller
             $slug = $originalSlug.'-'.$counter++;
         }
 
-        // Helpdesk model's created event creates default columns (Open, In Progress, Resolved)
-        $helpdesk = $project->helpdesks()->create([
-            'name' => $validated['name'],
-            'slug' => $slug,
-            'description' => $validated['description'] ?? null,
-            'created_by' => $request->user()->id,
-        ]);
+        $template = isset($validated['template']) ? HelpdeskTemplates::build($validated['template']) : null;
+
+        $helpdesk = DB::transaction(function () use ($project, $validated, $slug, $request, $template) {
+            // Helpdesk model's created event creates default columns (Open, In Progress, Resolved)
+            $helpdesk = $project->helpdesks()->create([
+                'name' => $validated['name'],
+                'slug' => $slug,
+                'description' => $validated['description'] ?? null,
+                'created_by' => $request->user()->id,
+                'settings' => $template['settings'] ?? null,
+            ]);
+
+            if ($template) {
+                $this->applyTemplate($helpdesk, $template);
+            }
+
+            return $helpdesk;
+        });
 
         return redirect()->route('helpdesks.show', [$workspace->slug, $project->slug, $helpdesk->slug])
             ->with('success', 'Helpdesk created successfully.');
@@ -130,6 +147,62 @@ class HelpdeskController extends Controller
     }
 
     /**
+     * The template's columns replace the three defaults; its form fields get unique names.
+     *
+     * @param  array{columns: list<array>, fields: list<array>}  $template
+     */
+    private function applyTemplate(Helpdesk $helpdesk, array $template): void
+    {
+        $helpdesk->columns()->delete();
+        $slugs = [];
+        foreach ($template['columns'] as $position => [$name, $color]) {
+            $base = Str::slug($name) ?: 'column';
+            $slug = $base;
+            for ($n = 2; isset($slugs[$slug]); $n++) {
+                $slug = "{$base}-{$n}";
+            }
+            $slugs[$slug] = true;
+            $helpdesk->columns()->create([
+                'name' => $name,
+                'slug' => $slug,
+                'color' => $color,
+                'position' => $position,
+                'is_done_column' => ! empty($template['columns'][$position][2]),
+            ]);
+        }
+
+        $names = [];
+        foreach ($template['fields'] as $position => [$label, $type, $options, $required, $onCard]) {
+            $base = mb_substr(Str::slug($label, '_'), 0, 50) ?: 'field';
+            $name = $base;
+            for ($n = 2; isset($names[$name]); $n++) {
+                $name = "{$base}_{$n}";
+            }
+            $names[$name] = true;
+            $helpdesk->fields()->create([
+                'name' => $name,
+                'label' => $label,
+                'type' => $type,
+                'options' => $options,
+                'is_required' => $required,
+                'is_visible_on_card' => $onCard,
+                'position' => $position + 1,
+            ]);
+        }
+    }
+
+    /**
+     * Helpdesk templates for the "New helpdesk" gallery.
+     */
+    public function templates(): JsonResponse
+    {
+        return response()->json([
+            'categories' => array_map(fn ($key, $name) => ['key' => $key, 'name' => $name], array_keys(HelpdeskTemplates::CATEGORIES), HelpdeskTemplates::CATEGORIES),
+            'templates' => HelpdeskTemplates::catalog(),
+        ]);
+    }
+
+    /**
      * Update helpdesk settings.
      */
     public function update(Request $request, Workspace $workspace, Project $project, Helpdesk $helpdesk)
@@ -140,6 +213,7 @@ class HelpdeskController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'settings' => 'nullable|array',
+            ...HelpdeskForm::settingsRules(),
             'public_slug' => ['nullable', 'string', 'min:3', 'max:60', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/', Rule::unique('helpdesks', 'public_slug')->ignore($helpdesk->id)],
         ], [
             'public_slug.regex' => 'Use lowercase letters, numbers and single dashes, e.g. acme-support.',

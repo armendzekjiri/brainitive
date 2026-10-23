@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import HelpdeskTemplatePicker from '@/components/helpdesk/HelpdeskTemplatePicker';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { PageProps, Workspace, Project, Board, TaskList, Page as PageType, Helpdesk, PlanSummary } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -45,7 +46,7 @@ export default function ProjectsShow({ workspace, project, canUpdate = false, ca
     const { planTemplates = [] } = usePage<PageProps>().props;
 
     const boardForm = useForm({ name: '', description: '' });
-    const helpdeskForm = useForm({ name: '', description: '' });
+    const helpdeskForm = useForm({ name: '', description: '', template: '' });
     const listForm = useForm({ name: '', description: '' });
     const planForm = useForm({ name: '', template: 'blank' });
 
@@ -315,9 +316,14 @@ export default function ProjectsShow({ workspace, project, canUpdate = false, ca
 
                 {/* Create dialogs */}
                 <Dialog open={createHelpdeskDialogOpen} onOpenChange={setCreateHelpdeskDialogOpen}>
-                    <DialogContent className="sm:max-w-md">
-                        <DialogHeader><DialogTitle>Create Helpdesk</DialogTitle><DialogDescription>Create a helpdesk to manage support tickets.</DialogDescription></DialogHeader>
+                    <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader><DialogTitle>Create Helpdesk</DialogTitle><DialogDescription>Start from a template — support desk, contact form, registration, applications and more.</DialogDescription></DialogHeader>
                         <form onSubmit={createHelpdesk} className="space-y-4 mt-4">
+                            <HelpdeskTemplatePicker
+                                workspaceSlug={workspace.slug}
+                                value={helpdeskForm.data.template}
+                                onChange={(key, template) => helpdeskForm.setData((d) => ({ ...d, template: key, name: d.name || (template?.name ?? '') }))}
+                            />
                             <div className="space-y-2"><Label>Helpdesk Name</Label><Input value={helpdeskForm.data.name} onChange={(e) => helpdeskForm.setData('name', e.target.value)} placeholder="e.g., Customer Support" required />{helpdeskForm.errors.name && <p className="text-sm text-destructive">{helpdeskForm.errors.name}</p>}</div>
                             <div className="space-y-2"><Label>Description (optional)</Label><Textarea value={helpdeskForm.data.description} onChange={(e) => helpdeskForm.setData('description', e.target.value)} placeholder="Brief description" /></div>
                             <div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setCreateHelpdeskDialogOpen(false)}>Cancel</Button><Button type="submit" disabled={helpdeskForm.processing}>{helpdeskForm.processing ? 'Creating…' : 'Create'}</Button></div>

@@ -76,6 +76,19 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.33.0',
+        title: 'Helpdesk templates: support desks, forms, registrations and more',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'Start a new helpdesk from one of 17 templates — Customer support, IT helpdesk, Bug reports, Returns, Website contact form, Quote request, Newsletter & waitlist, Partnerships, Press, Event registration, Appointment requests, Volunteers, Job applications, HR requests, Office & facilities, Feature requests and Beta sign-up.',
+            'Each template brings its own board columns and form fields (dropdowns, single and multiple choice, dates, numbers, checkboxes) and shows a preview before you create it.',
+            'Form texts are now yours to change in helpdesk settings: title, button label, placeholder, thank-you message — and you can hide the Subject field for forms that don’t need one.',
+            'Forms can end with a thank-you message instead of the request page, and required fields are now checked when the form is sent.',
+            'The floating widget now supports single choice, multiple choice and date fields, and hides attachments when you turn them off.',
+        ]
+    },
+    {
         version: 'v1.32.0',
         title: 'Template gallery with 20 templates',
         tag: 'Feature',
