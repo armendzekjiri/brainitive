@@ -24,7 +24,7 @@
 	# no access to our cookies or pages).
 	@uploads path /storage/*
 	header @uploads X-Content-Type-Options nosniff
-	@uploadedMarkup path_regexp uploadedMarkup (?i)^/storage/.*\.(html?|xhtml|xht|shtml|svgz?|xml|xsl)$
+	@uploadedMarkup path_regexp uploadedMarkup (?i)^/storage/.*\.(html?|xhtml?|xht|shtml|svgz?|xml|xsl|xslt|mht|mhtml)$
 	header @uploadedMarkup Content-Security-Policy "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox"
 
 	{$CADDY_SERVER_EXTRA_DIRECTIVES}

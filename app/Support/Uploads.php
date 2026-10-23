@@ -17,8 +17,21 @@ class Uploads
     private const ACTIVE = [
         'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'pht', 'phps', 'phpt', 'phar', 'pgif', 'inc',
         'htaccess', 'htpasswd', 'user.ini', 'ini',
-        'html', 'htm', 'xhtml', 'xht', 'shtml', 'shtm', 'stm', 'svg', 'svgz', 'xml', 'xsl', 'xslt', 'mht', 'mhtml',
+        'html', 'htm', 'xhtml', 'xhtm', 'xht', 'shtml', 'shtm', 'stm', 'svg', 'svgz', 'xml', 'xsl', 'xslt', 'mht', 'mhtml',
         'js', 'mjs', 'cjs', 'jsp', 'jspx', 'asp', 'aspx', 'cer', 'asa', 'cgi', 'pl', 'py', 'rb', 'sh', 'bash', 'swf',
+    ];
+
+    /**
+     * Client extensions kept as-is: documents, archives, media, plain data. An allowlist — a new
+     * active type (like .xhtm, which servers map to application/xhtml+xml) must never slip through.
+     */
+    private const SAFE = [
+        'pdf', 'txt', 'csv', 'tsv', 'md', 'rtf', 'log', 'json', 'eml', 'ics', 'vcf',
+        'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp', 'pages', 'numbers', 'key',
+        'zip', 'rar', '7z', 'gz', 'tgz', 'tar', 'bz2',
+        'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'heic', 'heif', 'tif', 'tiff', 'ico',
+        'mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'mp4', 'm4v', 'mov', 'webm', 'avi', 'mkv',
+        'psd', 'ai', 'sketch', 'fig', 'dwg', 'stl', 'obj',
     ];
 
     private const IMAGE = ['jpeg' => 'jpg', 'jpg' => 'jpg', 'png' => 'png', 'gif' => 'gif', 'webp' => 'webp', 'bmp' => 'bmp', 'avif' => 'avif'];
@@ -39,7 +52,7 @@ class Uploads
     {
         $ext = strtolower($file->getClientOriginalExtension());
 
-        return preg_match('/^[a-z0-9]{1,10}$/', $ext) && ! in_array($ext, self::ACTIVE, true) ? $ext : 'bin';
+        return in_array($ext, self::SAFE, true) && ! in_array($ext, self::ACTIVE, true) ? $ext : 'bin';
     }
 
     /** From the detected MIME type, never the client's name — a PNG named x.php stays .png. */

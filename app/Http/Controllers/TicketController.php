@@ -331,9 +331,12 @@ class TicketController extends Controller
         $validated = $request->validate([
             'body' => 'required|string',
             'access_token' => 'required|string',
-            'file' => 'nullable',
+            'file' => 'nullable|array|max:5',
             'file.*' => 'file|max:10240',
         ]);
+        if ($request->hasFile('file') && ! empty(($helpdesk->settings ?? [])['default_field_attachments']['hidden'])) {
+            abort(403, 'This helpdesk does not accept attachments.');
+        }
 
         $contact = $ticket->contact;
         if (! $contact || ! $ticket->verifyPublicAccessToken($validated['access_token'])) {
@@ -426,6 +429,12 @@ class TicketController extends Controller
 
         if (! $ticket->verifyPublicAccessToken($validated['access_token'])) {
             abort(403, 'Invalid access token');
+        }
+        if (! empty(($helpdesk->settings ?? [])['default_field_attachments']['hidden'])) {
+            abort(403, 'This helpdesk does not accept attachments.');
+        }
+        if ($ticket->attachments()->where('uploaded_by_contact', true)->count() >= 20) {
+            abort(422, 'This request already has the maximum number of attachments.');
         }
 
         $file = $request->file('file');

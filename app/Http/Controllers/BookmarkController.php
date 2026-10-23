@@ -240,7 +240,7 @@ class BookmarkController extends Controller
         $validated = $request->validate([
             'type' => 'required|in:link,todo,note,file',
             'title' => 'nullable|string|max:500',
-            'url' => 'nullable|string|max:2048',
+            'url' => ['nullable', 'string', 'max:2048', 'not_regex:/^\s*(javascript|data|vbscript|file|blob):/i'],
             'content' => 'nullable|string|max:10000',
         ]);
 
@@ -310,7 +310,7 @@ class BookmarkController extends Controller
 
         $validated = $request->validate([
             'title' => 'nullable|string|max:500',
-            'url' => 'nullable|string|max:2048',
+            'url' => ['nullable', 'string', 'max:2048', 'not_regex:/^\s*(javascript|data|vbscript|file|blob):/i'],
             'content' => 'nullable|string|max:10000',
             'is_completed' => 'boolean',
         ]);

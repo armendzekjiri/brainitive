@@ -44,6 +44,13 @@ User ids from requests (assignees, watchers) use `App\Rules\ProjectMember`, neve
 (`NotificationController::appPath`, `safeAppHref` in `NotificationMessage.tsx`, `public/sw.js`).
 `Workspace::$hidden = ['settings']` (AI endpoint + encrypted key) — read AI config server-side.
 
+### Uploads keep only allowlisted extensions
+`Uploads::extension()` keeps a client extension only if it is in `Uploads::SAFE` (documents,
+archives, media); everything else is stored as `.bin`. It used to be a denylist, and `.xhtm`
+(served as application/xhtml+xml → script on our origin) slipped through. Exports of page HTML
+(PDF / HTML / Markdown) always go through `safeHtml()` — stored page HTML is not trusted.
+Visitor text in ticket mails goes through `NewLeadNotification::plain()` (Markdown renders links).
+
 ### Auth links and login limits (security hardening, 2026-10-23)
 - Email verification links are `signed:relative` temporary signed URLs (built in
   `VerifyEmailNotification`, host from `APP_URL`, signature over path + query only, so proxies /

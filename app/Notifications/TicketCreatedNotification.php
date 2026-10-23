@@ -45,7 +45,7 @@ class TicketCreatedNotification extends Notification
 
         return $this->webPush(
             "New ticket {$this->ticket->key}",
-            "{$sourceName}: {$this->ticket->subject}",
+            "{$sourceName}: {$this->plainSubject()}",
             $url,
         );
     }
@@ -96,7 +96,7 @@ class TicketCreatedNotification extends Notification
         // Different URL for contacts vs users (use token passed from controller so we don't invalidate the one returned in API)
         if ($notifiable instanceof TicketContact) {
             $url = $this->ticket->publicUrl();
-            $subject = "Ticket {$this->ticket->key} created: {$this->ticket->subject}";
+            $subject = "Ticket {$this->ticket->key} created: {$this->plainSubject()}";
             $line = "Your ticket has been created and we'll get back to you soon.";
             $action = 'View Ticket';
         } else {
@@ -106,7 +106,7 @@ class TicketCreatedNotification extends Notification
                 $helpdesk->slug,
                 $this->ticket->id,
             ]);
-            $subject = "New ticket {$this->ticket->key}: {$this->ticket->subject}";
+            $subject = "New ticket {$this->ticket->key}: {$this->plainSubject()}";
             $sourceName = $this->source instanceof User
                 ? $this->source->name
                 : ($this->source instanceof TicketContact
@@ -119,7 +119,13 @@ class TicketCreatedNotification extends Notification
         return (new MailMessage)
             ->subject($subject)
             ->line($line)
-            ->line($this->ticket->subject)
+            ->line($this->plainSubject())
             ->action($action, $url);
+    }
+
+    /** The visitor-written subject as plain text: no Markdown links, images or formatting in mails. */
+    private function plainSubject(): string
+    {
+        return NewLeadNotification::plain((string) $this->ticket->subject);
     }
 }

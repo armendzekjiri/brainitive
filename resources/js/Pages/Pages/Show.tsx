@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { safeHtml } from '@/lib/sanitize';
 import { Head, useForm, router, Link, usePage } from '@inertiajs/react';
 import { PageProps, Workspace, Project, Page as PageType, PageDraftState, User } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -862,8 +863,9 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
         };
     }, [flushSave]);
 
+    // Stored HTML is never trusted: the PDF export writes it into a window on our origin
     const getExportHtml = useCallback(() =>
-        (isEditing ? currentHtmlRef.current : null) ?? extractHtmlContent(page.content as any) ?? '',
+        safeHtml((isEditing ? currentHtmlRef.current : null) ?? extractHtmlContent(page.content as any) ?? ''),
     [page.content, isEditing]);
 
     const exportTitle = (isEditing ? formData.name : page.name) || 'Untitled';
