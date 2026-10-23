@@ -25,7 +25,8 @@ agents (Claude, Copilot, Codex, Cursor) stay in sync.
 composer run dev           # run the app (serve + queue + pail + vite)
 ./vendor/bin/pint --test   # PHP lint
 npx tsc --noEmit           # TS check
-php artisan test           # PHPUnit (SQLite :memory:)
+php artisan test           # PHPUnit (PostgreSQL, database brainitive_test)
+npm run e2e                # Playwright e2e (PostgreSQL, brainitive_e2e_<port>)
 npm run build              # frontend build
 ```
 
