@@ -20,6 +20,7 @@ use App\Mcp\Tools\FetchTool;
 use App\Mcp\Tools\GetBoardItemTool;
 use App\Mcp\Tools\GetBoardTool;
 use App\Mcp\Tools\GetPageTool;
+use App\Mcp\Tools\GetPlanTool;
 use App\Mcp\Tools\GetProjectTool;
 use App\Mcp\Tools\GetSprintTool;
 use App\Mcp\Tools\GetTaskListTool;
@@ -30,6 +31,7 @@ use App\Mcp\Tools\ListCalendarEventsTool;
 use App\Mcp\Tools\ListGoogleTasksTool;
 use App\Mcp\Tools\ListItemCommentsTool;
 use App\Mcp\Tools\ListPagesTool;
+use App\Mcp\Tools\ListPlansTool;
 use App\Mcp\Tools\ListProjectMembersTool;
 use App\Mcp\Tools\ListProjectsTool;
 use App\Mcp\Tools\ListSnippetsTool;
@@ -44,6 +46,7 @@ use App\Mcp\Tools\UpdateBoardItemTool;
 use App\Mcp\Tools\UpdateCalendarEventTool;
 use App\Mcp\Tools\UpdateGoogleTaskTool;
 use App\Mcp\Tools\UpdatePageTool;
+use App\Mcp\Tools\UpdatePlanTool;
 use App\Mcp\Tools\UpdateSnippetTool;
 use App\Mcp\Tools\UpdateSprintTool;
 use App\Mcp\Tools\UpdateTaskTool;
@@ -74,6 +77,10 @@ Scrum sprints: list_sprints / get_sprint (sprint_id 0 = backlog) to read; create
 update_sprint, move_items_to_sprint, start_sprint (explicit dates) and complete_sprint
 (explicit move_open_to: 0 = backlog or a planned sprint) to plan — the same rules as the
 board's backlog page. Confirm with the user before starting or completing a sprint.
+
+Gantt plans: list_plans / get_plan to read (rows, bars, dependencies, linked issues);
+update_plan applies a list of operations against expected_revision — on a revision
+conflict nothing changes: read the plan again before trying anything else.
 
 Card comments: list_item_comments reads a card's discussion; add_item_comment posts
 an update as the signed-in user without touching the description. Write tools that take
@@ -140,6 +147,9 @@ class BrainitiveServer extends Server
         MoveItemsToSprintTool::class,
         StartSprintTool::class,
         CompleteSprintTool::class,
+        ListPlansTool::class,
+        GetPlanTool::class,
+        UpdatePlanTool::class,
         // Snippets
         ListSnippetsTool::class,
         CreateSnippetCollectionTool::class,

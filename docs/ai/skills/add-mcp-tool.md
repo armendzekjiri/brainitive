@@ -98,3 +98,13 @@ clients that ignore pagination still see it.
 
 ## 5. Update docs
 Bump the tool count / add the capability in [`ARCHITECTURE.md`](../ARCHITECTURE.md).
+
+## 5. Writes that an AI might retry
+Give write tools a required `request_id` and wrap the write in
+`IdempotentRequest::run($user, '<tool>', $requestId, $payload, fn () => [...result])`:
+a retry with the same payload returns the stored result (`replayed`), a different payload
+with the same id is refused (`RequestIdConflict`). Annotate with `#[IsIdempotent]`; reads
+get `#[IsReadOnly]`. Reuse the UI's domain action (e.g. `ItemComments::add`,
+`SprintLifecycle::start`) instead of copying controller code, so history and
+notifications happen exactly once. For concurrently edited documents, take an
+`expected_revision` and refuse stale writes (see `UpdatePlanTool`).
