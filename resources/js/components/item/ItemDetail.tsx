@@ -918,6 +918,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                         <RichLexicalEditor
                             key={`edit-${editorKey}`}
                             content={editorContent}
+                            projectId={project.id}
                             pollScope={{ type: 'item', id: String(item.id) }}
                             onChange={handleEditorChange}
                             placeholder="Add a description…"

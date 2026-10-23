@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Board;
 use App\Models\ItemType;
 use App\Models\Label;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
@@ -138,9 +139,14 @@ class ProjectController extends Controller
             $query->visibleTo($request->user())->orderByRaw("CASE type WHEN 'folder' THEN 0 ELSE 1 END")->orderBy('position');
         }]);
 
+        $ai = $workspace->settings ?? [];
+
         return Inertia::render('Projects/Show', [
             'workspace' => $workspace,
             'project' => $project,
+            'canUpdate' => $request->user()->can('update', $project),
+            'canCreatePages' => $request->user()->can('create', [Page::class, $project]),
+            'aiConfigured' => ! empty($ai['ai_endpoint']) && ! empty($ai['ai_api_key']) && ! empty($ai['ai_model']),
         ]);
     }
 
