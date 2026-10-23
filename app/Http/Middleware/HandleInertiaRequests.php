@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Board;
+use App\Models\Capture;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Page;
@@ -252,6 +253,8 @@ class HandleInertiaRequests extends Middleware
                 ? (is_object($request->route('page')) ? $request->route('page')->uuid : $request->route('page'))
                 : null,
             'unreadNotificationsCount' => fn () => $user ? $user->unreadNotifications()->count() : 0,
+            // Quick capture (BRAI-70): open ideas in the user's private capture inbox (sidebar badge)
+            'captureInboxCount' => fn () => $user ? Capture::ownedBy($user)->inState('inbox')->count() : 0,
             'push' => [
                 'vapidPublicKey' => config('webpush.vapid.public_key'),
                 'subscribed' => fn () => $user ? $user->pushSubscriptions()->exists() : false,

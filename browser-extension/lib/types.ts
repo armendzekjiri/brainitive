@@ -94,7 +94,7 @@ export interface PendingCapture {
     clipWholePage?: boolean;
 }
 
-export type Mode = 'issue' | 'bookmark' | 'doc' | 'task' | 'snippet';
+export type Mode = 'issue' | 'bookmark' | 'doc' | 'task' | 'snippet' | 'inbox';
 
 export interface Session {
     server: string;

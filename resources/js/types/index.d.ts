@@ -541,6 +541,8 @@ export type PageProps<
     planTemplates?: { key: string; name: string; description: string }[];
     /** Unread notification count shared by HandleInertiaRequests middleware */
     unreadNotificationsCount?: number;
+    /** Open ideas in the user's private capture inbox (BRAI-70) */
+    captureInboxCount?: number;
     /** Browser push config shared by HandleInertiaRequests middleware */
     push?: {
         vapidPublicKey: string | null;
@@ -896,4 +898,58 @@ export interface AdminAuditEntry {
     meta: Record<string, unknown> | null;
     ip_address: string | null;
     created_at: string | null;
+}
+
+// ── Quick capture (BRAI-70) ─────────────────────────────────────────────────
+
+/** Destination kinds: board issue, list task, doc, bookmark (group), snippet (collection). */
+export type CaptureType = 'issue' | 'task' | 'page' | 'bookmark' | 'snippet';
+export type CaptureState = 'inbox' | 'processed' | 'archived';
+
+/** Where a converted capture's content lives (ResourceLocator; `available` = still exists). */
+export interface CaptureTarget {
+    type: CaptureType;
+    title: string;
+    breadcrumb: string;
+    url: string | null;
+    available: boolean;
+}
+
+/** One idea in the user's private capture inbox (CaptureInboxController::present). */
+export interface Capture {
+    id: string;
+    text: string;
+    url: string | null;
+    intended_type: CaptureType | null;
+    source: string | null;
+    state: CaptureState;
+    captured_at: string | null;
+    processed_at: string | null;
+    archived_at: string | null;
+    target: CaptureTarget | null;
+}
+
+/** Writable destinations, grouped by workspace (CaptureDestinations, shared with the extension). */
+export interface CaptureDestinationWorkspace {
+    id: number;
+    name: string;
+    slug: string;
+    projects: {
+        id: number;
+        name: string;
+        key: string | null;
+        can_create_pages: boolean;
+        boards: { id: number; name: string; type: string; columns: { id: number; name: string }[] }[];
+        task_lists: { id: number; name: string }[];
+    }[];
+    bookmarks: { id: number; name: string; icon: string | null }[];
+    snippet_collections: { id: number; name: string }[];
+}
+
+/** Result of POST captures.convert. */
+export interface CaptureConversionResult {
+    replayed: boolean;
+    /** `url` is null when the created content is gone or no longer accessible to you. */
+    location: { type: string; title: string; breadcrumb: string; url: string | null };
+    capture: Capture;
 }

@@ -76,6 +76,7 @@ import {
     Kanban,
     List,
     ListTodo,
+    Lightbulb,
     Bookmark as BookmarkIcon,
     Code2,
     PencilRuler,
@@ -104,6 +105,7 @@ import {
 import { flattenPagesForParentSelect } from '@/lib/pageTree';
 import { GlobalCreateModal } from '@/components/GlobalCreateModal';
 import CreateProjectDialog, { openCreateProject } from '@/components/projects/CreateProjectDialog';
+import { QuickCaptureDialog, QuickCaptureFab, openQuickCapture } from '@/components/captures/QuickCaptureDialog';
 import HelpdeskTemplatePicker from '@/components/helpdesk/HelpdeskTemplatePicker';
 import LeadFormTemplatePicker from '@/components/leadForms/LeadFormTemplatePicker';
 
@@ -1590,7 +1592,7 @@ function AppSidebar({
     onOpenSearch?: () => void;
     onOpenHelp?: () => void;
 }) {
-    const { auth, currentPageUuid, canManageWorkspace = false } = usePage<PageProps>().props;
+    const { auth, currentPageUuid, canManageWorkspace = false, captureInboxCount = 0 } = usePage<PageProps>().props;
     const isInstanceAdmin = !!auth.isInstanceAdmin;
     const user = auth.user;
     const projects = currentWorkspace?.projects || [];
@@ -1703,6 +1705,23 @@ function AppSidebar({
                             >
                                 <ListTodo className="size-4" />
                                 <span>My Work</span>
+                            </Link>
+                        </SidebarMenuItem>
+                        <SidebarMenuItem>
+                            <Link
+                                href={route('captures.index')}
+                                className={cn(
+                                    'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                                    route().current() === 'captures.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                )}
+                            >
+                                <Lightbulb className="size-4" />
+                                <span>Captures</span>
+                                {captureInboxCount > 0 && (
+                                    <span className="ml-auto rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground" aria-label={`${captureInboxCount} in your capture inbox`}>
+                                        {captureInboxCount}
+                                    </span>
+                                )}
                             </Link>
                         </SidebarMenuItem>
                         <SidebarMenuItem>
@@ -1987,6 +2006,16 @@ function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: 
                 <Button variant="ghost" size="icon" className="size-8" onClick={() => onOpenHelp?.()}>
                     <HelpCircle className="size-4" />
                 </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="hidden h-8 gap-1.5 px-3 md:inline-flex"
+                    onClick={openQuickCapture}
+                    title="Quick capture (C)"
+                >
+                    <Lightbulb className="size-3.5" />
+                    Capture
+                </Button>
                 <Button size="sm" className="h-8 px-3 gap-1.5" onClick={onCreateClick}>
                     <Plus className="size-3.5" />
                     <span className="hidden sm:inline">Create</span>
@@ -2142,6 +2171,15 @@ export default function AppLayout({ children, title }: Props) {
         ] as PaletteCommand[] : []),
 
         // ── Create ──────────────────────────────────────────────────────────
+        {
+            id: 'quick-capture',
+            label: 'Quick capture',
+            keywords: 'idea note inbox jot capture later',
+            description: 'Save an idea to your private captures (C)',
+            icon: <CmdIcon color="#f59e0b"><Lightbulb className="size-4" /></CmdIcon>,
+            group: 'Create',
+            action: () => openQuickCapture(),
+        },
         ...(currentWorkspace ? [
             {
                 id: 'create-project',
@@ -2305,6 +2343,8 @@ export default function AppLayout({ children, title }: Props) {
                 </>
             )}
             <CreateProjectDialog workspace={currentWorkspace ?? null} />
+            <QuickCaptureDialog />
+            <QuickCaptureFab />
             <HelpModal open={helpModalOpen} onOpenChange={setHelpModalOpen} />
             <GlobalStickyNotes />
             <WelcomeModal />

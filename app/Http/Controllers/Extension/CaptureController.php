@@ -3,28 +3,26 @@
 namespace App\Http\Controllers\Extension;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\FetchLinkMetadataJob;
 use App\Models\ActivityLog;
 use App\Models\Board;
 use App\Models\Bookmark;
+use App\Models\Capture;
 use App\Models\Item;
-use App\Models\Page;
 use App\Models\Project;
 use App\Models\SnippetCollection;
 use App\Models\TaskList;
-use App\Support\Boards\ProjectIssues;
-use App\Support\Mcp\PageContentConverter;
+use App\Support\Captures\ContentCapture;
 use App\Support\Mcp\ResourceLocator;
 use App\Support\Uploads;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 /**
- * Write endpoints for the browser extension. Same policies as the app; Markdown from the
- * extension is converted to the editors' formats here. Every response carries a `location`.
+ * Write endpoints for the browser extension. Same policies as the app; the create behaviour is
+ * shared with the capture inbox (`ContentCapture`). Every response carries a `location`.
  */
 class CaptureController extends Controller
 {
@@ -33,28 +31,7 @@ class CaptureController extends Controller
      */
     public function bookmarkItem(Request $request, Bookmark $bookmarkGroup): JsonResponse
     {
-        $bookmark = $bookmarkGroup;
-        $this->authorize('update', $bookmark);
-
-        $validated = $request->validate([
-            'type' => 'required|in:link,note',
-            'title' => 'nullable|string|max:500',
-            'url' => 'nullable|required_if:type,link|url:http,https|max:2048',
-            'content' => 'nullable|string|max:10000',
-        ]);
-
-        $item = $bookmark->items()->create([
-            'type' => $validated['type'],
-            'title' => $validated['title'] ?? null,
-            'url' => $validated['url'] ?? null,
-            'content' => $validated['content'] ?? null,
-            'position' => ($bookmark->items()->max('position') ?? 0) + 1,
-            'created_by' => $request->user()->id,
-        ]);
-
-        if ($item->type === 'link' && $item->url) {
-            FetchLinkMetadataJob::dispatch($item->id);
-        }
+        $item = $this->capture($request, 'bookmark', $bookmarkGroup);
 
         return response()->json([
             'created' => true,
@@ -64,42 +41,21 @@ class CaptureController extends Controller
     }
 
     /**
-     * New issue (Markdown description), optionally with a screenshot attached. Lands in
-     * the chosen column — on Scrum boards in the backlog, like issues from plans and
-     * whiteboards.
+     * New issue (Markdown description), optionally with a screenshot attached.
      */
     public function issue(Request $request, Board $board): JsonResponse
     {
-        $this->authorize('createItems', $board);
-
-        $validated = $request->validate([
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string|max:50000',
-            'column_id' => ['nullable', 'integer', Rule::exists('board_columns', 'id')->where('board_id', $board->id)],
-            'assign_to_me' => 'nullable|boolean',
-            'screenshot' => 'nullable|image|mimes:png,jpg,jpeg,webp|max:10240',
-        ]);
-
-        $user = $request->user();
-        $project = $board->project;
+        ContentCapture::authorize($request->user(), 'issue', $board);
+        $request->validate(['screenshot' => 'nullable|image|mimes:png,jpg,jpeg,webp|max:10240']);
 
         try {
-            $item = ProjectIssues::create($board, $project, $user, [[
-                'title' => $validated['title'],
-                'description' => ! empty($validated['description'])
-                    ? PageContentConverter::markdownToHtml($validated['description'])
-                    : null,
-                'assigned_to' => $request->boolean('assign_to_me') ? $user->id : null,
-            ]], isset($validated['column_id']) ? $board->columns()->find($validated['column_id']) : null)->first();
+            $item = $this->capture($request, 'issue', $board);
         } catch (\DomainException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
-        // ProjectIssues loads a slim board (no project_id); the locator needs the full one.
-        $item->setRelation('board', $board);
-
         if ($request->hasFile('screenshot')) {
-            $this->attachScreenshot($item, $request->file('screenshot'), $user->id);
+            $this->attachScreenshot($item, $request->file('screenshot'), $request->user()->id);
         }
 
         return response()->json([
@@ -116,27 +72,7 @@ class CaptureController extends Controller
     public function page(Request $request, Project $project): JsonResponse
     {
         abort_unless($request->user()->hasProjectAccess($project), 404);
-        $this->authorize('create', [Page::class, $project]);
-
-        $validated = $request->validate([
-            'title' => 'required|string|max:255',
-            'markdown' => 'nullable|string|max:500000',
-            'publish' => 'nullable|boolean',
-        ]);
-
-        $page = $project->allPages()->create([
-            'name' => $validated['title'],
-            'type' => 'page',
-            'icon' => '🔖',
-            'created_by' => $request->user()->id,
-            'content' => ! empty($validated['markdown'])
-                ? PageContentConverter::htmlToPageContent(PageContentConverter::markdownToHtml($validated['markdown']))
-                : ['type' => 'lexical', 'html' => ''],
-        ]);
-
-        if ($request->boolean('publish')) {
-            $page->publish($request->user());
-        }
+        $page = $this->capture($request, 'page', $project);
 
         return response()->json([
             'created' => true,
@@ -148,26 +84,7 @@ class CaptureController extends Controller
 
     public function task(Request $request, TaskList $taskList): JsonResponse
     {
-        $this->authorize('manageItems', $taskList);
-
-        $validated = $request->validate([
-            'title' => 'required|string|max:500',
-            'notes' => 'nullable|string|max:10000',
-            'due_date' => 'nullable|date_format:Y-m-d',
-            'assign_to_me' => 'nullable|boolean',
-        ]);
-
-        $item = $taskList->items()->create([
-            'title' => $validated['title'],
-            'description' => ! empty($validated['notes'])
-                ? ['type' => 'lexical', 'html' => PageContentConverter::markdownToHtml($validated['notes'])]
-                : null,
-            'status' => 'todo',
-            'due_date' => $validated['due_date'] ?? null,
-            'assignee_id' => $request->boolean('assign_to_me') ? $request->user()->id : null,
-            'position' => ($taskList->items()->max('position') ?? 0) + 1,
-            'created_by' => $request->user()->id,
-        ]);
+        $item = $this->capture($request, 'task', $taskList);
 
         return response()->json([
             'created' => true,
@@ -182,30 +99,48 @@ class CaptureController extends Controller
      */
     public function snippet(Request $request, SnippetCollection $snippetCollection): JsonResponse
     {
-        $this->authorize('create', [SnippetCollection::class, $snippetCollection->workspace]);
-
-        $validated = $request->validate([
-            'title' => 'required|string|max:255',
-            'content' => 'required|string|max:200000',
-            'language' => 'nullable|string|max:50|regex:/^[a-z0-9+#-]+$/',
-            'description' => 'nullable|string|max:2000',
-        ]);
-
-        $snippet = $snippetCollection->snippets()->create([
-            'title' => $validated['title'],
-            'content' => $validated['content'],
-            'language' => $validated['language'] ?? 'plaintext',
-            'description' => $validated['description'] ?? null,
-            'visibility' => 'inherit',
-            'position' => ($snippetCollection->snippets()->max('position') ?? 0) + 1,
-            'created_by' => $request->user()->id,
-        ]);
+        $snippet = $this->capture($request, 'snippet', $snippetCollection);
 
         return response()->json([
             'created' => true,
             'snippet_slug' => $snippet->slug,
             'location' => ResourceLocator::locate($snippet),
         ], 201);
+    }
+
+    /**
+     * "Save to inbox" (BRAI-70): an idea without a destination, organized later in the app.
+     * Create only — an extension token can never read the inbox.
+     */
+    public function inbox(Request $request): JsonResponse
+    {
+        $validated = $request->validate(Capture::rules());
+
+        $capture = Capture::create([
+            'user_id' => $request->user()->id,
+            'source' => ($validated['source'] ?? null) ?: 'Browser extension',
+        ] + $validated);
+
+        return response()->json([
+            'created' => true,
+            'capture_id' => $capture->uuid,
+            'location' => [
+                'type' => 'capture',
+                'title' => Str::limit(strtok($capture->text, "\n") ?: $capture->text, 80),
+                'workspace' => '',
+                'project' => '',
+                'breadcrumb' => 'Captures',
+                'url' => route('captures.index'),
+            ],
+        ], 201);
+    }
+
+    private function capture(Request $request, string $type, Model $destination): Model
+    {
+        ContentCapture::authorize($request->user(), $type, $destination);
+        $validated = $request->validate(ContentCapture::rules($type, $destination));
+
+        return ContentCapture::create($request->user(), $type, $destination, $validated);
     }
 
     private function attachScreenshot(Item $item, UploadedFile $file, int $userId): void

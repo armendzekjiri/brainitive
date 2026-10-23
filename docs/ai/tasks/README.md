@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Quick capture: private inbox + convert to content (BRAI-70)](./feat-quick-capture.md) | done |
 | [Helpdesk templates (BRAI-92)](./feat-helpdesk-templates.md) | done |
 | [Lead Generation forms (BRAI-93)](./feat-lead-forms.md) | done |
 | [Security hardening, batch 1](./fix-security-hotfix-1.md) | done |
