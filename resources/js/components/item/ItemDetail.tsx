@@ -361,6 +361,8 @@ export function useItemDetail(args: UseItemDetailArgs) {
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [timeSpent, setTimeSpent] = useState(item?.time_spent ?? 0);
     const [development, setDevelopment] = useState<Development | null>(null);
+    const [releaseOptions, setReleaseOptions] = useState<{ id: number; name: string; status: string }[]>([]);
+    const [releaseId, setReleaseId] = useState<string>('none');
     const currentItemIdRef = useRef(item?.id);
     currentItemIdRef.current = item?.id;
 
@@ -370,7 +372,7 @@ export function useItemDetail(args: UseItemDetailArgs) {
         setDetailsLoading(true);
         window.axios
             .get(route('boards.items.details', [workspace.slug, project.slug, board.slug, itemId]))
-            .then(({ data }: { data: { comments: Comment[]; attachments: Attachment[]; history: ItemHistoryEntry[]; time_spent: number; development?: Development } }) => {
+            .then(({ data }: { data: { comments: Comment[]; attachments: Attachment[]; history: ItemHistoryEntry[]; time_spent: number; development?: Development; releases?: { id: number; name: string; status: string }[]; release_id?: number | null } }) => {
                 // Ignore answers for an item the user already navigated away from
                 if (currentItemIdRef.current !== itemId) return;
                 setLocalComments(data.comments);
@@ -378,6 +380,8 @@ export function useItemDetail(args: UseItemDetailArgs) {
                 setHistory(data.history);
                 setTimeSpent(data.time_spent ?? 0);
                 setDevelopment(data.development ?? null);
+                setReleaseOptions(data.releases ?? []);
+                setReleaseId(data.release_id ? String(data.release_id) : 'none');
             })
             .catch(() => { /* keep what we have; the board itself still works */ })
             .finally(() => setDetailsLoading(false));
@@ -696,7 +700,7 @@ export function useItemDetail(args: UseItemDetailArgs) {
         // file preview
         filePreview, setFilePreview,
         // history + time tracking
-        history, detailsLoading, timeSpent, development,
+        history, detailsLoading, timeSpent, development, releaseOptions, releaseId, setReleaseId,
         logWorkOpen, setLogWorkOpen, logWorkTime, setLogWorkTime, logWorkNote, setLogWorkNote,
         logWorkError, isLoggingWork, handleLogWork,
     };
@@ -711,6 +715,7 @@ const HISTORY_FIELD_LABELS: Record<string, string> = {
     board_id: 'Board',
     column_id: 'Status',
     sprint_id: 'Sprint',
+    release_id: 'Fix version',
     assigned_to: 'Assignee',
     priority_id: 'Priority',
     item_type_id: 'Type',
@@ -1473,6 +1478,28 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                     </Select>
                 </div>
             </div>
+
+            {/* Fix version (release) */}
+            {(d.releaseOptions.length > 0 || d.releaseId !== 'none') && (
+                <div className="flex items-center min-h-[40px] py-1">
+                    <span className="w-[40%] shrink-0 text-xs text-muted-foreground">Fix version</span>
+                    <div className="flex-1">
+                        <Select value={d.releaseId} onValueChange={(v) => { d.setReleaseId(v); d.saveProp({ release_id: v === 'none' ? null : Number(v) }); }}>
+                            <SelectTrigger className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 transition-colors focus:ring-0 text-sm px-2 -ml-2 rounded-md" aria-label="Fix version">
+                                <SelectValue placeholder="None" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                {d.releaseOptions.map((r) => (
+                                    <SelectItem key={r.id} value={String(r.id)}>
+                                        {r.name}{r.status !== 'unreleased' && <span className="ml-1.5 text-xs text-muted-foreground">({r.status})</span>}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+            )}
 
             {/* Story Points */}
             <div className="flex items-center min-h-[40px] py-1">

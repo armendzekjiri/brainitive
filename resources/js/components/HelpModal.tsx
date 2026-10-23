@@ -76,6 +76,19 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.26.0',
+        title: 'Releases and Fix Versions',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'Plan releases per project (sidebar → Releases): name, start and release date, description — with a progress bar of done, in progress and to-do issues and an overdue warning.',
+            'Give issues a Fix version from the issue sidebar, or add them from the release page. Issues already shipped in another release are flagged.',
+            'Release a version in one step and decide where unfinished issues go — the next release or no fix version.',
+            'Release notes: generate a draft from the finished issues (Features, Improvements, Fixes — titles only), edit it, and publish it to a public page and project changelog. Later edits stay private until you publish the update.',
+            'Fixed: shared docs and public pages now show headings, lists and links formatted; a wrong link method shows the proper error page instead of a server error.',
+        ]
+    },
+    {
         version: 'v1.25.1',
         title: 'Correct Website and Contact Addresses',
         tag: 'Fix',

@@ -68,7 +68,7 @@ export default function ShareShow({ shared }: { shared: Shared | null }) {
                     </dl>
                 )}
                 {shared.html ? (
-                    <article className="prose prose-sm sm:prose-base dark:prose-invert max-w-none" dangerouslySetInnerHTML={safeHtmlProp(shared.html)} />
+                    <article className="rich-html prose prose-sm sm:prose-base dark:prose-invert max-w-none" dangerouslySetInnerHTML={safeHtmlProp(shared.html)} />
                 ) : (
                     <p className="text-muted-foreground">No content.</p>
                 )}

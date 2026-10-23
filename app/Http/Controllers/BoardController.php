@@ -11,6 +11,7 @@ use App\Models\ItemLink;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Project;
+use App\Models\Release;
 use App\Models\Sprint;
 use App\Models\User;
 use App\Models\Workspace;
@@ -443,6 +444,12 @@ class BoardController extends Controller
             'time_spent' => $item->time_spent,
             'original_estimate' => $item->original_estimate,
             'development' => ItemDevelopment::for($item),
+            // Options for the "Fix version" field: open and shipped releases, plus the current one.
+            'releases' => Release::where('project_id', $item->board->project_id)
+                ->where(fn ($q) => $q->where('status', '!=', Release::STATUS_ARCHIVED)->orWhere('id', $item->release_id))
+                ->orderByRaw("case status when 'unreleased' then 0 else 1 end")->orderBy('release_date')->orderByDesc('id')
+                ->limit(100)->get(['id', 'name', 'status']),
+            'release_id' => $item->release_id,
         ]);
     }
 
@@ -643,6 +650,8 @@ class BoardController extends Controller
             'due_date' => 'nullable|date',
             'due_time' => 'nullable|date_format:H:i',
             'story_points' => 'nullable|integer|min:0',
+            // Fix version: a release of this project that isn't archived.
+            'release_id' => ['nullable', Rule::exists('releases', 'id')->where('project_id', $project->id)->whereIn('status', [Release::STATUS_UNRELEASED, Release::STATUS_RELEASED])],
             'original_estimate' => ['nullable', 'string', 'max:50', function ($attribute, $value, $fail) {
                 if (Item::parseDuration($value) === null) {
                     $fail('Use a duration like 45m, 1h 30m, 2h or 1d.');

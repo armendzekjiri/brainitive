@@ -78,4 +78,11 @@ class ErrorPagesTest extends TestCase
     {
         $this->getJson('/api/does-not-exist')->assertNotFound()->assertJsonStructure(['message']);
     }
+
+    public function test_a_wrong_http_method_shows_the_405_page_not_a_crash(): void
+    {
+        // No route matched, so there is no session — shared flash props must not need one.
+        $this->withoutVite();
+        $this->put('/login')->assertStatus(405)->assertInertia(fn ($page) => $page->component('Error')->where('status', 405));
+    }
 }

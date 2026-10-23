@@ -25,6 +25,7 @@ class Item extends Model
         'parent_id',
         'item_type_id',
         'priority_id',
+        'release_id',
         'uuid',
         'key',
         'title',
@@ -437,5 +438,13 @@ class Item extends Model
     public function devLinks(): HasMany
     {
         return $this->hasMany(ItemDevLink::class);
+    }
+
+    /**
+     * The fix version this issue ships in.
+     */
+    public function release(): BelongsTo
+    {
+        return $this->belongsTo(Release::class);
     }
 }
