@@ -47,10 +47,12 @@ E2E_PORT=8021 npm run e2e                                            # a second 
 - **Isolation.** Tests run fully in parallel on one database. Create your own data with `uid()`
   names, and never rename, re-password or delete the seeded users, workspace, project or board.
 - **Page errors.** An uncaught page error fails the test (the auto fixture in `fixtures.ts`).
-- **Remote / after every deploy.** `pre-release.yml` runs project `dev` (`tests/dev-smoke.spec.ts`)
-  against the deployed https://dev.brainitive.app after each deploy. It needs no local server and
-  does no reset, and uses the e2e users the deploy seeds there (idempotent `E2eSeeder`, E2E
-  Workspace only). Locally: `E2E_BASE_URL=https://dev.brainitive.app E2E_HTTP_USER=…
+- **Live on dev after every deploy.** `pre-release.yml` runs **all journeys** (`--project=chromium`)
+  plus `dev-smoke.spec.ts` against the deployed https://dev.brainitive.app. The deploy first runs
+  `php artisan e2e:prune --force`, which deletes every `@example.test` user and, through the
+  cascades, everything they created. It refuses in production, and when a test user is in a real
+  person's workspace. Then `E2eSeeder` recreates the test users. Only the invite journey is
+  skipped there, because it reads the local mail log. Locally: `E2E_BASE_URL=https://dev.brainitive.app E2E_HTTP_USER=…
   E2E_HTTP_PASSWORD=… E2E_PASSWORD=… npx playwright test -c e2e --project=dev`. The credentials
   are in the GitHub secrets `DEV_BASIC_AUTH_*` and `E2E_DEV_PASSWORD`; locally they're in
   `~/.brainitive-dev-*`.
