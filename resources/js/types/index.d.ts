@@ -249,8 +249,49 @@ export interface Item {
     original_estimate?: number | null;
     /** Minutes. */
     time_spent?: number;
+    /** Custom field values — one row per field that has a value (BRAI-77). */
+    field_values?: ItemFieldValue[];
     created_at: string;
     updated_at: string;
+}
+
+export type ItemFieldType = 'text' | 'number' | 'date' | 'checkbox' | 'select';
+
+export interface ItemFieldOption {
+    id: number;
+    item_field_id: number;
+    label: string;
+    color: string | null;
+    position: number;
+    /** Archived options stay on issues that have them but can't be picked anew. */
+    archived_at: string | null;
+}
+
+/** A project's custom field for board issues (App\Models\ItemField). */
+export interface ItemField {
+    id: number;
+    project_id: number;
+    name: string;
+    type: ItemFieldType;
+    /** Null = every board of the project. */
+    board_ids: number[] | null;
+    position: number;
+    archived_at: string | null;
+    options: ItemFieldOption[];
+    /** Project settings only: how many issues have a value. */
+    values_count?: number;
+}
+
+/** Exactly one typed column is set, chosen by the field type; no row = no value. */
+export interface ItemFieldValue {
+    id: number;
+    item_id: number;
+    item_field_id: number;
+    value_text: string | null;
+    value_number: number | null;
+    value_date: string | null;
+    value_bool: boolean | null;
+    option_id: number | null;
 }
 
 export interface ItemType {

@@ -309,6 +309,21 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **An empty JSON object comes back as `[]` from an `array` cast.** `(object) []` is stored
   as `{}`, but the cast decodes with `json_decode(…, true)`, so React gets `[]`. Client code
   that compares or spreads such values (`rules: {}` vs `rules: []`) must accept both.
+- **Custom field values are typed rows, not strings** (unlike helpdesk `ticket_field_values`).
+  `item_field_values` has one column per type; "empty" means *no row*, so a budget of 0 or an
+  unticked "Needs QA" stays distinct from "not filled in". Changing a field's type is refused
+  while values exist (422) — the documented migration path is "add a new field, archive the
+  old one"; there is no automatic conversion. Values of archived fields, of fields limited to
+  other boards and of archived options are kept and come back on restore / when the issue moves
+  back. Moving an issue to *another project* deletes its old project's values (logged in the
+  history, `ItemFieldValues::dropForeign`). Values on soft-deleted issues still count as "in
+  use", so the field can't be deleted while trashed issues might come back. Limits: 50 active
+  fields per project, 100 options per field, text 1000 chars, numbers below 10^14
+  (`decimal(20,6)`, but read back as a PHP float: ~15 significant digits survive).
+- **New components land in `Components/` on disk.** macOS shows `resources/js/components` as
+  `Components`, so `git add` of a *new* file there records the capital-C path, which breaks
+  the lowercase import on Linux. After adding a component, check `git ls-files | grep -i <name>`
+  and re-stage with `git update-index --add --cacheinfo` under `resources/js/components/…`.
 - **Share links expose only a whitelist.** `ShareLinkController::show` builds the payload
   field by field (title, content / description, status, type, priority, dates) and never
   serializes the model, so new columns can't leak into public pages. Docs share the live

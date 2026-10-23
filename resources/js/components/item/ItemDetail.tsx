@@ -19,13 +19,14 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { DevelopmentPanel, type Development } from '@/components/item/DevelopmentPanel';
+import { ItemFieldsSection } from '@/components/item/ItemFieldsSection';
 import { formatDuration } from '@/lib/duration';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { ItemTypeIcon } from '@/components/ItemTypeIcon';
 import { LabelChip, PriorityIndicator, AssigneeAvatar, itemAccentColor, statusCategory, STATUS_CATEGORY_CLASSES } from '@/components/board/ItemPrimitives';
 import {
     Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User,
-    Label as LabelType, Comment, Attachment, ItemHistoryEntry,
+    Label as LabelType, Comment, Attachment, ItemHistoryEntry, ItemField,
 } from '@/types';
 import { safeHtmlProp } from '@/lib/sanitize';
 
@@ -210,12 +211,17 @@ export interface UseItemDetailArgs {
     currentUserId: number;
     /** Open another item (popup: switch modal item; full page: navigate). */
     onOpenItem: (item: Item) => void;
+    /** Custom fields shown on this board (BRAI-77). */
+    customFields?: ItemField[];
+    /** Whether the user may change the issue (custom field values are read-only otherwise). */
+    canEditItems?: boolean;
 }
 
 export function useItemDetail(args: UseItemDetailArgs) {
     const {
         item, workspace, project, board, itemTypes, priorities,
         projectUsers, projectLabels, projectItems, columns, currentUserId, onOpenItem,
+        customFields = [], canEditItems = true,
     } = args;
 
     const [selectedLabels, setSelectedLabels] = useState<number[]>(item?.labels?.map(l => l.id) || []);
@@ -701,6 +707,8 @@ export function useItemDetail(args: UseItemDetailArgs) {
         filePreview, setFilePreview,
         // history + time tracking
         history, detailsLoading, timeSpent, development, releaseOptions, releaseId, setReleaseId,
+        // custom fields
+        customFields, canEditItems,
         logWorkOpen, setLogWorkOpen, logWorkTime, setLogWorkTime, logWorkNote, setLogWorkNote,
         logWorkError, isLoggingWork, handleLogWork,
     };
@@ -773,6 +781,15 @@ function HistoryEntryBody({ entry }: { entry: ItemHistoryEntry }) {
                     {meta.note ? <> — <span className="text-foreground/80">{String(meta.note)}</span></> : null}
                 </span>
             );
+        case 'field_changed': {
+            const change = entry.changes?.value ?? {};
+            return (
+                <span>
+                    changed <span className="font-medium text-foreground">{String(meta.field ?? 'a field')}</span>:{' '}
+                    <HistoryValue value={change.from} /> <span className="text-muted-foreground">→</span> <HistoryValue value={change.to} />
+                </span>
+            );
+        }
         case 'labels_changed': {
             const labels = entry.changes?.labels ?? {};
             return (
@@ -1499,6 +1516,18 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                         </Select>
                     </div>
                 </div>
+            )}
+
+            {/* Custom fields (project settings → Fields) */}
+            {live && (
+                <ItemFieldsSection
+                    item={live}
+                    fields={d.customFields}
+                    canEdit={d.canEditItems}
+                    workspace={workspace}
+                    project={project}
+                    board={board}
+                />
             )}
 
             {/* Story Points */}

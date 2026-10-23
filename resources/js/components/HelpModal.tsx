@@ -76,6 +76,19 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.30.0',
+        title: 'Custom fields on issues',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'Add your own fields to issues in Project settings → Fields: text, number, date, a yes/no checkbox or a list of options — for all boards or only some.',
+            'Fill them in from the issue details. A 0 or “No” is a real value, different from leaving the field empty.',
+            'Show fields as columns in the board’s List view (“Fields” button), and sort by any column with a click — empty values always go last.',
+            'Filter the board by your fields from the Filter menu. Filters stay in the address, so a filtered board can be shared.',
+            'Renaming an option updates every issue; removing one keeps it on the issues that already have it. Changes show up in the issue history.',
+        ]
+    },
+    {
         version: 'v1.29.0',
         title: 'My Day and a focus timer',
         tag: 'Feature',

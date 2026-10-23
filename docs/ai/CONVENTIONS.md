@@ -357,6 +357,20 @@ Pages work like Confluence. Keep these rules when touching pages:
   rows; Who is read-only once the issue has an assignee.
 - Reuse `ProjectIssues` for anything that shows or creates issues outside the board.
 
+## Custom fields (BRAI-77)
+
+- **Write values only through `App\Support\Boards\ItemFieldValues::apply()`** — it validates
+  every value against the field type, scopes field ids to the item's project and board, and
+  writes the `field_changed` history. Never set `item_field_values` rows by hand in a feature.
+- **No value = no row.** `null` clears (deletes the row); `0` and `false` are stored values.
+  Read values with `fieldValue()` from `lib/customFields.ts` (TS) or `ItemFieldValues::valueOf()`
+  (PHP), never by guessing the typed column.
+- **Never delete options or used fields.** Removing an option archives it; a field with values
+  can only be archived. A field's type changes only while it has no values.
+- **Filters/sorting are client-side** (boards load every card). URL params: `f{fieldId}` for
+  filters (format in `lib/customFields.ts`), `sort=[-]f{fieldId}` in the list view. Empty values
+  sort last in both directions — use `compareNullable()` for any new sortable column.
+
 ## Item history (activity log)
 
 - Changes to `Item` columns are logged automatically by `ItemObserver` — don't log them by

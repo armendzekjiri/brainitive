@@ -1,7 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
-import { PageProps, Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User, Label as LabelType } from '@/types';
+import { PageProps, Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User, Label as LabelType, ItemField } from '@/types';
 import { Button } from '@/components/ui/button';
 import {
     Breadcrumb,
@@ -34,6 +34,8 @@ interface Props extends PageProps {
     columns: BoardColumn[];
     projectLabels: LabelType[];
     projectItems: ProjectItemLite[];
+    customFields?: ItemField[];
+    canEditItems?: boolean;
 }
 
 export default function ItemShow({
@@ -47,6 +49,8 @@ export default function ItemShow({
     columns,
     projectLabels,
     projectItems,
+    customFields = [],
+    canEditItems = true,
 }: Props) {
     const currentUser = usePage<PageProps>().props.auth.user;
     const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
@@ -63,6 +67,8 @@ export default function ItemShow({
         projectItems,
         columns,
         currentUserId: currentUser.id,
+        customFields,
+        canEditItems,
         onOpenItem: (it: Item) =>
             router.visit(route('boards.items.show', [workspace.slug, project.slug, board.slug, it.id])),
     });

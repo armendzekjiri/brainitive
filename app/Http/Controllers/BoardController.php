@@ -7,6 +7,7 @@ use App\Models\Attachment;
 use App\Models\Board;
 use App\Models\BoardColumn;
 use App\Models\Item;
+use App\Models\ItemField;
 use App\Models\ItemLink;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
@@ -18,6 +19,7 @@ use App\Models\Workspace;
 use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
 use App\Support\Boards\ItemComments;
+use App\Support\Boards\ItemFieldValues;
 use App\Support\Boards\ItemMentions;
 use App\Support\Boards\Swimlanes;
 use App\Support\Github\ItemDevelopment;
@@ -111,6 +113,10 @@ class BoardController extends Controller
             'projectUsers' => $projectUsers,
             'projectLabels' => $projectLabels,
             'projectItems' => $projectItems,
+            'customFields' => ItemField::forBoard($board),
+            // Admins get a shortcut to field settings; values follow ItemPolicy::update (= board update).
+            'canManageFields' => $request->user()->can('update', $project),
+            'canEditItems' => $request->user()->can('update', $board),
             'activeSprint' => $activeSprint?->only(['id', 'name', 'goal', 'start_date', 'end_date']),
             'canManageSprints' => $request->user()->can('update', $board),
             'plannedSprints' => $board->isScrum()
@@ -518,6 +524,7 @@ class BoardController extends Controller
             'outgoingLinks.targetItem.board:id,name,slug',
             'incomingLinks.sourceItem:id,key,title,board_id',
             'incomingLinks.sourceItem.board:id,name,slug',
+            'fieldValues' => fn ($q) => $q->select(self::FIELD_VALUE_COLUMNS),
             'attachments' => function ($q) {
                 $q->with('user:id,name,email')->orderBy('created_at', 'desc');
             },
@@ -571,6 +578,8 @@ class BoardController extends Controller
             'projectLabels' => $projectLabels,
             'projectItems' => $projectItems,
             'projectBoards' => $projectBoards,
+            'customFields' => ItemField::forBoard($board),
+            'canEditItems' => $request->user()->can('update', $item),
         ]);
     }
 
@@ -808,6 +817,8 @@ class BoardController extends Controller
             $newItem->labels()->sync($labelIds);
         }
 
+        ItemFieldValues::copy($originalItem, $newItem);
+
         if ($withSubitems) {
             foreach ($originalItem->children()->orderBy('position')->get() as $child) {
                 $this->performItemDuplication($child, $project, $newItem->id, $userId, false, true);
@@ -878,6 +889,23 @@ class BoardController extends Controller
         }
 
         return back()->with('success', 'Labels updated successfully.');
+    }
+
+    /**
+     * Set custom field values on an item: `values: {fieldId: value|null}` (null clears).
+     * Each field must be an active field of this project that shows on the item's board.
+     */
+    public function updateItemFields(Request $request, Workspace $workspace, Project $project, Board $board, Item $item)
+    {
+        $this->authorize('update', $item);
+
+        $validated = $request->validate([
+            'values' => 'present|array|max:'.ItemField::MAX_FIELDS,
+        ]);
+
+        ItemFieldValues::apply($item, $validated['values']);
+
+        return back();
     }
 
     /**
@@ -998,6 +1026,8 @@ class BoardController extends Controller
                 'parent_id' => null, // a parent on the old board can't own it any more
                 'position' => 0,
             ]);
+            // Custom fields are per project: values of the old project's fields can't follow.
+            ItemFieldValues::dropForeign([$item->id, ...$item->descendantIds()], $targetBoard->project_id);
         });
 
         return back()->with('success', 'Item moved successfully.');
@@ -1063,6 +1093,11 @@ class BoardController extends Controller
     private const HISTORY_LIMIT = 200;
 
     /**
+     * Custom field value columns sent with each card (no timestamps).
+     */
+    private const FIELD_VALUE_COLUMNS = ['id', 'item_id', 'item_field_id', 'value_text', 'value_number', 'value_date', 'value_bool', 'option_id'];
+
+    /**
      * What a card on the board (and the item popup's "live" copy) needs — no comment or
      * attachment bodies, just their counts.
      *
@@ -1084,6 +1119,7 @@ class BoardController extends Controller
                 'outgoingLinks.targetItem.board:id,name,slug',
                 'incomingLinks.sourceItem:id,key,title,board_id',
                 'incomingLinks.sourceItem.board:id,name,slug',
+                'fieldValues' => fn ($q) => $q->select(self::FIELD_VALUE_COLUMNS),
             ]);
     }
 }
