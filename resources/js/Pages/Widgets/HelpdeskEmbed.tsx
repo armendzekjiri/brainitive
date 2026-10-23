@@ -41,12 +41,23 @@ type Branding = {
     welcome_message?: string;
 };
 
+type FormTexts = {
+    form_title: string;
+    submit_label: string;
+    message_placeholder: string;
+    success_message: string;
+    after_submit: 'portal' | 'message';
+};
+
 type FormConfig = {
     helpdesk_uuid: string;
     default_editable: DefaultEditable;
     attachments_enabled?: boolean;
     fields: FormField[];
     branding: Branding;
+    /** Per-helpdesk form texts and subject field (BRAI-92). */
+    texts?: FormTexts;
+    subject?: { label: string; hidden: boolean };
 };
 
 type Reply = {
@@ -130,6 +141,7 @@ export default function HelpdeskEmbed({
     const [loadingTicket, setLoadingTicket] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [submitted, setSubmitted] = useState<string | null>(null);
     const [replySubmitting, setReplySubmitting] = useState(false);
     const [replyBody, setReplyBody] = useState('');
     const [descriptionHtml, setDescriptionHtml] = useState('');
@@ -185,7 +197,8 @@ export default function HelpdeskEmbed({
         const form = e.currentTarget;
         const de = formConfig.default_editable || {};
         const body: Record<string, string> = {
-            subject: (form.querySelector('[name="subject"]') as HTMLInputElement)?.value ?? '',
+            // A hidden subject is filled in by the server
+            subject: (form.querySelector('[name="subject"]') as HTMLInputElement | null)?.value ?? '',
             contact_email: (form.querySelector('[name="contact_email"]') as HTMLInputElement)?.value ?? '',
         };
         if (de.contact_name) body.contact_name = (form.querySelector('[name="contact_name"]') as HTMLInputElement)?.value ?? '';
@@ -216,7 +229,8 @@ export default function HelpdeskEmbed({
                 }
                 if (textOnly) body[`field_${f.name}`] = html;
             } else {
-                const el = form.querySelector(`[name="field_${f.name}"]`) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
+                // Radios and checkboxes only count when picked (querySelector alone returns the first radio)
+                const el = form.querySelector(`[name="field_${f.name}"]:is(input[type=radio], input[type=checkbox]):checked, [name="field_${f.name}"]:not(input[type=radio]):not(input[type=checkbox])`) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | null;
                 if (el && el.value != null && String(el.value).trim() !== '') {
                     body[`field_${f.name}`] = String(el.value);
                 }
@@ -256,6 +270,12 @@ export default function HelpdeskEmbed({
                 }
             }
             setAttachments([]);
+
+            // Forms (registration, contact, sign-up…) end on a thank-you screen
+            if (formConfig.texts?.after_submit === 'message') {
+                setSubmitted(data.message || formConfig.texts.success_message);
+                return;
+            }
 
             // Redirect to the same portal ticket page as the link in the email
             window.location.href = `${baseUrl}/portal/tickets/${data.ticket_uuid}?token=${encodeURIComponent(data.access_token)}`;
@@ -338,10 +358,12 @@ export default function HelpdeskEmbed({
     };
 
     const welcomeMessage = formConfig?.branding?.welcome_message ?? 'How can we help you?';
+    const texts = formConfig?.texts;
+    const subjectField = formConfig?.subject ?? { label: 'Subject', hidden: false };
 
     return (
         <EmbedLayout wide={!!page}>
-            <Head title={page ? `${page.title} — Support` : 'Contact support'} />
+            <Head title={page ? `${page.title} — ${texts?.form_title ?? 'Support'}` : (texts?.form_title ?? 'Contact support')} />
             {page && (
                 <header className="mb-6 flex items-center gap-3">
                     {page.logo_url ? (
@@ -440,10 +462,19 @@ export default function HelpdeskEmbed({
                         </Card>
                     ) : null}
                 </>
+            ) : submitted !== null ? (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>{texts?.form_title ?? 'Thank you'}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <p role="status" className="text-sm">{submitted}</p>
+                    </CardContent>
+                </Card>
             ) : (
                 <Card>
                     <CardHeader>
-                        <CardTitle>Contact support</CardTitle>
+                        <CardTitle>{texts?.form_title ?? 'Contact support'}</CardTitle>
                         <CardDescription>{welcomeMessage}</CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -469,10 +500,12 @@ export default function HelpdeskEmbed({
                                     required
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="subject">Subject *</Label>
-                                <Input id="subject" name="subject" required />
-                            </div>
+                            {!subjectField.hidden && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="subject">{subjectField.label} *</Label>
+                                    <Input id="subject" name="subject" required />
+                                </div>
+                            )}
                             {formConfig?.default_editable?.description && (
                                 <div className="space-y-2">
                                     <Label>
@@ -483,7 +516,7 @@ export default function HelpdeskEmbed({
                                         content={null}
                                         onChange={setDescriptionHtml}
                                         editable={true}
-                                        placeholder="Type your message…"
+                                        placeholder={texts?.message_placeholder ?? 'Type your message…'}
                                         showToolbar={true}
                                         minHeight="120px"
                                         className="rounded-md border border-input shadow-sm min-h-[120px]"
@@ -650,7 +683,7 @@ export default function HelpdeskEmbed({
                                 {submitting ? (
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                 ) : null}
-                                Submit
+                                {texts?.submit_label ?? 'Submit'}
                             </Button>
                         </form>
                     </CardContent>

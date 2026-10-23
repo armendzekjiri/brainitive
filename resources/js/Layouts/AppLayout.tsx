@@ -103,6 +103,7 @@ import {
 import { flattenPagesForParentSelect } from '@/lib/pageTree';
 import { GlobalCreateModal } from '@/components/GlobalCreateModal';
 import CreateProjectDialog, { openCreateProject } from '@/components/projects/CreateProjectDialog';
+import HelpdeskTemplatePicker from '@/components/helpdesk/HelpdeskTemplatePicker';
 
 interface Props extends PropsWithChildren {
     title?: string;
@@ -719,6 +720,7 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
     const helpdeskForm = useForm({
         name: '',
         description: '',
+        template: '',
     });
 
     const listForm = useForm({
@@ -798,7 +800,7 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
 
     return (
         <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-            <DialogContent className={cn('sm:max-w-md', itemType === 'plan' && 'sm:max-w-lg')}>
+            <DialogContent className={cn('sm:max-w-md', itemType === 'plan' && 'sm:max-w-lg', itemType === 'helpdesk' && 'sm:max-w-2xl max-h-[90vh] overflow-y-auto')}>
                 <DialogHeader>
                     <DialogTitle>
                         {itemType === null ? 'Create New' : itemType === 'board' ? 'Create Board' : itemType === 'folder' ? 'Create Folder' : itemType === 'excalidraw' ? 'Create Whiteboard' : itemType === 'helpdesk' ? 'Create Helpdesk' : itemType === 'list' ? 'Create List' : itemType === 'plan' ? 'Create Plan' : 'Create Page'}
@@ -936,6 +938,15 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
                     </form>
                 ) : itemType === 'helpdesk' ? (
                     <form onSubmit={handleCreateHelpdesk} className="space-y-4 py-2">
+                        <div className="space-y-2">
+                            <Label>Start from</Label>
+                            <HelpdeskTemplatePicker
+                                workspaceSlug={workspace.slug}
+                                value={helpdeskForm.data.template}
+                                onChange={(key, template) => helpdeskForm.setData((d) => ({ ...d, template: key, name: d.name || (template?.name ?? '') }))}
+                            />
+                            {helpdeskForm.errors.template && <p className="text-sm text-destructive">{helpdeskForm.errors.template}</p>}
+                        </div>
                         <div className="space-y-2">
                             <Label htmlFor="helpdesk-name">Helpdesk Name</Label>
                             <Input

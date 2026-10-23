@@ -309,6 +309,10 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **An empty JSON object comes back as `[]` from an `array` cast.** `(object) []` is stored
   as `{}`, but the cast decodes with `json_decode(…, true)`, so React gets `[]`. Client code
   that compares or spreads such values (`rules: {}` vs `rules: []`) must accept both.
+- **Public helpdesk submissions are validated on the server** (`HelpdeskForm::publicRules()`, since BRAI-92): required name / message per settings, required custom fields, numbers, dates and choices from the field's options. Before, only the browser checked them. Multi-choice answers arrive as a JSON string and are decoded first (`HelpdeskForm::prepare`).
+- **A hidden subject is filled by the server** as "<auto_subject or helpdesk name> — <name or email>"; forms like registrations don't show one.
+- **SQLite kept the old enum CHECK on `helpdesk_fields.type`** until 2026_10_24_130000 (radio / date / checkboxes failed to save on SQLite installs); it's a plain string there now.
+- **The embed form used to send the first radio's value and an unticked checkbox's value**; it now reads only `:checked` inputs.
 - **Project templates copy structure, never people or history.** Captured: labels, project
   item types (Lucide icon names only), custom fields, boards + columns + swimlanes, and by
   choice issues (no assignee / reporter), published docs (live content, never drafts —

@@ -125,6 +125,10 @@
             contact_name?: { label: string; is_required: boolean };
             description?: { label: string; is_required: boolean };
         };
+        attachments_enabled?: boolean;
+        // Per-helpdesk texts and subject field (BRAI-92)
+        texts?: { form_title: string; submit_label: string; message_placeholder: string; success_message: string; after_submit: 'portal' | 'message' };
+        subject?: { label: string; hidden: boolean };
     };
 
     type TicketData = {
@@ -136,7 +140,8 @@
     let currentTicketUuid: string | null = ticketUuid || null;
     let currentToken: string | null = token || null;
     let panelOpen = false;
-    let view: 'form' | 'ticket' = ticketUuid && token ? 'ticket' : 'form';
+    let view: 'form' | 'ticket' | 'thanks' = ticketUuid && token ? 'ticket' : 'form';
+    let thanksMessage = '';
 
     const root = document.createElement('div');
     shadow.appendChild(document.createElement('style')).textContent = css;
@@ -188,6 +193,11 @@
             const name = fd.get('contact_name');
             if (name != null && String(name).trim() !== '') body.contact_name = String(name).trim();
             formConfig!.fields.forEach((f) => {
+                if (f.type === 'checkboxes') {
+                    const picked = fd.getAll('field_' + f.name).map(String);
+                    if (picked.length) body['field_' + f.name] = JSON.stringify(picked);
+                    return;
+                }
                 const v = fd.get('field_' + f.name);
                 if (v != null && String(v).trim() !== '') body['field_' + f.name] = String(v);
             });
@@ -223,7 +233,12 @@
                         }
                     }
                 }
-                view = 'ticket';
+                if (formConfig?.texts?.after_submit === 'message') {
+                    thanksMessage = data.message || formConfig.texts.success_message;
+                    view = 'thanks';
+                } else {
+                    view = 'ticket';
+                }
                 render();
             } catch (err) {
                 const msg = document.createElement('div');
@@ -232,7 +247,7 @@
                 form.insertBefore(msg, form.firstChild);
                 if (submitBtn) {
                     submitBtn.disabled = false;
-                    submitBtn.textContent = 'Submit';
+                    submitBtn.textContent = formConfig?.texts?.submit_label || 'Submit';
                 }
             }
         };
@@ -264,14 +279,32 @@
                 const inp = document.createElement('input');
                 inp.type = 'checkbox';
                 inp.id = inp.name = name;
+                inp.value = '1';
+                inp.required = required;
                 g.appendChild(inp);
+            } else if ((type === 'radio' || type === 'checkboxes') && options && options.length) {
+                options.forEach((o, i) => {
+                    const row = document.createElement('label');
+                    row.style.display = 'flex';
+                    row.style.gap = '6px';
+                    row.style.alignItems = 'center';
+                    row.style.fontWeight = 'normal';
+                    const inp = document.createElement('input');
+                    inp.type = type === 'radio' ? 'radio' : 'checkbox';
+                    inp.name = name;
+                    inp.value = o;
+                    if (type === 'radio' && required && i === 0) inp.required = true;
+                    row.appendChild(inp);
+                    row.appendChild(document.createTextNode(o));
+                    g.appendChild(row);
+                });
             } else {
                 const isLongText = typeof type === 'string' && (type === 'rich_text' || type === 'textarea' || type.toLowerCase().replace(/[\s-]/g, '_') === 'rich_text');
                 const inp = document.createElement(isLongText ? 'textarea' : 'input');
                 inp.id = inp.name = name;
                 inp.required = required;
                 if (inp instanceof HTMLInputElement) {
-                    inp.type = type === 'number' ? 'number' : 'text';
+                    inp.type = type === 'number' ? 'number' : type === 'date' ? 'date' : name === 'contact_email' ? 'email' : 'text';
                 } else {
                     (inp as HTMLTextAreaElement).rows = 4;
                 }
@@ -283,13 +316,14 @@
         const de = formConfig.default_editable || {};
         if (de.contact_name) addField('contact_name', de.contact_name.label, 'text', de.contact_name.is_required);
         addField('contact_email', 'Email', 'text', true);
-        addField('subject', 'Subject', 'text', true);
+        if (!formConfig.subject?.hidden) addField('subject', formConfig.subject?.label || 'Subject', 'text', true);
         if (de.description) addField('description', de.description.label, 'textarea', de.description.is_required);
         formConfig.fields.forEach((f) => {
             addField('field_' + f.name, f.label, f.type, f.is_required, f.options);
         });
 
         const attGroup = document.createElement('div');
+        if (formConfig.attachments_enabled === false) attGroup.style.display = 'none';
         attGroup.className = 'form-group';
         const attLabel = document.createElement('label');
         attLabel.htmlFor = 'attachments';
@@ -334,7 +368,7 @@
         const sub = document.createElement('button');
         sub.type = 'submit';
         sub.className = 'btn btn-primary';
-        sub.textContent = 'Submit';
+        sub.textContent = formConfig.texts?.submit_label || 'Submit';
         form.appendChild(sub);
         wrap.appendChild(form);
         return wrap;
@@ -468,8 +502,17 @@
             let title = 'Support';
             let body: HTMLDivElement;
             if (view === 'form') {
-                title = 'Contact support';
+                title = formConfig?.texts?.form_title || 'Contact support';
                 body = renderForm();
+            } else if (view === 'thanks') {
+                title = formConfig?.texts?.form_title || 'Thank you';
+                body = document.createElement('div');
+                body.className = 'panel-body';
+                const msg = document.createElement('div');
+                msg.className = 'msg success';
+                msg.setAttribute('role', 'status');
+                msg.textContent = thanksMessage;
+                body.appendChild(msg);
             } else {
                 title = 'Your ticket';
                 body = renderTicketView();

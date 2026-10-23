@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Helpdesk;
+use App\Support\Helpdesks\HelpdeskForm;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -42,11 +43,16 @@ class HelpdeskWidgetController extends Controller
         }
 
         $attachmentsEnabled = empty($settings['default_field_attachments']['hidden']);
+        // Form texts and the subject field come from the helpdesk (templates set them, BRAI-92)
+        $texts = HelpdeskForm::texts($helpdesk);
+        $subject = HelpdeskForm::subject($helpdesk);
 
         return response()->json([
             'helpdesk_uuid' => $helpdesk->uuid,
             'default_editable' => $defaultEditable,
             'attachments_enabled' => $attachmentsEnabled,
+            'texts' => $texts,
+            'subject' => $subject,
             'fields' => $helpdesk->fields->map(function ($f) {
                 $type = $f->type;
                 if (is_string($type)) {

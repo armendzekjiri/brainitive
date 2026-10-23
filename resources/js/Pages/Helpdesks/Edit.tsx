@@ -50,6 +50,7 @@ import {
 } from 'lucide-react';
 import { useState, useEffect, FormEvent, DragEvent } from 'react';
 import axios from 'axios';
+import HelpdeskFormTextsCard from '@/components/helpdesk/HelpdeskFormTextsCard';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -1024,6 +1025,7 @@ export default function HelpdesksEdit({ workspace, project, helpdesk, appUrl }: 
                                     </form>
                                 </CardContent>
                             </Card>
+                            <HelpdeskFormTextsCard workspace={workspace} project={project} helpdesk={helpdesk} />
                         </TabsContent>
 
                         <TabsContent value="columns" className="space-y-6">
