@@ -161,7 +161,7 @@ $table->softDeletes();              // main entities
 $table->foreignId('workspace_id')->constrained()->cascadeOnDelete();
 $table->json('settings')->nullable();
 ```
-Keep migrations cross-DB safe (the default is SQLite, tests use `:memory:`). Branch on the
+Keep migrations cross-DB safe (self-hosted installs default to SQLite; production and all tests run PostgreSQL). Branch on the
 database driver before using raw engine-specific SQL such as constraint changes or MySQL
 `MODIFY` statements.
 
@@ -215,7 +215,7 @@ export default function MyPage({ entity }: Props) {
 
 ## Database / Eloquent
 
-- Default SQLite; tests `:memory:`. Always eager load; always scope to the user's accessible
+- Self-hosted default SQLite; production + tests PostgreSQL (`brainitive_test`). Always eager load; always scope to the user's accessible
   workspaces. Use `create()`/`update()` with validated data.
 
 Key relationships:

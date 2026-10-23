@@ -249,6 +249,24 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 | A server-side request to a user URL | `App\Support\OutboundUrl::options()` (public IPs only, pinned, no auto-redirects) |
 | Rendering stored HTML | `safeHtmlProp()` (`resources/js/lib/sanitize.ts`); server: `App\Support\SafeHtml` |
 
+## Testing
+- **PHPUnit** (`tests/`): PostgreSQL in the forced database `brainitive_test` (phpunit.xml).
+- **E2E** (`e2e/`, Playwright, see `e2e/README.md`):
+  - `env.ts`: target, per-port Postgres database, app environment;
+  - `fixtures.ts`: `uid`, `urls`, per-worker owner/member sessions, `memberPage`, page-error guard;
+  - `assets.ts`: in-memory `/build/assets` cache;
+  - `mail.ts`: links from the e2e mail log;
+  - `crawler.ts`: the every-button crawler;
+  - `tests/*.spec.ts`: one spec per area, plus collaboration and crawl;
+  - `helpers/*.ts`.
+- Seed: `Database\Seeders\E2eSeeder`. Reset: `php artisan e2e:reset` (`App\Console\Commands\E2eReset`,
+  e2e databases only).
+- **CI:**
+  - `tests.yml`: Pint, tsc + build, PHPUnit, and e2e in Chromium on every push;
+  - `e2e-nightly.yml`: Firefox and WebKit;
+  - `pre-release.yml`: the gate, then a deploy to dev.brainitive.app;
+  - `deploy.yml`: production, only after the gate.
+
 ## Self-hosting (Docker)
 - `Dockerfile` — multi-stage: composer → node (frontend; needs `vendor/tightenco/ziggy` for
   `tsc`) → `dunglas/frankenphp` runtime (Caddy + PHP 8.4, non-root, extensions installed

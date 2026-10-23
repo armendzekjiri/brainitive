@@ -35,7 +35,8 @@ This runs: `php artisan serve`, `php artisan queue:listen`, `php artisan pail`, 
 
 - **PHP lint**: `./vendor/bin/pint --test` (Laravel Pint)
 - **TypeScript check**: `npx tsc --noEmit`
-- **PHPUnit tests**: `php artisan test` (uses SQLite in-memory)
+- **PHPUnit tests**: `php artisan test` (PostgreSQL like production, in the forced database `brainitive_test` — create it once with `createdb -O <your DB user> brainitive_test`)
+- **E2E tests**: `npm run e2e` (Playwright; see `e2e/README.md`)
 - **Frontend build**: `npm run build` (runs `tsc && vite build`)
 
 ### Known issues

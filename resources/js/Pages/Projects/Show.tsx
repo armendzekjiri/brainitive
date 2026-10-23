@@ -146,9 +146,11 @@ export default function ProjectsShow({ workspace, project, canUpdate = false, ca
                                     </form>
                                 </DialogContent>
                             </Dialog>
-                            <Link href={route('projects.edit', [workspace.slug, project.slug])}>
-                                <Button size="icon" className="size-8 bg-white/15 text-white hover:bg-white/25 border border-white/20"><Settings className="size-3.5" /></Button>
-                            </Link>
+                            {canUpdate && (
+                                <Link href={route('projects.edit', [workspace.slug, project.slug])} aria-label="Project settings">
+                                    <Button size="icon" className="size-8 bg-white/15 text-white hover:bg-white/25 border border-white/20"><Settings className="size-3.5" /></Button>
+                                </Link>
+                            )}
                         </div>
                     </div>
                 </div>

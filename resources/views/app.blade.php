@@ -53,8 +53,10 @@
         @vite(['resources/js/app.tsx', "resources/js/Pages/{$page['component']}.tsx"])
         @inertiaHead
 
-        <!-- Analytics (Nova Brain Hub) -->
-        <script defer src="https://stats.novabrainhub.de/script.js" data-website-id="e6d93341-8b10-4d6a-8629-b9599635909e"></script>
+        <!-- Analytics (Nova Brain Hub): brainitive.app only, never dev / e2e / local / self-hosted installs -->
+        @if (in_array(request()->getHost(), ['brainitive.app', 'www.brainitive.app'], true))
+            <script defer src="https://stats.novabrainhub.de/script.js" data-website-id="e6d93341-8b10-4d6a-8629-b9599635909e"></script>
+        @endif
     </head>
     <body class="font-sans antialiased">
         @inertia

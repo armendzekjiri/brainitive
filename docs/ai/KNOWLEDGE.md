@@ -29,6 +29,45 @@ Deployments are matched by window: what reached the deployed ref after the previ
 deploy to that environment (`github_connections.deployments`). Keep processing idempotent
 (upserts keyed by item+kind+repo+identifier) — GitHub redelivers.
 
+### E2E suite (Playwright, BRAI-96): how it works and the traps it found
+Details in `e2e/README.md`; this lists what isn't obvious.
+
+- **Every run is isolated.** Each local run starts its own `php artisan serve --no-reload` on
+  `E2E_PORT` with its own Postgres database, `brainitive_e2e_<port>`. `--no-reload` makes it pass
+  the e2e environment through instead of re-reading `.env`. `e2e:reset` refuses anything but
+  `APP_ENV=e2e` plus an e2e database.
+- **One session per worker** (the worker fixtures in `fixtures.ts`). Laravel's flash data
+  (validation errors, toasts) belongs to a session, and workers sharing one session consumed each
+  other's flash.
+- **A new `request.newContext()` inside the runner inherits the project's `storageState`.** Pass
+  an empty one explicitly, or a "fresh" login is really the owner's existing session (`/login` then
+  just redirects).
+- **Cache `/build/assets` in memory** (`assets.ts`). `php artisan serve` closes every connection,
+  an app page loads about 200 chunks, and parallel runs ran out of loopback ports
+  (`ERR_ADDRESS_INVALID`, blank pages).
+- **Mail.** e2e mail goes to `storage/e2e/mail-<port>.log` (the `mail` log channel), and
+  `mail.ts` follows invite and verification links. Laravel's log transport has already decoded
+  quoted-printable bodies, so don't decode again (it corrupts `=17…` in links).
+- **Every button.** The crawler (`crawler.ts`, project `crawl`) clicks every control on every
+  page it can reach, plus their menus and dialogs, and fills and submits form dialogs. Destructive
+  requests are answered with a reload (`409` + `X-Inertia-Location`). `networkidle` returns at
+  once on a loaded page, so the crawler counts in-flight requests itself.
+
+App bugs it found (all fixed, each with a test). Patterns to keep:
+
+- **Plain `throttle:N,M` shares one counter per IP or user across every route.** Always add a
+  prefix: `throttle:10,1,<route name>`. `RouteThrottleTest` fails on an unprefixed one.
+- **Laravel writes the whole session at the end of every request; the last write wins.** A
+  background fetch that started before a form submit wiped the submit's validation errors.
+  Read-only fetches fired on page load get `ReadOnlySession` (`page-sticky-notes.index`).
+- **Inertia sends `X-Requested-With` too.** "JSON for XHR" endpoints must exclude
+  `X-Inertia`, or Inertia forms get JSON (`storeLabel`, `storeItemType`).
+- **Key counters:** `Project::bumpCounter()` increments under a row lock. Reading the loaded
+  model and incrementing later handed parallel requests the same key. Ticket keys are unique per
+  helpdesk, not per instance (project keys repeat across workspaces).
+- **The Lexical mention picker only runs with `projectId`.** The issue comment editor missed it,
+  so comments couldn't @mention anyone.
+
 ### dev.brainitive.app: staging on the production server, isolated
 `pre-release` deploys to `/var/www/brainitive-dev` on the same server as production (BRAI-95).
 - **Isolation:**
@@ -44,8 +83,9 @@ deploy to that environment (`github_connections.deployments`). Keep processing i
   `~/.brainitive-dev-basic-auth` on the maintainer's Mac) and noindex.
 - **Deploy guard:** the deploy refuses to run unless the folder, `APP_ENV=staging` and
   `DB_DATABASE=brainitive_dev` all match. Keep that guard on anything destructive (the e2e reset).
-- **Production `.env` is world-readable** (664, and every site's PHP runs as `www-data`). Fix:
-  `chmod 640` (`www-data` is in `webdev`), ideally plus an own FPM pool for production.
+- **Production `.env`** was world-readable (664; every site's PHP runs as `www-data`). It has
+  been 640 since 2026-10-23 (`www-data` reads it through `webdev`). An own FPM pool for production
+  would isolate it fully.
 
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
@@ -361,11 +401,16 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   never existed). For a new render, assert `assertInertia(fn ($p) => $p->component(...))` and
   that the file exists. Ticket links (`tickets.show`) render `Helpdesks/Show` with
   `openTicketId`; there is no separate ticket page.
-- **SQLite in tests is lax about NOT NULL in some paths; production is PostgreSQL.** To test a
-  DB-specific failure, run the tests against a throwaway Postgres:
-  `docker run -d -p 55432:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=brainitive_test postgres:17-alpine`,
-  then `DB_CONNECTION=pgsql DB_PORT=55432 DB_DATABASE=brainitive_test DB_USERNAME=postgres DB_PASSWORD=test php artisan test`.
-  CI (`tests.yml`) runs the whole suite on Postgres 16 on every push. Traps it caught:
+- **All tests run on PostgreSQL** (since BRAI-96), like production:
+  - PHPUnit uses the database `brainitive_test`, forced in phpunit.xml, so tests never touch
+    `devdb`. Create it once with `createdb -O <your .env DB user> brainitive_test`.
+  - e2e uses `brainitive_e2e_<port>`.
+  - There is no SQLite test run; SQLite stays only as the zero-config default for self-hosted
+    installs.
+  - Many parallel local e2e servers can exhaust loopback ports ("Can't assign requested
+    address"). `DB_HOST=/tmp` (the Unix socket) avoids that for PHPUnit.
+
+  Traps the Postgres runs caught:
   - **`where(col, 'like', …)` is case-sensitive on Postgres.** Use `whereLike` / `orWhereLike`
     (`ilike` on pgsql). Search must not depend on case.
   - **A caught unique violation aborts the surrounding Postgres transaction**, including the
@@ -440,9 +485,6 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   people who aren't members of the source project (only published docs, issues, lists and
   plans that were included). That's why only workspace admins save templates, and the save
   dialog says so.
-- **On PostgreSQL, two tests fail on `main` too** (`CommandPaletteTest` search ranking,
-  `GithubDevelopmentTest` signatures) and `ItemCommentToolsTest` pagination is flaky in the
-  full run; SQLite (the default test DB) is green.
 - **Issue keys start at KEY-2 in blank projects.** `projects.next_item_number` stores the
   last number used and `getNextItemKey()` increments first, but the column defaults to 1.
   Template-created projects set it to 0 (first issue KEY-1). Fixing the blank-project path

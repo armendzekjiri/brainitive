@@ -42,6 +42,7 @@ use App\Http\Controllers\TicketController;
 use App\Http\Controllers\WhiteboardController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkTimerController;
+use App\Http\Middleware\ReadOnlySession;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -107,9 +108,9 @@ Route::get('/share/bookmarks/{uuid}', [BookmarkController::class, 'showPublic'])
 Route::get('/share/snippets/{uuid}', [SnippetController::class, 'showPublicSnippet'])->name('snippets.public.show');
 Route::get('/share/plans/{token}', [PublicPlanController::class, 'show'])->name('plans.public');
 // Read-only link to one doc / issue (ShareLink); no login
-Route::get('/r/{token}', [PublicReleaseController::class, 'show'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:120,1')->name('releases.public');
-Route::get('/changelog/{token}', [PublicReleaseController::class, 'changelog'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:120,1')->name('changelog.public');
-Route::get('/s/{token}', [ShareLinkController::class, 'show'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:120,1')->name('share.show');
+Route::get('/r/{token}', [PublicReleaseController::class, 'show'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:120,1,releases.public')->name('releases.public');
+Route::get('/changelog/{token}', [PublicReleaseController::class, 'changelog'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:120,1,changelog.public')->name('changelog.public');
+Route::get('/s/{token}', [ShareLinkController::class, 'show'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:120,1,share.show')->name('share.show');
 Route::get('/share/snippet-collections/{uuid}', [SnippetController::class, 'showPublicCollection'])->name('snippet-collections.public.show');
 
 // Embed test page (same-origin; use this URL to verify iframe works)
@@ -117,20 +118,20 @@ Route::get('/embed-test/{helpdesk:uuid}', [HelpdeskWidgetController::class, 'emb
 
 // Public lead forms (BRAI-93): page to promote, iframe embed, submit + analytics (no CSRF: f/*)
 Route::prefix('f/{publicSlug}')->where(['publicSlug' => '[a-z0-9-]{3,60}'])->group(function () {
-    Route::get('/', [PublicLeadFormController::class, 'show'])->middleware('throttle:120,1')->name('lead-forms.public');
-    Route::get('embed', [PublicLeadFormController::class, 'embed'])->middleware('throttle:120,1')->name('lead-forms.embed');
-    Route::post('submit', [PublicLeadFormController::class, 'submit'])->middleware('throttle:10,1')->name('lead-forms.submit');
-    Route::post('events', [PublicLeadFormController::class, 'event'])->middleware('throttle:120,1')->name('lead-forms.events');
+    Route::get('/', [PublicLeadFormController::class, 'show'])->middleware('throttle:120,1,lead-forms.public')->name('lead-forms.public');
+    Route::get('embed', [PublicLeadFormController::class, 'embed'])->middleware('throttle:120,1,lead-forms.embed')->name('lead-forms.embed');
+    Route::post('submit', [PublicLeadFormController::class, 'submit'])->middleware('throttle:10,1,lead-forms.submit')->name('lead-forms.submit');
+    Route::post('events', [PublicLeadFormController::class, 'event'])->middleware('throttle:120,1,lead-forms.events')->name('lead-forms.events');
 });
 
 // Public helpdesk widget and portal (no auth, CORS for embedding on external sites)
 Route::middleware('cors')->group(function () {
     Route::get('/widget/helpdesks/{helpdesk:uuid}/form', [HelpdeskWidgetController::class, 'formConfig'])->name('helpdesks.widget.form');
     Route::get('/widget/helpdesks/{helpdesk:uuid}/embed', [HelpdeskWidgetController::class, 'embed'])->name('helpdesks.widget.embed');
-    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets', [TicketController::class, 'storePublic'])->middleware('throttle:20,1')->name('helpdesks.tickets.store-public');
+    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets', [TicketController::class, 'storePublic'])->middleware('throttle:20,1,helpdesks.tickets.store-public')->name('helpdesks.tickets.store-public');
     Route::get('/widget/tickets/{ticket:uuid}', [TicketController::class, 'getPublicTicketJson'])->name('helpdesks.tickets.get-public');
-    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/replies', [TicketController::class, 'storePublicReply'])->middleware('throttle:20,1')->name('helpdesks.tickets.replies.store-public');
-    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/attachments', [TicketController::class, 'storePublicAttachment'])->middleware('throttle:20,1')->name('helpdesks.tickets.attachments.store-public');
+    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/replies', [TicketController::class, 'storePublicReply'])->middleware('throttle:20,1,helpdesks.tickets.replies.store-public')->name('helpdesks.tickets.replies.store-public');
+    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/attachments', [TicketController::class, 'storePublicAttachment'])->middleware('throttle:20,1,helpdesks.tickets.attachments.store-public')->name('helpdesks.tickets.attachments.store-public');
     Route::get('/portal/tickets/{ticket:uuid}', [TicketController::class, 'showPublic'])->name('helpdesks.tickets.show-public');
     Route::get('/support/{publicSlug}', [HelpdeskWidgetController::class, 'supportPage'])->where('publicSlug', '[a-z0-9-]+')->name('helpdesks.support-page');
     Route::get('/portal/tickets/{ticket:uuid}/replies', [TicketController::class, 'publicReplies'])->name('helpdesks.tickets.replies.public');
@@ -163,14 +164,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Share links for docs and issues (people who can edit them)
     Route::get('/share-links', [ShareLinkController::class, 'index'])->name('share-links.index');
-    Route::post('/share-links', [ShareLinkController::class, 'store'])->middleware('throttle:30,1')->name('share-links.store');
+    Route::post('/share-links', [ShareLinkController::class, 'store'])->middleware('throttle:30,1,share-links.store')->name('share-links.store');
     Route::delete('/share-links/{shareLink}', [ShareLinkController::class, 'destroy'])->name('share-links.destroy');
 
     // Poll votes (polls inside docs / issue descriptions)
     Route::get('/polls/{scopeType}/{scopeId}/{pollId}', [PollVoteController::class, 'show'])
         ->whereIn('scopeType', ['page', 'item'])->where('pollId', '[A-Za-z0-9:_-]{1,120}')->name('polls.show');
     Route::post('/polls/{scopeType}/{scopeId}/{pollId}', [PollVoteController::class, 'vote'])
-        ->whereIn('scopeType', ['page', 'item'])->where('pollId', '[A-Za-z0-9:_-]{1,120}')->middleware('throttle:60,1')->name('polls.vote');
+        ->whereIn('scopeType', ['page', 'item'])->where('pollId', '[A-Za-z0-9:_-]{1,120}')->middleware('throttle:60,1,polls.vote')->name('polls.vote');
 
     // Calendar — personal calendar across all workspaces
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar.index');
@@ -215,8 +216,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('ai/settings', [AiController::class, 'getSettings'])->name('ai.settings');
         Route::post('ai/settings', [AiController::class, 'saveSettings'])->name('ai.settings.save');
         Route::post('ai/models', [AiController::class, 'fetchModels'])->name('ai.models');
-        Route::post('ai/generate', [AiController::class, 'generate'])->middleware('throttle:30,1')->name('ai.generate');
-        Route::post('projects/{project:slug}/ai/assist', [AiController::class, 'projectAssist'])->name('ai.project-assist')->scopeBindings()->middleware('throttle:20,1');
+        Route::post('ai/generate', [AiController::class, 'generate'])->middleware('throttle:30,1,ai.generate')->name('ai.generate');
+        Route::post('projects/{project:slug}/ai/assist', [AiController::class, 'projectAssist'])->name('ai.project-assist')->scopeBindings()->middleware('throttle:20,1,ai.project-assist');
         Route::post('projects/{project:slug}/ai/save-doc', [AiController::class, 'saveProjectAssist'])->name('ai.project-assist.save')->scopeBindings();
 
         // Bookmarks (workspace level)
@@ -387,7 +388,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('lead-forms/{leadForm:slug}', [LeadFormController::class, 'destroy'])->name('lead-forms.destroy');
             Route::post('lead-forms/{leadForm:slug}/publish', [LeadFormController::class, 'publish'])->name('lead-forms.publish');
             Route::delete('lead-forms/{leadForm:slug}/publish', [LeadFormController::class, 'unpublish'])->name('lead-forms.unpublish');
-            Route::post('lead-forms/{leadForm:slug}/assets', [LeadFormController::class, 'uploadAsset'])->middleware('throttle:30,1')->name('lead-forms.assets');
+            Route::post('lead-forms/{leadForm:slug}/assets', [LeadFormController::class, 'uploadAsset'])->middleware('throttle:30,1,lead-forms.assets')->name('lead-forms.assets');
             Route::post('lead-forms/{leadForm:slug}/inbound-token', [LeadFormController::class, 'rotateInboundToken'])->name('lead-forms.inbound-token');
             Route::delete('lead-forms/{leadForm:slug}/inbound-token', [LeadFormController::class, 'revokeInboundToken'])->name('lead-forms.inbound-token.revoke');
             Route::get('lead-forms/{leadForm:slug}/analytics', [LeadFormController::class, 'analytics'])->name('lead-forms.analytics');
@@ -472,7 +473,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/upload/document', [FileController::class, 'uploadDocument'])->name('upload.document');
 
     // Page-level sticky notes (per user, per URL)
-    Route::get('/api/page-sticky-notes', [PageStickyNoteController::class, 'index'])->name('page-sticky-notes.index');
+    // fetched on every page load: must not write the session (it would race form submits)
+    Route::get('/api/page-sticky-notes', [PageStickyNoteController::class, 'index'])->middleware(ReadOnlySession::class)->name('page-sticky-notes.index');
     Route::post('/api/page-sticky-notes', [PageStickyNoteController::class, 'store'])->name('page-sticky-notes.store');
     Route::patch('/api/page-sticky-notes/{note}', [PageStickyNoteController::class, 'update'])->name('page-sticky-notes.update');
     Route::delete('/api/page-sticky-notes/{note}', [PageStickyNoteController::class, 'destroy'])->name('page-sticky-notes.destroy');
@@ -483,7 +485,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/api/notifications/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unread-count');
     Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
-    Route::post('/api/notifications/notify-mention', [NotificationController::class, 'notifyMention'])->middleware('throttle:60,1')->name('notifications.notify-mention');
+    Route::post('/api/notifications/notify-mention', [NotificationController::class, 'notifyMention'])->middleware('throttle:60,1,notifications.notify-mention')->name('notifications.notify-mention');
 
     // Browser push subscriptions
     Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');

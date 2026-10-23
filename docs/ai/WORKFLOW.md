@@ -35,13 +35,15 @@ feature branch ──PR──▶ pre-release ──(green)──PR──▶ main
 ```
 
 - **Tests** (`.github/workflows/tests.yml`) runs on every push to a feature branch, and is
-  called by the other two workflows. It runs Pint, tsc, the build, and PHPUnit on **SQLite and
-  PostgreSQL**. Production is Postgres; SQLite alone hides case-sensitive `LIKE` and aborted
-  transactions.
+  called by the other two workflows. It runs Pint, tsc, the build, PHPUnit on **PostgreSQL 16**
+  (as production), and the Playwright e2e journeys in Chromium. There is no SQLite in testing:
+  SQLite hid case-sensitive `LIKE` and aborted transactions.
 - **Pre-release** (`pre-release.yml`): the gate on the integration branch, then a deploy to
   **dev.brainitive.app**. That deploy runs plain `migrate` on dev's existing data, the same thing
-  production will run. Green means ready for `main`: open or update the PR
-  **pre-release → main**. Actions can't open PRs in this repo. Check the change on dev; the
+  production will run, then smoke-tests the deployed dev server. When all of that is green, the
+  workflow **opens or updates the PR "Release: pre-release → main"** itself, listing the PRs
+  that would reach production. A person merges it, and merging deploys. The repo setting "Allow
+  GitHub Actions to create pull requests" is on for this. Check the change on dev; the
   Brainitive card goes to **Testing** once it's live there.
 - **Deploy** (`deploy.yml`): `needs: tests`, then fast-forwards the server to `github.sha`,
   never to a newer commit nobody tested.
@@ -112,9 +114,9 @@ php artisan test           # backend tests
 npm run build              # frontend builds clean
 ```
 All green **and** the change verified in the running app (`composer run dev`). Open the PR
-against **`pre-release`**, scoped to one feature/fix. CI repeats the gate, also on Postgres.
-To run Postgres locally, use a throwaway role and database, never `devdb`:
-`DB_CONNECTION=pgsql DB_DATABASE=<scratch db> DB_USERNAME=<scratch role> … php artisan test`. Report honestly if any step failed or was skipped.
+against **`pre-release`**, scoped to one feature/fix. CI repeats the gate and adds the e2e suite
+(`npm run e2e` locally, see `e2e/README.md`). PHPUnit runs on Postgres in the forced database
+`brainitive_test` (phpunit.xml), never `devdb`. Report honestly if any step failed or was skipped.
 
 ---
 

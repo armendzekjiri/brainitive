@@ -488,7 +488,9 @@ class ProjectController extends Controller
 
         $label = $project->labels()->create($validated);
 
-        if ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+        // axios callers (quick create) get the label; Inertia visits (settings, issue dialog) also send
+        // X-Requested-With but need a page response — JSON left their dialog open (found by e2e)
+        if (! $request->header('X-Inertia') && ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest')) {
             return response()->json($label, 201);
         }
 
@@ -556,7 +558,8 @@ class ProjectController extends Controller
 
         $type = $project->itemTypes()->create($validated);
 
-        if ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+        // JSON for API / axios callers only: the settings page posts with Inertia (see storeLabel)
+        if (! $request->header('X-Inertia') && ($request->expectsJson() || $request->header('X-Requested-With') === 'XMLHttpRequest')) {
             return response()->json($type->only(['id', 'project_id', 'name', 'slug', 'icon', 'color', 'description', 'is_default', 'is_active']), 201);
         }
 
