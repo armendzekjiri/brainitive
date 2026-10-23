@@ -29,6 +29,24 @@ Deployments are matched by window: what reached the deployed ref after the previ
 deploy to that environment (`github_connections.deployments`). Keep processing idempotent
 (upserts keyed by item+kind+repo+identifier) — GitHub redelivers.
 
+### dev.brainitive.app: staging on the production server, isolated
+`pre-release` deploys to `/var/www/brainitive-dev` on the same server as production (BRAI-95).
+- **Isolation:**
+  - **PHP:** its own pool `brainitive-dev` (user `brainitive-dev`, socket
+    `php8.4-fpm-brainitive-dev.sock`, `open_basedir` = the dev folder), never the shared
+    `www-data` pool.
+  - **Files:** `.env` is 640 `ubuntu:brainitive-dev`; `storage` and `bootstrap/cache` are closed
+    to others (ACLs for ubuntu + brainitive-dev), except `storage/app/public`.
+  - **Database:** Postgres role and DB `brainitive_dev`, with no privileges on production tables.
+- **Settings:** `APP_ENV=staging`, `MAIL_MAILER=log`, `QUEUE_CONNECTION=sync`, no scheduler, no
+  queue worker.
+- **Access:** behind basic auth (`/etc/nginx/brainitive-dev.htpasswd`; the credentials are in
+  `~/.brainitive-dev-basic-auth` on the maintainer's Mac) and noindex.
+- **Deploy guard:** the deploy refuses to run unless the folder, `APP_ENV=staging` and
+  `DB_DATABASE=brainitive_dev` all match. Keep that guard on anything destructive (the e2e reset).
+- **Production `.env` is world-readable** (664, and every site's PHP runs as `www-data`). Fix:
+  `chmod 640` (`www-data` is in `webdev`), ideally plus an own FPM pool for production.
+
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
 means adding its param to `BoardViewConfig::PARAM_KEYS` + `normalize()` (allowlist) and, if it

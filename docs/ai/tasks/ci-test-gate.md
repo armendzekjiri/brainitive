@@ -25,9 +25,14 @@ locally on SQLite, while production runs PostgreSQL.
 - A duplicate GitHub webhook delivery aborted the enclosing transaction. Now `createOrFirst`.
 - A comment-pagination test assumed ids restart per test.
 
+## dev.brainitive.app (done, waiting for DNS + certificate)
+Same server, isolated. Every pre-release push deploys there and runs `migrate` on the existing
+data. The reset + seed for e2e arrives with BRAI-96, so manual logins survive until then.
+Server: own user, PHP pool, Postgres role / DB, nginx site with basic auth + noindex. Verified:
+401 without the password, isolation in both directions, production unaffected.
+
 ## Next
-- dev.brainitive.app (same server, isolated): its own folder, DB, FPM pool and basic auth.
-  Every pre-release push deploys there, migrates, then reseeds.
+- DNS `dev` → 162.19.229.57 (Cloudflare, DNS-only), then `certbot --nginx -d dev.brainitive.app`.
 - BRAI-96: Playwright e2e against dev in `pre-release.yml`.
 - Branch protection on `main` and `pre-release` (required checks) once the checks have run once.
 

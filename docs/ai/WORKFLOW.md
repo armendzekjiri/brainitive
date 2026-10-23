@@ -29,16 +29,20 @@ agents producing consistent, locatable work.
 ```
 feature branch ──PR──▶ pre-release ──(green)──PR──▶ main ──▶ production deploy
   Tests workflow        Pre-release workflow         Deploy workflow
-  (every push)          (tests; dev.brainitive.app    (tests again, then deploys
-                         + e2e: coming, BRAI-96)       exactly the tested commit)
+  (every push)          (tests → deploy to            (tests again, then deploys
+                         dev.brainitive.app;           exactly the tested commit)
+                         e2e: BRAI-96)
 ```
 
 - **Tests** (`.github/workflows/tests.yml`) runs on every push to a feature branch, and is
   called by the other two workflows. It runs Pint, tsc, the build, and PHPUnit on **SQLite and
   PostgreSQL**. Production is Postgres; SQLite alone hides case-sensitive `LIKE` and aborted
   transactions.
-- **Pre-release** (`pre-release.yml`): the gate on the integration branch. Green means ready for
-  `main`: open or update the PR **pre-release → main**. Actions can't open PRs in this repo.
+- **Pre-release** (`pre-release.yml`): the gate on the integration branch, then a deploy to
+  **dev.brainitive.app**. That deploy runs plain `migrate` on dev's existing data, the same thing
+  production will run. Green means ready for `main`: open or update the PR
+  **pre-release → main**. Actions can't open PRs in this repo. Check the change on dev; the
+  Brainitive card goes to **Testing** once it's live there.
 - **Deploy** (`deploy.yml`): `needs: tests`, then fast-forwards the server to `github.sha`,
   never to a newer commit nobody tested.
 - **Hotfix** straight into `main` (emergencies only): merge `main` back into `pre-release`
