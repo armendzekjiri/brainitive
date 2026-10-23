@@ -101,6 +101,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import ShareButton from '@/components/share/ShareButton';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -1137,6 +1138,10 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                                     <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400">
                                         Unpublished changes
                                     </Badge>
+                                )}
+
+                                {page.type === 'page' && !page.is_whiteboard && can.update && !isEditing && (
+                                    <ShareButton type="page" id={page.uuid} label={page.name} className="h-8 px-2.5 text-xs gap-1.5" />
                                 )}
 
                                 {/* Watch / Watching button */}

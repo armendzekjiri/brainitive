@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Secure sharing for docs and issues (BRAI-15)](./feat-secure-sharing.md) | done |
 | [Nested subtasks (BRAI-25)](./feat-nested-subtasks.md) | done |
 | [AI with project context (BRAI-30)](./feat-ai-project-context.md) | done |
 | [Polls that work (BRAI-13)](./fix-editor-polls.md) | done |

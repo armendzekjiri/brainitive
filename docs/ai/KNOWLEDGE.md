@@ -273,3 +273,7 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **Item soft deletes don't cascade.** The `parent_id` FK cascades only on hard deletes, so
   `destroyItem` soft-deletes `descendantIds()` explicitly. Before that, a deleted issue's
   subtasks stayed behind, although the confirm dialog said they'd be deleted.
+- **Share links expose only a whitelist.** `ShareLinkController::show` builds the payload
+  field by field (title, content / description, status, type, priority, dates) and never
+  serializes the model, so new columns can't leak into public pages. Docs share the live
+  `content`, never `draft_*`; whiteboards aren't shareable yet (they need the Excalidraw viewer).

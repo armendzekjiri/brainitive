@@ -174,6 +174,10 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 
 ---
 
+### Sharing (read-only links)
+- **Docs and issues:** `ShareLink` (morph `shareable`: `Page` / `Item`, random token, `expires_at`, `revoked_at`, views), `ShareLinkController` — manage via `share-links.*` (needs `update` on the item), public view `/s/{token}` → `Pages/Share/Show.tsx` (`noindex`, 410 when revoked / expired / deleted). UI: `components/share/ShareButton.tsx`.
+- **Plans** keep their own `share_token` (`/share/plans/{token}`); bookmarks / snippets have `visibility = public`.
+
 ## Frontend layout (`resources/js/`)
 
 | Dir | What |
