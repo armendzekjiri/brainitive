@@ -59,7 +59,9 @@ App bugs it found (all fixed, each with a test). Patterns to keep:
   prefix: `throttle:10,1,<route name>`. `RouteThrottleTest` fails on an unprefixed one.
 - **Laravel writes the whole session at the end of every request; the last write wins.** A
   background fetch that started before a form submit wiped the submit's validation errors.
-  Read-only fetches fired on page load get `ReadOnlySession` (`page-sticky-notes.index`).
+  Read-only fetches fired on page load or polled get `ReadOnlySession`:
+  `page-sticky-notes.index`, `notifications.index`, and `notifications.unread-count` (every 30 s).
+  Every new background GET needs it too.
 - **Inertia sends `X-Requested-With` too.** "JSON for XHR" endpoints must exclude
   `X-Inertia`, or Inertia forms get JSON (`storeLabel`, `storeItemType`).
 - **Key counters:** `Project::bumpCounter()` increments under a row lock. Reading the loaded

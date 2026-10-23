@@ -17,8 +17,16 @@
   that never had an issue reset to 0. Projects with issues keep their counter.
 - `WorkTimerTest` used a hand-picked `BRAI-1` that now collides with the first generated key.
 
+- The bell's "Mark as read" was invisible (opacity 0) without a mouse hover, so touch and
+  keyboard users never saw it. It now shows on touch screens, and on desktop on hover or keyboard
+  focus, with an aria-label. (Found by the button crawler.)
+- `notifications.index` and `notifications.unread-count` (polled every 30 s) get
+  `ReadOnlySession`, like the sticky notes fetch.
+- Crawler: skips `aria-hidden` form mirrors (Radix's hidden native `<select>`).
+
 ## Tests
 - PHPUnit: `IssueNumberingTest`.
 - e2e:
   - "a #item link to a card created after the page loaded opens it in the dialog" (boards)
   - "the first issue of a new project is KEY-1" (workspaces-projects)
+  - "the bell: a new notification can be marked as read" (collaboration)

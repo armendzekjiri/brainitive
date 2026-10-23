@@ -193,12 +193,14 @@ export function NotificationsDropdown() {
                                             <p className="text-[11px] text-muted-foreground/70 mt-1">{timeAgo(n.created_at)}</p>
                                         </div>
 
-                                        {/* Mark read button */}
+                                        {/* Mark read button: always visible on touch screens; on desktop on hover or keyboard focus */}
                                         {isUnread && (
                                             <button
+                                                type="button"
                                                 onClick={() => markRead(n.id)}
-                                                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-0.5 p-1 rounded hover:bg-muted text-muted-foreground"
+                                                className="shrink-0 mt-0.5 p-1 rounded hover:bg-muted text-muted-foreground transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 focus-visible:opacity-100"
                                                 title="Mark as read"
+                                                aria-label="Mark as read"
                                             >
                                                 <X className="size-3" />
                                             </button>
