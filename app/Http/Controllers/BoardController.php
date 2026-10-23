@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\Attachment;
 use App\Models\Board;
 use App\Models\BoardColumn;
+use App\Models\BoardView;
 use App\Models\Item;
 use App\Models\ItemField;
 use App\Models\ItemLink;
@@ -28,6 +29,7 @@ use App\Support\Uploads;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -71,9 +73,21 @@ class BoardController extends Controller
     /**
      * Display the specified board (Kanban view).
      */
-    public function show(Request $request, Workspace $workspace, Project $project, Board $board): Response
+    public function show(Request $request, Workspace $workspace, Project $project, Board $board): Response|RedirectResponse
     {
         $this->authorize('view', $board);
+        $user = $request->user();
+
+        // Saved views (BRAI-78): opening the plain board applies the personal default view
+        // (bv=0 or any view param = "show exactly this")
+        $defaultViewId = DB::table('board_view_defaults')->where('user_id', $user->id)->where('board_id', $board->id)->value('board_view_id');
+        $hasViewParams = $request->has('bv') || collect($request->query())->keys()->contains(fn ($key) => in_array($key, ['q', 'assignee', 'status', 'labels', 'priority', 'type', 'quick', 'sort', 'view', 'hide'], true) || preg_match('/^f\d+$/', (string) $key));
+        if ($defaultViewId && ! $hasViewParams && ! $request->header('X-Inertia-Partial-Data')) {
+            $default = BoardView::find($defaultViewId);
+            if ($default && $user->can('view', $default)) {
+                return redirect()->route('boards.views.open', [$workspace->slug, $project->slug, $board->slug, $default->id]);
+            }
+        }
 
         // Scrum boards show the running sprint only (no sprint running → empty board)
         $activeSprint = $board->isScrum() ? $board->activeSprint()->first() : null;
@@ -120,6 +134,19 @@ class BoardController extends Controller
             'canEditItems' => $request->user()->can('update', $board),
             'activeSprint' => $activeSprint?->only(['id', 'name', 'goal', 'start_date', 'end_date']),
             'canManageSprints' => $request->user()->can('update', $board),
+            'savedViews' => $board->views()->visibleTo($user)->with('user:id,name')->get()
+                ->map(fn (BoardView $view) => [
+                    'id' => $view->id,
+                    'name' => $view->name,
+                    'is_shared' => $view->is_shared,
+                    'is_own' => $view->user_id === $user->id,
+                    'owner' => $view->user?->name,
+                    'params' => (object) $view->params(),
+                    'can_edit' => $user->can('update', $view),
+                ])->values(),
+            'activeViewId' => $request->integer('bv') ?: null,
+            'defaultViewId' => $defaultViewId,
+            'canShareViews' => $user->can('update', $board),
             'plannedSprints' => $board->isScrum()
                 ? $board->sprints()->where('status', Sprint::STATUS_PLANNED)->get(['id', 'name'])
                 : [],

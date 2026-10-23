@@ -87,6 +87,18 @@ class Board extends Model
         return $this->hasMany(BoardColumn::class)->orderBy('position');
     }
 
+    /** Saved views (BRAI-78) — use BoardView::visibleTo() for what a user may see. */
+    public function views(): HasMany
+    {
+        return $this->hasMany(BoardView::class)->orderBy('position')->orderBy('id');
+    }
+
+    /** Route-binding relation for {boardView} under {board} (scoped bindings). */
+    public function boardViews(): HasMany
+    {
+        return $this->views();
+    }
+
     /**
      * Get all items in this board.
      */

@@ -258,6 +258,7 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => fn () => ($request->hasSession() ? $request->session() : null)?->get('success'),
                 'error' => fn () => ($request->hasSession() ? $request->session() : null)?->get('error'),
+                'warning' => fn () => ($request->hasSession() ? $request->session() : null)?->get('warning'),
                 'invite_result' => fn () => ($request->hasSession() ? $request->session() : null)?->get('invite_result'),
                 'invite_confirm_required' => fn () => ($request->hasSession() ? $request->session() : null)?->get('invite_confirm_required'),
                 'invite_email' => fn () => ($request->hasSession() ? $request->session() : null)?->get('invite_email'),

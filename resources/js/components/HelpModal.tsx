@@ -83,6 +83,19 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.35.0',
+        title: 'Saved board views',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'Save how you look at a board — filters, custom-field filters, layout (board, list, timeline, calendar), list sorting and hidden list columns — as a named view (Views menu in the board toolbar).',
+            'Personal views are only yours; board managers can share views with everyone on the board. “Only my issues” in a shared view shows each person their own issues.',
+            'Changed something? The view shows a dot and “Save changes”. Rename, duplicate, share or delete views from the menu.',
+            'Pick a view that opens by default on a board (★). “All issues” takes you back to the plain board.',
+            'If a view refers to a column, field or member that no longer exists, that part is left out with a short note.',
+        ]
+    },
+    {
         version: 'v1.34.2',
         title: 'More security hardening',
         tag: 'Security',

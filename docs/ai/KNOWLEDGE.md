@@ -29,6 +29,13 @@ Deployments are matched by window: what reached the deployed ref after the previ
 deploy to that environment (`github_connections.deployments`). Keep processing idempotent
 (upserts keyed by item+kind+repo+identifier) — GitHub redelivers.
 
+### Saved board views store the URL params
+A saved view is the board's own query string, not a second filter language: adding a board filter
+means adding its param to `BoardViewConfig::normalize()` (allowlist) and, if it references ids,
+to `sanitize()` — and to `boardFilterParams()` / `currentViewParams` in Boards/Show. `assignee=me`
+stays literal so it resolves for each viewer. A shared view never grants board access (every
+policy check starts with BoardPolicy::view).
+
 ### Explicit route binders run before implicit ones
 In `Route::bind('page' | 'bookmark', …)` the `{workspace}` / `{project}` parameters are still raw
 slugs — an `instanceof Project` check there is always false. `AppServiceProvider::routeProject()` /
