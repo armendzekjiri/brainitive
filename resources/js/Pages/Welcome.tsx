@@ -596,7 +596,7 @@ export default function Welcome({
                     icon: ListChecks,
                     title: 'Task lists',
                     description:
-                        'Lightweight checklists for the work that doesn’t need a full board.',
+                        'To-do lists for the work that doesn’t need a full board — due dates, repeats, and reminders before it’s due.',
                 },
                 {
                     icon: CalendarDays,

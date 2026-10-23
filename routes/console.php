@@ -20,5 +20,10 @@ Schedule::command('app:send-item-reminders')
     ->everyFiveMinutes()
     ->withoutOverlapping();
 
+// Morning summary (from 08:00 in each user's time zone) of list tasks due today / overdue.
+Schedule::command('app:send-task-digest')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
 // Forget MCP idempotency keys after 7 days.
 Schedule::command('model:prune', ['--model' => [McpRequest::class, GithubDelivery::class]])->daily();

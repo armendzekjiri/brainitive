@@ -176,7 +176,8 @@ class CliController extends Controller
             && $validated['status'] === 'done'
             && $item->status !== 'done';
 
-        if ($isCompleting && $item->recurrence) {
+        // Without a due date there is nothing to move: a repeating task then just gets done.
+        if ($isCompleting && $item->recurrence && $item->due_date) {
             $nextDate = $item->nextDueDate();
             $item->update(array_merge($validated, [
                 'status' => 'todo',

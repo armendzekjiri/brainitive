@@ -22,6 +22,11 @@ export interface NotificationData {
     old_column?: string;
     new_column?: string;
     when_label?: string;
+    // task_digest
+    due_today?: number;
+    overdue?: number;
+    titles?: string[];
+    url?: string;
     context_type?: string;
     context_title?: string;
     context_url?: string;
@@ -48,12 +53,13 @@ export function notificationUrl(d: NotificationData): string | undefined {
 
 /** Second line under the sentence. */
 export function notificationDetail(d: NotificationData): string | undefined {
+    if (d.type === 'task_digest') return d.titles?.join(', ');
     if (d.type === 'ticket_reply') return d.reply_preview || d.ticket_subject;
     return d.ticket_subject ?? d.item_title ?? d.page_name;
 }
 
 export function NotificationAvatar({ data: d }: { data: NotificationData }) {
-    if (d.type === 'item_reminder') return <Bell className="size-4 text-muted-foreground" />;
+    if (d.type === 'item_reminder' || d.type === 'task_digest') return <Bell className="size-4 text-muted-foreground" />;
     if (d.actor_avatar) return <img src={d.actor_avatar} alt={d.actor_name} className="size-full object-cover" />;
     const actor = notificationActor(d);
     if (actor) return <>{actor.charAt(0)}</>;
@@ -83,6 +89,13 @@ export function NotificationMessage({
     const actor = <span className="font-medium">{notificationActor(d) || 'Someone'}</span>;
 
     switch (d.type) {
+        case 'task_digest':
+            return (
+                <>
+                    Your tasks:{' '}
+                    {link(d.url, [d.due_today ? `${d.due_today} due today` : null, d.overdue ? `${d.overdue} overdue` : null].filter(Boolean).join(' · '))}
+                </>
+            );
         case 'item_reminder':
             return (
                 <>

@@ -169,6 +169,10 @@ database driver before using raw engine-specific SQL such as constraint changes 
 - Channels via `via()`. Use the `App\Notifications\Concerns\SendsWebPush` trait + its
   `withWebPush()` / `webPush()` helpers to add browser push **only for `User` notifiables**
   (never `TicketContact`). DB payload via `toDatabase()`. See the [skill](./skills/add-notification.md).
+- **Time-based notifications** (reminders, digests) compute dates and times in the recipient's
+  `User::localTimezone()`, never the app's UTC, and dedup through `sent_item_reminders` with a
+  key that contains the absolute time (or the local date for once-a-day messages). Personal
+  tasks without an assignee notify their creator (`TaskListItem::reminderRecipient()`).
 
 ---
 

@@ -8,6 +8,8 @@ export interface User {
     bio?: string | null;
     phone?: string | null;
     calendar_view?: 'month' | 'week' | 'day' | null;
+    timezone?: string | null;
+    task_digest?: boolean;
     is_instance_admin?: boolean;
     pivot?: {
         role?: 'admin' | 'editor' | 'viewer' | 'member';
@@ -136,6 +138,8 @@ export interface TaskListItem {
     start_date?: string | null;
     start_time?: string | null;
     recurrence?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null;
+    /** Minutes before the due time (0 = at due time), null = no reminder. */
+    reminder_minutes?: number | null;
     position: number;
     created_by?: number;
     creator?: User;

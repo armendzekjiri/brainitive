@@ -5,6 +5,7 @@ import React, { PropsWithChildren, useState, useRef, FormEvent, useEffect, useCa
 import { PageProps, Workspace, Project, Board, TaskList, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn, Helpdesk, PlanSummary } from '@/types';
 import { cn } from '@/lib/utils';
 import { CommandPalette, CmdIcon, PaletteCommand, useRecentTracking } from '@/components/CommandPalette';
+import { useTimezoneSync } from '@/hooks/useTimezoneSync';
 import { QuickCreateSnippetModal } from '@/components/QuickCreateSnippetModal';
 import { QuickCreateBookmarkModal } from '@/components/QuickCreateBookmarkModal';
 import { GlobalStickyNotes } from '@/components/GlobalStickyNotes';
@@ -1929,6 +1930,7 @@ export default function AppLayout({ children, title }: Props) {
     const [paletteQuery, setPaletteQuery] = useState('');
     const { resolvedTheme, toggleTheme } = useTheme();
     useRecentTracking();
+    useTimezoneSync();
     const [quickCreateSnippetOpen, setQuickCreateSnippetOpen] = useState(false);
     const [quickCreateBookmarkOpen, setQuickCreateBookmarkOpen] = useState(false);
     const [helpModalOpen, setHelpModalOpen] = useState(false);

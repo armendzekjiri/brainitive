@@ -48,7 +48,7 @@ const WELCOME_FEATURES = [
         icon: ListChecks,
         tone: 'bg-sky-500/10 text-sky-500',
         title: 'Lists & My Work',
-        description: 'Light to-do lists with due dates, plus one view of everything assigned to you across projects.',
+        description: 'To-do lists with due dates, repeats and reminders (plus a morning summary), and one view of everything assigned to you across projects.',
         where: 'Project → Lists · Sidebar → My Work',
     },
     {
@@ -75,6 +75,21 @@ const WELCOME_FEATURES = [
 ];
 
 const CHANGELOG = [
+    {
+        version: 'v1.28.0',
+        title: 'Lists, redesigned — with reminders',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'Lists look and work like a to-do app: type a task and press Enter to add the next one; date, person, repeat and reminder are one click away.',
+            'Overdue tasks are red, today’s amber. Drag tasks to put them in order; done tasks fold away under “Completed”.',
+            'Click a task to open it on the side: notes, due date and time, start, assignee, repeat and reminder — everything saves as you go.',
+            'Reminders: at the due time, 10 minutes, 1 hour or 1 day before — in the bell and as a browser notification. Tasks without an assignee remind the person who added them.',
+            'Every morning at 8:00 you get one summary of the list tasks that are due today or overdue. You can turn it off in your profile.',
+            'Reminder times now follow your own time zone (start reminders used to arrive late outside UTC).',
+            'Fixed: existing due dates showed an empty date field.',
+        ]
+    },
     {
         version: 'v1.27.1',
         title: 'Swimlane fixes',
