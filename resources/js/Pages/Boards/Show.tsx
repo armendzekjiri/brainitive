@@ -54,7 +54,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { buildLanes, Lane, MODE_LABELS, SwimlaneMode } from '@/lib/swimlanes';
+import { buildLanes, canonicalConfig, Lane, MODE_LABELS, SwimlaneMode } from '@/lib/swimlanes';
 import { toast } from 'sonner';
 import {
     Plus,
@@ -2152,21 +2152,23 @@ export default function BoardsShow({
     // ── Swimlanes ────────────────────────────────────────────────────────
     const boardLanes = board.settings?.swimlanes ?? null;
     const laneStorageKey = `board-${board.id}-lane-mode`;
-    const [chosenLaneMode, setLaneModeState] = useState<SwimlaneMode>(() => {
+    // A personal lane choice only holds for the board setup it was made on: once the board's
+    // swimlanes are saved again, everyone starts from the new default.
+    const laneSetup = JSON.stringify(canonicalConfig(boardLanes));
+    const [laneChoice, setLaneChoice] = useState<{ mode: SwimlaneMode; setup: string } | null>(() => {
         try {
-            const stored = localStorage.getItem(laneStorageKey) as SwimlaneMode | null;
-            if (stored && Object.prototype.hasOwnProperty.call(MODE_LABELS, stored)) return stored;
-        } catch { /* ignore */ }
-        return boardLanes?.mode ?? 'none';
+            const stored = JSON.parse(localStorage.getItem(laneStorageKey) ?? 'null');
+            if (stored && typeof stored.setup === 'string' && Object.prototype.hasOwnProperty.call(MODE_LABELS, stored.mode)) return stored;
+        } catch { /* ignore (also the old plain-string format) */ }
+        return null;
     });
-    // A remembered "custom" choice is void once the board has no custom lanes any more.
     const hasCustomLanes = (boardLanes?.lanes?.length ?? 0) > 0;
-    const laneMode: SwimlaneMode = chosenLaneMode === 'custom' && !hasCustomLanes
-        ? (boardLanes?.mode && boardLanes.mode !== 'custom' ? boardLanes.mode : 'none')
-        : chosenLaneMode;
+    const usable = (mode: SwimlaneMode | undefined) => (mode && (mode !== 'custom' || hasCustomLanes) ? mode : null);
+    const laneMode: SwimlaneMode = (laneChoice?.setup === laneSetup ? usable(laneChoice.mode) : null) ?? usable(boardLanes?.mode) ?? 'none';
     const setLaneMode = (mode: SwimlaneMode) => {
-        setLaneModeState(mode);
-        try { localStorage.setItem(laneStorageKey, mode); } catch { /* ignore */ }
+        const choice = { mode, setup: laneSetup };
+        setLaneChoice(choice);
+        try { localStorage.setItem(laneStorageKey, JSON.stringify(choice)); } catch { /* ignore */ }
     };
 
     const handleLaneDrop = (e: DragEvent, column: BoardColumn, lane: Lane, laneOf: (item: Item) => string, lanes: Lane[]) => {

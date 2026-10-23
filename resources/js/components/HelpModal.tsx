@@ -83,7 +83,7 @@ const CHANGELOG = [
         items: [
             'Saving swimlanes now confirms it, and “Unsaved changes” goes away after the save.',
             'If a swimlane save or a drag into a lane fails, you now see why instead of nothing happening.',
-            'If you picked “Custom lanes” and they were removed later, the board falls back to its default lanes.',
+            'Saved swimlanes now show up on the board for everyone. Before, a lane choice you had once made in the board toolbar kept overriding them. Your own choice still works until the board’s swimlanes are changed again.',
             'Fix versions without a date are listed after the dated ones everywhere.',
         ]
     },
