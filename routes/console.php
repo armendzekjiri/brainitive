@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\GithubDelivery;
 use App\Models\McpRequest;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -20,4 +21,4 @@ Schedule::command('app:send-item-reminders')
     ->withoutOverlapping();
 
 // Forget MCP idempotency keys after 7 days.
-Schedule::command('model:prune', ['--model' => [McpRequest::class]])->daily();
+Schedule::command('model:prune', ['--model' => [McpRequest::class, GithubDelivery::class]])->daily();

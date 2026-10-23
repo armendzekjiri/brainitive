@@ -17,6 +17,13 @@ project board, not Jira issues. When a user references one, start with the Brain
 board tools. Only check Jira/Atlassian if the user explicitly asks for that external
 tracker.
 
+### GitHub webhooks are stateless API routes
+`/api/webhooks/github/{uuid}` lives in `routes/api.php` (no session/CSRF); the per-project
+secret (encrypted column) is the only auth, checked with `hash_equals` over the raw body.
+Deployments are matched by window: what reached the deployed ref after the previous successful
+deploy to that environment (`github_connections.deployments`). Keep processing idempotent
+(upserts keyed by item+kind+repo+identifier) — GitHub redelivers.
+
 ### Production deploys never run seeders
 `deploy.yml` runs `migrate --force` only; `docker/entrypoint.sh` seeds item types and
 priorities, the git-deployed server didn't. Reference rows the app needs (types, priorities)

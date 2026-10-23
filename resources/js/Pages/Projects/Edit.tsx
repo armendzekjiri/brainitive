@@ -2,6 +2,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import MoveProjectCard from '@/components/projects/MoveProjectCard';
+import GithubIntegrationCard, { type GithubSettings } from '@/components/projects/GithubIntegrationCard';
 import { PageProps, Workspace, Project, Label as LabelType, User, ItemType } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,7 +40,7 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag, Users, ListTodo, Power, PowerOff, Settings, Shield } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag, Users, ListTodo, Power, PowerOff, Settings, Shield, Plug } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -59,6 +60,7 @@ interface Props extends PageProps {
     projectItemTypes?: ProjectItemType[];
     /** Workspaces the user also administers (empty when they can't move this project). */
     moveTargets?: { id: number; name: string; slug: string }[];
+    github?: GithubSettings | null;
 }
 
 // Predefined colors for labels and project
@@ -277,7 +279,9 @@ function ItemTypeForm({
     );
 }
 
-export default function ProjectsEdit({ auth, workspace, project, workspaceUsers, canManageMembers, projectItemTypes = [], moveTargets = [] }: Props) {
+export default function ProjectsEdit({ auth, workspace, project, workspaceUsers, canManageMembers, projectItemTypes = [], moveTargets = [], github = null }: Props) {
+    // Deep links like ?tab=integrations (from an issue's Development section).
+    const initialTab = (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tab')) || 'general';
     const [createLabelOpen, setCreateLabelOpen] = useState(false);
     const [editingLabel, setEditingLabel] = useState<LabelType | null>(null);
     const [createItemTypeOpen, setCreateItemTypeOpen] = useState(false);
@@ -375,7 +379,7 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
 
                 {/* Content */}
                 <div className="max-w-4xl mx-auto px-6 py-8">
-                    <Tabs defaultValue="general" orientation="vertical" className="space-y-0">
+                    <Tabs defaultValue={initialTab} orientation="vertical" className="space-y-0">
                         <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
                             <aside className="w-full lg:w-52 lg:shrink-0 lg:sticky lg:top-4">
                                 <div className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Settings</div>
@@ -391,6 +395,9 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                     </TabsTrigger>
                                     <TabsTrigger value="members" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
                                         <Users className="size-4" />Members
+                                    </TabsTrigger>
+                                    <TabsTrigger value="integrations" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
+                                        <Plug className="size-4" />Integrations
                                     </TabsTrigger>
                                     <TabsTrigger value="danger" className="w-full justify-start gap-2 px-3 h-9 text-destructive data-[state=active]:bg-destructive/10 data-[state=active]:text-destructive data-[state=active]:shadow-none">
                                         <Shield className="size-4" />Danger zone
@@ -940,6 +947,10 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                             )}
                         </CardContent>
                     </Card>
+                        </TabsContent>
+
+                        <TabsContent value="integrations" className="space-y-8">
+                            <GithubIntegrationCard workspace={workspace} project={project} github={github} />
                         </TabsContent>
 
                         <TabsContent value="danger" className="space-y-8">

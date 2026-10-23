@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [GitHub development panel (BRAI-61)](./feat-github-development.md) | done |
 | [Command palette v2 (BRAI-83)](./feat-command-palette.md) | done |
 | [Fix: priorities and board columns (BRAI-84/85/86)](./fix-priorities-and-columns.md) | done |
 | [MCP: comments, sprints and plans (BRAI-67/68/69)](./feat-mcp-comments-sprints-plans.md) | done |

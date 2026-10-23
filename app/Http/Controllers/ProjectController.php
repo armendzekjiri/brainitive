@@ -218,6 +218,7 @@ class ProjectController extends Controller
             'canManageMembers' => $request->user()->can('manageMembers', $project),
             'projectItemTypes' => $projectItemTypes,
             'moveTargets' => $moveTargets,
+            'github' => ProjectGithubController::settingsFor($project),
         ]);
     }
 

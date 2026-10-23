@@ -18,6 +18,7 @@ use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
 use App\Support\Boards\ItemComments;
 use App\Support\Boards\ItemMentions;
+use App\Support\Github\ItemDevelopment;
 use App\Support\Uploads;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -441,6 +442,7 @@ class BoardController extends Controller
             'history' => $history,
             'time_spent' => $item->time_spent,
             'original_estimate' => $item->original_estimate,
+            'development' => ItemDevelopment::for($item),
         ]);
     }
 

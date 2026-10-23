@@ -3,6 +3,7 @@
 use App\Http\Controllers\CliController;
 use App\Http\Controllers\Extension\CaptureController;
 use App\Http\Controllers\Extension\ExtensionController;
+use App\Http\Controllers\GithubWebhookController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\RejectCaptureTokens;
 use Illuminate\Support\Facades\Route;
@@ -54,3 +55,9 @@ Route::prefix('ext/v1')
         Route::post('task-lists/{taskList:id}/items', [CaptureController::class, 'task'])->name('task-lists.items.store');
         Route::post('snippet-collections/{snippetCollection:id}/snippets', [CaptureController::class, 'snippet'])->name('snippet-collections.snippets.store');
     });
+
+// GitHub webhooks: stateless, verified by the per-project HMAC secret (BRAI-61).
+Route::post('/webhooks/github/{uuid}', GithubWebhookController::class)
+    ->middleware('throttle:120,1')
+    ->where('uuid', '[0-9a-fA-F-]{36}')
+    ->name('webhooks.github');
