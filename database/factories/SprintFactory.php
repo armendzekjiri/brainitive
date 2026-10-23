@@ -7,7 +7,7 @@ use App\Models\Sprint;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Sprint>
+ * @extends Factory<Sprint>
  */
 class SprintFactory extends Factory
 {

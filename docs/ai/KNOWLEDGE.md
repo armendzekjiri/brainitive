@@ -29,6 +29,24 @@ Deployments are matched by window: what reached the deployed ref after the previ
 deploy to that environment (`github_connections.deployments`). Keep processing idempotent
 (upserts keyed by item+kind+repo+identifier) — GitHub redelivers.
 
+### dev.brainitive.app: staging on the production server, isolated
+`pre-release` deploys to `/var/www/brainitive-dev` on the same server as production (BRAI-95).
+- **Isolation:**
+  - **PHP:** its own pool `brainitive-dev` (user `brainitive-dev`, socket
+    `php8.4-fpm-brainitive-dev.sock`, `open_basedir` = the dev folder), never the shared
+    `www-data` pool.
+  - **Files:** `.env` is 640 `ubuntu:brainitive-dev`; `storage` and `bootstrap/cache` are closed
+    to others (ACLs for ubuntu + brainitive-dev), except `storage/app/public`.
+  - **Database:** Postgres role and DB `brainitive_dev`, with no privileges on production tables.
+- **Settings:** `APP_ENV=staging`, `MAIL_MAILER=log`, `QUEUE_CONNECTION=sync`, no scheduler, no
+  queue worker.
+- **Access:** behind basic auth (`/etc/nginx/brainitive-dev.htpasswd`; the credentials are in
+  `~/.brainitive-dev-basic-auth` on the maintainer's Mac) and noindex.
+- **Deploy guard:** the deploy refuses to run unless the folder, `APP_ENV=staging` and
+  `DB_DATABASE=brainitive_dev` all match. Keep that guard on anything destructive (the e2e reset).
+- **Production `.env` is world-readable** (664, and every site's PHP runs as `www-data`). Fix:
+  `chmod 640` (`www-data` is in `webdev`), ideally plus an own FPM pool for production.
+
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
 means adding its param to `BoardViewConfig::PARAM_KEYS` + `normalize()` (allowlist) and, if it
@@ -347,6 +365,15 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   DB-specific failure, run the tests against a throwaway Postgres:
   `docker run -d -p 55432:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=brainitive_test postgres:17-alpine`,
   then `DB_CONNECTION=pgsql DB_PORT=55432 DB_DATABASE=brainitive_test DB_USERNAME=postgres DB_PASSWORD=test php artisan test`.
+  CI (`tests.yml`) runs the whole suite on Postgres 16 on every push. Traps it caught:
+  - **`where(col, 'like', …)` is case-sensitive on Postgres.** Use `whereLike` / `orWhereLike`
+    (`ilike` on pgsql). Search must not depend on case.
+  - **A caught unique violation aborts the surrounding Postgres transaction**, including the
+    test's RefreshDatabase transaction. Use `createOrFirst` / `firstOrCreate` (savepoint) or
+    wrap the insert in `DB::transaction`, rather than catching
+    `UniqueConstraintViolationException` and querying on.
+  - **Sequences don't restart between tests** (rollback keeps them), so never hard-code ids
+    like `=== 4`. Keep the created model's id.
 - **Notification payloads are rendered in one place.** `components/NotificationMessage.tsx`
   maps every `data.type` to a sentence. The bell and the page used to fall back to
   "{actor} moved {item_key}", so ticket notifications (`ticket_*`, with no `item_*` keys)

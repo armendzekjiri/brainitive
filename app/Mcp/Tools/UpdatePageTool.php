@@ -96,7 +96,7 @@ class UpdatePageTool extends Tool
         return [
             'updated' => $schema->boolean(),
             'page_uuid' => $schema->string(),
-            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+            'location' => ResourceLocator::outputSchema($schema),
         ];
     }
 

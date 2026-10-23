@@ -19,9 +19,34 @@ agents producing consistent, locatable work.
 
 ```
 1. Branch        2. Plan + track      3. Build            4. Update docs       5. Gate & PR
-   off main  ─▶   tasks/<branch>.md ─▶ follow a skill  ─▶ ARCH/KNOW/CONV  ─▶  green + PR
-                  + Brainitive card                       (+ move card → Testing)
+   off        ─▶  tasks/<branch>.md ─▶ follow a skill  ─▶ ARCH/KNOW/CONV  ─▶  green + PR
+   pre-release    + Brainitive card                       (+ move card → Testing)  into pre-release
 ```
+
+### Release flow: pre-release → main (BRAI-95)
+**Nothing goes straight to `main`.** `main` is production: every push to it deploys.
+
+```
+feature branch ──PR──▶ pre-release ──(green)──PR──▶ main ──▶ production deploy
+  Tests workflow        Pre-release workflow         Deploy workflow
+  (every push)          (tests → deploy to            (tests again, then deploys
+                         dev.brainitive.app;           exactly the tested commit)
+                         e2e: BRAI-96)
+```
+
+- **Tests** (`.github/workflows/tests.yml`) runs on every push to a feature branch, and is
+  called by the other two workflows. It runs Pint, tsc, the build, and PHPUnit on **SQLite and
+  PostgreSQL**. Production is Postgres; SQLite alone hides case-sensitive `LIKE` and aborted
+  transactions.
+- **Pre-release** (`pre-release.yml`): the gate on the integration branch, then a deploy to
+  **dev.brainitive.app**. That deploy runs plain `migrate` on dev's existing data, the same thing
+  production will run. Green means ready for `main`: open or update the PR
+  **pre-release → main**. Actions can't open PRs in this repo. Check the change on dev; the
+  Brainitive card goes to **Testing** once it's live there.
+- **Deploy** (`deploy.yml`): `needs: tests`, then fast-forwards the server to `github.sha`,
+  never to a newer commit nobody tested.
+- **Hotfix** straight into `main` (emergencies only): merge `main` back into `pre-release`
+  right away.
 
 > **Tracking lives in Brainitive.** When the Brainitive MCP server is connected, the project
 > board on Brainitive.app is the source of truth for *status*: every task gets a card, and
@@ -32,8 +57,8 @@ agents producing consistent, locatable work.
 > If MCP is **not** connected, skip the card and use the local plan only — don't fabricate
 > board updates.
 
-### 1 — Branch off `main`
-Never commit to `main`. Use the existing prefixes: `feat/...`, `fix/...`, `chore/...`
+### 1 — Branch off `pre-release`
+Never commit to `main` or `pre-release` directly. Use the existing prefixes: `feat/...`, `fix/...`, `chore/...`
 (matches git history, e.g. `feat/mcp-server`).
 
 ### 2 — Write the plan: `docs/ai/tasks/<branch>.md`
@@ -87,7 +112,9 @@ php artisan test           # backend tests
 npm run build              # frontend builds clean
 ```
 All green **and** the change verified in the running app (`composer run dev`). Open the PR
-against `main`, scoped to one feature/fix. Report honestly if any step failed or was skipped.
+against **`pre-release`**, scoped to one feature/fix. CI repeats the gate, also on Postgres.
+To run Postgres locally, use a throwaway role and database, never `devdb`:
+`DB_CONNECTION=pgsql DB_DATABASE=<scratch db> DB_USERNAME=<scratch role> … php artisan test`. Report honestly if any step failed or was skipped.
 
 ---
 
@@ -107,7 +134,7 @@ newest entry *is* the app version). New feature → minor bump (`v1.11.0` → `v
 fix → patch (`v1.12.0` → `v1.12.1`). Entry = `version`, short `title`, `tag` (Feature /
 Major Feature / Enhancement / Patch), `date`, and user-facing `items` (what changed for the
 user, not file names).
-Merging to `main` with a new top version **releases it automatically**
+Merging `pre-release` into `main` with a new top version **releases it automatically**
 (`.github/workflows/release.yml`): tag `vX.Y.Z`, GitHub Release with the entry's items as
 notes, and Docker images `:X.Y.Z` / `:X.Y` / `:latest`. No bump → only `:edge` is rebuilt.
 
@@ -117,9 +144,10 @@ the UI changed visibly — the screenshots in `public/images/screenshots/` (ligh
 2880×1720 JPEG, demo data only, no real customer data).
 
 ## Git & PR conventions
-- Branch off `main`; commit/push only when asked.
+- Branch off `pre-release`; commit/push only when asked.
 - Conventional commits with scope: `feat(mcp): …`, `fix(helpdesk): …`.
-- End commit messages with the required `Co-Authored-By` trailer; PRs against `main`.
+- End commit messages with the required `Co-Authored-By` trailer; PRs against `pre-release`
+  (only the promotion PR targets `main`).
 
 ## Agent etiquette
 - **Read [`ARCHITECTURE.md`](./ARCHITECTURE.md) + [`CONVENTIONS.md`](./CONVENTIONS.md) +

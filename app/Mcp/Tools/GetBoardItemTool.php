@@ -83,7 +83,7 @@ class GetBoardItemTool extends Tool
             'type' => $schema->string(),
             'priority' => $schema->string(),
             'completed' => $schema->boolean(),
-            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+            'location' => ResourceLocator::outputSchema($schema),
         ];
     }
 

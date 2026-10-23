@@ -58,7 +58,7 @@ class UpdateCalendarEventTool extends Tool
     {
         return [
             'updated' => $schema->boolean(),
-            'event' => \App\Support\Mcp\CalendarFormatter::eventSchema($schema),
+            'event' => CalendarFormatter::eventSchema($schema),
         ];
     }
 

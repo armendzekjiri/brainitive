@@ -1,0 +1,72 @@
+# Staging flow (BRAI-95): feature branches merge into pre-release, never straight into main.
+# Every push to pre-release runs the test gate, then deploys to dev.brainitive.app (same server,
+# isolated: own folder, DB, PHP pool, basic auth) and migrates its existing data the way
+# production will. Playwright e2e on dev (BRAI-96) comes next. Green = ready for main.
+name: Pre-release
+
+on:
+  push:
+    branches: [pre-release]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pre-release
+  # never stop a dev deploy halfway; a newer push waits
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  deploy-dev:
+    name: Deploy to dev.brainitive.app
+    needs: tests
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+      url: https://dev.brainitive.app
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          fingerprint: ${{ secrets.DEPLOY_FINGERPRINT }}
+          script: |
+            set -e
+            cd /var/www/brainitive-dev
+            # guard: only ever the dev checkout + dev database (production lives in /var/www/brainitive)
+            if [ "$(pwd)" != /var/www/brainitive-dev ] || ! grep -qx 'APP_ENV=staging' .env || ! grep -qx 'DB_DATABASE=brainitive_dev' .env; then
+              echo "Refusing: this is not the dev checkout"; exit 1
+            fi
+            echo ">>> Updating to the tested commit ${{ github.sha }}..."
+            git fetch -q origin pre-release
+            git reset -q --hard ${{ github.sha }}
+            composer install --no-dev --optimize-autoloader --no-interaction -q
+            npm ci --silent
+            npm run build --silent > /dev/null
+            echo ">>> Migrating the existing dev data (what production will do)..."
+            php artisan migrate --force
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            echo ">>> dev.brainitive.app is on ${{ github.sha }}"
+
+  ready:
+    name: Ready for main
+    needs: deploy-dev
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          {
+            echo "### pre-release is green"
+            echo
+            echo "Commit \`${GITHUB_SHA::7}\` passed the test gate and runs on https://dev.brainitive.app."
+            echo "Open or update the PR **pre-release → main** to deploy it to production."
+          } >> "$GITHUB_STEP_SUMMARY"

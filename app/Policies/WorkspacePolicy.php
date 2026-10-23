@@ -39,6 +39,7 @@ class WorkspacePolicy
     public function update(User $user, Workspace $workspace): bool
     {
         $role = $user->workspaceRole($workspace);
+
         return $role === 'admin';
     }
 
@@ -57,6 +58,7 @@ class WorkspacePolicy
     public function manageMembers(User $user, Workspace $workspace): bool
     {
         $role = $user->workspaceRole($workspace);
+
         return $role === 'admin';
     }
 
@@ -66,6 +68,7 @@ class WorkspacePolicy
     public function inviteMembers(User $user, Workspace $workspace): bool
     {
         $role = $user->workspaceRole($workspace);
+
         return $role === 'admin';
     }
 
@@ -75,6 +78,7 @@ class WorkspacePolicy
     public function createProjects(User $user, Workspace $workspace): bool
     {
         $role = $user->workspaceRole($workspace);
+
         return in_array($role, ['admin', 'editor']);
     }
 }

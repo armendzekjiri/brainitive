@@ -30,6 +30,7 @@ class TicketPolicy
 
         // Project admin or editor can update
         $projectRole = $user->projectRole($project);
+
         return in_array($projectRole, ['admin', 'editor']);
     }
 
@@ -90,6 +91,7 @@ class TicketPolicy
         // Only project admin or editor can add internal notes
         $project = $ticket->helpdesk->project;
         $projectRole = $user->projectRole($project);
+
         return in_array($projectRole, ['admin', 'editor']);
     }
 }

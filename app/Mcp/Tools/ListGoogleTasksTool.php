@@ -57,7 +57,7 @@ class ListGoogleTasksTool extends Tool
     public function outputSchema(JsonSchema $schema): array
     {
         return [
-            'tasks' => $schema->array()->items(\App\Support\Mcp\CalendarFormatter::taskSchema($schema)),
+            'tasks' => $schema->array()->items(CalendarFormatter::taskSchema($schema)),
             'count' => $schema->integer(),
         ];
     }

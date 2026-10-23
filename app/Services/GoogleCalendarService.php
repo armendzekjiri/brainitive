@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 class GoogleCalendarService
 {
     private const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
+
     private const API_BASE = 'https://www.googleapis.com/calendar/v3';
 
     /** Ensure the connection's access token is valid, refreshing if needed. */
@@ -44,6 +45,7 @@ class GoogleCalendarService
                 'body' => $resp->json(),
             ]);
             $connection->update(['is_active' => false]);
+
             return false;
         }
 
@@ -64,6 +66,7 @@ class GoogleCalendarService
         }
         $resp = $this->get($connection, '/users/me/calendarList');
         $items = $resp->json('items', []);
+
         return array_map(fn ($c) => [
             'id' => $c['id'],
             'summary' => $c['summary'] ?? $c['id'],
@@ -87,6 +90,7 @@ class GoogleCalendarService
             'orderBy' => 'startTime',
             'maxResults' => 250,
         ]);
+
         return $resp->json('items', []);
     }
 
@@ -124,7 +128,7 @@ class GoogleCalendarService
 
         $resp = Http::withToken($connection->access_token)
             ->acceptJson()
-            ->post(self::API_BASE . "/calendars/{$calId}/events", $body);
+            ->post(self::API_BASE."/calendars/{$calId}/events", $body);
 
         if (! $resp->successful()) {
             Log::warning('Google event create failed', [
@@ -132,8 +136,10 @@ class GoogleCalendarService
                 'status' => $resp->status(),
                 'body' => $resp->json(),
             ]);
+
             return null;
         }
+
         return $resp->json();
     }
 
@@ -152,9 +158,15 @@ class GoogleCalendarService
         }
         $calId = rawurlencode($connection->external_calendar_id);
         $body = [];
-        if (isset($data['title'])) $body['summary'] = $data['title'];
-        if (array_key_exists('description', $data)) $body['description'] = $data['description'];
-        if (array_key_exists('location', $data)) $body['location'] = $data['location'];
+        if (isset($data['title'])) {
+            $body['summary'] = $data['title'];
+        }
+        if (array_key_exists('description', $data)) {
+            $body['description'] = $data['description'];
+        }
+        if (array_key_exists('location', $data)) {
+            $body['location'] = $data['location'];
+        }
 
         $startDate = $data['start_date'] ?? null;
         $startTime = $data['start_time'] ?? null;
@@ -181,7 +193,7 @@ class GoogleCalendarService
 
         $resp = Http::withToken($connection->access_token)
             ->acceptJson()
-            ->patch(self::API_BASE . "/calendars/{$calId}/events/{$eventId}", $body);
+            ->patch(self::API_BASE."/calendars/{$calId}/events/{$eventId}", $body);
 
         if (! $resp->successful()) {
             Log::warning('Google event update failed', [
@@ -190,8 +202,10 @@ class GoogleCalendarService
                 'status' => $resp->status(),
                 'body' => $resp->json(),
             ]);
+
             return null;
         }
+
         return $resp->json();
     }
 
@@ -209,8 +223,10 @@ class GoogleCalendarService
                 'event_id' => $eventId,
                 'status' => $resp->status(),
             ]);
+
             return null;
         }
+
         return $resp->json();
     }
 
@@ -222,7 +238,8 @@ class GoogleCalendarService
         }
         $calId = rawurlencode($connection->external_calendar_id);
         $resp = Http::withToken($connection->access_token)
-            ->delete(self::API_BASE . "/calendars/{$calId}/events/{$eventId}");
+            ->delete(self::API_BASE."/calendars/{$calId}/events/{$eventId}");
+
         return $resp->successful() || $resp->status() === 410; // 410 = already gone
     }
 
@@ -230,6 +247,6 @@ class GoogleCalendarService
     {
         return Http::withToken($connection->access_token)
             ->acceptJson()
-            ->get(self::API_BASE . $path, $query);
+            ->get(self::API_BASE.$path, $query);
     }
 }

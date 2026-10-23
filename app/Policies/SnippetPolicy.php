@@ -17,9 +17,14 @@ class SnippetPolicy
     public function update(User $user, SnippetCollection $collection): bool
     {
         $workspace = $collection->workspace;
-        if (! $user->hasWorkspaceAccess($workspace)) return false;
+        if (! $user->hasWorkspaceAccess($workspace)) {
+            return false;
+        }
         $role = $user->workspaceRole($workspace);
-        if ($role === 'admin') return true;
+        if ($role === 'admin') {
+            return true;
+        }
+
         return $collection->created_by === $user->id;
     }
 

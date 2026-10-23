@@ -35,12 +35,12 @@ class MentionNotification extends Notification
     public function toDatabase(object $notifiable): array
     {
         return [
-            'type'           => 'mentioned',
-            'context_type'   => $this->contextType,
-            'context_title'  => $this->contextTitle,
-            'context_url'    => $this->contextUrl,
-            'actor_name'     => $this->actor->name,
-            'actor_avatar'   => $this->actor->avatar_display,
+            'type' => 'mentioned',
+            'context_type' => $this->contextType,
+            'context_title' => $this->contextTitle,
+            'context_url' => $this->contextUrl,
+            'actor_name' => $this->actor->name,
+            'actor_avatar' => $this->actor->avatar_display,
         ];
     }
 }

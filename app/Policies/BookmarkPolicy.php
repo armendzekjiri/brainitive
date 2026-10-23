@@ -10,10 +10,11 @@ class BookmarkPolicy
 {
     public function create(User $user, Workspace $workspace): bool
     {
-        if (!$user->hasWorkspaceAccess($workspace)) {
+        if (! $user->hasWorkspaceAccess($workspace)) {
             return false;
         }
         $role = $user->workspaceRole($workspace);
+
         return in_array($role, ['admin', 'editor']);
     }
 
@@ -22,34 +23,37 @@ class BookmarkPolicy
         if ($bookmark->visibility === 'public') {
             return true;
         }
-        if (!$user->hasWorkspaceAccess($bookmark->workspace)) {
+        if (! $user->hasWorkspaceAccess($bookmark->workspace)) {
             return false;
         }
         if ($user->workspaceRole($bookmark->workspace) === 'admin') {
             return true;
         }
+
         return $bookmark->isViewableBy($user);
     }
 
     public function update(User $user, Bookmark $bookmark): bool
     {
-        if (!$user->hasWorkspaceAccess($bookmark->workspace)) {
+        if (! $user->hasWorkspaceAccess($bookmark->workspace)) {
             return false;
         }
         if ($user->workspaceRole($bookmark->workspace) === 'admin') {
             return true;
         }
+
         return $bookmark->isEditableBy($user);
     }
 
     public function delete(User $user, Bookmark $bookmark): bool
     {
-        if (!$user->hasWorkspaceAccess($bookmark->workspace)) {
+        if (! $user->hasWorkspaceAccess($bookmark->workspace)) {
             return false;
         }
         if ($user->workspaceRole($bookmark->workspace) === 'admin') {
             return true;
         }
+
         return $bookmark->created_by === $user->id;
     }
 

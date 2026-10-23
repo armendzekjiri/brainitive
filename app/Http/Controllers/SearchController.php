@@ -54,8 +54,8 @@ class SearchController extends Controller
         $workspaces = Workspace::query()
             ->whereIn('id', $workspaceIds)
             ->where(function ($query) use ($term) {
-                $query->where('name', 'like', $term)
-                    ->orWhere('description', 'like', $term);
+                $query->whereLike('name', $term)
+                    ->orWhereLike('description', $term);
             })
             ->limit(5)
             ->get(['id', 'name', 'slug', 'description'])
@@ -72,9 +72,9 @@ class SearchController extends Controller
         $projects = Project::query()
             ->whereIn('id', $projectIds)
             ->where(function ($query) use ($term) {
-                $query->where('name', 'like', $term)
-                    ->orWhere('description', 'like', $term)
-                    ->orWhere('key', 'like', $term);
+                $query->whereLike('name', $term)
+                    ->orWhereLike('description', $term)
+                    ->orWhereLike('key', $term);
             })
             ->limit(8)
             ->get(['id', 'workspace_id', 'name', 'slug', 'key', 'description'])
@@ -95,8 +95,8 @@ class SearchController extends Controller
         $snippets = SnippetCollection::query()
             ->whereIn('workspace_id', $workspaceIds)
             ->where(function ($query) use ($term) {
-                $query->where('name', 'like', $term)
-                    ->orWhere('description', 'like', $term);
+                $query->whereLike('name', $term)
+                    ->orWhereLike('description', $term);
             })
             ->limit(8)
             ->get(['id', 'workspace_id', 'name', 'slug', 'description'])
@@ -117,8 +117,8 @@ class SearchController extends Controller
         $bookmarks = Bookmark::query()
             ->whereIn('workspace_id', $workspaceIds)
             ->where(function ($query) use ($term) {
-                $query->where('name', 'like', $term)
-                    ->orWhere('description', 'like', $term);
+                $query->whereLike('name', $term)
+                    ->orWhereLike('description', $term);
             })
             ->limit(25)
             ->get()
@@ -144,9 +144,9 @@ class SearchController extends Controller
             ->join('projects', 'boards.project_id', '=', 'projects.id')
             ->whereIn('projects.id', $projectIds)
             ->where(function ($query) use ($term) {
-                $query->where('items.title', 'like', $term)
-                    ->orWhere('items.description', 'like', $term)
-                    ->orWhere('items.key', 'like', $term);
+                $query->whereLike('items.title', $term)
+                    ->orWhereLike('items.description', $term)
+                    ->orWhereLike('items.key', $term);
             })
             ->select('items.id', 'items.title', 'items.key', 'items.board_id', 'items.description', 'projects.slug as project_slug', 'projects.workspace_id', 'boards.slug as board_slug')
             ->orderByRaw('case when projects.id = ? then 0 else 1 end', [$contextProject])
@@ -174,7 +174,7 @@ class SearchController extends Controller
             ->where('pages.type', 'page')
             ->visibleTo($user)
             ->where(function ($query) use ($term) {
-                $query->where('pages.name', 'like', $term);
+                $query->whereLike('pages.name', $term);
             })
             ->select('pages.id', 'pages.name', 'pages.uuid', 'pages.project_id', 'projects.slug as project_slug', 'projects.workspace_id')
             ->orderByRaw('case when projects.id = ? then 0 else 1 end', [$contextProject])
@@ -197,7 +197,7 @@ class SearchController extends Controller
         $boards = Board::query()
             ->with('project:id,workspace_id,name,slug', 'project.workspace:id,slug,name')
             ->whereIn('project_id', $projectIds)
-            ->where('name', 'like', $term)
+            ->whereLike('name', $term)
             ->orderByRaw('case when project_id = ? then 0 else 1 end', [$contextProject])
             ->limit(25)
             ->get()
@@ -216,7 +216,7 @@ class SearchController extends Controller
         $plans = Plan::query()
             ->with('project:id,workspace_id,name,slug', 'project.workspace:id,slug,name')
             ->whereIn('project_id', $projectIds)
-            ->where('name', 'like', $term)
+            ->whereLike('name', $term)
             ->orderByRaw('case when project_id = ? then 0 else 1 end', [$contextProject])
             ->limit(25)
             ->get()

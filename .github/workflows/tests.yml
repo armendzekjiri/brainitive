@@ -1,0 +1,110 @@
+# The test gate (BRAI-95): lint, types, build and PHPUnit on SQLite + PostgreSQL (production
+# runs Postgres; SQLite alone missed case-sensitive LIKE and aborted transactions).
+# Runs on every push to a feature branch; deploy.yml calls it before production deploys.
+name: Tests
+
+on:
+  push:
+    branches-ignore: [main, pre-release]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  frontend:
+    name: Frontend (types + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Build
+        run: npm run build
+      # PHPUnit renders Inertia pages, which need the Vite manifest
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build
+          path: public/build
+          retention-days: 1
+
+  pint:
+    name: Pint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.4'
+          coverage: none
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ hashFiles('composer.lock') }}
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: ./vendor/bin/pint --test
+
+  phpunit:
+    name: PHPUnit (${{ matrix.db }})
+    needs: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [sqlite, pgsql]
+    services:
+      # CI-only throwaway database (credentials exist only inside the runner)
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: brainitive
+          POSTGRES_PASSWORD: brainitive
+          POSTGRES_DB: testing
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U brainitive"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # real env vars win over phpunit.xml's <env> (not forced); sqlite keeps :memory:
+      DB_CONNECTION: ${{ matrix.db }}
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: ${{ matrix.db == 'pgsql' && 'testing' || ':memory:' }}
+      DB_USERNAME: brainitive
+      DB_PASSWORD: brainitive
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.4'
+          extensions: mbstring, intl, gd, bcmath, zip, fileinfo, sodium, pdo_sqlite, pdo_pgsql
+          coverage: none
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ hashFiles('composer.lock') }}
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build
+          path: public/build
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+      - run: php artisan test

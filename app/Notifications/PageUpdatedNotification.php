@@ -25,7 +25,7 @@ class PageUpdatedNotification extends Notification
     public function toWebPush(object $notifiable, $notification)
     {
         $workspace = $this->page->project?->workspace;
-        $project   = $this->page->project;
+        $project = $this->page->project;
         $url = $workspace && $project
             ? route('pages.show', [$workspace->slug, $project->slug, $this->page->uuid])
             : '/';
@@ -40,17 +40,17 @@ class PageUpdatedNotification extends Notification
     public function toDatabase(object $notifiable): array
     {
         $workspace = $this->page->project?->workspace;
-        $project   = $this->page->project;
+        $project = $this->page->project;
 
         $url = $workspace && $project
             ? route('pages.show', [$workspace->slug, $project->slug, $this->page->uuid])
             : '#';
 
         return [
-            'type'         => 'page_updated',
-            'page_name'    => $this->page->name,
-            'page_url'     => $url,
-            'actor_name'   => $this->actor->name,
+            'type' => 'page_updated',
+            'page_name' => $this->page->name,
+            'page_url' => $url,
+            'actor_name' => $this->actor->name,
             'actor_avatar' => $this->actor->avatar_display,
         ];
     }
