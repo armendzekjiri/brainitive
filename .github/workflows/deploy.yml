@@ -10,6 +10,10 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Makes GitHub record a deployment, so issues linked via commits show "Deployed to production".
+    environment:
+      name: production
+      url: https://www.brainitive.app
     steps:
       - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.2.0

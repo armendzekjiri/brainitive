@@ -21,6 +21,7 @@ use App\Http\Controllers\PlanController;
 use App\Http\Controllers\PollVoteController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\ProjectGithubController;
 use App\Http\Controllers\PublicPlanController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\SearchController;
@@ -254,6 +255,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('boards', [BoardController::class, 'store'])->name('boards.store');
             Route::get('boards/{board:slug}/items', [BoardController::class, 'rootItemsJson'])->name('boards.root-items');
             Route::get('boards/{board:slug}', [BoardController::class, 'show'])->name('boards.show');
+            Route::post('github', [ProjectGithubController::class, 'store'])->name('projects.github.store');
+            Route::post('github/rotate', [ProjectGithubController::class, 'rotate'])->name('projects.github.rotate');
+            Route::delete('github', [ProjectGithubController::class, 'destroy'])->name('projects.github.destroy');
             Route::get('boards/{board:slug}/backlog', [SprintController::class, 'backlog'])->name('boards.backlog');
             Route::post('boards/{board:slug}/backlog/rank', [SprintController::class, 'rank'])->name('boards.backlog.rank');
             Route::get('boards/{board:slug}/reports', [SprintController::class, 'reports'])->name('boards.reports');

@@ -1867,6 +1867,29 @@ export default function BoardsShow({
 }: Props) {
     const itemTypes = boardItemTypes;
     const [editingItem, setEditingItem] = useState<Item | null>(null);
+
+    // Links like …/boards/x#item-123 (search, command palette, AI connector) open that issue;
+    // one that isn't on the board right now (e.g. outside the running sprint) opens its own page.
+    useEffect(() => {
+        const openFromHash = () => {
+            const match = window.location.hash.match(/^#item-(\d+)$/);
+            if (!match) return;
+            const id = Number(match[1]);
+            const found = board.columns.flatMap((c) => c.items ?? []).find((i) => i.id === id);
+            if (found) setEditingItem(found);
+            else router.visit(route('boards.items.show', [workspace.slug, project.slug, board.slug, id]));
+        };
+        openFromHash();
+        window.addEventListener('hashchange', openFromHash);
+        return () => window.removeEventListener('hashchange', openFromHash);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    const closeItem = useCallback(() => {
+        setEditingItem(null);
+        if (window.location.hash.startsWith('#item-')) {
+            window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
+        }
+    }, []);
     const [draggedItem, setDraggedItem] = useState<Item | null>(null);
     const [dragOverColumn, setDragOverColumn] = useState<number | null>(null);
     // Filters live in the URL so a filtered board can be shared or bookmarked
@@ -2557,7 +2580,7 @@ export default function BoardsShow({
                 currentUserId={auth.user.id}
                 columns={board.columns}
                 open={!!editingItem}
-                onClose={() => setEditingItem(null)}
+                onClose={closeItem}
                 onOpenItem={setEditingItem}
             />
             <CompleteSubtasksDialog

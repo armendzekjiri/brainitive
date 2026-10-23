@@ -430,4 +430,12 @@ class Item extends Model
     {
         return $this->board?->project?->workspace;
     }
+
+    /**
+     * Branches, commits, pull requests and deployments linked from GitHub.
+     */
+    public function devLinks(): HasMany
+    {
+        return $this->hasMany(ItemDevLink::class);
+    }
 }

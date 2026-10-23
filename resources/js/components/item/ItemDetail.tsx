@@ -18,6 +18,7 @@ import {
     FileArchive, FileCode, FileType, History, Clock, Loader2, ChevronDown, ListChecks,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { DevelopmentPanel, type Development } from '@/components/item/DevelopmentPanel';
 import { formatDuration } from '@/lib/duration';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { ItemTypeIcon } from '@/components/ItemTypeIcon';
@@ -359,6 +360,7 @@ export function useItemDetail(args: UseItemDetailArgs) {
     const [history, setHistory] = useState<ItemHistoryEntry[]>([]);
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [timeSpent, setTimeSpent] = useState(item?.time_spent ?? 0);
+    const [development, setDevelopment] = useState<Development | null>(null);
     const currentItemIdRef = useRef(item?.id);
     currentItemIdRef.current = item?.id;
 
@@ -368,13 +370,14 @@ export function useItemDetail(args: UseItemDetailArgs) {
         setDetailsLoading(true);
         window.axios
             .get(route('boards.items.details', [workspace.slug, project.slug, board.slug, itemId]))
-            .then(({ data }: { data: { comments: Comment[]; attachments: Attachment[]; history: ItemHistoryEntry[]; time_spent: number } }) => {
+            .then(({ data }: { data: { comments: Comment[]; attachments: Attachment[]; history: ItemHistoryEntry[]; time_spent: number; development?: Development } }) => {
                 // Ignore answers for an item the user already navigated away from
                 if (currentItemIdRef.current !== itemId) return;
                 setLocalComments(data.comments);
                 setLocalAttachments(data.attachments);
                 setHistory(data.history);
                 setTimeSpent(data.time_spent ?? 0);
+                setDevelopment(data.development ?? null);
             })
             .catch(() => { /* keep what we have; the board itself still works */ })
             .finally(() => setDetailsLoading(false));
@@ -389,6 +392,7 @@ export function useItemDetail(args: UseItemDetailArgs) {
     useEffect(() => {
         if (!item) {
             setHistory([]);
+            setDevelopment(null);
             return;
         }
         refreshDetails();
@@ -692,7 +696,7 @@ export function useItemDetail(args: UseItemDetailArgs) {
         // file preview
         filePreview, setFilePreview,
         // history + time tracking
-        history, detailsLoading, timeSpent,
+        history, detailsLoading, timeSpent, development,
         logWorkOpen, setLogWorkOpen, logWorkTime, setLogWorkTime, logWorkNote, setLogWorkNote,
         logWorkError, isLoggingWork, handleLogWork,
     };
@@ -1687,6 +1691,12 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                     if (completePrompt) moveToColumn(completePrompt.columnId, withSubtasks);
                     setCompletePrompt(null);
                 }}
+            />
+            <DevelopmentPanel
+                development={d.development}
+                itemKey={item.key}
+                itemTitle={item.title}
+                settingsUrl={route('projects.edit', [workspace.slug, project.slug]) + '?tab=integrations'}
             />
             <div className="border-t pt-3">
                 <div className="flex flex-wrap items-center gap-1">

@@ -76,6 +76,19 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.25.0',
+        title: 'GitHub: Branches, Commits, PRs and Deployments on Issues',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'Connect GitHub in Project settings → Integrations: paste one webhook URL and secret into your repository — no GitHub login or tokens needed.',
+            'Mention the issue key and it links itself: commits like “fix(BRAI-123): …”, branches like “feat/brai-123_fix_column” and pull request titles.',
+            'A new Development section on every issue shows its branches, commits, pull requests (open, draft, merged) and where it is deployed — e.g. “production · deployed”.',
+            'Copy a ready “git checkout -b …” command or commit prefix straight from the issue.',
+            'Fixed: links to an issue from search, the command palette or the AI connector now open the issue instead of just the board.',
+        ]
+    },
+    {
         version: 'v1.24.0',
         title: 'One Command Palette',
         tag: 'Feature',
