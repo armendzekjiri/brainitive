@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Fix: priorities and board columns (BRAI-84/85/86)](./fix-priorities-and-columns.md) | done |
 | [MCP: comments, sprints and plans (BRAI-67/68/69)](./feat-mcp-comments-sprints-plans.md) | done |
 | [Secure sharing for docs and issues (BRAI-15)](./feat-secure-sharing.md) | done |
 | [Nested subtasks (BRAI-25)](./feat-nested-subtasks.md) | done |

@@ -1,5 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, useForm, router, Link } from '@inertiajs/react';
+import { Head, useForm, router, Link, usePage } from '@inertiajs/react';
 import { PageProps, Workspace, Project, Board, BoardColumn } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -39,7 +39,7 @@ import {
     Edit2,
     Kanban,
 } from 'lucide-react';
-import { useState, FormEvent, DragEvent } from 'react';
+import { useEffect, useState, FormEvent, DragEvent } from 'react';
 import axios from 'axios';
 
 interface Props extends PageProps {
@@ -89,7 +89,7 @@ function ColumnCard({
 }) {
     const itemsCount = column.items_count ?? 0;
     const handleDelete = () => {
-        router.delete(route('boards.columns.destroy', [workspace.slug, project.slug, board.slug, column.id]));
+        router.delete(route('boards.columns.destroy', [workspace.slug, project.slug, board.slug, column.id]), { preserveScroll: true });
     };
 
     return (
@@ -183,6 +183,7 @@ function AddColumnDialog({
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
         post(route('boards.columns.store', [workspace.slug, project.slug, board.slug]), {
+            preserveScroll: true,
             onSuccess: () => {
                 setOpen(false);
                 reset();
@@ -207,9 +208,9 @@ function AddColumnDialog({
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                     <div className="space-y-2">
-                        <Label htmlFor="name">Column Name</Label>
+                        <Label htmlFor="new-column-name">Column Name</Label>
                         <Input
-                            id="name"
+                            id="new-column-name"
                             value={data.name}
                             onChange={(e) => setData('name', e.target.value)}
                             placeholder="e.g., In Progress, Review, Done"
@@ -279,6 +280,7 @@ function EditColumnDialog({
         e.preventDefault();
         if (!column) return;
         put(route('boards.columns.update', [workspace.slug, project.slug, board.slug, column.id]), {
+            preserveScroll: true,
             onSuccess: () => onClose(),
         });
     };
@@ -371,6 +373,10 @@ function EditColumnDialog({
 export default function BoardsEdit({ workspace, project, board }: Props) {
     const [editingColumn, setEditingColumn] = useState<BoardColumn | null>(null);
     const [columns, setColumns] = useState<BoardColumn[]>(board.columns);
+    // Columns are created/edited/deleted via redirects that reload `board`; keep the local
+    // (drag-reorderable) copy in sync, otherwise changes only appeared after a full reload.
+    useEffect(() => setColumns(board.columns), [board.columns]);
+    const columnError = (usePage().props.errors as Record<string, string> | undefined)?.column;
     const [draggedColumn, setDraggedColumn] = useState<BoardColumn | null>(null);
     const [dragOverColumn, setDragOverColumn] = useState<BoardColumn | null>(null);
 
@@ -560,6 +566,7 @@ export default function BoardsEdit({ workspace, project, board }: Props) {
                                 </div>
                             ) : (
                                 <div className="space-y-2">
+                                    {columnError && <p className="text-sm text-destructive">{columnError}</p>}
                                     {columns.map((column) => (
                                         <ColumnCard
                                             key={column.id}
@@ -634,6 +641,7 @@ export default function BoardsEdit({ workspace, project, board }: Props) {
 
             {/* Edit Column Dialog */}
             <EditColumnDialog
+                key={editingColumn?.id ?? 'none'}
                 column={editingColumn}
                 workspace={workspace}
                 project={project}

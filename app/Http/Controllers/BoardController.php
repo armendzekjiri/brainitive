@@ -183,11 +183,16 @@ class BoardController extends Controller
             'color' => 'nullable|string|max:20',
         ]);
 
-        $slug = Str::slug($validated['name']);
+        // Slugs are unique per board; two "Review" columns or emoji-only names must not 500.
+        $base = Str::slug($validated['name']) ?: 'column';
+        $slug = $base;
+        for ($n = 2; $board->columns()->where('slug', $slug)->exists(); $n++) {
+            $slug = $base.'-'.$n;
+        }
         $maxPosition = $board->columns()->max('position') ?? 0;
 
         $board->columns()->create([
-            'name' => $validated['name'],
+            'name' => trim($validated['name']),
             'slug' => $slug,
             'color' => $validated['color'] ?? null,
             'position' => $maxPosition + 1,
@@ -202,6 +207,7 @@ class BoardController extends Controller
     public function updateColumn(Request $request, Workspace $workspace, Project $project, Board $board, BoardColumn $column)
     {
         $this->authorize('update', $board);
+        abort_unless($column->board_id === $board->id, 404);
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -265,10 +271,11 @@ class BoardController extends Controller
     public function destroyColumn(Workspace $workspace, Project $project, Board $board, BoardColumn $column)
     {
         $this->authorize('update', $board);
+        abort_unless($column->board_id === $board->id, 404);
 
         // Check if column has items
-        if ($column->items()->count() > 0) {
-            return redirect()->back()->withErrors(['column' => 'Cannot delete column with items. Move or delete items first.']);
+        if ($column->items()->exists()) {
+            return redirect()->back()->withErrors(['column' => 'Cannot delete a column that still has items. Move or delete them first.']);
         }
 
         $column->delete();

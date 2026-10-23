@@ -697,14 +697,34 @@ function BoardColumnComponent({
     const [wipValue, setWipValue] = useState(wipLimit ? String(wipLimit) : '');
     const settingsUrl = route('boards.edit', [workspace.slug, project.slug, board.slug]);
 
-    const saveWipLimit = (e: FormEvent) => {
-        e.preventDefault();
+    const [renameOpen, setRenameOpen] = useState(false);
+    const [nameValue, setNameValue] = useState(column.name);
+    const [columnError, setColumnError] = useState('');
+
+    const saveColumn = (changes: { name?: string; wip_limit?: number | null }, done: () => void) => {
+        setColumnError('');
         router.put(route('boards.columns.update', [workspace.slug, project.slug, board.slug, column.id]), {
             name: column.name,
             color: column.color,
             is_done_column: column.is_done_column,
-            wip_limit: wipValue.trim() === '' ? null : Number(wipValue),
-        }, { preserveScroll: true, onSuccess: () => setWipDialogOpen(false) });
+            wip_limit: wipLimit,
+            ...changes,
+        }, {
+            preserveScroll: true,
+            onSuccess: done,
+            onError: (errors) => setColumnError(Object.values(errors)[0] ?? 'Could not save the column.'),
+        });
+    };
+
+    const saveWipLimit = (e: FormEvent) => {
+        e.preventDefault();
+        saveColumn({ wip_limit: wipValue.trim() === '' ? null : Number(wipValue) }, () => setWipDialogOpen(false));
+    };
+
+    const saveName = (e: FormEvent) => {
+        e.preventDefault();
+        if (!nameValue.trim()) return;
+        saveColumn({ name: nameValue.trim() }, () => setRenameOpen(false));
     };
 
     // Nest subtasks under their parent when both live in this column.
@@ -766,7 +786,10 @@ function BoardColumnComponent({
                             </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setWipDialogOpen(true)}>
+                            <DropdownMenuItem onClick={() => { setNameValue(column.name); setColumnError(''); setRenameOpen(true); }}>
+                                Rename column
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setWipValue(wipLimit ? String(wipLimit) : ''); setColumnError(''); setWipDialogOpen(true); }}>
                                 {wipLimit ? `WIP limit: ${wipLimit}` : 'Set WIP limit'}
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild>
@@ -789,12 +812,32 @@ function BoardColumnComponent({
                         <div className="space-y-2">
                             <Label htmlFor={`wip-${column.id}`}>Max. cards</Label>
                             <Input id={`wip-${column.id}`} type="number" min={0} value={wipValue} onChange={(e) => setWipValue(e.target.value)} placeholder="No limit" autoFocus />
+                            {columnError && <p className="text-sm text-destructive">{columnError}</p>}
                         </div>
                         <div className="flex justify-end gap-2">
                             {wipLimit !== null && (
                                 <Button type="button" variant="ghost" onClick={() => setWipValue('')}>Remove limit</Button>
                             )}
                             <Button type="submit">Save</Button>
+                        </div>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+                <DialogContent className="max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Rename column</DialogTitle>
+                        <DialogDescription>Cards stay in the column; only its name changes.</DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={saveName} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor={`name-${column.id}`}>Name</Label>
+                            <Input id={`name-${column.id}`} value={nameValue} onChange={(e) => setNameValue(e.target.value)} maxLength={255} autoFocus required />
+                            {columnError && <p className="text-sm text-destructive">{columnError}</p>}
+                        </div>
+                        <div className="flex justify-end">
+                            <Button type="submit" disabled={!nameValue.trim()}>Save</Button>
                         </div>
                     </form>
                 </DialogContent>
@@ -1752,6 +1795,62 @@ function CalendarView({
 }
 
 // Main Board Component
+/** Creates a column in place: it shows up right away (the board reloads), no trip to settings. */
+function NewColumnTile({ workspace, project, board }: { workspace: Workspace; project: Project; board: Board }) {
+    const [editing, setEditing] = useState(false);
+    const { data, setData, post, processing, errors, reset, clearErrors } = useForm({ name: '' });
+
+    const close = () => {
+        setEditing(false);
+        reset();
+        clearErrors();
+    };
+
+    const submit = (e: FormEvent) => {
+        e.preventDefault();
+        if (!data.name.trim()) return;
+        post(route('boards.columns.store', [workspace.slug, project.slug, board.slug]), {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => reset(),
+        });
+    };
+
+    if (!editing) {
+        return (
+            <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="flex-shrink-0 w-[282px] h-full min-h-[220px] border border-dashed border-border rounded-[10px] flex flex-col items-center justify-center gap-1.5 text-muted-foreground text-[12.5px] font-medium hover:bg-card hover:text-foreground hover:border-border transition-colors"
+            >
+                <Plus className="size-[14px]" />
+                <span>New column</span>
+            </button>
+        );
+    }
+
+    return (
+        <form onSubmit={submit} className="flex-shrink-0 w-[282px] self-start rounded-[10px] border bg-card p-2.5 space-y-2">
+            <Input
+                value={data.name}
+                onChange={(e) => setData('name', e.target.value)}
+                onKeyDown={(e) => e.key === 'Escape' && close()}
+                placeholder="Column name, e.g. Review"
+                maxLength={255}
+                autoFocus
+            />
+            {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
+            <div className="flex items-center gap-2">
+                <Button type="submit" size="sm" disabled={processing || !data.name.trim()}>Add column</Button>
+                <Button type="button" size="sm" variant="ghost" onClick={close}>Done</Button>
+                <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug])} className="ml-auto text-xs text-muted-foreground hover:text-foreground">
+                    Settings
+                </Link>
+            </div>
+        </form>
+    );
+}
+
 export default function BoardsShow({
     auth,
     workspace,
@@ -2398,13 +2497,7 @@ export default function BoardsShow({
                                 />
                             ))}
 
-                            {/* Add Column Button */}
-                            <Link href={route('boards.edit', [workspace.slug, project.slug, board.slug])} className="flex-shrink-0 h-full">
-                                <button className="w-[282px] h-full min-h-[220px] border border-dashed border-border rounded-[10px] flex flex-col items-center justify-center gap-1.5 text-muted-foreground text-[12.5px] font-medium hover:bg-card hover:text-foreground hover:border-border transition-colors">
-                                    <Plus className="size-[14px]" />
-                                    <span>New column</span>
-                                </button>
-                            </Link>
+                            <NewColumnTile workspace={workspace} project={project} board={board} />
                         </div>
                     </div>
                 )}

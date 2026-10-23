@@ -17,6 +17,13 @@ project board, not Jira issues. When a user references one, start with the Brain
 board tools. Only check Jira/Atlassian if the user explicitly asks for that external
 tracker.
 
+### Production deploys never run seeders
+`deploy.yml` runs `migrate --force` only; `docker/entrypoint.sh` seeds item types and
+priorities, the git-deployed server didn't. Reference rows the app needs (types, priorities)
+must arrive through a migration that calls the idempotent seeder (see
+`2026_10_23_150000_ensure_default_item_priorities.php`, BRAI-85) — otherwise pickers are
+empty in production while tests and Docker look fine.
+
 ### SQLite-incompatible migrations
 - `2026_02_03_145210_add_member_role_to_workspace_user_table` uses
   `ALTER TABLE … DROP CONSTRAINT`, which SQLite doesn't support. Breaks `php artisan
