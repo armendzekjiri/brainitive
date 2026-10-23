@@ -3,8 +3,10 @@
 namespace Tests\Feature\Helpdesk;
 
 use App\Models\Helpdesk;
+use App\Models\Project;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Notifications\TicketCreatedNotification;
 use App\Notifications\TicketResolvedNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -70,6 +72,35 @@ class HelpdeskAgentTest extends TestCase
         $this->assertSame('Cleo Customer', $ticket->contact->name);
         $this->assertEqualsCanonicalizing(['A-4711', 'Web'], $ticket->fieldValues()->pluck('value')->all());
         Notification::assertSentTo($ticket->contact, TicketCreatedNotification::class);
+    }
+
+    public function test_projects_with_the_same_key_in_two_workspaces_both_take_tickets(): void
+    {
+        // the same project key (BRAI) in a second workspace: ticket keys only need to be unique per helpdesk
+        $otherOwner = User::factory()->create();
+        $otherWorkspace = Workspace::factory()->create(['owner_id' => $otherOwner->id]);
+        $otherWorkspace->addUser($otherOwner, 'admin');
+        $otherProject = Project::factory()->create(['workspace_id' => $otherWorkspace->id, 'created_by' => $otherOwner->id, 'key' => $this->project->key]);
+        $otherHelpdesk = Helpdesk::create(['project_id' => $otherProject->id, 'name' => 'Support', 'slug' => 'support', 'created_by' => $otherOwner->id]);
+
+        $ticket = fn (User $agent, $workspace, $project, Helpdesk $helpdesk) => $this->actingAs($agent)->post(
+            route('tickets.store', [$workspace->slug, $project->slug, $helpdesk->slug]),
+            ['subject' => 'Hello', 'column_id' => $helpdesk->columns()->first()->id, 'contact_email' => 'c@example.com'],
+        )->assertSessionHasNoErrors();
+
+        $ticket($this->admin, $this->workspace, $this->project, $this->helpdesk);
+        $ticket($otherOwner, $otherWorkspace, $otherProject, $otherHelpdesk);
+
+        $this->assertSame(['BRAI-T1', 'BRAI-T1'], Ticket::orderBy('id')->pluck('key')->all());
+    }
+
+    public function test_ticket_and_issue_numbers_keep_counting_up(): void
+    {
+        $keys = [$this->project->getNextTicketKey(), $this->project->fresh()->getNextTicketKey(), $this->project->getNextTicketKey()];
+        $this->assertSame(['BRAI-T1', 'BRAI-T2', 'BRAI-T3'], $keys);
+
+        $first = $this->project->getNextItemKey();
+        $this->assertSame((int) substr($first, 5) + 1, (int) substr($this->project->fresh()->getNextItemKey(), 5));
     }
 
     public function test_tickets_can_only_be_assigned_to_workspace_members(): void

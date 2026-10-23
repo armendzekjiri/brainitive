@@ -17,7 +17,7 @@ use Laravel\Passport\Http\Middleware\CheckToken;
 */
 
 // Public: issue a Passport personal access token from email + password
-Route::post('/cli/login', [CliController::class, 'login'])->middleware('throttle:5,1');
+Route::post('/cli/login', [CliController::class, 'login'])->middleware('throttle:5,1,cli.login');
 
 // Protected endpoints — require a valid Passport API token (Bearer)
 // scopeBindings: {item} must belong to {taskList}, not just any list the user can manage.
@@ -42,7 +42,7 @@ Route::middleware(['auth:api', EnsureUserIsNotSuspended::class, RejectCaptureTok
 | Everything resolves by numeric id and runs the same policies as the app.
 */
 Route::prefix('ext/v1')
-    ->middleware(['auth:api', EnsureUserIsNotSuspended::class, CheckToken::using('capture'), 'throttle:120,1'])
+    ->middleware(['auth:api', EnsureUserIsNotSuspended::class, CheckToken::using('capture'), 'throttle:120,1,ext'])
     ->name('ext.')
     ->group(function () {
         Route::get('me', [ExtensionController::class, 'me'])->name('me');
@@ -59,10 +59,10 @@ Route::prefix('ext/v1')
 
 // GitHub webhooks: stateless, verified by the per-project HMAC secret (BRAI-61).
 Route::post('/webhooks/github/{uuid}', GithubWebhookController::class)
-    ->middleware('throttle:120,1')
+    ->middleware('throttle:120,1,webhooks.github')
     ->where('uuid', '[0-9a-fA-F-]{36}')
     ->name('webhooks.github');
 
 // Lead forms: other tools push leads (Bearer = the form's inbound token)
 Route::post('/lead-forms/{uuid}/inbound', [LeadFormInboundController::class, 'store'])
-    ->whereUuid('uuid')->middleware('throttle:60,1')->name('lead-forms.inbound');
+    ->whereUuid('uuid')->middleware('throttle:60,1,lead-forms.inbound')->name('lead-forms.inbound');

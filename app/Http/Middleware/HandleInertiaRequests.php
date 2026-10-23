@@ -241,6 +241,8 @@ class HandleInertiaRequests extends Middleware
             'activeTimer' => fn () => $user ? WorkTimer::where('user_id', $user->id)->first()?->payload($user) : null,
             'workspaces' => $workspaces,
             'currentWorkspace' => $currentWorkspace,
+            // workspace settings are admin-only: hide the link for everyone else (it would end in a 403)
+            'canManageWorkspace' => fn () => $currentWorkspace && $user ? $user->can('update', $currentWorkspace) : false,
             'currentProjectId' => $currentProjectId,
             'currentBoardId' => $currentBoardId,
             'itemTypes' => fn () => $user ? ItemType::orderBy('id')->get(['id', 'name', 'slug', 'color', 'icon']) : [],

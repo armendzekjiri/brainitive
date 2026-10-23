@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class Project extends Model
@@ -277,9 +278,7 @@ class Project extends Model
      */
     public function getNextItemKey(): string
     {
-        $this->increment('next_item_number');
-
-        return $this->key.'-'.$this->next_item_number;
+        return $this->key.'-'.$this->bumpCounter('next_item_number');
     }
 
     /**
@@ -287,10 +286,28 @@ class Project extends Model
      */
     public function getNextTicketKey(): string
     {
-        $key = $this->key.'-T'.$this->next_ticket_number;
-        $this->increment('next_ticket_number');
+        // this counter holds the next number to use (the issue counter holds the last one used)
+        return $this->key.'-T'.($this->bumpCounter('next_ticket_number') - 1);
+    }
 
-        return $key;
+    /**
+     * Increment a key counter under a row lock and return the new value. Reading the number from
+     * the loaded model and incrementing afterwards let parallel requests share a number (duplicate
+     * key → 500 on simultaneous ticket submissions, found by the e2e suite).
+     */
+    private function bumpCounter(string $column): int
+    {
+        $value = DB::transaction(function () use ($column) {
+            $current = (int) static::whereKey($this->getKey())->lockForUpdate()->value($column);
+            static::whereKey($this->getKey())->update([$column => $current + 1]);
+
+            return $current + 1;
+        });
+
+        $this->setAttribute($column, $value);
+        $this->syncOriginalAttribute($column);
+
+        return $value;
     }
 
     /**

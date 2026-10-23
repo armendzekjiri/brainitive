@@ -1,5 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, router, useForm } from '@inertiajs/react';
+import { toast } from 'sonner';
 import { PageProps, Workspace, Project, Helpdesk, HelpdeskColumn, Ticket, TicketReply, ItemPriority, User, HelpdeskField } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -363,10 +364,31 @@ function HelpdeskColumnComponent({
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Edit column</DropdownMenuItem>
-                        <DropdownMenuItem>Set WIP limit</DropdownMenuItem>
+                        {/* name, color and WIP limit are edited in the helpdesk settings' column editor */}
+                        <DropdownMenuItem asChild>
+                            <Link href={`${route('helpdesks.edit', [workspace.slug, project.slug, helpdesk.slug])}?tab=columns`}>Edit column</Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                            <Link href={`${route('helpdesks.edit', [workspace.slug, project.slug, helpdesk.slug])}?tab=columns`}>Set WIP limit</Link>
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-destructive">Delete column</DropdownMenuItem>
+                        <DropdownMenuItem
+                            className="text-destructive"
+                            onSelect={() => {
+                                if (column.tickets?.length) {
+                                    toast.error('Move or delete the tickets in this column first.');
+                                    return;
+                                }
+                                if (!window.confirm(`Delete the column “${column.name}”?`)) return;
+                                router.delete(route('helpdesks.columns.destroy', [workspace.slug, project.slug, helpdesk.slug, column.id]), {
+                                    preserveScroll: true,
+                                    onSuccess: () => toast.success('Column deleted'),
+                                    onError: (errors) => toast.error(Object.values(errors)[0] ?? 'The column could not be deleted.'),
+                                });
+                            }}
+                        >
+                            Delete column
+                        </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
@@ -450,7 +472,12 @@ function TicketEditModal({
     const [columnId, setColumnId] = useState(ticket?.column_id?.toString() || '');
     const [assignedTo, setAssignedTo] = useState(ticket?.assigned_to?.toString() || '');
     const [priorityId, setPriorityId] = useState(ticket?.priority_id?.toString() || '');
-    const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+    // custom field values by field name: the customer's answers, editable in the sidebar
+    const savedFieldValues = useCallback(
+        () => Object.fromEntries((ticket?.field_values ?? []).filter((fv) => fv.field).map((fv) => [fv.field!.name, fv.value ?? ''])),
+        [ticket],
+    );
+    const [fieldValues, setFieldValues] = useState<Record<string, string>>(savedFieldValues);
     const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
 
     // Update when ticket changes
@@ -464,7 +491,9 @@ function TicketEditModal({
             setDescription(ticket.description || '');
             setLocalReplies(ticket.replies || []);
             setLocalAttachments(ticket.attachments || []);
+            setFieldValues(savedFieldValues());
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ticket?.id]);
 
     // Title handlers
@@ -493,6 +522,16 @@ function TicketEditModal({
             { preserveScroll: true },
         );
     }, [workspace.slug, project.slug, helpdesk.slug, ticket?.id]);
+
+    // Custom field: saved when the input loses focus (only if it changed)
+    const saveField = (name: string) => {
+        if (!ticket || (fieldValues[name] ?? '') === (savedFieldValues()[name] ?? '')) return;
+        router.patch(
+            route('tickets.fields.update', [workspace.slug, project.slug, helpdesk.slug, ticket.id]),
+            { [name]: fieldValues[name] ?? '' },
+            { preserveScroll: true, preserveState: true },
+        );
+    };
 
     // Column change
     const handleMoveToColumn = (newColId: string) => {
@@ -680,9 +719,7 @@ function TicketEditModal({
                                                             const newValues = { ...fieldValues, [field.name]: e.target.value };
                                                             setFieldValues(newValues);
                                                         }}
-                                                        onBlur={() => {
-                                                            // Save field value via API
-                                                        }}
+                                                        onBlur={() => saveField(field.name)}
                                                         className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
                                                         placeholder={field.is_required ? 'Required' : 'Optional'}
                                                     />
@@ -845,14 +882,28 @@ function TicketEditModal({
                                                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                                         {canPreview && (
                                                             <Button variant="ghost" size="icon" className="size-7" title="Preview"
-                                                                onClick={() => {}}>
+                                                                onClick={() => window.open(attachment.url, '_blank', 'noopener,noreferrer')}>
                                                                 <Eye className="size-3.5" />
                                                             </Button>
                                                         )}
                                                         <a href={attachment.url} target="_blank" rel="noopener noreferrer" download={attachment.original_filename}>
                                                             <Button variant="ghost" size="icon" className="size-7" title="Download"><Download className="size-3.5" /></Button>
                                                         </a>
-                                                        <Button variant="ghost" size="icon" className="size-7 text-destructive hover:text-destructive">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="size-7 text-destructive hover:text-destructive"
+                                                            title="Delete"
+                                                            onClick={() => {
+                                                                if (!window.confirm(`Delete “${attachment.original_filename}”?`)) return;
+                                                                router.delete(route('tickets.attachments.destroy', [workspace.slug, project.slug, helpdesk.slug, ticket.id, attachment.id]), {
+                                                                    preserveScroll: true,
+                                                                    preserveState: true,
+                                                                    onSuccess: () => setLocalAttachments((list) => list.filter((a) => a.id !== attachment.id)),
+                                                                    onError: () => toast.error('The attachment could not be deleted.'),
+                                                                });
+                                                            }}
+                                                        >
                                                             <Trash2 className="size-3.5" />
                                                         </Button>
                                                     </div>
@@ -1065,11 +1116,8 @@ function TicketEditModal({
                                                 onChange={(e) => {
                                                     const newValues = { ...fieldValues, [field.name]: e.target.value };
                                                     setFieldValues(newValues);
-                                                    // Save on blur
                                                 }}
-                                                onBlur={() => {
-                                                    // Save field value via API
-                                                }}
+                                                onBlur={() => saveField(field.name)}
                                                 className="h-8 border-0 shadow-none bg-transparent hover:bg-muted/80 focus:bg-muted/80 transition-colors focus-visible:ring-0 text-sm px-0 rounded-md"
                                                 placeholder={field.is_required ? 'Required' : 'Optional'}
                                             />

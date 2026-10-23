@@ -83,6 +83,21 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.35.1',
+        title: 'Fixes found by the new end-to-end tests',
+        tag: 'Patch',
+        date: '2026-10-23',
+        items: [
+            'You can @mention people in issue comments again — the member picker opens when you type @.',
+            'Creating labels and issue types in project settings (and labels from an issue) closes the dialog and shows them right away.',
+            'Helpdesk: the custom fields in a ticket’s sidebar show the customer’s answers and save your changes; the column menu (edit, WIP limit, delete) and attachment preview / delete work.',
+            'Tickets and issues created at the same moment no longer fail, and projects with the same key in different workspaces can both take tickets.',
+            'Visitors who open a lead form a few times are no longer refused when they submit it.',
+            'Validation messages no longer disappear when a form is sent right after the page loads.',
+            'Settings links are only shown to people who can open them.',
+        ]
+    },
+    {
         version: 'v1.35.0',
         title: 'Saved board views',
         tag: 'Feature',

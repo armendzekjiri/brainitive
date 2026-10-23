@@ -516,6 +516,8 @@ export type PageProps<
         error?: string;
         warning?: string | null;
     };
+    /** Current user may open the current workspace's settings (admin). */
+    canManageWorkspace?: boolean;
     /** Running focus timer (BRAI-74), null when none. */
     activeTimer?: ActiveTimer | null;
     // Shared layout data

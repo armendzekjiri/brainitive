@@ -384,7 +384,7 @@ class SecurityRegressionTest extends TestCase
     {
         Storage::fake('public');
         foreach (['helpdesks.tickets.attachments.store-public', 'helpdesks.tickets.replies.store-public'] as $name) {
-            $this->assertContains('throttle:20,1', Route::getRoutes()->getByName($name)->gatherMiddleware(), $name);
+            $this->assertContains("throttle:20,1,{$name}", Route::getRoutes()->getByName($name)->gatherMiddleware(), $name);
         }
 
         $helpdesk = $this->helpdesk();
