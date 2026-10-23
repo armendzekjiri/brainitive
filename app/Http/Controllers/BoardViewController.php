@@ -103,6 +103,12 @@ class BoardViewController extends Controller
         $this->authorize('delete', $boardView);
         $boardView->delete(); // its defaults go with it (FK cascade)
 
+        // Deleting the open view leaves the ordinary board; any other keeps the current URL
+        parse_str((string) parse_url(url()->previous(), PHP_URL_QUERY), $previous);
+        if ((int) ($previous['bv'] ?? 0) !== $boardView->id) {
+            return back()->with('success', 'View deleted.');
+        }
+
         return redirect()->route('boards.show', [$workspace->slug, $project->slug, $board->slug, 'bv' => 0])
             ->with('success', 'View deleted.');
     }
@@ -118,9 +124,9 @@ class BoardViewController extends Controller
         ['params' => $params, 'dropped' => $dropped] = BoardViewConfig::sanitize((array) $boardView->config, $board);
         $redirect = redirect()->route('boards.show', [$workspace->slug, $project->slug, $board->slug, ...$params, 'bv' => $boardView->id]);
 
-        return $dropped === []
-            ? $redirect
-            : $redirect->with('warning', "Parts of “{$boardView->name}” no longer exist (".implode(', ', $dropped).') and were left out.');
+        $note = BoardViewConfig::droppedNote($boardView->name, $dropped);
+
+        return $note === null ? $redirect : $redirect->with('warning', $note);
     }
 
     /** Make a view the current user's default for this board, or clear it (view = null). */

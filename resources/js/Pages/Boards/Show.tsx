@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { PageProps, Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User, Label as LabelType, ItemField } from '@/types';
+import { PageProps, Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User, Label as LabelType, ItemField, SavedBoardView } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -127,7 +127,7 @@ import {
     matchesFieldFilter, readFieldFilters, serializeFieldFilter, type FieldFilter, type FieldFilters, type SortDirection,
 } from '@/lib/customFields';
 import { ActiveSprintBar, type SprintSummary } from '@/components/board/ActiveSprintBar';
-import SavedViewsMenu, { type SavedBoardView } from '@/components/board/SavedViewsMenu';
+import SavedViewsMenu from '@/components/board/SavedViewsMenu';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -151,6 +151,8 @@ interface Props extends PageProps {
     /** Saved views (BRAI-78): own personal + shared views of this board. */
     savedViews?: SavedBoardView[];
     activeViewId?: number | null;
+    /** The default view the server applied to a plain board URL — the page writes it into the URL. */
+    appliedViewParams?: Record<string, string> | null;
     defaultViewId?: number | null;
     canShareViews?: boolean;
 }
@@ -633,8 +635,47 @@ function boardFilterParams(filters: BoardFilters, fields: ItemField[] = [], fiel
     params.labels = filters.labels.join(',');
     params.priority = filters.priority.join(',');
     params.type = filters.type.join(',');
-    params.quick = filters.quick.join(',');
+    // fixed order (as the server stores it), not click order — keeps saved-view comparisons stable
+    params.quick = QUICK_FILTERS.filter((f) => filters.quick.includes(f)).join(',');
     return params;
+}
+
+/** A saved view is open (`?bv=<id>`): the URL alone describes the board, nothing comes from the remembered setup. */
+function inSavedView(): boolean {
+    if (typeof window === 'undefined') return false;
+    return Number(new URLSearchParams(window.location.search).get('bv') ?? 0) > 0;
+}
+
+/** The default view the server applied to the plain board URL: write its params (+ bv) into the URL, keeping #item-N. */
+function applyViewParamsToUrl(params: Record<string, string>, viewId: number) {
+    const url = new URL(window.location.href);
+    for (const [key, value] of Object.entries(params)) if (value) url.searchParams.set(key, value);
+    url.searchParams.set('bv', String(viewId));
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.href);
+}
+
+type BoardLayout = 'kanban' | 'list' | 'gantt' | 'calendar';
+const BOARD_LAYOUTS: BoardLayout[] = ['kanban', 'list', 'gantt', 'calendar'];
+
+/** `?view=` (saved views, backlog/report links) wins; outside a saved view the remembered tab follows. */
+function readBoardLayout(storageKey: string): BoardLayout {
+    if (typeof window === 'undefined') return 'kanban';
+    const fromUrl = new URLSearchParams(window.location.search).get('view');
+    let stored: string | null = null;
+    if (!inSavedView()) {
+        try { stored = window.localStorage.getItem(storageKey); } catch { /* private mode */ }
+    }
+    const layout = (fromUrl ?? stored) as BoardLayout | null;
+    return layout && BOARD_LAYOUTS.includes(layout) ? layout : 'kanban';
+}
+
+function writeBoardLayout(storageKey: string, layout: BoardLayout) {
+    if (!inSavedView()) {
+        try { window.localStorage.setItem(storageKey, layout); } catch { /* private mode */ }
+    }
+    const url = new URL(window.location.href);
+    if (layout === 'kanban') url.searchParams.delete('view'); else url.searchParams.set('view', layout);
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.href);
 }
 
 /** Mirror the filters into the query string without an Inertia visit (keeps other params). */
@@ -1204,6 +1245,7 @@ function writeListSort(sort: ListSort | null) {
 function readHiddenFields(boardId: number): number[] {
     const fromUrl = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('hide');
     if (fromUrl !== null) return parseIds(fromUrl);
+    if (inSavedView()) return []; // the view shows all columns
     try {
         const stored = JSON.parse(window.localStorage.getItem(`board-${boardId}-list-hidden-fields`) ?? '[]');
         return Array.isArray(stored) ? stored.filter((n) => Number.isInteger(n)) : [];
@@ -1211,7 +1253,10 @@ function readHiddenFields(boardId: number): number[] {
 }
 
 function writeHiddenFields(boardId: number, ids: number[]) {
-    try { window.localStorage.setItem(`board-${boardId}-list-hidden-fields`, JSON.stringify(ids)); } catch { /* private mode */ }
+    // a saved view's columns never become your remembered choice for the plain board
+    if (!inSavedView()) {
+        try { window.localStorage.setItem(`board-${boardId}-list-hidden-fields`, JSON.stringify(ids)); } catch { /* private mode */ }
+    }
     const url = new URL(window.location.href);
     if (ids.length) url.searchParams.set('hide', ids.join(',')); else url.searchParams.delete('hide');
     if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.href);
@@ -2200,10 +2245,25 @@ export default function BoardsShow({
     canEditItems = true,
     savedViews = [],
     activeViewId = null,
+    appliedViewParams = null,
     defaultViewId = null,
     canShareViews = false,
 }: Props) {
-    const { flash } = usePage<PageProps & { flash?: { warning?: string | null } }>().props;
+    // The default view applied by the server: into the URL before any URL-backed state below reads
+    // it — then into Inertia's page too (a client-side visit, no request), or Inertia's first page
+    // load puts the plain URL back
+    useState(() => {
+        if (appliedViewParams && activeViewId && typeof window !== 'undefined') applyViewParamsToUrl(appliedViewParams, activeViewId);
+    });
+    useEffect(() => {
+        if (!appliedViewParams || !activeViewId) return;
+        const url = new URL(window.location.href);
+        for (const [key, value] of Object.entries(appliedViewParams)) if (value) url.searchParams.set(key, value);
+        url.searchParams.set('bv', String(activeViewId));
+        router.replace({ url: url.pathname + url.search + url.hash, preserveState: true, preserveScroll: true });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    const { flash } = usePage<PageProps>().props;
     const itemTypes = boardItemTypes;
     const [editingItem, setEditingItem] = useState<Item | null>(null);
 
@@ -2234,7 +2294,8 @@ export default function BoardsShow({
     // Filters live in the URL so a filtered board can be shared or bookmarked
     const initialFilters = useMemo(readBoardFilters, []);
     const [searchQuery, setSearchQuery] = useState(initialFilters.q);
-    const [currentView, setCurrentView] = useState<'kanban' | 'list' | 'gantt' | 'calendar'>('kanban');
+    const layoutKey = `board-view-${project.id}-${board.id}`;
+    const [currentView, setCurrentView] = useState<BoardLayout>(() => readBoardLayout(layoutKey));
     const [calendarDate, setCalendarDate] = useState(new Date());
     const [filterOpen, setFilterOpen] = useState(false);
     const [assigneeFilter, setAssigneeFilter] = useState<string>(initialFilters.assignee);
@@ -2289,23 +2350,8 @@ export default function BoardsShow({
         [assigneeFilter, statusFilter.length, labelFilter.length, priorityFilter.length, typeFilter.length, quickFilters.length, fieldFilters],
     );
 
-    // Persist board view preference per project so user sees same view next time
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        // ?view= (links from the backlog/reports tabs) wins over the remembered view
-        const fromUrl = new URLSearchParams(window.location.search).get('view');
-        const key = `board-view-${project.id}-${board.id}`;
-        const stored = (fromUrl ?? window.localStorage.getItem(key)) as 'kanban' | 'list' | 'gantt' | 'calendar' | null;
-        if (stored && ['kanban', 'list', 'gantt', 'calendar'].includes(stored)) {
-            setCurrentView(stored);
-        }
-    }, [project.id, board.id]);
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const key = `board-view-${project.id}-${board.id}`;
-        window.localStorage.setItem(key, currentView);
-    }, [currentView, project.id, board.id]);
+    // The layout tab lives in the URL too (and is remembered per board outside saved views)
+    useEffect(() => writeBoardLayout(layoutKey, currentView), [layoutKey, currentView]);
 
     // What a saved view captures: the URL view params of the current board setup
     const currentViewParams = useMemo<Record<string, string>>(() => {

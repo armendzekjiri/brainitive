@@ -28,6 +28,21 @@ class BoardViewConfig
 
     public const SORT_KEYS = ['key', 'title', 'status', 'priority', 'assignee', 'due_date', 'story_points'];
 
+    /** The URL params a view consists of (plus custom-field filters f<id>). */
+    public const PARAM_KEYS = ['q', 'assignee', 'status', 'labels', 'priority', 'type', 'quick', 'sort', 'view', 'hide'];
+
+    /** Is this query param part of the board view (so the URL already says what to show)? */
+    public static function isViewParam(string $key): bool
+    {
+        return in_array($key, self::PARAM_KEYS, true) || preg_match('/^f\d+$/', $key) === 1;
+    }
+
+    /** The note shown when sanitize() left parts of a view out, null when nothing was dropped. */
+    public static function droppedNote(string $viewName, array $dropped): ?string
+    {
+        return $dropped === [] ? null : "Parts of “{$viewName}” no longer exist (".implode(', ', $dropped).') and were left out.';
+    }
+
     /**
      * @param  array<string, mixed>  $params  as the board page sends them
      * @return array{version: int, params: array<string, string>}

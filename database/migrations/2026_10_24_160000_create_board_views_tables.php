@@ -33,6 +33,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique(['user_id', 'board_id']);
+            $table->index('board_id');
             $table->index('board_view_id');
         });
     }

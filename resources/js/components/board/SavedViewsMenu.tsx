@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useRef, useState } from 'react';
 import { router } from '@inertiajs/react';
 import { toast } from 'sonner';
 import { Bookmark, Check, ChevronDown, Copy, MoreHorizontal, Pencil, Star, Trash2, Users } from 'lucide-react';
@@ -13,16 +13,10 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import type { SavedBoardView } from '@/types';
 
-export interface SavedBoardView {
-    id: number;
-    name: string;
-    is_shared: boolean;
-    is_own: boolean;
-    owner: string | null;
-    params: Record<string, string>;
-    can_edit: boolean;
-}
+/** The keys that filter issues (the rest — layout, sort, hidden columns — only change how they show). */
+const FILTER_KEY = /^(q|assignee|status|labels|priority|type|quick|f\d+)$/;
 
 /** Same params? (id lists compared as sets, empty values ignored) */
 export function sameViewParams(a: Record<string, string>, b: Record<string, string>): boolean {
@@ -59,12 +53,14 @@ export default function SavedViewsMenu({ views, activeViewId, defaultViewId, can
     const [shared, setShared] = useState(false);
     const [renaming, setRenaming] = useState<number | null>(null);
     const [renameValue, setRenameValue] = useState('');
+    const renameInput = useRef<HTMLInputElement>(null);
+    const startingRename = useRef(false);
 
     const active = views.find((v) => v.id === activeViewId) ?? null;
     const dirty = active ? !sameViewParams(active.params, currentParams) : false;
     const mine = views.filter((v) => !v.is_shared);
     const team = views.filter((v) => v.is_shared);
-    const hasFilters = Object.entries(currentParams).some(([k, v]) => v && !(k === 'view' && v === 'kanban'));
+    const hasFilters = Object.entries(currentParams).some(([k, v]) => v && FILTER_KEY.test(k));
 
     const fail = (errors: Record<string, string>) => toast.error(Object.values(errors)[0] ?? 'Something went wrong.');
     const viewRoute = (routeName: string, view: SavedBoardView) => route(routeName, [...routeParams, view.id]);
@@ -83,6 +79,8 @@ export default function SavedViewsMenu({ views, activeViewId, defaultViewId, can
         if (!name.trim()) return;
         router.post(route('boards.views.store', routeParams), { name: name.trim(), params: currentParams, is_shared: shared }, {
             preserveScroll: true,
+            // the board reloads from the saved view's URL (POSTs keep component state by default)
+            preserveState: false,
             onSuccess: () => {
                 setSaving(false);
                 setName('');
@@ -117,7 +115,12 @@ export default function SavedViewsMenu({ views, activeViewId, defaultViewId, can
 
     const remove = (view: SavedBoardView) => {
         if (!window.confirm(`Delete the view “${view.name}”?${view.is_shared ? ' It disappears for the whole team.' : ''}`)) return;
-        router.delete(viewRoute('boards.views.destroy', view), { preserveScroll: true, onError: fail });
+        router.delete(viewRoute('boards.views.destroy', view), {
+            preserveScroll: true,
+            preserveState: false,
+            onSuccess: () => toast.success('View deleted'),
+            onError: fail,
+        });
     };
 
     const row = (view: SavedBoardView) => (
@@ -131,7 +134,15 @@ export default function SavedViewsMenu({ views, activeViewId, defaultViewId, can
                         setRenaming(null);
                     }}
                 >
-                    <Input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)} maxLength={80} className="h-7 text-sm" onKeyDown={(e) => e.key === 'Escape' && setRenaming(null)} />
+                    <Input
+                        ref={renameInput}
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        maxLength={80}
+                        className="h-7 text-sm"
+                        aria-label="View name"
+                    />
                 </form>
             ) : (
                 <button type="button" onClick={() => openView(view)} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-sm">
@@ -143,11 +154,21 @@ export default function SavedViewsMenu({ views, activeViewId, defaultViewId, can
             )}
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <button type="button" className="rounded p-1 text-muted-foreground opacity-0 hover:bg-muted focus:opacity-100 group-hover:opacity-100" aria-label={`Options for ${view.name}`}>
+                    <button type="button" className="rounded p-1 text-muted-foreground hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100 md:opacity-0" aria-label={`Options for ${view.name}`}>
                         <MoreHorizontal className="size-4" />
                     </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuContent
+                    align="end"
+                    className="w-52"
+                    onCloseAutoFocus={(e) => {
+                        // Rename: keep the focus in the name field instead of the "…" button
+                        if (!startingRename.current) return;
+                        startingRename.current = false;
+                        e.preventDefault();
+                        renameInput.current?.focus();
+                    }}
+                >
                     {view.id === defaultViewId ? (
                         <DropdownMenuItem onSelect={() => setDefault(null)}>
                             <Star className="mr-2 size-4" /> Don't open by default
@@ -157,13 +178,21 @@ export default function SavedViewsMenu({ views, activeViewId, defaultViewId, can
                             <Star className="mr-2 size-4" /> Open by default
                         </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem onSelect={() => router.post(viewRoute('boards.views.duplicate', view), {}, { preserveScroll: true, onError: fail })}>
+                    <DropdownMenuItem
+                        onSelect={() => router.post(viewRoute('boards.views.duplicate', view), {}, {
+                            preserveScroll: true,
+                            preserveState: false,
+                            onSuccess: () => toast.success(`Copied to “${view.name} (copy)”`),
+                            onError: fail,
+                        })}
+                    >
                         <Copy className="mr-2 size-4" /> Duplicate
                     </DropdownMenuItem>
                     {view.can_edit && (
                         <>
                             <DropdownMenuItem
                                 onSelect={() => {
+                                    startingRename.current = true;
                                     setRenaming(view.id);
                                     setRenameValue(view.name);
                                 }}
@@ -193,11 +222,25 @@ export default function SavedViewsMenu({ views, activeViewId, defaultViewId, can
                     <Button variant="outline" size="sm" className="h-8 max-w-56 gap-1.5 text-[13px]">
                         <Bookmark className="size-3.5 shrink-0" />
                         <span className="truncate">{active ? active.name : 'Views'}</span>
-                        {dirty && <span className="size-1.5 shrink-0 rounded-full bg-amber-500" aria-label="Unsaved changes" />}
+                        {dirty && (
+                            <>
+                                <span className="size-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden />
+                                <span className="sr-only">(unsaved changes)</span>
+                            </>
+                        )}
                         <ChevronDown className="size-3.5 shrink-0 opacity-60" />
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent align="start" className="w-72 p-1.5">
+                <PopoverContent
+                    align="start"
+                    className="w-72 p-1.5"
+                    onEscapeKeyDown={(e) => {
+                        // Escape in the rename field cancels the rename, not the whole menu
+                        if (renaming === null) return;
+                        e.preventDefault();
+                        setRenaming(null);
+                    }}
+                >
                     <button type="button" onClick={showAll} className={cn('flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted', !active && !hasFilters && 'bg-accent')}>
                         {!active && !hasFilters ? <Check className="size-3.5 text-primary" /> : <span className="size-3.5" />}
                         All issues

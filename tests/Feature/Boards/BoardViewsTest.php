@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Boards;
 
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Models\Board;
 use App\Models\BoardView;
 use App\Models\ItemField;
 use App\Models\User;
@@ -105,15 +107,22 @@ class BoardViewsTest extends TestCase
         $response->assertSessionHas('warning', fn ($w) => str_contains($w, 'columns') && str_contains($w, 'member') && str_contains($w, 'field'));
     }
 
-    public function test_a_default_view_opens_with_the_plain_board_and_goes_away_with_the_view(): void
+    public function test_a_default_view_applies_to_the_plain_board_and_goes_away_with_the_view(): void
     {
         $view = $this->savedView($this->editor, 'Default', params: ['quick' => 'due']);
         $board = route('boards.show', [$this->workspace->slug, $this->project->slug, $this->board->slug]);
 
         $this->actingAs($this->editor)->post($this->route('boards.views.default'), ['board_view_id' => $view->id])->assertSessionHasNoErrors();
-        $this->actingAs($this->editor)->get($board)->assertRedirect($this->viewRoute('boards.views.open', $view));
-        $this->actingAs($this->editor)->get($board.'?bv=0')->assertOk();
-        $this->actingAs($this->editor)->get($board.'?quick=blocked')->assertOk();
+
+        // applied in place (no redirect: Inertia visits would lose #item-N links)
+        $this->actingAs($this->editor)->get($board)->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('activeViewId', $view->id)->where('defaultViewId', $view->id)->where('appliedViewParams.quick', 'due'));
+        $inertia = ['X-Inertia' => 'true', 'X-Inertia-Version' => (string) app(HandleInertiaRequests::class)->version(request())];
+        $this->actingAs($this->editor)->get($board, $inertia)->assertOk()->assertJsonPath('props.activeViewId', $view->id);
+        $this->actingAs($this->editor)->get($board.'?bv=0')
+            ->assertInertia(fn (Assert $page) => $page->where('activeViewId', null)->where('appliedViewParams', null));
+        $this->actingAs($this->editor)->get($board.'?quick=blocked')
+            ->assertInertia(fn (Assert $page) => $page->where('activeViewId', null)->where('appliedViewParams', null));
 
         // someone else's personal view can't become my default
         $other = $this->savedView($this->viewer, 'Theirs');
@@ -121,7 +130,112 @@ class BoardViewsTest extends TestCase
 
         $this->actingAs($this->editor)->delete($this->viewRoute('boards.views.destroy', $view))->assertRedirect();
         $this->assertSame(0, DB::table('board_view_defaults')->count());
-        $this->actingAs($this->editor)->get($board)->assertOk();
+        $this->actingAs($this->editor)->get($board)
+            ->assertInertia(fn (Assert $page) => $page->where('activeViewId', null)->where('appliedViewParams', null));
+    }
+
+    public function test_an_applied_default_with_removed_parts_is_cleaned_up_with_a_note(): void
+    {
+        $columns = $this->board->columns()->orderBy('position')->pluck('id');
+        $view = $this->savedView($this->editor, 'Old', params: ['status' => $columns[0].',999999']);
+        DB::table('board_view_defaults')->insert(['user_id' => $this->editor->id, 'board_id' => $this->board->id, 'board_view_id' => $view->id, 'created_at' => now(), 'updated_at' => now()]);
+
+        $this->actingAs($this->editor)->get(route('boards.show', [$this->workspace->slug, $this->project->slug, $this->board->slug]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('appliedViewParams.status', (string) $columns[0])
+                // the open view is compared against what the board shows, not the stored params
+                ->where('savedViews.0.params.status', (string) $columns[0])
+                ->where('flash.warning', fn ($w) => str_contains((string) $w, 'columns')));
+    }
+
+    public function test_board_load_does_not_query_per_saved_view(): void
+    {
+        $board = route('boards.show', [$this->workspace->slug, $this->project->slug, $this->board->slug, 'bv' => 0]);
+        $this->savedView($this->editor, 'Mine');
+        $this->savedView($this->editor, 'Team', shared: true);
+        $this->actingAs($this->editor)->get($board)->assertOk(); // warm up
+
+        $queries = fn () => tap(0, function () use ($board, &$count) {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->actingAs($this->editor)->get($board)->assertOk();
+            $count = count(DB::getQueryLog());
+            DB::disableQueryLog();
+        }) + $count;
+
+        $before = $queries();
+        foreach (range(1, 8) as $i) {
+            $this->savedView($this->editor, "Mine {$i}");
+            $this->savedView($this->editor, "Team {$i}", shared: true);
+        }
+        $this->assertSame($before, $queries());
+    }
+
+    public function test_views_of_another_board_are_not_found(): void
+    {
+        $otherBoard = Board::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->editor->id]);
+        $foreign = BoardView::create(['board_id' => $otherBoard->id, 'user_id' => $this->editor->id, 'name' => 'Elsewhere', 'is_shared' => true, 'config' => ['version' => 1, 'params' => []]]);
+
+        $this->actingAs($this->editor)->get($this->viewRoute('boards.views.open', $foreign))->assertNotFound();
+        $this->actingAs($this->editor)->patch($this->viewRoute('boards.views.update', $foreign), ['name' => 'Moved'])->assertNotFound();
+        $this->actingAs($this->editor)->post($this->viewRoute('boards.views.duplicate', $foreign))->assertNotFound();
+        $this->actingAs($this->editor)->delete($this->viewRoute('boards.views.destroy', $foreign))->assertNotFound();
+        $this->actingAs($this->editor)->post($this->route('boards.views.default'), ['board_view_id' => $foreign->id])->assertNotFound();
+        $this->assertSame('Elsewhere', $foreign->fresh()->name);
+    }
+
+    public function test_personal_views_are_off_limits_even_for_board_managers(): void
+    {
+        $personal = $this->savedView($this->viewer, 'Private');
+
+        $this->actingAs($this->editor)->get($this->viewRoute('boards.views.open', $personal))->assertForbidden();
+        $this->actingAs($this->editor)->patch($this->viewRoute('boards.views.update', $personal), ['name' => 'Mine now'])->assertForbidden();
+        $this->actingAs($this->editor)->delete($this->viewRoute('boards.views.destroy', $personal))->assertForbidden();
+        $this->actingAs($this->editor)->post($this->viewRoute('boards.views.duplicate', $personal))->assertForbidden();
+        $this->assertSame('Private', $personal->fresh()->name);
+    }
+
+    public function test_outsiders_cannot_save_views_or_pick_defaults(): void
+    {
+        $shared = $this->savedView($this->editor, 'Team', shared: true);
+
+        $this->actingAs($this->outsider)->post($this->route('boards.views.store'), ['name' => 'Spy', 'params' => []])->assertForbidden();
+        $this->actingAs($this->outsider)->post($this->route('boards.views.default'), ['board_view_id' => $shared->id])->assertForbidden();
+        $this->assertSame(1, BoardView::count());
+    }
+
+    public function test_board_managers_rename_and_delete_shared_views_and_viewers_cannot_unshare_them(): void
+    {
+        $shared = $this->savedView($this->viewer, 'Team', shared: true);
+
+        $this->actingAs($this->viewer)->patch($this->viewRoute('boards.views.update', $shared), ['is_shared' => false])->assertForbidden();
+        $this->assertTrue($shared->fresh()->is_shared);
+
+        $this->actingAs($this->editor)->patch($this->viewRoute('boards.views.update', $shared), ['name' => 'Sprint board'])->assertSessionHasNoErrors();
+        $this->assertSame('Sprint board', $shared->fresh()->name);
+        $this->actingAs($this->editor)->delete($this->viewRoute('boards.views.destroy', $shared))->assertRedirect();
+        $this->assertModelMissing($shared);
+    }
+
+    public function test_deleting_a_view_that_is_not_open_keeps_the_current_board_url(): void
+    {
+        $open = $this->savedView($this->editor, 'Open');
+        $other = $this->savedView($this->editor, 'Other');
+        $current = route('boards.show', [$this->workspace->slug, $this->project->slug, $this->board->slug, 'quick' => 'due', 'bv' => $open->id]);
+
+        $this->actingAs($this->editor)->from($current)->delete($this->viewRoute('boards.views.destroy', $other))->assertRedirect($current);
+        $this->actingAs($this->editor)->from($current)->delete($this->viewRoute('boards.views.destroy', $open))
+            ->assertRedirect(route('boards.show', [$this->workspace->slug, $this->project->slug, $this->board->slug, 'bv' => 0]));
+    }
+
+    public function test_view_input_is_validated(): void
+    {
+        $store = $this->route('boards.views.store');
+
+        $this->actingAs($this->editor)->post($store, ['name' => str_repeat('x', 81), 'params' => []])->assertSessionHasErrors('name');
+        $this->actingAs($this->editor)->post($store, ['name' => 'Bad', 'params' => 'q=1'])->assertSessionHasErrors('params');
+        $this->actingAs($this->editor)->post($store, ['name' => 'Huge', 'params' => array_fill_keys(array_map(fn ($i) => "f{$i}", range(1, 61)), 'yes')])->assertSessionHasErrors('params');
+        $this->assertSame(0, BoardView::count());
     }
 
     public function test_unsharing_a_view_drops_it_as_other_peoples_default(): void

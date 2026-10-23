@@ -26,7 +26,8 @@ config = { version: 1, params: { q?, assignee?, status?, labels?, priority?, typ
   the board URL with the clean params + `bv=<id>` and a flash warning when something was dropped.
 - `assignee=me` is stored literally, so it resolves for whoever opens the view.
 - Default: `board_view_defaults` (user, board → view). Opening the board without view params
-  redirects to the default (`bv=0` = ordinary board). Deleting the view removes the default.
+  applies the default in place (`bv=0` = ordinary board) — no redirect, which would lose `#item-N`
+  on Inertia visits. Deleting the view removes the default.
 - Permissions (`BoardViewPolicy`): personal views only for their owner (who must still see the
   board); shared views for everyone who can see the board; creating / changing / deleting a
   shared view needs board `update`. Sharing never grants board access — items stay filtered by
@@ -40,9 +41,23 @@ config = { version: 1, params: { q?, assignee?, status?, labels?, priority?, typ
 - Models `BoardView`; policy `BoardViewPolicy` (registered); `BoardViewController`; routes under
   `projects/{project}` (scoped bindings).
 - `BoardController::show`: `savedViews`, `activeViewId`, `defaultViewId`, `canShareViews`,
-  default redirect.
+  default applied in place (`appliedViewParams`).
 - Frontend: `components/board/SavedViewsMenu.tsx`, `Pages/Boards/Show.tsx` (current params,
   list sort lifted for unsaved detection).
+
+## Review follow-ups
+php- and frontend-reviewer findings fixed:
+- component tracked as `Components/` (broke the Linux build)
+- N+1 on `can_edit`
+- default redirect lost `#item-N`
+- missing `board_id` index
+- duplicated param list
+- false "unsaved" states (quick order, `hide` from localStorage, unsanitized stored params, `view` not in URL)
+- POSTs keeping stale state (save, duplicate, delete)
+- delete always leaving the board URL
+- touch / keyboard access to row options; rename focus and Escape
+- types moved to `types/index.d.ts`
+- extra tests: IDOR across boards, manager limits on personal views, outsiders, validation, query count
 
 ## Out of scope (v1)
 Cross-project dashboards, scheduled reports, list-view column visibility (doesn't exist yet).
