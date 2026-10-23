@@ -3,6 +3,8 @@
  * Usage: <script src="https://your-app.com/js/helpdesk-widget.js" data-helpdesk-id="UUID" data-button-text="Support" data-button-position="bottom-right" data-brand-color="#0E83DC"></script>
  * With ticket context (e.g. from email link): add data-ticket-uuid and data-token to show ticket + replies.
  */
+import { BLOCKED_UPLOAD_MESSAGE, isBlockedUpload } from '../lib/blockedUploads';
+
 (function () {
     const script = document.currentScript as HTMLScriptElement | null;
     if (!script) return;
@@ -362,7 +364,17 @@
                 attList.appendChild(span);
             }
         };
-        attInput.onchange = updateAttList;
+        attInput.onchange = () => {
+            // programs / scripts are refused by the server too: drop them right away with a note
+            const files = attInput.files;
+            if (files && Array.from(files).some((f) => isBlockedUpload(f.name))) {
+                const dt = new DataTransfer();
+                Array.from(files).filter((f) => !isBlockedUpload(f.name)).forEach((f) => dt.items.add(f));
+                attInput.files = dt.files;
+                window.alert(BLOCKED_UPLOAD_MESSAGE);
+            }
+            updateAttList();
+        };
         form.appendChild(attGroup);
 
         const sub = document.createElement('button');
