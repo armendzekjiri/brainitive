@@ -292,6 +292,15 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **Item soft deletes don't cascade.** The `parent_id` FK cascades only on hard deletes, so
   `destroyItem` soft-deletes `descendantIds()` explicitly. Before that, a deleted issue's
   subtasks stayed behind, although the confirm dialog said they'd be deleted.
+- **The app runs in UTC; task dates and times are the user's wall clock.** `due_date` /
+  `due_time` / `start_*` on items and list tasks have no zone. Anything that turns them into a
+  moment (reminders, "today", the morning digest) must use the recipient's
+  `User::localTimezone()` (browser zone, synced on page load) — the old start reminders
+  read them as UTC and fired 1–2 h late in Europe. List-task dates serialize as `Y-m-d`
+  (`date:Y-m-d` cast); the old ISO output left `<input type="date">` empty. Browsers still
+  report old zone names (`Asia/Calcutta`, `Europe/Kiev`): validate with `timezone:all_with_bc`.
+  "1 day before" is `subDay()` (same clock time), not `subMinutes(1440)`, which is an hour off
+  on DST weekends. `due_time` comes back as `HH:MM:SS` on Postgres; send `HH:MM` back.
 - **An empty JSON object comes back as `[]` from an `array` cast.** `(object) []` is stored
   as `{}`, but the cast decodes with `json_decode(…, true)`, so React gets `[]`. Client code
   that compares or spreads such values (`rules: {}` vs `rules: []`) must accept both.

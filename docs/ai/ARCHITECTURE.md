@@ -97,7 +97,16 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Controller:** `TaskListController` (also exposed via CLI — see CLI module)
 - **Policy:** `TaskListPolicy`
 - **Routes:** `task-lists/...` under `projects/{project}`
-- **Pages:** `Pages/Lists/`
+- **Pages:** `Pages/Lists/Show.tsx` (Todoist-style list, BRAI-89) built from `components/lists/`:
+  `TaskRow`, `TaskComposer` (quick add), `TaskDetailSheet` (side panel, saves on blur),
+  `TaskPickers` (date / assignee / repeat / reminder popovers), `taskDates.ts` (labels, tones,
+  `nextOccurrence()` mirroring `TaskListItem::nextDueDate()`)
+- **Reminders:** `TaskListItem::reminderRecipient()` (assignee, else creator), `dueAt()` /
+  `remindAt()` (due time or 09:00, minus `reminder_minutes` ∈ `REMINDER_OPTIONS`), sent by
+  `SendItemReminders`. Morning summary: `SendTaskDigest` + `TaskDigestNotification` (once per
+  user per local day from 08:00, due today + overdue, off via `users.task_digest`)
+- **User settings:** `PATCH profile.preferences` (`timezone` — synced from the browser by
+  `hooks/useTimezoneSync.ts` in `AppLayout`; `task_digest` — `Profile/Partials/TaskDigestSetting`)
 
 ### Helpdesk / Ticketing
 - **Models:** `Helpdesk`, `HelpdeskColumn`, `HelpdeskField`, `Ticket`, `TicketReply`, `TicketContact`, `TicketFieldValue`, `TicketAttachment`
@@ -129,9 +138,10 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Controllers:** `CalendarController` (app view, reschedule), `CalendarConnectionController` (connect/redirect/callback, events & tasks CRUD)
 - **Services:** `app/Services/GoogleCalendarService.php`, `app/Services/GoogleTasksService.php`
 - **Console:** `SendCalendarReminders.php` + `CalendarReminderNotification` (Google events/tasks, push-only);
-  `SendItemReminders.php` + `ItemReminderNotification` (board/task-list items reaching their
-  `start_time` → bell **+** push; assignee only; dedup via `sent_item_reminders`). Both scheduled
-  every 5 min in `routes/console.php`.
+  `SendItemReminders.php` + `ItemReminderNotification` (bell **+** push: board / task-list items
+  reaching their `start_time`, and task-list items whose `reminder_minutes` before the due time
+  is reached; times in the recipient's `User::localTimezone()`; dedup via `sent_item_reminders`).
+  Both scheduled every 5 min in `routes/console.php`. Task-list digest: see Task Lists.
 - **Routes:** `calendar/connections/...` controller group in `web.php`
 - **Pages:** `Pages/Calendar/`
 

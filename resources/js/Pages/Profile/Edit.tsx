@@ -4,6 +4,7 @@ import { Head } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import DeleteUserForm from './Partials/DeleteUserForm';
 import NotificationSettingsForm from './Partials/NotificationSettingsForm';
+import TaskDigestSetting from './Partials/TaskDigestSetting';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm';
 
@@ -38,10 +39,11 @@ export default function Edit({
                 <Card>
                     <CardHeader>
                         <CardTitle>Notifications</CardTitle>
-                        <CardDescription>Control browser push notifications for this device.</CardDescription>
+                        <CardDescription>Browser push for this device, and your task reminders.</CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-6">
                         <NotificationSettingsForm className="max-w-xl" />
+                        <TaskDigestSetting className="max-w-xl border-t pt-6" />
                     </CardContent>
                 </Card>
 

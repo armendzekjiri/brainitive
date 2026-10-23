@@ -9,6 +9,7 @@ use App\Models\Workspace;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class TaskListController extends Controller
@@ -67,6 +68,7 @@ class TaskListController extends Controller
             'project' => $project,
             'taskList' => $taskList,
             'members' => $members,
+            'canManage' => $request->user()->can('manageItems', $taskList),
         ]);
     }
 
@@ -123,12 +125,14 @@ class TaskListController extends Controller
         $validated = $request->validate([
             'title' => 'required|string|max:500',
             'description' => 'nullable|array',
-            'assignee_id' => 'nullable|integer|exists:users,id',
+            // Only people in this workspace can be assigned.
+            'assignee_id' => ['nullable', 'integer', Rule::in($this->memberIds($workspace))],
             'due_date' => 'nullable|date',
             'due_time' => 'nullable|date_format:H:i',
             'start_date' => 'nullable|date',
             'start_time' => 'nullable|date_format:H:i',
             'recurrence' => 'nullable|in:daily,weekly,monthly,yearly',
+            'reminder_minutes' => 'nullable|integer|in:'.implode(',', TaskListItem::REMINDER_OPTIONS),
         ]);
 
         $position = $taskList->items()->max('position') + 1;
@@ -143,6 +147,7 @@ class TaskListController extends Controller
             'start_date' => $validated['start_date'] ?? null,
             'start_time' => $validated['start_time'] ?? null,
             'recurrence' => $validated['recurrence'] ?? null,
+            'reminder_minutes' => $validated['reminder_minutes'] ?? null,
             'position' => $position,
             'created_by' => $request->user()->id,
         ]);
@@ -158,12 +163,14 @@ class TaskListController extends Controller
             'title' => 'sometimes|required|string|max:500',
             'description' => 'nullable|array',
             'status' => 'sometimes|in:todo,done',
-            'assignee_id' => 'nullable|integer|exists:users,id',
+            // Only people in this workspace can be assigned.
+            'assignee_id' => ['nullable', 'integer', Rule::in($this->memberIds($workspace))],
             'due_date' => 'nullable|date',
             'due_time' => 'nullable|date_format:H:i',
             'start_date' => 'nullable|date',
             'start_time' => 'nullable|date_format:H:i',
             'recurrence' => 'nullable|in:daily,weekly,monthly,yearly',
+            'reminder_minutes' => 'nullable|integer|in:'.implode(',', TaskListItem::REMINDER_OPTIONS),
         ]);
 
         $isCompleting = isset($validated['status'])
@@ -171,7 +178,8 @@ class TaskListController extends Controller
             && $item->status !== 'done';
 
         // Recurring: when completing a recurring item, reset to todo with next due date
-        if ($isCompleting && $item->recurrence) {
+        // Without a due date there is nothing to move: a repeating task then just gets done.
+        if ($isCompleting && $item->recurrence && $item->due_date) {
             $nextDate = $item->nextDueDate();
 
             $item->update(array_merge($validated, [
@@ -235,6 +243,12 @@ class TaskListController extends Controller
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
+
+    /** @return list<int> */
+    private function memberIds(Workspace $workspace): array
+    {
+        return $workspace->users()->pluck('users.id')->all();
+    }
 
     private function uniqueSlug(Project $project, string $base, ?int $excludeId = null): string
     {

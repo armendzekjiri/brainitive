@@ -38,6 +38,8 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
         'phone',
         'onboarding_state',
         'calendar_view',
+        'timezone',
+        'task_digest',
     ];
 
     protected $appends = ['avatar_display'];
@@ -65,7 +67,20 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
             'last_login_at' => 'datetime',
             'password' => 'hashed',
             'onboarding_state' => 'array',
+            'task_digest' => 'boolean',
         ];
+    }
+
+    /**
+     * The user's own time zone (set from the browser), else the app's. Reminder times and
+     * "today" are computed in it.
+     */
+    public function localTimezone(): string
+    {
+        // ALL_WITH_BC: browsers still report old names such as "Asia/Calcutta" or "Europe/Kiev".
+        return $this->timezone && in_array($this->timezone, \DateTimeZone::listIdentifiers(\DateTimeZone::ALL_WITH_BC), true)
+            ? $this->timezone
+            : config('app.timezone');
     }
 
     /** Full URL for profile picture (avatar). */

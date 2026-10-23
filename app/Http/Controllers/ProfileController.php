@@ -28,6 +28,23 @@ class ProfileController extends Controller
     }
 
     /**
+     * Small personal settings: the browser's time zone (sent automatically) and the daily
+     * task summary. JSON requests get 204, Inertia / form posts go back.
+     */
+    public function updatePreferences(Request $request)
+    {
+        $validated = $request->validate([
+            // all_with_bc: browsers still report old names such as "Asia/Calcutta".
+            'timezone' => 'sometimes|required|string|timezone:all_with_bc',
+            'task_digest' => 'sometimes|boolean',
+        ]);
+
+        $request->user()->update($validated);
+
+        return $request->header('X-Inertia') || ! $request->expectsJson() ? back() : response()->noContent();
+    }
+
+    /**
      * Update the user's profile information.
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
