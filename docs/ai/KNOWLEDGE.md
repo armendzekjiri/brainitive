@@ -347,6 +347,15 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   DB-specific failure, run the tests against a throwaway Postgres:
   `docker run -d -p 55432:5432 -e POSTGRES_PASSWORD=test -e POSTGRES_DB=brainitive_test postgres:17-alpine`,
   then `DB_CONNECTION=pgsql DB_PORT=55432 DB_DATABASE=brainitive_test DB_USERNAME=postgres DB_PASSWORD=test php artisan test`.
+  CI (`tests.yml`) runs the whole suite on Postgres 16 on every push. Traps it caught:
+  - **`where(col, 'like', …)` is case-sensitive on Postgres.** Use `whereLike` / `orWhereLike`
+    (`ilike` on pgsql). Search must not depend on case.
+  - **A caught unique violation aborts the surrounding Postgres transaction**, including the
+    test's RefreshDatabase transaction. Use `createOrFirst` / `firstOrCreate` (savepoint) or
+    wrap the insert in `DB::transaction`, rather than catching
+    `UniqueConstraintViolationException` and querying on.
+  - **Sequences don't restart between tests** (rollback keeps them), so never hard-code ids
+    like `=== 4`. Keep the created model's id.
 - **Notification payloads are rendered in one place.** `components/NotificationMessage.tsx`
   maps every `data.type` to a sentence. The bell and the page used to fall back to
   "{actor} moved {item_key}", so ticket notifications (`ticket_*`, with no `item_*` keys)

@@ -1,0 +1,34 @@
+# Staging flow (BRAI-95): feature branches merge into pre-release, never straight into main.
+# Every push to pre-release runs the test gate; dev.brainitive.app deploy + Playwright e2e
+# (BRAI-96) come next. Green = pre-release is ready to be merged into main (which deploys).
+name: Pre-release
+
+on:
+  push:
+    branches: [pre-release]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pre-release
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  ready:
+    name: Ready for main
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          {
+            echo "### pre-release is green"
+            echo
+            echo "Commit \`${GITHUB_SHA::7}\` passed the test gate."
+            echo "Open or update the PR **pre-release → main** to deploy it to production."
+          } >> "$GITHUB_STEP_SUMMARY"
