@@ -107,7 +107,9 @@ import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { Comment, Attachment } from '@/types';
 import { ItemTypeIcon } from '@/components/ItemTypeIcon';
 import { LabelChip, PriorityIndicator, TypeBadge, AssigneeAvatar, priorityMeta, itemAccentColor } from '@/components/board/ItemPrimitives';
+import CompleteSubtasksDialog from '@/components/item/CompleteSubtasksDialog';
 import DuplicateItemDialog from '@/components/item/DuplicateItemDialog';
+import { itemTree } from '@/lib/itemTree';
 import { useItemDetail, ItemDetailMain, ItemDetailSidebar, ItemFilePreviewDialog, type ProjectItemLite } from '@/components/item/ItemDetail';
 import { BoardHeader } from '@/components/board/BoardHeader';
 import { ActiveSprintBar, type SprintSummary } from '@/components/board/ActiveSprintBar';
@@ -536,6 +538,7 @@ function CreateItemDialog({
                                 <SelectItem value="none">None</SelectItem>
                                 {rootItems.map((r) => (
                                     <SelectItem key={r.id} value={String(r.id)}>
+                                        {(r as Item & { depth?: number }).depth ? <span className="text-muted-foreground">{'\u00a0\u00a0↳ '}</span> : null}
                                         <span className="font-mono text-xs">{r.key}</span> {r.title}
                                     </SelectItem>
                                 ))}
@@ -1848,17 +1851,27 @@ export default function BoardsShow({
         setDragOverColumn(column.id);
     };
 
+    // Dropping a parent on a done column with open subtasks below asks first.
+    const [completePrompt, setCompletePrompt] = useState<{ item: Item; column: BoardColumn; openCount: number } | null>(null);
+    const boardTree = useMemo(() => itemTree(board.columns.flatMap((c) => c.items ?? [])), [board.columns]);
+
+    const moveItem = (item: Item, column: BoardColumn, withSubtasks = false) =>
+        router.patch(
+            route('boards.items.move', [workspace.slug, project.slug, board.slug, item.id]),
+            { column_id: column.id, position: 0, with_subtasks: withSubtasks },
+            { preserveScroll: true },
+        );
+
     const handleDrop = (e: DragEvent, column: BoardColumn) => {
         e.preventDefault();
         if (draggedItem && draggedItem.column_id !== column.id) {
-            router.patch(
-                route('boards.items.move', [workspace.slug, project.slug, board.slug, draggedItem.id]),
-                {
-                    column_id: column.id,
-                    position: 0,
-                },
-                { preserveScroll: true }
-            );
+            const doneIds = new Set(board.columns.filter((c) => c.is_done_column).map((c) => c.id));
+            const open = column.is_done_column ? boardTree.descendants(draggedItem.id).filter((d) => !doneIds.has(d.column_id as number)) : [];
+            if (open.length > 0) {
+                setCompletePrompt({ item: draggedItem, column, openCount: open.length });
+            } else {
+                moveItem(draggedItem, column);
+            }
         }
         setDraggedItem(null);
         setDragOverColumn(null);
@@ -1912,11 +1925,13 @@ export default function BoardsShow({
             }) || [],
     }));
 
-    // Root items (no parent) for parent-task selector
-    const rootItems = useMemo(
-        () => filteredColumns.flatMap((c) => c.items || []).filter((i) => !i.parent_id),
-        [filteredColumns],
-    );
+    // Possible parents for a new issue: top-level issues and first-level subtasks (3 levels max),
+    // each followed by its children.
+    const rootItems = useMemo(() => {
+        const all = board.columns.flatMap((c) => c.items ?? []);
+        const roots = all.filter((i) => !i.parent_id);
+        return roots.flatMap((r) => [{ ...r, depth: 0 }, ...all.filter((c) => c.parent_id === r.id).map((c) => ({ ...c, depth: 1 }))]);
+    }, [board.columns]);
 
     return (
         <AppLayout>
@@ -2451,6 +2466,17 @@ export default function BoardsShow({
                 open={!!editingItem}
                 onClose={() => setEditingItem(null)}
                 onOpenItem={setEditingItem}
+            />
+            <CompleteSubtasksDialog
+                open={completePrompt !== null}
+                itemKey={completePrompt?.item.key ?? ''}
+                openCount={completePrompt?.openCount ?? 0}
+                columnName={completePrompt?.column.name ?? ''}
+                onCancel={() => setCompletePrompt(null)}
+                onChoose={(withSubtasks) => {
+                    if (completePrompt) moveItem(completePrompt.item, completePrompt.column, withSubtasks);
+                    setCompletePrompt(null);
+                }}
             />
         </AppLayout>
     );

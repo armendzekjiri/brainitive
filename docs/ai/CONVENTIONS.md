@@ -303,7 +303,10 @@ Pages work like Confluence. Keep these rules when touching pages:
 ## Sprints (Scrum boards)
 
 - Move issues between sprints/backlog only via `Item::moveToSprint()` — it carries the
-  subtasks along and appends to the target list. Never set `sprint_id` on a subtask alone.
+  whole subtree along and appends to the target list. Never set `sprint_id` on a subtask alone.
+- **Subtasks nest 3 levels** (`Item::MAX_DEPTH = 2`; `lib/itemTree.ts` mirrors it). Anything
+  that acts on an issue as a whole (delete, move to sprint / board, duplicate, complete) uses
+  `Item::descendantIds()`, not just `children()`.
 - Sprint lifecycle goes through `Sprint::start()` / `Sprint::complete()` (they snapshot
   committed / completed numbers and the final burndown). Don't flip `status` by hand.
 - Burndown/velocity numbers come from `SprintReport`; a sprint without story points burns

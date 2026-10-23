@@ -108,6 +108,62 @@ class Item extends Model
     }
 
     /**
+     * Nesting limit: issue → subtask → sub-subtask (depth 0, 1, 2).
+     */
+    public const MAX_DEPTH = 2;
+
+    /** 0 for a top-level issue, 1 for a subtask, 2 for a sub-subtask. */
+    public function depth(): int
+    {
+        $depth = 0;
+        $parentId = $this->parent_id;
+        $seen = [$this->id];
+        while ($parentId !== null && $depth <= self::MAX_DEPTH + 5) {
+            $parent = static::withTrashed()->select('id', 'parent_id')->find($parentId);
+            if (! $parent || in_array($parent->id, $seen, true)) {
+                break;
+            }
+            $seen[] = $parent->id;
+            $depth++;
+            $parentId = $parent->parent_id;
+        }
+
+        return $depth;
+    }
+
+    /** Levels below this item (0 = no children). */
+    public function subtreeHeight(): int
+    {
+        $height = 0;
+        $level = [$this->id];
+        while ($level !== [] && $height <= self::MAX_DEPTH + 5) {
+            $level = static::whereIn('parent_id', $level)->pluck('id')->all();
+            if ($level !== []) {
+                $height++;
+            }
+        }
+
+        return $height;
+    }
+
+    /**
+     * All descendants' ids (children, grandchildren, …).
+     *
+     * @return list<int>
+     */
+    public function descendantIds(): array
+    {
+        $ids = [];
+        $level = [$this->id];
+        while ($level !== []) {
+            $level = static::whereIn('parent_id', $level)->whereNotIn('id', $ids)->pluck('id')->all();
+            $ids = array_merge($ids, $level);
+        }
+
+        return $ids;
+    }
+
+    /**
      * Get child items (subtasks).
      */
     public function children(): HasMany
@@ -274,9 +330,8 @@ class Item extends Model
 
         $this->update(['sprint_id' => $targetId, 'backlog_position' => $last + 1]);
 
-        foreach ($this->children()->get() as $child) {
-            $child->update(['sprint_id' => $targetId]);
-        }
+        // The whole subtree travels with its issue.
+        static::whereIn('id', $this->descendantIds())->update(['sprint_id' => $targetId]);
     }
 
     /** Working-day / week length used by durations, as in Jira (1d = 8h, 1w = 5d). */

@@ -310,8 +310,8 @@ class BoardController extends Controller
 
                         return;
                     }
-                    if ($parent->parent_id !== null) {
-                        $fail('Parent task must be a root task.');
+                    if ($parent->depth() >= Item::MAX_DEPTH) {
+                        $fail('Subtasks can be nested up to 3 levels (issue → subtask → sub-subtask).');
 
                         return;
                     }
@@ -388,13 +388,15 @@ class BoardController extends Controller
     {
         $this->authorize('view', $board);
 
-        $items = $board->items()
-            ->whereNull('parent_id')
-            ->select('id', 'key', 'title', 'column_id')
-            ->orderBy('position')
-            ->get();
+        // Possible parents: top-level issues and their direct subtasks (3 levels max), each
+        // issue followed by its subtasks.
+        $roots = $board->items()->whereNull('parent_id')->select('id', 'key', 'title', 'column_id')->orderBy('position')->get();
+        $children = $board->items()->whereIn('parent_id', $roots->pluck('id'))->select('id', 'key', 'title', 'column_id', 'parent_id')->orderBy('position')->get()->groupBy('parent_id');
 
-        return response()->json($items);
+        $items = $roots->flatMap(fn (Item $root) => collect([[...$root->only(['id', 'key', 'title', 'column_id']), 'depth' => 0]])
+            ->concat(($children[$root->id] ?? collect())->map(fn (Item $c) => [...$c->only(['id', 'key', 'title', 'column_id']), 'depth' => 1])));
+
+        return response()->json($items->values());
     }
 
     /**
@@ -548,12 +550,21 @@ class BoardController extends Controller
         $validated = $request->validate([
             'column_id' => ['required', Rule::exists('board_columns', 'id')->where('board_id', $item->board_id)],
             'position' => 'required|integer|min:0',
+            // Moving into a done column: complete the open subtasks (all levels) too.
+            'with_subtasks' => 'nullable|boolean',
         ]);
 
         $oldColumn = $item->column;
         $newColumn = BoardColumn::findOrFail($validated['column_id']);
 
         $item->moveToColumn($newColumn, $validated['position']);
+
+        if ($newColumn->is_done_column && $request->boolean('with_subtasks')) {
+            Item::whereIn('id', $item->descendantIds())
+                ->whereHas('column', fn ($q) => $q->where('is_done_column', false))
+                ->get()
+                ->each(fn (Item $child) => $child->moveToColumn($newColumn, 0));
+        }
 
         // Notify all watchers when the column (status) actually changed
         if ($oldColumn && $oldColumn->id !== $newColumn->id) {
@@ -644,8 +655,8 @@ class BoardController extends Controller
 
                         return;
                     }
-                    if ($parent->parent_id !== null) {
-                        $fail('Parent task must be a root task.');
+                    if ($parent->depth() + 1 + $item->subtreeHeight() > Item::MAX_DEPTH) {
+                        $fail('Subtasks can be nested up to 3 levels (issue → subtask → sub-subtask).');
 
                         return;
                     }
@@ -777,7 +788,11 @@ class BoardController extends Controller
     {
         $this->authorize('delete', $item);
 
-        $item->delete();
+        // Soft deletes don't trigger the FK cascade: remove the whole subtree explicitly.
+        DB::transaction(function () use ($item) {
+            Item::whereIn('id', $item->descendantIds())->get()->each->delete();
+            $item->delete();
+        });
 
         return back()->with('success', 'Item deleted successfully.');
     }
@@ -941,13 +956,24 @@ class BoardController extends Controller
             }
         }
 
-        // Update item to new board and column
-        $item->update([
-            'board_id' => $targetBoard->id,
-            'project_id' => $targetBoard->project_id,
-            'column_id' => $targetColumn->id,
-            'position' => 0,
-        ]);
+        // Update item (and its whole subtree) to the new board and column; it leaves any
+        // sprint, which belongs to the old board.
+        DB::transaction(function () use ($item, $targetBoard, $targetColumn) {
+            Item::whereIn('id', $item->descendantIds())->update([
+                'board_id' => $targetBoard->id,
+                'project_id' => $targetBoard->project_id,
+                'column_id' => $targetColumn->id,
+                'sprint_id' => null,
+            ]);
+            $item->update([
+                'board_id' => $targetBoard->id,
+                'project_id' => $targetBoard->project_id,
+                'column_id' => $targetColumn->id,
+                'sprint_id' => null,
+                'parent_id' => null, // a parent on the old board can't own it any more
+                'position' => 0,
+            ]);
+        });
 
         return back()->with('success', 'Item moved successfully.');
     }
