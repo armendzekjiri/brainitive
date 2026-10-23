@@ -33,7 +33,8 @@ export function isTypingTarget(target: EventTarget | null): boolean {
 export function isCaptureShortcut(e: KeyboardEvent): boolean {
     if (e.defaultPrevented || e.isComposing || e.repeat) return false;
     if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return false;
-    if (e.key.toLowerCase() !== CAPTURE_SHORTCUT) return false;
+    // autofill fires keydown events without a key
+    if (typeof e.key !== 'string' || e.key.toLowerCase() !== CAPTURE_SHORTCUT) return false;
     return !isTypingTarget(e.target) && !isTypingTarget(document.activeElement);
 }
 

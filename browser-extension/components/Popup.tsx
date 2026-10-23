@@ -148,13 +148,14 @@ function Capture({ server }: { server: string }) {
                         </button>
                     </div>
                 </div>
-            ) : !page || !mode || !destinations ? (
+            ) : !page || !mode || (!destinations && mode !== 'inbox') ? (
                 <div className="center">
                     {error ? <div className="banner">{error}</div> : <Loader2 className="spin muted" size={20} />}
                 </div>
             ) : (
                 (() => {
-                    const props = { page, destinations, onCreated: (c: Created, label: string) => setCreated({ created: c, label }) };
+                    // the inbox needs no destination: it still works when the list couldn't load
+                    const props = { page, destinations: destinations ?? { workspaces: [] }, onCreated: (c: Created, label: string) => setCreated({ created: c, label }) };
                     switch (mode) {
                         case 'issue':
                             return <IssueForm key="issue" {...props} />;
