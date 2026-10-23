@@ -40,13 +40,22 @@ feature branch ──PR──▶ pre-release ──(green)──PR──▶ main
   SQLite hid case-sensitive `LIKE` and aborted transactions.
 - **Pre-release** (`pre-release.yml`): the gate on the integration branch, then a deploy to
   **dev.brainitive.app**. That deploy runs plain `migrate` on dev's existing data, the same thing
-  production will run, then smoke-tests the deployed dev server. When all of that is green, the
+  production will run, then runs **all e2e journeys live against the deployed dev server** (the
+  previous run's test data is pruned first with `e2e:prune`). When all of that is green, the
   workflow **opens or updates the PR "Release: pre-release → main"** itself, listing the PRs
   that would reach production. A person merges it, and merging deploys. The repo setting "Allow
   GitHub Actions to create pull requests" is on for this. Check the change on dev; the
   Brainitive card goes to **Testing** once it's live there.
 - **Deploy** (`deploy.yml`): `needs: tests`, then fast-forwards the server to `github.sha`,
   never to a newer commit nobody tested.
+- **Branch protection:**
+  - `pre-release` takes PRs only, with **Pint, Frontend (types + build), PHPUnit (PostgreSQL)
+    and E2E (Chromium)** green.
+  - `main` takes PRs only, with **Ready for main** green (the release PR the workflow opens).
+  - Neither can be force-pushed or deleted.
+  - Admins can override in an emergency (`enforce_admins` is off).
+  - Renaming a CI job means updating the required check names
+    (`gh api repos/{owner}/{repo}/branches/<b>/protection`).
 - **Hotfix** straight into `main` (emergencies only): merge `main` back into `pre-release`
   right away.
 

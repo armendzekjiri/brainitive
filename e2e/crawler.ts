@@ -220,11 +220,11 @@ export class Crawler {
         for (const item of items) {
             await reopen();
             if ((await this.openState()) !== 'menu') return;
-            const opened = await this.click(href, this.innerLocator(scope, item), item.name, false, via);
+            const opened = await this.click(href, await this.innerLocator(scope, item), item.name, false, via);
             // a menu item that opens a dialog (Rename…, Create…): fill + submit it as well
             if (opened === 'dialog') await this.dialogPass(href, async () => {
                 await reopen();
-                await this.innerLocator(scope, item).click({ timeout: 3_000 }).catch(() => {});
+                await (await this.innerLocator(scope, item)).click({ timeout: 3_000 }).catch(() => {});
                 await this.settle();
             }, `${via} › ${item.name}`);
         }
@@ -238,7 +238,7 @@ export class Crawler {
             await reopen();
             if ((await this.openState()) !== 'dialog') return;
             if (SUBMIT.test(item.label)) await this.fillForm(scope);
-            await this.click(href, this.innerLocator(scope, item), item.name, false, via);
+            await this.click(href, await this.innerLocator(scope, item), item.name, false, via);
         }
     }
 
@@ -297,8 +297,17 @@ export class Crawler {
         return list.filter((c, i) => list.findIndex((d) => d.role === c.role && d.label === c.label) === i);
     }
 
-    private innerLocator(scope: string, item: InnerControl): Locator {
-        return this.page.locator(scope).last().getByRole(item.role as Parameters<Page['getByRole']>[0], { name: item.label, exact: true }).first();
+    /** Find the item again in the (re)opened menu / dialog with the same label rule as inner(), and mark it. */
+    private async innerLocator(scope: string, item: InnerControl): Promise<Locator> {
+        await this.page.locator(scope).last().locator(CONTROLS).evaluateAll((els, wanted) => {
+            document.querySelectorAll('[data-crawl-target]').forEach((e) => e.removeAttribute('data-crawl-target'));
+            const match = els.find((e) => {
+                const label = (e.getAttribute('aria-label') || (e as HTMLElement).innerText || e.getAttribute('title') || '').replace(/\s+/g, ' ').trim();
+                return (e as HTMLElement).checkVisibility?.() !== false && label === wanted;
+            });
+            match?.setAttribute('data-crawl-target', '1');
+        }, item.label);
+        return this.page.locator('[data-crawl-target="1"]').first();
     }
 
     /** The tagged control again — re-tagging after a reload (the order of controls is stable). */

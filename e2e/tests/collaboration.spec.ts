@@ -8,9 +8,8 @@ import { canReadMail, mailLink } from '../mail';
  * in separate browser contexts — invitations, joining, and the notifications each side gets.
  */
 test.describe('collaboration', () => {
-    test.skip(!canReadMail, 'needs the local mail log');
-
     test('an invited person signs up from the email, verifies and joins the workspace', async ({ page, browser }) => {
+        test.skip(!canReadMail, 'follows the invite / verification mail: local mail log only (not on dev)');
         const name = `Nina ${uid('new')}`;
         const email = `${uid('invitee')}@example.test`;
 
