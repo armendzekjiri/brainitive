@@ -1296,6 +1296,8 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                                 onChange={(html) => { setComment(html); if (!commentActive) setCommentActive(true); }}
                                 placeholder="Add a comment…"
                                 editable={true}
+                                // @mentions (the picker needs the project, like replies and the description)
+                                projectId={project.id}
                                 showToolbar={commentActive}
                                 minHeight="60px"
                                 maxHeight="240px"

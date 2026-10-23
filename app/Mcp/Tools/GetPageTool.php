@@ -67,7 +67,7 @@ class GetPageTool extends Tool
             'title' => $schema->string(),
             'type' => $schema->string(),
             'markdown' => $schema->string()->description('Page body as Markdown (empty for whiteboards).'),
-            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+            'location' => ResourceLocator::outputSchema($schema),
         ];
     }
 

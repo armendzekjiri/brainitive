@@ -65,6 +65,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Outgoing mail when MAIL_MAILER=log + MAIL_LOG_CHANNEL=mail: the e2e suite reads the
+        // invite / verification links from this file (one per e2e port).
+        'mail' => [
+            'driver' => 'single',
+            'path' => env('MAIL_LOG_PATH', storage_path('logs/mail.log')),
+            'level' => 'debug',
+        ],
+
         'daily' => [
             'driver' => 'daily',
             'path' => storage_path('logs/laravel.log'),

@@ -1590,7 +1590,7 @@ function AppSidebar({
     onOpenSearch?: () => void;
     onOpenHelp?: () => void;
 }) {
-    const { auth, currentPageUuid } = usePage<PageProps>().props;
+    const { auth, currentPageUuid, canManageWorkspace = false } = usePage<PageProps>().props;
     const isInstanceAdmin = !!auth.isInstanceAdmin;
     const user = auth.user;
     const projects = currentWorkspace?.projects || [];
@@ -1878,7 +1878,7 @@ function AppSidebar({
                                     <span className="text-sm">Profile settings</span>
                                 </Link>
                             </DropdownMenuItem>
-                            {currentWorkspace && (
+                            {currentWorkspace && canManageWorkspace && (
                                 <DropdownMenuItem asChild className="cursor-pointer">
                                     <Link href={route('workspaces.edit', currentWorkspace.slug)} className="flex items-center gap-3 p-2">
                                         <Settings className="size-4" />

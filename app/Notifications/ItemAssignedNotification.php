@@ -27,7 +27,7 @@ class ItemAssignedNotification extends Notification
 
     public function toWebPush(object $notifiable, $notification)
     {
-        $board  = $this->item->board;
+        $board = $this->item->board;
         $project = $board?->project;
         $workspace = $project?->workspace;
         $url = $workspace && $project && $board
@@ -46,7 +46,7 @@ class ItemAssignedNotification extends Notification
      */
     public function toDatabase(object $notifiable): array
     {
-        $board  = $this->item->board;
+        $board = $this->item->board;
         $project = $board?->project;
         $workspace = $project?->workspace;
 
@@ -60,11 +60,11 @@ class ItemAssignedNotification extends Notification
             : '#';
 
         return [
-            'type'         => 'item_assigned',
-            'item_key'     => $this->item->key,
-            'item_title'   => $this->item->title,
-            'item_url'     => $url,
-            'actor_name'   => $this->actor->name,
+            'type' => 'item_assigned',
+            'item_key' => $this->item->key,
+            'item_title' => $this->item->title,
+            'item_url' => $url,
+            'actor_name' => $this->actor->name,
             'actor_avatar' => $this->actor->avatar_display,
         ];
     }

@@ -82,14 +82,15 @@ export default function DeleteUserForm({
                     </p>
 
                     <div className="mt-6">
+                        {/* own id: the password form on the same page already uses "password" */}
                         <InputLabel
-                            htmlFor="password"
+                            htmlFor="delete-account-password"
                             value="Password"
                             className="sr-only"
                         />
 
                         <TextInput
-                            id="password"
+                            id="delete-account-password"
                             type="password"
                             name="password"
                             ref={passwordInput}

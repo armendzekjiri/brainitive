@@ -17,7 +17,7 @@ Route::middleware('guest')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');
 
-    Route::post('register', [RegisteredUserController::class, 'store'])->middleware('throttle:10,1');
+    Route::post('register', [RegisteredUserController::class, 'store'])->middleware('throttle:10,1,register');
 
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
@@ -40,7 +40,7 @@ Route::middleware('guest')->group(function () {
         ->name('password.request');
 
     Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])
-        ->middleware('throttle:6,1')
+        ->middleware('throttle:6,1,password.email')
         ->name('password.email');
 
     Route::get('reset-password/{token}', [NewPasswordController::class, 'create'])
@@ -54,7 +54,7 @@ Route::middleware('guest')->group(function () {
 // carry a valid, unexpired signature. `relative`: the signature ignores the host, so localhost vs
 // 127.0.0.1 or a proxy in front doesn't break the link. Opening it never signs anyone in.
 Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
-    ->middleware(['signed:relative', 'throttle:6,1'])
+    ->middleware(['signed:relative', 'throttle:6,1,verification.verify'])
     ->name('verification.verify');
 
 Route::middleware('auth')->group(function () {
@@ -62,7 +62,7 @@ Route::middleware('auth')->group(function () {
         ->name('verification.notice');
 
     Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])
-        ->middleware('throttle:6,1')
+        ->middleware('throttle:6,1,verification.send')
         ->name('verification.send');
 
     Route::get('confirm-password', [ConfirmablePasswordController::class, 'show'])

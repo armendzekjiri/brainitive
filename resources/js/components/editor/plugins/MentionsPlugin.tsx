@@ -298,11 +298,13 @@ export default function MentionsPlugin({ projectId, contextUrl, contextTitle, co
             className="fixed z-[9999] bg-popover border border-border rounded-lg shadow-xl overflow-hidden"
             style={{ top: menuPosition.top, left: menuPosition.left, minWidth: 240, maxWidth: 320 }}
         >
-            <div className="py-1 max-h-60 overflow-y-auto">
+            <div className="py-1 max-h-60 overflow-y-auto" role="listbox" aria-label="Mention someone">
                 {results.map((member, index) => (
                     <button
                         key={member.id}
                         type="button"
+                        role="option"
+                        aria-selected={index === selectedIndex}
                         className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-left transition-colors
                             ${index === selectedIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'}
                         `}

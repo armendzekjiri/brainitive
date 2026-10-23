@@ -1,4 +1,4 @@
-# Automatic deployment on push to main
+# Automatic deployment on push to main, after the test gate (tests.yml) passed
 # Deploys Laravel app to your server via SSH
 name: Deploy
 
@@ -7,8 +7,18 @@ on:
     branches: [main]
   workflow_dispatch: # allow manual run from Actions tab
 
+# One production deploy at a time; a newer push waits instead of racing the older one
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
+  # The test gate (BRAI-95): nothing reaches production unless the exact commit passed
+  tests:
+    uses: ./.github/workflows/tests.yml
+
   deploy:
+    needs: tests
     runs-on: ubuntu-latest
     # Makes GitHub record a deployment, so issues linked via commits show "Deployed to production".
     environment:
@@ -27,8 +37,10 @@ jobs:
           script: |
             set -e
             cd ${{ secrets.DEPLOY_PATH }}
-            echo ">>> Pulling latest code..."
-            git pull origin main
+            echo ">>> Updating to the tested commit ${{ github.sha }}..."
+            git fetch origin main
+            # fast-forward to exactly what the tests ran on (never a newer, untested commit)
+            git merge --ff-only ${{ github.sha }}
             echo ">>> Installing PHP dependencies..."
             composer install --no-dev --optimize-autoloader --no-interaction
             echo ">>> Installing Node dependencies and building assets..."

@@ -1,0 +1,127 @@
+# Staging flow (BRAI-95): feature branches merge into pre-release, never straight into main.
+# Every push to pre-release runs the test gate (incl. all e2e journeys on a fresh app), then
+# deploys to dev.brainitive.app (same server, isolated: own folder, DB, PHP pool, basic auth),
+# migrates its existing data the way production will, and smoke-tests the deployed server
+# (e2e/tests/dev-smoke.spec.ts). Green = ready for main.
+name: Pre-release
+
+on:
+  push:
+    branches: [pre-release]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pre-release
+  # never stop a dev deploy halfway; a newer push waits
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  deploy-dev:
+    name: Deploy to dev.brainitive.app
+    needs: tests
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+      url: https://dev.brainitive.app
+    env:
+      # the e2e test users on dev (smoke-dev below); the seeder only creates them once
+      E2E_PASSWORD: ${{ secrets.E2E_DEV_PASSWORD }}
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          fingerprint: ${{ secrets.DEPLOY_FINGERPRINT }}
+          envs: E2E_PASSWORD
+          script: |
+            set -e
+            cd /var/www/brainitive-dev
+            # guard: only ever the dev checkout + dev database (production lives in /var/www/brainitive)
+            if [ "$(pwd)" != /var/www/brainitive-dev ] || ! grep -qx 'APP_ENV=staging' .env || ! grep -qx 'DB_DATABASE=brainitive_dev' .env; then
+              echo "Refusing: this is not the dev checkout"; exit 1
+            fi
+            echo ">>> Updating to the tested commit ${{ github.sha }}..."
+            git fetch -q origin pre-release
+            git reset -q --hard ${{ github.sha }}
+            composer install --no-dev --optimize-autoloader --no-interaction -q
+            npm ci --silent
+            npm run build --silent > /dev/null
+            echo ">>> Migrating the existing dev data (what production will do)..."
+            php artisan migrate --force
+            echo ">>> e2e test users (E2E Workspace only; idempotent)..."
+            E2E_PASSWORD="$E2E_PASSWORD" php artisan db:seed --class=E2eSeeder --force
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            echo ">>> dev.brainitive.app is on ${{ github.sha }}"
+
+  smoke-dev:
+    name: Smoke test dev.brainitive.app
+    needs: deploy-dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # e2e/tests/dev-smoke.spec.ts against the deployed server (no local app, no reset)
+      E2E_BASE_URL: https://dev.brainitive.app
+      E2E_HTTP_USER: ${{ secrets.DEV_BASIC_AUTH_USER }}
+      E2E_HTTP_PASSWORD: ${{ secrets.DEV_BASIC_AUTH_PASSWORD }}
+      E2E_PASSWORD: ${{ secrets.E2E_DEV_PASSWORD }}
+      E2E_SHOW_CURSOR: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test -c e2e --project=dev
+      # video / screenshot / trace of failed tests only
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dev-smoke-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+
+  ready:
+    name: Ready for main
+    needs: smoke-dev
+    runs-on: ubuntu-latest
+    # only this job may open the release PR (repo setting: Actions can create PRs)
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Open or update the PR pre-release → main
+        run: |
+          # what main doesn't have yet, newest first (merge commits = the PRs that came in)
+          changes=$(gh api "repos/$GH_REPO/compare/main...$GITHUB_SHA" --jq '[.commits[] | select(.parents | length > 1) | .commit.message | split("\n") | select(.[0] | startswith("Merge pull request")) | "- #" + (.[0] | capture("#(?<n>[0-9]+)").n) + " " + (.[2] // "")] | reverse | .[]')
+          [ -n "$changes" ] || changes="- (no merged PRs, direct commits only)"
+          body=$(printf '%s\n\n%s\n\n%s\n%s\n' \
+            "All checks passed on \`${GITHUB_SHA::7}\`: tests, e2e, deploy to https://dev.brainitive.app and its smoke test." \
+            "**Merging this deploys to production.**" \
+            "### Coming to production" \
+            "$changes")
+          pr=$(gh pr list --base main --head pre-release --state open --json number --jq '.[0].number')
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --body "$body"
+            echo "Updated PR #$pr" >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh pr create --base main --head pre-release --title "Release: pre-release → main" --body "$body"
+            echo "Opened the release PR" >> "$GITHUB_STEP_SUMMARY"
+          fi

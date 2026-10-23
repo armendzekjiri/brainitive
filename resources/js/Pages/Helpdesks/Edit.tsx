@@ -723,6 +723,13 @@ const defaultSettings = {
     button_position: 'bottom-right' as 'bottom-right' | 'bottom-left',
 };
 
+const SETTINGS_TABS = ['general', 'columns', 'fields', 'embed'];
+
+function initialSettingsTab(): string {
+    const tab = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('tab');
+    return tab && SETTINGS_TABS.includes(tab) ? tab : 'general';
+}
+
 export default function HelpdesksEdit({ workspace, project, helpdesk, appUrl }: Props) {
     const [editingColumn, setEditingColumn] = useState<HelpdeskColumn | null>(null);
     const [columns, setColumns] = useState<HelpdeskColumn[]>(helpdesk.columns);
@@ -893,7 +900,8 @@ export default function HelpdesksEdit({ workspace, project, helpdesk, appUrl }: 
                 </div>
 
                 <div className="max-w-4xl mx-auto p-6">
-                    <Tabs defaultValue="general" className="space-y-6">
+                    {/* ?tab=columns etc. opens a tab directly (the board's column menu links here) */}
+                    <Tabs defaultValue={initialSettingsTab()} className="space-y-6">
                         <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
                             <TabsTrigger value="general" className="gap-2">
                                 <Settings className="size-4" />

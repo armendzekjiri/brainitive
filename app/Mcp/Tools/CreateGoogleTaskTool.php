@@ -75,7 +75,7 @@ class CreateGoogleTaskTool extends Tool
     {
         return [
             'created' => $schema->boolean(),
-            'task' => \App\Support\Mcp\CalendarFormatter::taskSchema($schema),
+            'task' => CalendarFormatter::taskSchema($schema),
         ];
     }
 

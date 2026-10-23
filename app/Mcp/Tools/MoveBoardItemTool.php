@@ -76,7 +76,7 @@ class MoveBoardItemTool extends Tool
             'moved' => $schema->boolean(),
             'item_key' => $schema->string(),
             'column' => $schema->string(),
-            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+            'location' => ResourceLocator::outputSchema($schema),
         ];
     }
 

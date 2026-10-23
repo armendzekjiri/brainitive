@@ -12,7 +12,7 @@ the matching line here. Adapted from the reviewer agents in [ECC](https://github
 
 ## Scope
 
-- Branch review: `git diff main...HEAD` (use the PR's base branch if it isn't `main`).
+- Branch review: `git diff pre-release...HEAD` (the PR's base branch; `main` only for the promotion PR).
   Local work in progress: `git diff` plus `git diff --staged`.
 - Review **only changed lines and the code they directly affect**. Read the surrounding file
   before you flag something. Legacy code that the diff doesn't touch is out of scope.

@@ -56,7 +56,7 @@ class UpdateGoogleTaskTool extends Tool
     {
         return [
             'updated' => $schema->boolean(),
-            'task' => \App\Support\Mcp\CalendarFormatter::taskSchema($schema),
+            'task' => CalendarFormatter::taskSchema($schema),
         ];
     }
 

@@ -198,7 +198,7 @@ class ReleaseController extends Controller
         $q = trim((string) $request->query('q', ''));
         $items = $project->items()->with('release:id,name,status')
             ->where(fn ($w) => $w->whereNull('release_id')->orWhere('release_id', '!=', $release->id))
-            ->when($q !== '', fn ($w) => $w->where(fn ($s) => $s->where('title', 'like', '%'.$q.'%')->orWhere('key', 'like', '%'.$q.'%')))
+            ->when($q !== '', fn ($w) => $w->where(fn ($s) => $s->whereLike('title', '%'.$q.'%')->orWhereLike('key', '%'.$q.'%')))
             ->orderByRaw('completed_at is not null')->orderByDesc('updated_at')->limit(50)
             ->get(['id', 'key', 'title', 'release_id', 'completed_at']);
 

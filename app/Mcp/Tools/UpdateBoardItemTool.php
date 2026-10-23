@@ -108,7 +108,7 @@ class UpdateBoardItemTool extends Tool
         return [
             'updated' => $schema->boolean(),
             'item_key' => $schema->string(),
-            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+            'location' => ResourceLocator::outputSchema($schema),
         ];
     }
 

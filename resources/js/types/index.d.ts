@@ -106,6 +106,18 @@ export interface Board {
     updated_at: string;
 }
 
+/** A saved board view (BRAI-78) as BoardController::show sends it. */
+export interface SavedBoardView {
+    id: number;
+    name: string;
+    is_shared: boolean;
+    is_own: boolean;
+    owner: string | null;
+    /** The board URL params the view stores (the open view: what is left of them on this board). */
+    params: Record<string, string>;
+    can_edit: boolean;
+}
+
 export interface TaskList {
     id: number;
     uuid: string;
@@ -502,7 +514,10 @@ export type PageProps<
     flash?: {
         success?: string;
         error?: string;
+        warning?: string | null;
     };
+    /** Current user may open the current workspace's settings (admin). */
+    canManageWorkspace?: boolean;
     /** Running focus timer (BRAI-74), null when none. */
     activeTimer?: ActiveTimer | null;
     // Shared layout data

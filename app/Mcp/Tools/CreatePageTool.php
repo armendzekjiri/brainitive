@@ -82,7 +82,7 @@ class CreatePageTool extends Tool
             'created' => $schema->boolean(),
             'page_uuid' => $schema->string(),
             'status' => $schema->string(),
-            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+            'location' => ResourceLocator::outputSchema($schema),
         ];
     }
 

@@ -31,19 +31,22 @@ class RemoveInstanceAdmin extends Command
 
         $user = User::where('email', $email)->first();
 
-        if (!$user) {
+        if (! $user) {
             $this->error("User with email '{$email}' not found.");
+
             return Command::FAILURE;
         }
 
-        if (!$user->isInstanceAdmin()) {
+        if (! $user->isInstanceAdmin()) {
             $this->warn("User '{$user->name}' is not an instance admin.");
+
             return Command::SUCCESS;
         }
 
         InstanceAdmin::where('user_id', $user->id)->delete();
 
         $this->info("User '{$user->name}' is no longer an instance admin.");
+
         return Command::SUCCESS;
     }
 }

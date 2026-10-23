@@ -181,6 +181,7 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **GitHub development panel (BRAI-61):** per-project webhook (`GithubConnection`, settings in `ProjectGithubController` → Projects/Edit "Integrations", `components/projects/GithubIntegrationCard.tsx`). `POST /api/webhooks/github/{uuid}` (`GithubWebhookController`: HMAC check, `GithubDelivery` dedupe) → `ProcessGithubDelivery` job → `Support/Github/DevelopmentSync` writes `ItemDevLink` rows (branch / commit / pull_request / deployment) for keys found by `IssueKeys`. Shown by `ItemDevelopment` in the item-details JSON and `components/item/DevelopmentPanel.tsx`.
 - **Swimlanes (BRAI-87):** setup in `board.settings.swimlanes` (validated by `Support/Boards/Swimlanes`, saved via `BoardController@updateSwimlanes`), builder `components/board/SwimlaneSettings.tsx` on Boards/Edit, rules + grouping in `resources/js/lib/swimlanes.ts`, rendering `SwimlaneBoard` in Boards/Show (personal mode in localStorage `board-{id}-lane-mode`).
 - **Custom fields (BRAI-77):** `ItemField` (`item_fields`: project, name, type text/number/date/checkbox/select, `board_ids` null = all boards, position, `archived_at`), `ItemFieldOption` (archived, never deleted), `ItemFieldValue` (`item_field_values`: one typed column per type, unique item + field). Definitions: `ItemFieldController` (`projects.fields.*`, ProjectPolicy::update) → Projects/Edit "Fields" tab (`components/projects/ItemFieldsCard.tsx`). Values: `BoardController@updateItemFields` (`boards.items.fields.update`) → `Support/Boards/ItemFieldValues` (validation per type, writes, `field_changed` history, copy on duplicate). UI: `components/item/ItemFieldsSection.tsx` (issue sidebar), `components/board/CustomFieldFilters.tsx` (Filter popover), list-view columns + sorting in Boards/Show; pure helpers in `resources/js/lib/customFields.ts`. Cards carry `field_values`; `customFields` = `ItemField::forBoard()`.
+- **Saved views (BRAI-78):** `BoardView` (`board_views`: board, user, name, `is_shared`, `config` = `{version, params}`) + `board_view_defaults` (user + board → view). `config.params` are the board's own URL view params (`q`, `assignee`, `status`, `labels`, `priority`, `type`, `quick`, `sort`, `view`, `hide`, `f<id>`), allowlisted by `Support/Boards/BoardViewConfig::normalize()` and reduced to what still exists by `sanitize()` when opened. `BoardViewController` (`boards.views.*`; open = redirect to the board URL + `bv=<id>`, flash `warning` when parts were dropped), `BoardViewPolicy` (personal = owner only; shared = board viewers see, board `update` changes). `BoardController::show` applies the user's default view to the plain board URL in place (`appliedViewParams`, the page writes them into the URL; `bv=0` skips it) and sends the open view's params sanitized. UI: `components/board/SavedViewsMenu.tsx`; Boards/Show builds `currentViewParams` (list sort + hidden list columns are page state now).
 - **Releases / fix versions (BRAI-76):** `Release` model (`releases`, `items.release_id`), `ReleaseController` (project routes `releases.*`), `ReleasePolicy` (view = project view, manage = `createBoards`), notes draft `Support/Releases/ReleaseNotes`, public snapshot via `PublicReleaseController` (`/r/{token}`, `/changelog/{projects.changelog_token}`). Pages `Releases/{Index,Show,Public}`, shared bits `components/releases/ReleaseBits.tsx`; issue sidebar "Fix version" uses `releases` from the item-details JSON.
 - **Read-only rich text:** use the `rich-html` class (app.css) — the Tailwind typography plugin isn't installed, so `prose` alone styles nothing.
 - **Issue deep links:** `…/boards/{board}#item-{id}` opens the issue popup on the board (or `boards.items.show` if it isn't on the board).
@@ -247,6 +248,24 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 | A file upload | `App\Support\Uploads` for the stored name (never the client's). Old risky files: `php artisan uploads:audit` |
 | A server-side request to a user URL | `App\Support\OutboundUrl::options()` (public IPs only, pinned, no auto-redirects) |
 | Rendering stored HTML | `safeHtmlProp()` (`resources/js/lib/sanitize.ts`); server: `App\Support\SafeHtml` |
+
+## Testing
+- **PHPUnit** (`tests/`): PostgreSQL in the forced database `brainitive_test` (phpunit.xml).
+- **E2E** (`e2e/`, Playwright, see `e2e/README.md`):
+  - `env.ts`: target, per-port Postgres database, app environment;
+  - `fixtures.ts`: `uid`, `urls`, per-worker owner/member sessions, `memberPage`, page-error guard;
+  - `assets.ts`: in-memory `/build/assets` cache;
+  - `mail.ts`: links from the e2e mail log;
+  - `crawler.ts`: the every-button crawler;
+  - `tests/*.spec.ts`: one spec per area, plus collaboration and crawl;
+  - `helpers/*.ts`.
+- Seed: `Database\Seeders\E2eSeeder`. Reset: `php artisan e2e:reset` (`App\Console\Commands\E2eReset`,
+  e2e databases only).
+- **CI:**
+  - `tests.yml`: Pint, tsc + build, PHPUnit, and e2e in Chromium on every push;
+  - `e2e-nightly.yml`: Firefox and WebKit;
+  - `pre-release.yml`: the gate, then a deploy to dev.brainitive.app;
+  - `deploy.yml`: production, only after the gate.
 
 ## Self-hosting (Docker)
 - `Dockerfile` — multi-stage: composer → node (frontend; needs `vendor/tightenco/ziggy` for

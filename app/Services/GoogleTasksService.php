@@ -27,9 +27,12 @@ class GoogleTasksService
     /** Fetch the user's task lists. Returns array of {id, title}. */
     public function listTaskLists(CalendarConnection $connection): array
     {
-        if (! $this->ensureFreshToken($connection)) return [];
+        if (! $this->ensureFreshToken($connection)) {
+            return [];
+        }
         $resp = $this->get($connection, '/users/@me/lists');
         $items = $resp->json('items', []);
+
         return array_map(fn ($l) => [
             'id' => $l['id'],
             'title' => $l['title'] ?? $l['id'],
@@ -39,22 +42,34 @@ class GoogleTasksService
     /** Fetch all tasks from a list. */
     public function listTasks(CalendarConnection $connection, ?Carbon $dueMin = null, ?Carbon $dueMax = null): array
     {
-        if (! $this->ensureFreshToken($connection)) return [];
+        if (! $this->ensureFreshToken($connection)) {
+            return [];
+        }
         $listId = rawurlencode($connection->external_calendar_id);
         $query = ['showCompleted' => 'true', 'showHidden' => 'true', 'maxResults' => 100];
-        if ($dueMin) $query['dueMin'] = $dueMin->copy()->startOfDay()->toRfc3339String();
-        if ($dueMax) $query['dueMax'] = $dueMax->copy()->endOfDay()->toRfc3339String();
+        if ($dueMin) {
+            $query['dueMin'] = $dueMin->copy()->startOfDay()->toRfc3339String();
+        }
+        if ($dueMax) {
+            $query['dueMax'] = $dueMax->copy()->endOfDay()->toRfc3339String();
+        }
         $resp = $this->get($connection, "/lists/{$listId}/tasks", $query);
+
         return $resp->json('items', []);
     }
 
     /** Fetch a single task with all details. */
     public function getTask(CalendarConnection $connection, string $taskId): ?array
     {
-        if (! $this->ensureFreshToken($connection)) return null;
+        if (! $this->ensureFreshToken($connection)) {
+            return null;
+        }
         $listId = rawurlencode($connection->external_calendar_id);
         $resp = $this->get($connection, "/lists/{$listId}/tasks/{$taskId}");
-        if (! $resp->successful()) return null;
+        if (! $resp->successful()) {
+            return null;
+        }
+
         return $resp->json();
     }
 
@@ -65,15 +80,19 @@ class GoogleTasksService
      */
     public function createTask(CalendarConnection $connection, array $data): ?array
     {
-        if (! $this->ensureFreshToken($connection)) return null;
+        if (! $this->ensureFreshToken($connection)) {
+            return null;
+        }
         $listId = rawurlencode($connection->external_calendar_id);
         $body = ['title' => $data['title']];
-        if (! empty($data['description'])) $body['notes'] = $data['description'];
+        if (! empty($data['description'])) {
+            $body['notes'] = $data['description'];
+        }
         $body['due'] = $this->buildDueField($data['date'] ?? null, $data['time'] ?? null, $data['timezone'] ?? null);
 
         $resp = Http::withToken($connection->access_token)
             ->acceptJson()
-            ->post(self::API_BASE . "/lists/{$listId}/tasks", $body);
+            ->post(self::API_BASE."/lists/{$listId}/tasks", $body);
 
         if (! $resp->successful()) {
             Log::warning('Google task create failed', [
@@ -81,8 +100,10 @@ class GoogleTasksService
                 'status' => $resp->status(),
                 'body' => $resp->json(),
             ]);
+
             return null;
         }
+
         return $resp->json();
     }
 
@@ -93,11 +114,17 @@ class GoogleTasksService
      */
     public function updateTask(CalendarConnection $connection, string $taskId, array $data): ?array
     {
-        if (! $this->ensureFreshToken($connection)) return null;
+        if (! $this->ensureFreshToken($connection)) {
+            return null;
+        }
         $listId = rawurlencode($connection->external_calendar_id);
         $body = [];
-        if (isset($data['title'])) $body['title'] = $data['title'];
-        if (array_key_exists('description', $data)) $body['notes'] = $data['description'];
+        if (isset($data['title'])) {
+            $body['title'] = $data['title'];
+        }
+        if (array_key_exists('description', $data)) {
+            $body['notes'] = $data['description'];
+        }
         if (array_key_exists('date', $data) || array_key_exists('time', $data)) {
             if (empty($data['date'])) {
                 $body['due'] = null;
@@ -117,7 +144,7 @@ class GoogleTasksService
 
         $resp = Http::withToken($connection->access_token)
             ->acceptJson()
-            ->patch(self::API_BASE . "/lists/{$listId}/tasks/{$taskId}", $body);
+            ->patch(self::API_BASE."/lists/{$listId}/tasks/{$taskId}", $body);
 
         if (! $resp->successful()) {
             Log::warning('Google task update failed', [
@@ -126,28 +153,36 @@ class GoogleTasksService
                 'status' => $resp->status(),
                 'body' => $resp->json(),
             ]);
+
             return null;
         }
+
         return $resp->json();
     }
 
     public function deleteTask(CalendarConnection $connection, string $taskId): bool
     {
-        if (! $this->ensureFreshToken($connection)) return false;
+        if (! $this->ensureFreshToken($connection)) {
+            return false;
+        }
         $listId = rawurlencode($connection->external_calendar_id);
         $resp = Http::withToken($connection->access_token)
-            ->delete(self::API_BASE . "/lists/{$listId}/tasks/{$taskId}");
+            ->delete(self::API_BASE."/lists/{$listId}/tasks/{$taskId}");
+
         return $resp->successful() || $resp->status() === 410;
     }
 
     /** Build the `due` field. Google Tasks now supports time-of-day. */
     private function buildDueField(?string $date, ?string $time, ?string $tz): ?string
     {
-        if (! $date) return null;
+        if (! $date) {
+            return null;
+        }
         $tz = $tz ?: config('app.timezone');
         if ($time) {
             return Carbon::parse("{$date} {$time}", $tz)->toRfc3339String();
         }
+
         // Date-only: use UTC midnight (Google convention for all-day tasks)
         return Carbon::parse($date, 'UTC')->startOfDay()->toRfc3339String();
     }
@@ -156,6 +191,6 @@ class GoogleTasksService
     {
         return Http::withToken($connection->access_token)
             ->acceptJson()
-            ->get(self::API_BASE . $path, $query);
+            ->get(self::API_BASE.$path, $query);
     }
 }

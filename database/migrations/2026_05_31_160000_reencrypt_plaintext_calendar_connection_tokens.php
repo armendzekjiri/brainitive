@@ -34,8 +34,9 @@ return new class extends Migration
                 // If it already decrypts, it's a valid encrypted payload — skip.
                 try {
                     Crypt::decryptString($value);
+
                     continue;
-                } catch (\Throwable $e) {
+                } catch (Throwable $e) {
                     // Not decryptable → assume plaintext and re-encrypt it.
                     $updates[$column] = Crypt::encryptString($value);
                 }

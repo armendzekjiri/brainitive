@@ -96,7 +96,7 @@ class UpdateTaskTool extends Tool
             'status' => $schema->string(),
             'recurrence_rolled_forward' => $schema->boolean(),
             'next_due_date' => $schema->string(),
-            'location' => \App\Support\Mcp\ResourceLocator::outputSchema($schema),
+            'location' => ResourceLocator::outputSchema($schema),
         ];
     }
 

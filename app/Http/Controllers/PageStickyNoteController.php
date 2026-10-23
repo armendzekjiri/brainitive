@@ -32,13 +32,13 @@ class PageStickyNoteController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'url'       => 'required|string|max:1000',
-            'color'     => 'sometimes|string|in:yellow,pink',
-            'x'         => 'sometimes|integer',
-            'y'         => 'sometimes|integer',
-            'width'     => 'sometimes|integer|min:100|max:800',
+            'url' => 'required|string|max:1000',
+            'color' => 'sometimes|string|in:yellow,pink',
+            'x' => 'sometimes|integer',
+            'y' => 'sometimes|integer',
+            'width' => 'sometimes|integer|min:100|max:800',
             'font_size' => 'sometimes|integer|min:10|max:40',
-            'content'   => 'sometimes|nullable|string|max:10000',
+            'content' => 'sometimes|nullable|string|max:10000',
         ]);
 
         $note = PageStickyNote::create(array_merge($validated, [
@@ -56,12 +56,12 @@ class PageStickyNoteController extends Controller
         abort_if($note->user_id !== Auth::id(), 403);
 
         $validated = $request->validate([
-            'color'     => 'sometimes|string|in:yellow,pink',
-            'x'         => 'sometimes|integer',
-            'y'         => 'sometimes|integer',
-            'width'     => 'sometimes|integer|min:100|max:800',
+            'color' => 'sometimes|string|in:yellow,pink',
+            'x' => 'sometimes|integer',
+            'y' => 'sometimes|integer',
+            'width' => 'sometimes|integer|min:100|max:800',
             'font_size' => 'sometimes|integer|min:10|max:40',
-            'content'   => 'sometimes|nullable|string|max:10000',
+            'content' => 'sometimes|nullable|string|max:10000',
         ]);
 
         $note->update($validated);

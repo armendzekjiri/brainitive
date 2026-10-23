@@ -38,7 +38,7 @@ class Snippet extends Model
                         ->where('slug', $slug)
                         ->exists()
                 ) {
-                    $slug = $base . '-' . $i++;
+                    $slug = $base.'-'.$i++;
                 }
                 $snippet->slug = $slug;
             }
@@ -61,6 +61,7 @@ class Snippet extends Model
         if ($this->visibility === 'inherit') {
             return $this->collection?->visibility ?? 'private';
         }
+
         return $this->visibility;
     }
 
