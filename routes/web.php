@@ -11,6 +11,7 @@ use App\Http\Controllers\FileController;
 use App\Http\Controllers\HelpdeskController;
 use App\Http\Controllers\HelpdeskWidgetController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\ItemFieldController;
 use App\Http\Controllers\MyDayController;
 use App\Http\Controllers\MyWorkController;
 use App\Http\Controllers\NotificationController;
@@ -253,6 +254,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('item-types/upload-icon', [ProjectController::class, 'uploadItemTypeIcon'])->name('projects.item-types.upload-icon');
             Route::put('item-types/{itemType}', [ProjectController::class, 'updateItemType'])->name('projects.item-types.update');
             Route::delete('item-types/{itemType}', [ProjectController::class, 'destroyItemType'])->name('projects.item-types.destroy');
+            // Custom fields for board issues (the controller checks the field belongs to the project)
+            Route::post('fields', [ItemFieldController::class, 'store'])->name('projects.fields.store');
+            Route::post('fields/reorder', [ItemFieldController::class, 'reorder'])->name('projects.fields.reorder');
+            Route::put('fields/{itemField}', [ItemFieldController::class, 'update'])->whereNumber('itemField')->name('projects.fields.update');
+            Route::delete('fields/{itemField}', [ItemFieldController::class, 'destroy'])->whereNumber('itemField')->name('projects.fields.destroy');
         });
 
         // Project members (assign workspace users to project with role)
@@ -297,6 +303,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::patch('boards/{board:slug}/items/{item}', [BoardController::class, 'updateItem'])->name('boards.items.update');
             Route::post('boards/{board:slug}/items/{item}/watch', [BoardController::class, 'toggleWatch'])->name('boards.items.watch');
             Route::patch('boards/{board:slug}/items/{item}/labels', [BoardController::class, 'updateItemLabels'])->name('boards.items.labels');
+            Route::put('boards/{board:slug}/items/{item}/fields', [BoardController::class, 'updateItemFields'])->name('boards.items.fields.update');
             Route::post('boards/{board:slug}/items/{item}/links', [BoardController::class, 'storeItemLink'])->name('boards.items.links.store');
             // No Item::links() relation (links are outgoing or incoming); the controller checks the link belongs to the item.
             Route::delete('boards/{board:slug}/items/{item}/links/{link}', [BoardController::class, 'destroyItemLink'])->name('boards.items.links.destroy')->withoutScopedBindings();

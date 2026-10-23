@@ -467,6 +467,14 @@ class Item extends Model
     }
 
     /**
+     * Custom field values (one row per field that has a value).
+     */
+    public function fieldValues(): HasMany
+    {
+        return $this->hasMany(ItemFieldValue::class);
+    }
+
+    /**
      * The fix version this issue ships in.
      */
     public function release(): BelongsTo

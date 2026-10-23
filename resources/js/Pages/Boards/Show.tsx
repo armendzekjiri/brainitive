@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { Head, router, useForm } from '@inertiajs/react';
-import { PageProps, Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User, Label as LabelType } from '@/types';
+import { PageProps, Workspace, Project, Board, BoardColumn, Item, ItemType, ItemPriority, User, Label as LabelType, ItemField } from '@/types';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -106,6 +106,9 @@ import {
     SlidersHorizontal,
     Ban,
     Rows3,
+    ArrowUp,
+    ArrowDown,
+    Columns3,
 } from 'lucide-react';
 import { useState, useRef, useEffect, DragEvent, FormEvent, useCallback, useMemo } from 'react';
 import { Link } from '@inertiajs/react';
@@ -118,6 +121,11 @@ import DuplicateItemDialog from '@/components/item/DuplicateItemDialog';
 import { itemTree } from '@/lib/itemTree';
 import { useItemDetail, ItemDetailMain, ItemDetailSidebar, ItemFilePreviewDialog, type ProjectItemLite } from '@/components/item/ItemDetail';
 import { BoardHeader } from '@/components/board/BoardHeader';
+import { CustomFieldFilters } from '@/components/board/CustomFieldFilters';
+import {
+    compareNullable, compareText, fieldComparator, fieldParam, fieldValue, formatFieldValue, fieldOption,
+    matchesFieldFilter, readFieldFilters, serializeFieldFilter, type FieldFilter, type FieldFilters, type SortDirection,
+} from '@/lib/customFields';
 import { ActiveSprintBar, type SprintSummary } from '@/components/board/ActiveSprintBar';
 
 interface Props extends PageProps {
@@ -133,6 +141,12 @@ interface Props extends PageProps {
     activeSprint?: SprintSummary | null;
     plannedSprints?: { id: number; name: string }[];
     canManageSprints?: boolean;
+    /** Custom fields that show on this board (BRAI-77). */
+    customFields?: ItemField[];
+    /** Project admins: link to field settings. */
+    canManageFields?: boolean;
+    /** May change issues (custom field values are read-only otherwise). */
+    canEditItems?: boolean;
 }
 
 // Item Card Component — redesigned (utility-first dense kanban)
@@ -604,9 +618,10 @@ function readBoardFilters(): BoardFilters {
 }
 
 /** Mirror the filters into the query string without an Inertia visit (keeps other params). */
-function writeBoardFilters(filters: BoardFilters) {
+function writeBoardFilters(filters: BoardFilters, fields: ItemField[] = [], fieldFilters: FieldFilters = {}) {
     const url = new URL(window.location.href);
     const set = (key: string, value: string) => (value ? url.searchParams.set(key, value) : url.searchParams.delete(key));
+    fields.forEach((field) => set(fieldParam(field.id), serializeFieldFilter(fieldFilters[field.id])));
     set('q', filters.q.trim());
     set('assignee', filters.assignee === 'any' ? '' : filters.assignee);
     set('status', filters.status.join(','));
@@ -1038,6 +1053,8 @@ function ItemEditModal({
     open,
     onClose,
     onOpenItem,
+    customFields,
+    canEditItems,
 }: {
     item: Item | null;
     workspace: Workspace;
@@ -1053,6 +1070,8 @@ function ItemEditModal({
     open: boolean;
     onClose: () => void;
     onOpenItem: (item: Item) => void;
+    customFields: ItemField[];
+    canEditItems: boolean;
 }) {
     const d = useItemDetail({
         item,
@@ -1067,6 +1086,8 @@ function ItemEditModal({
         columns,
         currentUserId,
         onOpenItem,
+        customFields,
+        canEditItems,
     });
     const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
 
@@ -1145,39 +1166,175 @@ function ItemEditModal({
 }
 
 // List View Component
+type ListSortKey = 'key' | 'title' | 'status' | 'priority' | 'assignee' | 'due_date' | 'story_points' | `f${number}`;
+interface ListSort { key: ListSortKey; dir: SortDirection }
+
+const keyNumber = (item: Item) => Number(/(\d+)$/.exec(item.key)?.[1] ?? 0);
+
+/** `?sort=due_date` / `?sort=-f12` (descending). */
+function readListSort(): ListSort | null {
+    const raw = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('sort') ?? '';
+    const dir: SortDirection = raw.startsWith('-') ? 'desc' : 'asc';
+    const key = raw.replace(/^-/, '');
+    const valid = ['key', 'title', 'status', 'priority', 'assignee', 'due_date', 'story_points'].includes(key) || /^f\d+$/.test(key);
+    return valid ? { key: key as ListSortKey, dir } : null;
+}
+
+function writeListSort(sort: ListSort | null) {
+    const url = new URL(window.location.href);
+    if (sort) url.searchParams.set('sort', `${sort.dir === 'desc' ? '-' : ''}${sort.key}`); else url.searchParams.delete('sort');
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url.href);
+}
+
+function SortHeader({ label, sortKey, sort, onSort, className }: {
+    label: string; sortKey: ListSortKey; sort: ListSort | null; onSort: (key: ListSortKey) => void; className?: string;
+}) {
+    const active = sort?.key === sortKey;
+    return (
+        <th className={cn('pb-3 font-medium', className)} aria-sort={active ? (sort!.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+            <button type="button" onClick={() => onSort(sortKey)} className={cn('inline-flex items-center gap-1 hover:text-foreground transition-colors', active && 'text-foreground')}>
+                <span className="truncate max-w-[160px]">{label}</span>
+                {active && (sort!.dir === 'asc' ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
+            </button>
+        </th>
+    );
+}
+
+function FieldCell({ field, item }: { field: ItemField; item: Item }) {
+    const value = fieldValue(item, field);
+    if (value === null) return <span className="text-muted-foreground text-sm">—</span>;
+    if (field.type === 'select') {
+        const option = fieldOption(field, value);
+        return (
+            <span className={cn('inline-flex items-center gap-1.5 text-sm', option?.archived_at && 'text-muted-foreground')}>
+                {option?.color && <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: option.color }} />}
+                {option?.label}
+            </span>
+        );
+    }
+    const text = formatFieldValue(field, value);
+    return <span className={cn('text-sm', field.type === 'number' && 'tabular-nums', field.type === 'text' && 'block max-w-[220px] truncate')} title={text}>{text}</span>;
+}
+
 function ListView({
     columns,
     workspace,
     project,
     board,
     onEditItem,
+    customFields,
 }: {
     columns: (BoardColumn & { items: Item[] })[];
     workspace: Workspace;
     project: Project;
     board: Board;
     onEditItem: (item: Item) => void;
+    customFields: ItemField[];
 }) {
     const allItems = columns.flatMap(col => col.items.map(item => ({ ...item, columnName: col.name })));
+
+    // Hidden custom field columns, per board and person (new fields show up by default)
+    const hiddenKey = `board-${board.id}-list-hidden-fields`;
+    const [hiddenFieldIds, setHiddenFieldIds] = useState<number[]>(() => {
+        try {
+            const stored = JSON.parse(window.localStorage.getItem(hiddenKey) ?? '[]');
+            return Array.isArray(stored) ? stored.filter((n) => Number.isInteger(n)) : [];
+        } catch { return []; }
+    });
+    const toggleFieldColumn = (id: number) => setHiddenFieldIds((current) => {
+        const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+        try { window.localStorage.setItem(hiddenKey, JSON.stringify(next)); } catch { /* private mode: keep it for this visit */ }
+        return next;
+    });
+    const fieldColumns = customFields.filter((f) => !hiddenFieldIds.includes(f.id));
+
+    // Sorting: click a header for ascending, again for descending, a third time to reset.
+    const [sort, setSort] = useState<ListSort | null>(readListSort);
+    useEffect(() => writeListSort(sort), [sort]);
+    const onSort = (key: ListSortKey) => setSort((current) =>
+        current?.key !== key ? { key, dir: 'asc' } : current.dir === 'asc' ? { key, dir: 'desc' } : null);
+
+    // A sort on a field column that is hidden (or not on this board) would be invisible: drop it.
+    const sortHidden = !!sort && sort.key.startsWith('f') && !fieldColumns.some((f) => `f${f.id}` === sort.key);
+    useEffect(() => { if (sortHidden) setSort(null); }, [sortHidden]);
+
+    const columnRank = useMemo(() => new Map(columns.map((c, index) => [c.id, index])), [columns]);
+    const sortedItems = useMemo(() => {
+        if (!sort || sortHidden) return allItems;
+        const field = sort.key.startsWith('f') ? customFields.find((f) => `f${f.id}` === sort.key) : undefined;
+        const { dir } = sort;
+        const compare = (a: Item, b: Item): number => {
+            if (field) return fieldComparator(field, dir)(a, b);
+            switch (sort.key) {
+                case 'key': return compareNullable(keyNumber(a), keyNumber(b), dir, (x, y) => x - y);
+                case 'title': return compareNullable(a.title, b.title, dir, compareText);
+                case 'status': return compareNullable(columnRank.get(a.column_id as number), columnRank.get(b.column_id as number), dir, (x, y) => x - y);
+                case 'priority': return compareNullable(a.priority?.order, b.priority?.order, dir, (x, y) => x - y);
+                case 'assignee': return compareNullable(a.assignee?.name, b.assignee?.name, dir, compareText);
+                case 'due_date': return compareNullable(a.due_date ? String(a.due_date).slice(0, 10) : null, b.due_date ? String(b.due_date).slice(0, 10) : null, dir, (x, y) => x.localeCompare(y));
+                case 'story_points': return compareNullable(a.story_points ?? null, b.story_points ?? null, dir, (x, y) => x - y);
+                default: return 0;
+            }
+        };
+        // Ties keep a stable order by key
+        return [...allItems].sort((a, b) => compare(a, b) || keyNumber(a) - keyNumber(b));
+    }, [allItems, sort, sortHidden, customFields, columnRank]);
+
+    const columnCount = 8 + fieldColumns.length;
 
     return (
         <div className="flex-1 overflow-auto bg-background">
             <div className="p-6">
+                {customFields.length > 0 && (
+                    <div className="mb-3 flex justify-end">
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <button type="button" className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[4px] text-[13px] font-medium border bg-card border-border text-muted-foreground hover:bg-secondary">
+                                    <Columns3 className="size-3.5" />
+                                    Fields ({fieldColumns.length}/{customFields.length})
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-60 p-2" align="end">
+                                <p className="px-2 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Show columns</p>
+                                <div className="max-h-72 overflow-y-auto">
+                                    {customFields.map((field) => {
+                                        const shown = !hiddenFieldIds.includes(field.id);
+                                        return (
+                                            <button
+                                                key={field.id}
+                                                type="button"
+                                                aria-pressed={shown}
+                                                onClick={() => toggleFieldColumn(field.id)}
+                                                className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-muted"
+                                            >
+                                                <span className="truncate">{field.name}</span>
+                                                {shown && <Check className="size-3.5 text-primary shrink-0" />}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                )}
                 <table className="w-full">
                     <thead>
                         <tr className="border-b text-left text-sm text-muted-foreground">
-                            <th className="pb-3 pl-4 font-medium">Key</th>
-                            <th className="pb-3 font-medium">Title</th>
+                            <SortHeader label="Key" sortKey="key" sort={sort} onSort={onSort} className="pl-4" />
+                            <SortHeader label="Title" sortKey="title" sort={sort} onSort={onSort} />
                             <th className="pb-3 font-medium">Parent</th>
-                            <th className="pb-3 font-medium">Status</th>
-                            <th className="pb-3 font-medium">Priority</th>
-                            <th className="pb-3 font-medium">Assignee</th>
-                            <th className="pb-3 font-medium">Due Date</th>
-                            <th className="pb-3 pr-4 font-medium">Story Points</th>
+                            <SortHeader label="Status" sortKey="status" sort={sort} onSort={onSort} />
+                            <SortHeader label="Priority" sortKey="priority" sort={sort} onSort={onSort} />
+                            <SortHeader label="Assignee" sortKey="assignee" sort={sort} onSort={onSort} />
+                            <SortHeader label="Due Date" sortKey="due_date" sort={sort} onSort={onSort} />
+                            <SortHeader label="Story Points" sortKey="story_points" sort={sort} onSort={onSort} className={fieldColumns.length ? '' : 'pr-4'} />
+                            {fieldColumns.map((field, index) => (
+                                <SortHeader key={field.id} label={field.name} sortKey={`f${field.id}`} sort={sort} onSort={onSort} className={cn('pl-3', index === fieldColumns.length - 1 && 'pr-4')} />
+                            ))}
                         </tr>
                     </thead>
                     <tbody>
-                        {allItems.map((item) => (
+                        {sortedItems.map((item) => (
                             <tr
                                 key={item.id}
                                 className="border-b hover:bg-muted/50 cursor-pointer transition-colors"
@@ -1240,18 +1397,23 @@ function ListView({
                                         <span className="text-muted-foreground text-sm">—</span>
                                     )}
                                 </td>
-                                <td className="py-3 pr-4">
+                                <td className={cn('py-3', !fieldColumns.length && 'pr-4')}>
                                     {item.story_points ? (
                                         <Badge variant="outline" className="font-mono">{item.story_points}</Badge>
                                     ) : (
                                         <span className="text-muted-foreground text-sm">—</span>
                                     )}
                                 </td>
+                                {fieldColumns.map((field, index) => (
+                                    <td key={field.id} className={cn('py-3 pl-3', index === fieldColumns.length - 1 && 'pr-4')}>
+                                        <FieldCell field={field} item={item} />
+                                    </td>
+                                ))}
                             </tr>
                         ))}
-                        {allItems.length === 0 && (
+                        {sortedItems.length === 0 && (
                             <tr>
-                                <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                                <td colSpan={columnCount} className="py-12 text-center text-muted-foreground">
                                     No items found
                                 </td>
                             </tr>
@@ -2006,6 +2168,9 @@ export default function BoardsShow({
     activeSprint = null,
     plannedSprints = [],
     canManageSprints = false,
+    customFields = [],
+    canManageFields = false,
+    canEditItems = true,
 }: Props) {
     const itemTypes = boardItemTypes;
     const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -2048,6 +2213,14 @@ export default function BoardsShow({
     const [priorityFilter, setPriorityFilter] = useState<number[]>(initialFilters.priority);
     const [typeFilter, setTypeFilter] = useState<number[]>(initialFilters.type);
     const [quickFilters, setQuickFilters] = useState<QuickFilter[]>(initialFilters.quick);
+    const [fieldFilters, setFieldFilters] = useState<FieldFilters>(() =>
+        readFieldFilters(new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search), customFields));
+    const setFieldFilter = (fieldId: number, filter: FieldFilter | null) =>
+        setFieldFilters((current) => {
+            const next = { ...current };
+            if (filter) next[fieldId] = filter; else delete next[fieldId];
+            return next;
+        });
     const [createInColumnId, setCreateInColumnId] = useState<number | null>(null);
     const currentUserId = auth.user?.id;
 
@@ -2060,8 +2233,8 @@ export default function BoardsShow({
             priority: priorityFilter,
             type: typeFilter,
             quick: quickFilters,
-        });
-    }, [searchQuery, assigneeFilter, statusFilter, labelFilter, priorityFilter, typeFilter, quickFilters]);
+        }, customFields, fieldFilters);
+    }, [searchQuery, assigneeFilter, statusFilter, labelFilter, priorityFilter, typeFilter, quickFilters, fieldFilters, customFields]);
 
     const toggleQuickFilter = (filter: QuickFilter) =>
         setQuickFilters((current) => current.includes(filter) ? current.filter((f) => f !== filter) : [...current, filter]);
@@ -2073,8 +2246,9 @@ export default function BoardsShow({
             (labelFilter.length ? 1 : 0) +
             (priorityFilter.length ? 1 : 0) +
             (typeFilter.length ? 1 : 0) +
-            quickFilters.length,
-        [assigneeFilter, statusFilter.length, labelFilter.length, priorityFilter.length, typeFilter.length, quickFilters.length],
+            quickFilters.length +
+            Object.keys(fieldFilters).length,
+        [assigneeFilter, statusFilter.length, labelFilter.length, priorityFilter.length, typeFilter.length, quickFilters.length, fieldFilters],
     );
 
     // Persist board view preference per project so user sees same view next time
@@ -2237,6 +2411,11 @@ export default function BoardsShow({
 
                 // Type filter
                 if (typeFilter.length && !(item.item_type_id && typeFilter.includes(item.item_type_id))) {
+                    return false;
+                }
+
+                // Custom fields (all set filters must match)
+                if (!customFields.every((field) => !fieldFilters[field.id] || matchesFieldFilter(item, field, fieldFilters[field.id]))) {
                     return false;
                 }
 
@@ -2411,7 +2590,7 @@ export default function BoardsShow({
                                     {activeFiltersCount ? `Filter (${activeFiltersCount})` : 'Filter'}
                                 </button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-80 p-4 space-y-4" align="end">
+                            <PopoverContent className="w-80 p-4 space-y-4 max-h-[75vh] overflow-y-auto" align="end">
                                 <div className="flex items-center justify-between">
                                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                                         Filters
@@ -2429,6 +2608,7 @@ export default function BoardsShow({
                                                 setPriorityFilter([]);
                                                 setTypeFilter([]);
                                                 setQuickFilters([]);
+                                                setFieldFilters({});
                                             }}
                                         >
                                             Clear all
@@ -2730,6 +2910,17 @@ export default function BoardsShow({
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Custom fields */}
+                                <CustomFieldFilters fields={customFields} filters={fieldFilters} onChange={setFieldFilter} />
+                                {canManageFields && (
+                                    <Link
+                                        href={route('projects.edit', [workspace.slug, project.slug]) + '?tab=fields'}
+                                        className="block text-xs text-primary hover:underline"
+                                    >
+                                        {customFields.length ? 'Manage fields' : 'Add custom fields'}
+                                    </Link>
+                                )}
                             </PopoverContent>
                         </Popover>
 
@@ -2790,6 +2981,7 @@ export default function BoardsShow({
                         project={project}
                         board={board}
                         onEditItem={setEditingItem}
+                        customFields={customFields}
                     />
                 )}
 
@@ -2840,6 +3032,8 @@ export default function BoardsShow({
                 open={!!editingItem}
                 onClose={closeItem}
                 onOpenItem={setEditingItem}
+                customFields={customFields}
+                canEditItems={canEditItems}
             />
             <CompleteSubtasksDialog
                 open={completePrompt !== null}

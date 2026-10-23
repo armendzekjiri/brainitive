@@ -219,6 +219,10 @@ class ProjectController extends Controller
             'projectItemTypes' => $projectItemTypes,
             'moveTargets' => $moveTargets,
             'github' => ProjectGithubController::settingsFor($project),
+            // Custom fields (archived too) with how many issues use them: type changes and
+            // deleting are only allowed while a field is unused.
+            'itemFields' => $project->itemFields()->with('options')->withCount('values')->orderBy('position')->orderBy('id')->get(),
+            'projectBoards' => $project->boards()->orderBy('name')->get(['id', 'name', 'slug']),
         ]);
     }
 

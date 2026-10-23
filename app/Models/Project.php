@@ -191,6 +191,14 @@ class Project extends Model
     }
 
     /**
+     * Custom fields for this project's board issues (archived ones included).
+     */
+    public function itemFields(): HasMany
+    {
+        return $this->hasMany(ItemField::class);
+    }
+
+    /**
      * Get all item priorities for this project.
      */
     public function itemPriorities(): HasMany

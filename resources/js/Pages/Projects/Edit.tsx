@@ -3,7 +3,8 @@ import { Head, Link, useForm, router } from '@inertiajs/react';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import MoveProjectCard from '@/components/projects/MoveProjectCard';
 import GithubIntegrationCard, { type GithubSettings } from '@/components/projects/GithubIntegrationCard';
-import { PageProps, Workspace, Project, Label as LabelType, User, ItemType } from '@/types';
+import ItemFieldsCard from '@/components/projects/ItemFieldsCard';
+import { PageProps, Workspace, Project, Label as LabelType, User, ItemType, ItemField } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -40,7 +41,7 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag, Users, ListTodo, Power, PowerOff, Settings, Shield, Plug } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag, Users, ListTodo, Power, PowerOff, Settings, Shield, Plug, SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -61,6 +62,9 @@ interface Props extends PageProps {
     /** Workspaces the user also administers (empty when they can't move this project). */
     moveTargets?: { id: number; name: string; slug: string }[];
     github?: GithubSettings | null;
+    /** Custom fields for board issues, archived ones included (BRAI-77). */
+    itemFields?: ItemField[];
+    projectBoards?: { id: number; name: string; slug: string }[];
 }
 
 // Predefined colors for labels and project
@@ -279,7 +283,7 @@ function ItemTypeForm({
     );
 }
 
-export default function ProjectsEdit({ auth, workspace, project, workspaceUsers, canManageMembers, projectItemTypes = [], moveTargets = [], github = null }: Props) {
+export default function ProjectsEdit({ auth, workspace, project, workspaceUsers, canManageMembers, projectItemTypes = [], moveTargets = [], github = null, itemFields = [], projectBoards = [] }: Props) {
     // Deep links like ?tab=integrations (from an issue's Development section).
     const initialTab = (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tab')) || 'general';
     const [createLabelOpen, setCreateLabelOpen] = useState(false);
@@ -392,6 +396,9 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                     </TabsTrigger>
                                     <TabsTrigger value="item-types" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
                                         <ListTodo className="size-4" />Item types
+                                    </TabsTrigger>
+                                    <TabsTrigger value="fields" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
+                                        <SlidersHorizontal className="size-4" />Fields
                                     </TabsTrigger>
                                     <TabsTrigger value="members" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
                                         <Users className="size-4" />Members
@@ -833,6 +840,10 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                             )}
                         </CardContent>
                     </Card>
+                        </TabsContent>
+
+                        <TabsContent value="fields" className="space-y-8">
+                            <ItemFieldsCard workspace={workspace} project={project} fields={itemFields} boards={projectBoards} />
                         </TabsContent>
 
                         <TabsContent value="members" className="space-y-8">
