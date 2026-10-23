@@ -11,6 +11,8 @@ import { useState, FormEvent, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { safeHtmlProp } from '@/lib/sanitize';
 
+import { BLOCKED_UPLOAD_MESSAGE, isBlockedUpload } from '@/lib/blockedUploads';
+
 const MAX_REPLY_FILE_SIZE_MB = 10;
 const MAX_REPLY_FILE_SIZE_BYTES = MAX_REPLY_FILE_SIZE_MB * 1024 * 1024;
 
@@ -54,6 +56,11 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
         if (!files?.length) return;
         const next: File[] = [];
         for (const file of Array.from(files)) {
+            if (isBlockedUpload(file.name)) {
+                setError(`"${file.name}": ${BLOCKED_UPLOAD_MESSAGE}`);
+                e.target.value = '';
+                return;
+            }
             if (file.size > MAX_REPLY_FILE_SIZE_BYTES) {
                 setError(`"${file.name}" is too large. Max ${MAX_REPLY_FILE_SIZE_MB} MB per file.`);
                 e.target.value = '';

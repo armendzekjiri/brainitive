@@ -146,15 +146,20 @@ class SecurityRegressionTest extends TestCase
         $helpdesk = $this->helpdesk();
         $ticket = $this->submitTicket($helpdesk, 'x@example.com');
 
-        $this->post(route('helpdesks.tickets.attachments.store-public', [$helpdesk->uuid, $ticket['ticket_uuid']]), [
+        // public uploads refuse scripts outright (logged-in uploads store them as .bin, see below)
+        $this->postJson(route('helpdesks.tickets.attachments.store-public', [$helpdesk->uuid, $ticket['ticket_uuid']]), [
             'file' => UploadedFile::fake()->createWithContent('shell.php', '<?php system($_GET["c"]);'),
             'access_token' => $ticket['access_token'],
-        ])->assertOk();
+        ])->assertJsonValidationErrors('file');
 
-        $attachment = Ticket::where('uuid', $ticket['ticket_uuid'])->firstOrFail()->attachments()->firstOrFail();
-        $this->assertStringEndsWith('.bin', $attachment->path);
-        $this->assertSame('shell.php', $attachment->original_filename);
-        $this->assertSame([], array_filter(Storage::disk('public')->allFiles(), fn ($f) => str_contains($f, '.php')));
+        $this->assertSame(0, Ticket::where('uuid', $ticket['ticket_uuid'])->firstOrFail()->attachments()->count());
+        $this->assertSame([], Storage::disk('public')->allFiles());
+
+        $item = $this->item();
+        $this->actingAs($this->editor)->post(route('boards.items.attachments.store', [$this->workspace->slug, $this->project->slug, $this->board->slug, $item->id]), [
+            'file' => UploadedFile::fake()->createWithContent('shell.php', '<?php system($_GET["c"]);'),
+        ]);
+        $this->assertStringEndsWith('.bin', $item->attachments()->firstOrFail()->path);
     }
 
     public function test_board_attachments_and_image_uploads_use_server_side_extensions(): void
@@ -340,16 +345,39 @@ class SecurityRegressionTest extends TestCase
     public function test_uploads_only_keep_allowlisted_extensions(): void
     {
         Storage::fake('public');
-        $helpdesk = $this->helpdesk();
-        $ticket = $this->submitTicket($helpdesk, 'x@example.com');
+        $item = $this->item();
 
         foreach (['invoice.xhtm' => '.bin', 'payload.rdf' => '.bin', 'notes.strange' => '.bin', 'contract.pdf' => '.pdf', 'sheet.xlsx' => '.xlsx'] as $name => $ext) {
-            $this->post(route('helpdesks.tickets.attachments.store-public', [$helpdesk->uuid, $ticket['ticket_uuid']]), [
+            $this->actingAs($this->editor)->post(route('boards.items.attachments.store', [$this->workspace->slug, $this->project->slug, $this->board->slug, $item->id]), [
                 'file' => UploadedFile::fake()->createWithContent($name, '<?xml version="1.0"?><html xmlns="http://www.w3.org/1999/xhtml"><script>alert(1)</script></html>'),
-                'access_token' => $ticket['access_token'],
-            ])->assertOk();
-            $this->assertStringEndsWith($ext, Ticket::where('uuid', $ticket['ticket_uuid'])->firstOrFail()->attachments()->latest('id')->value('path'), $name);
+            ]);
+            $this->assertStringEndsWith($ext, $item->attachments()->latest('id')->value('path'), $name);
         }
+    }
+
+    public function test_public_uploads_refuse_programs_and_scripts_by_name_and_content(): void
+    {
+        Storage::fake('public');
+        $helpdesk = $this->helpdesk();
+        $ticket = $this->submitTicket($helpdesk, 'x@example.com');
+        $upload = fn (UploadedFile $file) => $this->postJson(route('helpdesks.tickets.attachments.store-public', [$helpdesk->uuid, $ticket['ticket_uuid']]), [
+            'file' => $file, 'access_token' => $ticket['access_token'],
+        ]);
+
+        foreach (['setup.exe', 'invoice.pdf.exe', 'Report.PDF.Bat', 'deploy.sh', 'tool.py', 'app.apk', 'Installer.dmg', 'macro.vbs', 'page.html', 'logo.svg'] as $name) {
+            $upload(UploadedFile::fake()->createWithContent($name, 'x'))->assertJsonValidationErrors('file');
+        }
+        // a Linux program renamed to .pdf is still caught by its content (real upload: fakes trust the name)
+        $upload($this->realUpload('report.pdf', "\x7fELF\x02\x01\x01\x00".str_repeat("\x00", 8)."\x02\x00\x3e\x00".str_repeat("\x00", 200)))->assertJsonValidationErrors('file');
+
+        // replies too
+        $this->postJson(route('helpdesks.tickets.replies.store-public', [$helpdesk->uuid, $ticket['ticket_uuid']]), [
+            'body' => 'see attached', 'access_token' => $ticket['access_token'], 'file' => [UploadedFile::fake()->createWithContent('run.cmd', 'x')],
+        ])->assertJsonValidationErrors('file.0');
+
+        $upload(UploadedFile::fake()->createWithContent('contract.pdf', "%PDF-1.4\n%âãÏÓ\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"))->assertOk();
+        $upload(UploadedFile::fake()->image('photo.png'))->assertOk();
+        $this->assertSame(2, Ticket::where('uuid', $ticket['ticket_uuid'])->firstOrFail()->attachments()->count());
     }
 
     public function test_public_ticket_uploads_are_throttled_limited_and_respect_attachments_off(): void

@@ -20,6 +20,7 @@ import {
     useState,
 } from 'react';
 import { cn } from '@/lib/utils';
+import { BLOCKED_UPLOAD_MESSAGE, isBlockedUpload } from '@/lib/blockedUploads';
 import { safeHtmlProp } from '@/lib/sanitize';
 
 type FormField = {
@@ -295,6 +296,11 @@ export default function HelpdeskEmbed({
         if (!files?.length) return;
         const next: File[] = [];
         for (const file of Array.from(files)) {
+            if (isBlockedUpload(file.name)) {
+                setError(`"${file.name}": ${BLOCKED_UPLOAD_MESSAGE}`);
+                e.target.value = '';
+                return;
+            }
             if (file.size > MAX_FILE_SIZE_BYTES) {
                 setError(`"${file.name}" is too large. Maximum size is ${MAX_FILE_SIZE_MB} MB per file.`);
                 e.target.value = '';

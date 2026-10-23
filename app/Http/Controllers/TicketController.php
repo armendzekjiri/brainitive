@@ -16,6 +16,7 @@ use App\Notifications\TicketAssignedNotification;
 use App\Notifications\TicketCreatedNotification;
 use App\Notifications\TicketReplyNotification;
 use App\Notifications\TicketResolvedNotification;
+use App\Rules\NotExecutableUpload;
 use App\Rules\ProjectMember;
 use App\Support\Helpdesks\HelpdeskForm;
 use App\Support\Uploads;
@@ -338,7 +339,7 @@ class TicketController extends Controller
             'body' => 'required|string|max:50000',
             'access_token' => 'required|string',
             'file' => 'nullable|array|max:5',
-            'file.*' => 'file|max:10240',
+            'file.*' => ['file', 'max:10240', new NotExecutableUpload],
         ]);
         if ($request->hasFile('file') && ! empty(($helpdesk->settings ?? [])['default_field_attachments']['hidden'])) {
             abort(403, 'This helpdesk does not accept attachments.');
@@ -432,7 +433,7 @@ class TicketController extends Controller
     public function storePublicAttachment(Request $request, Helpdesk $helpdesk, Ticket $ticket)
     {
         $validated = $request->validate([
-            'file' => 'required|file|max:10240',
+            'file' => ['required', 'file', 'max:10240', new NotExecutableUpload],
             'access_token' => 'required|string',
         ]);
 

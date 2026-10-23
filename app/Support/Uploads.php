@@ -62,6 +62,41 @@ class Uploads
         return self::IMAGE[strtolower((string) $file->guessExtension())] ?? 'bin';
     }
 
+    /** Programs, installers and scripts (any OS) — refused on public uploads (NotExecutableUpload). */
+    public const EXECUTABLE = [
+        'exe', 'msi', 'msp', 'msix', 'appx', 'com', 'scr', 'pif', 'cpl', 'dll', 'sys', 'lnk', 'reg', 'inf',
+        'bat', 'cmd', 'ps1', 'psm1', 'psd1', 'vbs', 'vbe', 'js', 'jse', 'mjs', 'wsf', 'wsh', 'hta', 'msc',
+        'jar', 'class', 'apk', 'aab', 'ipa', 'app', 'dmg', 'pkg', 'mpkg', 'command', 'deb', 'rpm', 'appimage', 'run', 'snap',
+        'sh', 'bash', 'zsh', 'csh', 'ksh', 'fish', 'py', 'pyc', 'pyw', 'pl', 'rb', 'lua', 'php', 'phtml', 'phar', 'cgi', 'asp', 'aspx', 'jsp',
+        'html', 'htm', 'xhtml', 'xhtm', 'svg', 'svgz', 'xpi', 'crx', 'so', 'dylib', 'elf', 'iso', 'img', 'vhd', 'vhdx',
+    ];
+
+    private const EXECUTABLE_MIMES = [
+        'application/x-dosexec', 'application/x-msdownload', 'application/vnd.microsoft.portable-executable',
+        'application/x-executable', 'application/x-pie-executable', 'application/x-sharedlib', 'application/x-elf',
+        'application/x-mach-binary', 'application/java-archive', 'application/x-java-archive',
+        'application/vnd.android.package-archive', 'application/x-msi', 'application/x-ms-installer',
+        'text/x-shellscript', 'application/x-sh', 'text/x-php', 'application/x-php', 'application/x-httpd-php',
+        'text/x-python', 'text/x-script.python', 'text/x-perl', 'text/x-ruby', 'text/html', 'image/svg+xml',
+        'application/x-apple-diskimage', 'application/x-iso9660-image',
+    ];
+
+    /**
+     * A program or script: any extension in the name (invoice.pdf.exe counts) or the type detected
+     * from the content (a Windows / Linux / macOS binary renamed to .pdf is still caught).
+     */
+    public static function isExecutable(UploadedFile $file): bool
+    {
+        $parts = explode('.', strtolower(trim(basename(str_replace('\\', '/', $file->getClientOriginalName())))));
+        foreach (array_slice($parts, 1) as $ext) {
+            if (in_array(trim($ext), self::EXECUTABLE, true)) {
+                return true;
+            }
+        }
+
+        return in_array(strtolower((string) $file->getMimeType()), self::EXECUTABLE_MIMES, true);
+    }
+
     /** The client's file name for display only: no path, no control characters. */
     public static function displayName(UploadedFile $file): string
     {

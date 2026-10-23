@@ -50,6 +50,11 @@ archives, media); everything else is stored as `.bin`. It used to be a denylist,
 (served as application/xhtml+xml → script on our origin) slipped through. Exports of page HTML
 (PDF / HTML / Markdown) always go through `safeHtml()` — stored page HTML is not trusted.
 Visitor text in ticket mails goes through `NewLeadNotification::plain()` (Markdown renders links).
+Uploads anyone can make without an account (public ticket form / portal replies) also refuse
+programs and scripts outright: `App\Rules\NotExecutableUpload` → `Uploads::isExecutable()` (every
+extension in the name + the content-detected MIME type); the browser forms pre-check with
+`resources/js/lib/blockedUploads.ts` (same list — change both together). Logged-in uploads keep
+the allowlist renaming only.
 
 ### Accounts, invitations and connected apps
 - An email is "proven" only by `email_verified_at` (raw column — `hasVerifiedEmail()` is always
