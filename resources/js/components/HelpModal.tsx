@@ -76,6 +76,19 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.31.0',
+        title: 'Project templates',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'Start a new project from a template: Software development, Scrum project, Client website delivery or Product launch — with boards and columns, starter issues, docs, checklists and a timeline.',
+            'Pick a start date: due dates and plan bars in the template move with it.',
+            'See what you’ll get before creating, and leave out sample issues, docs, lists or plans you don’t need.',
+            'Workspace admins can save any project as a template (Project settings → General → Save as template) and update it later — projects already created stay as they are.',
+            'Templates never copy comments, attachments, history, people or unpublished docs.',
+        ]
+    },
+    {
         version: 'v1.30.0',
         title: 'Custom fields on issues',
         tag: 'Feature',

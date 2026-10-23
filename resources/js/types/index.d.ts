@@ -294,6 +294,44 @@ export interface ItemFieldValue {
     option_id: number | null;
 }
 
+/** What a project template contains (App\Support\Templates\TemplateDocument::summary). */
+export interface ProjectTemplateSummary {
+    boards: { name: string; type: 'kanban' | 'scrum'; columns: string[]; issues: number }[];
+    issues: number;
+    docs: number;
+    folders: number;
+    task_lists: { name: string; tasks: number }[];
+    plans: string[];
+    labels: number;
+    fields: string[];
+    item_types: string[];
+}
+
+/** A template on the "New project" page: built-in or saved in the workspace (BRAI-72). */
+export interface ProjectTemplateOption {
+    /** "builtin:<key>" or "template:<uuid>" — sent as `template` when creating. */
+    id: string;
+    source: 'builtin' | 'workspace';
+    name: string;
+    description: string | null;
+    icon: string;
+    summary: ProjectTemplateSummary;
+    version?: number;
+    updated_at?: string | null;
+    created_by?: string | null;
+    uuid?: string;
+    can_delete?: boolean;
+}
+
+export type ProjectTemplateSection = 'issues' | 'pages' | 'task_lists' | 'plans';
+
+/** A saved workspace template as listed in project settings (no document). */
+export interface ProjectTemplate {
+    uuid: string;
+    name: string;
+    description: string | null;
+}
+
 export interface ItemType {
     id: number;
     name: string;

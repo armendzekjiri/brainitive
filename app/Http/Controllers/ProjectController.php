@@ -7,9 +7,12 @@ use App\Models\ItemType;
 use App\Models\Label;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\ProjectTemplate;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Projects\ProjectTransfer;
+use App\Support\Templates\TemplateDocument;
+use App\Support\Templates\TemplateRuns;
 use App\Support\Uploads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -56,6 +59,8 @@ class ProjectController extends Controller
 
         return Inertia::render('Projects/Create', [
             'workspace' => $workspace,
+            // Built-in and workspace templates to start from (BRAI-72)
+            'templates' => TemplateRuns::catalog($workspace, auth()->user()),
         ]);
     }
 
@@ -65,6 +70,11 @@ class ProjectController extends Controller
     public function store(Request $request, Workspace $workspace)
     {
         $this->authorize('createProjects', $workspace);
+
+        // A retried "create from template" submit lands on the project it already created
+        if ($request->filled('template') && ($existing = TemplateRuns::alreadyCreated($workspace, $request->user(), $request->input('request_id')))) {
+            return redirect()->route('projects.show', [$workspace, $existing]);
+        }
 
         $validated = $request->validate([
             'name' => [
@@ -83,7 +93,24 @@ class ProjectController extends Controller
                     ->where(fn ($q) => $q->where('workspace_id', $workspace->id)),
             ],
             'description' => 'nullable|string|max:50000',
+            // Start from a template: "builtin:<key>" or "template:<uuid>" (see TemplateRuns::catalog)
+            'template' => 'nullable|string|max:80',
+            'start_date' => 'nullable|required_with:template|date_format:Y-m-d',
+            'include' => 'nullable|array',
+            // "none" stands for "nothing extra" (an empty array isn't sent by forms)
+            'include.*' => Rule::in([...TemplateDocument::SECTIONS, 'none']),
+            'request_id' => 'nullable|uuid',
         ]);
+
+        if (! empty($validated['template'])) {
+            if (isset($validated['include'])) {
+                $validated['include'] = array_values(array_diff($validated['include'], ['none']));
+            }
+            $project = TemplateRuns::createProject($workspace, $request->user(), $validated);
+
+            return redirect()->route('projects.show', [$workspace, $project])
+                ->with('success', 'Project created from the template.');
+        }
 
         $project = $workspace->projects()->create([
             'name' => $validated['name'],
@@ -223,6 +250,11 @@ class ProjectController extends Controller
             // deleting are only allowed while a field is unused.
             'itemFields' => $project->itemFields()->with('options')->withCount('values')->orderBy('position')->orderBy('id')->get(),
             'projectBoards' => $project->boards()->orderBy('name')->get(['id', 'name', 'slug']),
+            // "Save as template" (workspace admins): existing templates can get a new version
+            'canSaveTemplate' => $request->user()->can('create', [ProjectTemplate::class, $workspace]),
+            'workspaceTemplates' => $request->user()->can('create', [ProjectTemplate::class, $workspace])
+                ? ProjectTemplate::where('workspace_id', $workspace->id)->orderBy('name')->get(['uuid', 'name', 'description'])
+                : [],
         ]);
     }
 

@@ -4,7 +4,8 @@ import { ProjectIcon } from '@/components/ProjectIcon';
 import MoveProjectCard from '@/components/projects/MoveProjectCard';
 import GithubIntegrationCard, { type GithubSettings } from '@/components/projects/GithubIntegrationCard';
 import ItemFieldsCard from '@/components/projects/ItemFieldsCard';
-import { PageProps, Workspace, Project, Label as LabelType, User, ItemType, ItemField } from '@/types';
+import SaveAsTemplateCard from '@/components/projects/SaveAsTemplateCard';
+import { PageProps, Workspace, Project, Label as LabelType, User, ItemType, ItemField, ProjectTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -65,6 +66,9 @@ interface Props extends PageProps {
     /** Custom fields for board issues, archived ones included (BRAI-77). */
     itemFields?: ItemField[];
     projectBoards?: { id: number; name: string; slug: string }[];
+    /** Workspace admins can save the project as a template (BRAI-72). */
+    canSaveTemplate?: boolean;
+    workspaceTemplates?: ProjectTemplate[];
 }
 
 // Predefined colors for labels and project
@@ -283,7 +287,7 @@ function ItemTypeForm({
     );
 }
 
-export default function ProjectsEdit({ auth, workspace, project, workspaceUsers, canManageMembers, projectItemTypes = [], moveTargets = [], github = null, itemFields = [], projectBoards = [] }: Props) {
+export default function ProjectsEdit({ auth, workspace, project, workspaceUsers, canManageMembers, projectItemTypes = [], moveTargets = [], github = null, itemFields = [], projectBoards = [], canSaveTemplate = false, workspaceTemplates = [] }: Props) {
     // Deep links like ?tab=integrations (from an issue's Development section).
     const initialTab = (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tab')) || 'general';
     const [createLabelOpen, setCreateLabelOpen] = useState(false);
@@ -512,6 +516,7 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                             </form>
                         </CardContent>
                     </Card>
+                    {canSaveTemplate && <SaveAsTemplateCard workspace={workspace} project={project} templates={workspaceTemplates} />}
                         </TabsContent>
 
                         <TabsContent value="labels" className="space-y-8">
