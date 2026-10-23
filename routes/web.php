@@ -293,6 +293,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('task-lists/{taskList:slug}/items/reorder', [TaskListController::class, 'reorderItems'])->name('task-lists.items.reorder');
             Route::patch('task-lists/{taskList:slug}/items/{item}', [TaskListController::class, 'updateItem'])->name('task-lists.items.update');
             Route::delete('task-lists/{taskList:slug}/items/{item}', [TaskListController::class, 'destroyItem'])->name('task-lists.items.destroy');
+            Route::post('task-lists/{taskList:slug}/items/{item}/duplicate', [TaskListController::class, 'duplicateItem'])->name('task-lists.items.duplicate');
 
             // Helpdesks (nested under projects)
             Route::post('helpdesks', [HelpdeskController::class, 'store'])->name('helpdesks.store');

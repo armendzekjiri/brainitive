@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { router, Link } from '@inertiajs/react';
+import DuplicateItemDialog from '@/components/item/DuplicateItemDialog';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
-    CheckSquare, Link2, Plus, X, Paperclip, Upload, Eye, Download, Trash2,
+    CheckSquare, Link2, Plus, X, Paperclip, Upload, Eye, Download, Trash2, Copy,
     MessageSquare, Reply, Pencil, Check, File, FileImage, FileText, FileSpreadsheet,
     FileArchive, FileCode, FileType, History, Clock, Loader2, ChevronDown, ListChecks,
 } from 'lucide-react';
@@ -1275,7 +1276,9 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
         rootItemsForParent, watcherIds, toggleWatcher,
         selectedLabels, labelSearch, setLabelSearch, labelPopoverOpen, setLabelPopoverOpen,
         newLabelName, setNewLabelName, filteredLabels, toggleLabel, handleCreateLabel,
+            workspace, project, board, subtasks,
     } = d;
+    const [duplicating, setDuplicating] = useState(false);
     const [detailsOpen, setDetailsOpen] = useState(true);
     if (!item) return null;
 
@@ -1624,6 +1627,18 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                 <br />
                 Updated {formatDistanceToNow(new Date((live ?? item).updated_at), { addSuffix: true })}
             </p>
+            <div className="border-t pt-3">
+                <Button variant="ghost" size="sm" className="h-8 gap-2 text-muted-foreground hover:text-foreground" onClick={() => setDuplicating(true)}>
+                    <Copy className="size-3.5" /> Duplicate
+                </Button>
+                <DuplicateItemDialog
+                    open={duplicating}
+                    onOpenChange={setDuplicating}
+                    url={route('boards.items.duplicate', [workspace.slug, project.slug, board.slug, item.id])}
+                    itemKey={item.key}
+                    subtaskCount={subtasks.length}
+                />
+            </div>
         </div>
     );
 }

@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -706,41 +707,43 @@ class BoardController extends Controller
     }
 
     /**
-     * Duplicate an item.
+     * Duplicate an issue — optionally with its subtasks — next to the original. Copies the
+     * content and planning fields (type, priority, assignee, dates, estimate, labels, sprint);
+     * never comments, attachments, watchers, work logs or history.
      */
     public function duplicateItem(Request $request, Workspace $workspace, Project $project, Board $board, Item $item)
     {
         $this->authorize('createItems', $board);
 
         $validated = $request->validate([
-            'with_subitems' => 'boolean',
+            'with_subitems' => 'nullable|boolean',
         ]);
 
-        $withSubitems = $validated['with_subitems'] ?? false;
+        $copy = DB::transaction(fn () => $this->performItemDuplication(
+            $item, $project, $item->parent_id, $request->user()->id, true, (bool) ($validated['with_subitems'] ?? false),
+        ));
 
-        $this->performItemDuplication($item, $project, clone $item->parent_id, $request->user()->id, true, $withSubitems);
-
-        return back()->with('success', 'Item duplicated successfully.');
+        return back()->with('success', "Copied as {$copy->key}.");
     }
 
     /**
      * Recursive helper to duplicate an item and its subitems.
      */
-    private function performItemDuplication(Item $originalItem, Project $project, ?int $parentId, int $userId, bool $isRootModifier, bool $withSubitems)
+    private function performItemDuplication(Item $originalItem, Project $project, ?int $parentId, int $userId, bool $isRoot, bool $withSubitems): Item
     {
         $newItem = $originalItem->replicate([
             'uuid',
             'key',
             'created_by',
             'reporter_id',
-            'assigned_to',
             'completed_at',
+            'time_spent',
             'created_at',
             'updated_at',
         ]);
 
-        if ($isRootModifier) {
-            $newItem->title = 'Copy of '.$originalItem->title;
+        if ($isRoot) {
+            $newItem->title = Str::limit('Copy of '.$originalItem->title, 255, '');
         }
 
         $newItem->key = $project->getNextItemKey();
@@ -748,22 +751,18 @@ class BoardController extends Controller
         $newItem->created_by = $userId;
         $newItem->reporter_id = $userId;
         $newItem->parent_id = $parentId;
-
-        // Find next position in column
-        $maxPosition = Item::where('column_id', $originalItem->column_id)->max('position') ?? 0;
-        $newItem->position = $maxPosition + 1;
-
+        $newItem->time_spent = 0;
+        $newItem->position = (Item::where('column_id', $originalItem->column_id)->max('position') ?? 0) + 1;
+        $newItem->backlog_position = (Item::where('board_id', $originalItem->board_id)->where('sprint_id', $originalItem->sprint_id)->max('backlog_position') ?? 0) + 1;
         $newItem->save();
 
-        // Sync labels
         $labelIds = $originalItem->labels()->pluck('labels.id');
         if ($labelIds->isNotEmpty()) {
             $newItem->labels()->sync($labelIds);
         }
 
         if ($withSubitems) {
-            $originalItem->load('children');
-            foreach ($originalItem->children as $child) {
+            foreach ($originalItem->children()->orderBy('position')->get() as $child) {
                 $this->performItemDuplication($child, $project, $newItem->id, $userId, false, true);
             }
         }
