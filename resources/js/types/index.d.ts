@@ -88,6 +88,7 @@ export interface Board {
     position: number;
     project?: Project;
     columns?: BoardColumn[];
+    settings?: { swimlanes?: import('@/lib/swimlanes').SwimlaneConfig } | null;
     created_at: string;
     updated_at: string;
 }
@@ -236,6 +237,8 @@ export interface Item {
     attachments_count?: number;
     /** Null = backlog (Scrum boards). */
     sprint_id?: number | null;
+    release_id?: number | null;
+    release?: { id: number; name: string; status: string; release_date?: string | null } | null;
     /** Rank in the backlog / sprint list. */
     backlog_position?: number;
     /** Minutes. */

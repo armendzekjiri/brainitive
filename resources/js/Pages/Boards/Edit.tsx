@@ -40,9 +40,11 @@ import {
     Kanban,
 } from 'lucide-react';
 import { useEffect, useState, FormEvent, DragEvent } from 'react';
+import SwimlaneSettings, { type LaneOptions } from '@/components/board/SwimlaneSettings';
 import axios from 'axios';
 
 interface Props extends PageProps {
+    laneOptions: LaneOptions;
     workspace: Workspace;
     project: Project;
     board: Board & { columns: BoardColumn[] };
@@ -370,7 +372,7 @@ function EditColumnDialog({
     );
 }
 
-export default function BoardsEdit({ workspace, project, board }: Props) {
+export default function BoardsEdit({ workspace, project, board, laneOptions }: Props) {
     const [editingColumn, setEditingColumn] = useState<BoardColumn | null>(null);
     const [columns, setColumns] = useState<BoardColumn[]>(board.columns);
     // Columns are created/edited/deleted via redirects that reload `board`; keep the local
@@ -587,6 +589,8 @@ export default function BoardsEdit({ workspace, project, board }: Props) {
                             )}
                         </CardContent>
                     </Card>
+
+                    <SwimlaneSettings workspace={workspace} project={project} board={board} options={laneOptions} />
 
                     {/* Danger Zone */}
                     <Card className="border-destructive/50">
