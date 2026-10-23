@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\TaskList;
 use App\Models\TaskListItem;
+use App\Support\AccountLoginThrottle;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -20,11 +21,19 @@ class CliController extends Controller
             'password' => 'required|string',
         ]);
 
+        // Same per-account limit as the web login (the route throttle is per IP only)
+        if (AccountLoginThrottle::tooManyAttempts($validated['email'])) {
+            return response()->json(['message' => 'Too many failed logins for this account. Try again later.'], 429);
+        }
+
         if (! Auth::attempt($validated)) {
+            AccountLoginThrottle::hit($validated['email']);
             throw ValidationException::withMessages([
                 'email' => ['Invalid credentials.'],
             ]);
         }
+
+        AccountLoginThrottle::clear($validated['email']);
 
         $user = Auth::user();
 

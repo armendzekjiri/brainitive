@@ -29,6 +29,17 @@ Deployments are matched by window: what reached the deployed ref after the previ
 deploy to that environment (`github_connections.deployments`). Keep processing idempotent
 (upserts keyed by item+kind+repo+identifier) — GitHub redelivers.
 
+### Auth links and login limits (security hardening, 2026-10-23)
+- Email verification links are `signed:relative` temporary signed URLs (built in
+  `VerifyEmailNotification`, host from `APP_URL`, signature over path + query only, so proxies /
+  another host don't break them). The route never signs anyone in — don't add `Auth::login()` back.
+- Reset links come from `APP_URL` (`ResetPassword::createUrlUsing` in `AppServiceProvider`), never
+  from the request host.
+- `App\Support\AccountLoginThrottle`: 20 failed password logins per account / 15 min, any IP —
+  web login and `/api/cli/login`; a password reset clears it. Trade-off: anyone who knows an email
+  can keep its password login locked (reset / social login still work). Real fix for IP spoofing is
+  a correct `TRUSTED_PROXIES` (never `*` when the app port is reachable directly).
+
 ### Lead form logic lives twice
 Which steps / questions a visitor sees is evaluated in the browser (`lib/leadForms.ts`) *and*
 on submit (`LeadFormDefinition::visibleFields`) — hidden questions are never validated and

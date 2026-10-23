@@ -124,7 +124,6 @@ Route::prefix('f/{publicSlug}')->where(['publicSlug' => '[a-z0-9-]{3,60}'])->gro
 
 // Public helpdesk widget and portal (no auth, CORS for embedding on external sites)
 Route::middleware('cors')->group(function () {
-    Route::get('/widget/helpdesks/{helpdesk:uuid}', [HelpdeskWidgetController::class, 'showWidget'])->name('helpdesks.widget.show');
     Route::get('/widget/helpdesks/{helpdesk:uuid}/form', [HelpdeskWidgetController::class, 'formConfig'])->name('helpdesks.widget.form');
     Route::get('/widget/helpdesks/{helpdesk:uuid}/embed', [HelpdeskWidgetController::class, 'embed'])->name('helpdesks.widget.embed');
     Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets', [TicketController::class, 'storePublic'])->middleware('throttle:20,1')->name('helpdesks.tickets.store-public');

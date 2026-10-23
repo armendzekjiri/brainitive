@@ -6,7 +6,6 @@ use App\Models\Helpdesk;
 use App\Support\Helpdesks\HelpdeskForm;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Inertia\Response;
 
 class HelpdeskWidgetController extends Controller
 {
@@ -124,35 +123,6 @@ class HelpdeskWidgetController extends Controller
                 'logo_url' => $settings['logo_url'] ?? null,
                 'brand_color' => $settings['brand_color'] ?? '#0E83DC',
             ],
-        ]);
-    }
-
-    /**
-     * Show the public widget for a helpdesk (embeddable on external sites).
-     */
-    public function showWidget(Request $request, Helpdesk $helpdesk): Response
-    {
-        // Load minimal required relationships
-        $helpdesk->load(['project.workspace', 'fields' => function ($q) {
-            $q->where('is_required', true)->orderBy('position');
-        }]);
-
-        // Basic branding settings
-        $branding = $helpdesk->settings ?? [];
-        $defaults = [
-            'brand_color' => '#0E83DC',
-            'button_text' => 'Support',
-            'button_position' => 'bottom-right',
-            'welcome_message' => 'How can we help you?',
-        ];
-
-        $branding = array_merge($defaults, $branding);
-
-        return Inertia::render('Widgets/HelpdeskWidget', [
-            'helpdesk' => $helpdesk,
-            'branding' => $branding,
-            'workspace' => $helpdesk->project->workspace,
-            'project' => $helpdesk->project,
         ]);
     }
 }
