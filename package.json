@@ -7,8 +7,11 @@
         "build": "tsc && vite build && npm run build:widget",
         "build:widget": "vite build --config vite.widget.config.js",
         "dev": "vite",
-        "e2e": "playwright test -c e2e",
-        "e2e:ui": "playwright test -c e2e --ui"
+        "e2e": "playwright test -c e2e --project=chromium",
+        "e2e:ui": "E2E_SHOW_CURSOR=1 playwright test -c e2e --project=chromium --ui",
+        "e2e:live": "E2E_SHOW_CURSOR=1 E2E_SLOWMO=300 playwright test -c e2e --project=chromium --headed --workers=1",
+        "e2e:crawl": "playwright test -c e2e --project=crawl",
+        "e2e:report": "playwright show-report e2e/playwright-report/8010"
     },
     "devDependencies": {
         "@headlessui/react": "^2.0.0",

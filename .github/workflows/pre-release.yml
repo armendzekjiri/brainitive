@@ -1,7 +1,8 @@
 # Staging flow (BRAI-95): feature branches merge into pre-release, never straight into main.
-# Every push to pre-release runs the test gate, then deploys to dev.brainitive.app (same server,
-# isolated: own folder, DB, PHP pool, basic auth) and migrates its existing data the way
-# production will. Playwright e2e on dev (BRAI-96) comes next. Green = ready for main.
+# Every push to pre-release runs the test gate (incl. all e2e journeys on a fresh app), then
+# deploys to dev.brainitive.app (same server, isolated: own folder, DB, PHP pool, basic auth),
+# migrates its existing data the way production will, and smoke-tests the deployed server
+# (e2e/tests/dev-smoke.spec.ts). Green = ready for main.
 name: Pre-release
 
 on:
@@ -28,6 +29,9 @@ jobs:
     environment:
       name: dev
       url: https://dev.brainitive.app
+    env:
+      # the e2e test users on dev (smoke-dev below); the seeder only creates them once
+      E2E_PASSWORD: ${{ secrets.E2E_DEV_PASSWORD }}
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
@@ -37,6 +41,7 @@ jobs:
           key: ${{ secrets.DEPLOY_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           fingerprint: ${{ secrets.DEPLOY_FINGERPRINT }}
+          envs: E2E_PASSWORD
           script: |
             set -e
             cd /var/www/brainitive-dev
@@ -52,14 +57,47 @@ jobs:
             npm run build --silent > /dev/null
             echo ">>> Migrating the existing dev data (what production will do)..."
             php artisan migrate --force
+            echo ">>> e2e test users (E2E Workspace only; idempotent)..."
+            E2E_PASSWORD="$E2E_PASSWORD" php artisan db:seed --class=E2eSeeder --force
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
             echo ">>> dev.brainitive.app is on ${{ github.sha }}"
 
+  smoke-dev:
+    name: Smoke test dev.brainitive.app
+    needs: deploy-dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # e2e/tests/dev-smoke.spec.ts against the deployed server (no local app, no reset)
+      E2E_BASE_URL: https://dev.brainitive.app
+      E2E_HTTP_USER: ${{ secrets.DEV_BASIC_AUTH_USER }}
+      E2E_HTTP_PASSWORD: ${{ secrets.DEV_BASIC_AUTH_PASSWORD }}
+      E2E_PASSWORD: ${{ secrets.E2E_DEV_PASSWORD }}
+      E2E_SHOW_CURSOR: 1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test -c e2e --project=dev
+      # video / screenshot / trace of failed tests only
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dev-smoke-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+
   ready:
     name: Ready for main
-    needs: deploy-dev
+    needs: smoke-dev
     runs-on: ubuntu-latest
     steps:
       - name: Summary

@@ -276,9 +276,13 @@ export class Crawler {
         );
     }
 
+    /** The visible, enabled controls of an open menu / dialog (index = position among all of them). */
     private async inner(scope: string): Promise<Control[]> {
         return this.page.locator(scope).locator(CONTROLS).evaluateAll((els) =>
-            els.map((e, index) => ({ index, name: `${e.getAttribute('role') || e.tagName.toLowerCase()} "${(e.getAttribute('aria-label') || (e as HTMLElement).innerText || e.tagName).replace(/\s+/g, ' ').trim().slice(0, 60)}"` })),
+            els
+                .map((e, index) => ({ e, index }))
+                .filter(({ e }) => (e as HTMLElement).checkVisibility?.() !== false && !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true')
+                .map(({ e, index }) => ({ index, name: `${e.getAttribute('role') || e.tagName.toLowerCase()} "${(e.getAttribute('aria-label') || (e as HTMLElement).innerText || e.tagName).replace(/\s+/g, ' ').trim().slice(0, 60)}"` })),
         );
     }
 

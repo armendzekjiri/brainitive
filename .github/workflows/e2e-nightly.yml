@@ -34,7 +34,6 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      E2E_DB_CONNECTION: pgsql
       E2E_DB_DATABASE: testing
       E2E_DB_USERNAME: brainitive
       E2E_DB_PASSWORD: brainitive

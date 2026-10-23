@@ -22,6 +22,15 @@ class E2eSeeder extends Seeder
     {
         $this->call([InstanceSettingsSeeder::class, ItemTypeSeeder::class, ItemPrioritySeeder::class]);
 
+        // Also seeds the e2e users on dev.brainitive.app (post-deploy smoke tests): a second run
+        // only refreshes their password and creates nothing — dev keeps its data.
+        if (User::where('email', 'e2e-owner@example.test')->exists()) {
+            User::whereIn('email', ['e2e-owner@example.test', 'e2e-member@example.test'])
+                ->update(['password' => Hash::make((string) env(self::PASSWORD_ENV, 'e2e-password'))]);
+
+            return;
+        }
+
         $owner = $this->user('Erin Owner', 'e2e-owner@example.test');
         $member = $this->user('Max Member', 'e2e-member@example.test');
 

@@ -5,14 +5,16 @@ invited people). They run in CI on every push (Chromium, against a fresh Postgre
 in Firefox and WebKit. A crawler also clicks every button.
 
 ```bash
-npx playwright test -c e2e --project=chromium # the journeys in Chromium (what CI runs per push)
-npx playwright test -c e2e --project=crawl    # + every button / command (runs the journeys first)
-npx playwright test -c e2e tests/boards.spec.ts --project=chromium
-npm run e2e:ui                                # watch it live: browser, timeline, every click (like Cypress)
-npx playwright test -c e2e --project=chromium --headed --workers=1   # a real browser window
-npx playwright test -c e2e tests/boards.spec.ts --debug              # step through click by click
-npx playwright show-report e2e/playwright-report/8010                # last run's report (traces, videos)
-E2E_PORT=8021 npx playwright test -c e2e …    # a second run in parallel (own server + DB)
+npm run e2e:ui       # like Cypress: one command, a window with every test, ▶ runs them live
+npm run e2e:live     # all journeys in a visible browser, one after another
+npm run e2e          # all journeys, headless (what CI runs on every push)
+npm run e2e:crawl    # the journeys + click every button / command (long)
+npm run e2e:report   # the last run's report: screenshots, videos, traces
+
+npx playwright test -c e2e --project=chromium tests/boards.spec.ts   # one area
+npx playwright test -c e2e --project=chromium -g "invited person"    # one test by name
+npx playwright test -c e2e tests/collaboration.spec.ts --debug       # step through click by click
+E2E_PORT=8021 npm run e2e                                            # a second run in parallel (own server + DB)
 ```
 
 ## How it works
@@ -45,8 +47,15 @@ E2E_PORT=8021 npx playwright test -c e2e …    # a second run in parallel (own 
 - **Isolation.** Tests run fully in parallel on one database. Create your own data with `uid()`
   names, and never rename, re-password or delete the seeded users, workspace, project or board.
 - **Page errors.** An uncaught page error fails the test (the auto fixture in `fixtures.ts`).
-- **Remote.** `E2E_BASE_URL=https://dev.brainitive.app E2E_HTTP_USER=… E2E_HTTP_PASSWORD=…`
-  runs against a deployed server, with no local server and no reset.
+- **Remote / after every deploy.** `pre-release.yml` runs project `dev` (`tests/dev-smoke.spec.ts`)
+  against the deployed https://dev.brainitive.app after each deploy. It needs no local server and
+  does no reset, and uses the e2e users the deploy seeds there (idempotent `E2eSeeder`, E2E
+  Workspace only). Locally: `E2E_BASE_URL=https://dev.brainitive.app E2E_HTTP_USER=…
+  E2E_HTTP_PASSWORD=… E2E_PASSWORD=… npx playwright test -c e2e --project=dev`. The credentials
+  are in the GitHub secrets `DEV_BASIC_AUTH_*` and `E2E_DEV_PASSWORD`; locally they're in
+  `~/.brainitive-dev-*`.
+- **Cursor.** `e2e:ui`, `e2e:live` and CI draw a red cursor + click ripple (`cursor.ts`), so you
+  see what gets clicked. CI keeps video / screenshot / trace for failed tests only.
 
 ## Writing tests
 - Import `test`, `expect`, `uid` and `urls` from `../fixtures`.

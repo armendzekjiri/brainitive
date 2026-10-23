@@ -124,8 +124,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      # read by e2e/env.ts: the app + e2e:reset use this database, never .env's
-      E2E_DB_CONNECTION: pgsql
+      # failure videos show a cursor + click ripple (e2e/cursor.ts)
+      E2E_SHOW_CURSOR: 1
       E2E_DB_DATABASE: testing
       E2E_DB_USERNAME: brainitive
       E2E_DB_PASSWORD: brainitive

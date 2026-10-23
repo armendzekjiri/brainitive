@@ -21,6 +21,8 @@ export default defineConfig({
         trace: 'retain-on-failure',
         screenshot: 'only-on-failure',
         video: 'retain-on-failure',
+        // E2E_SLOWMO=300: pause between actions so you can follow along (npm run e2e:live)
+        launchOptions: process.env.E2E_SLOWMO ? { slowMo: Number(process.env.E2E_SLOWMO) } : undefined,
         httpCredentials: process.env.E2E_HTTP_USER
             ? { username: process.env.E2E_HTTP_USER, password: process.env.E2E_HTTP_PASSWORD ?? '' }
             : undefined,
@@ -29,10 +31,12 @@ export default defineConfig({
         { name: 'setup', testMatch: /auth\.setup\.ts/ },
         {
             name: 'chromium',
-            testIgnore: /crawl\.spec\.ts/,
+            testIgnore: /(crawl|dev-smoke)\.spec\.ts/,
             use: { ...devices['Desktop Chrome'], storageState: authFile('owner') },
             dependencies: ['setup'],
         },
+        // after every deploy: the deployed dev server (E2E_BASE_URL=https://dev.brainitive.app)
+        { name: 'dev', testMatch: /dev-smoke\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
         // every button / command (e2e/crawler.ts) — after the journeys, on the data they created
         {
             name: 'crawl',
@@ -41,8 +45,8 @@ export default defineConfig({
             dependencies: process.env.E2E_CRAWL_ONLY ? ['setup'] : ['chromium'],
         },
         // nightly: --project=firefox / --project=webkit
-        { name: 'firefox', testIgnore: /crawl\.spec\.ts/, use: { ...devices['Desktop Firefox'], storageState: authFile('owner') }, dependencies: ['setup'] },
-        { name: 'webkit', testIgnore: /crawl\.spec\.ts/, use: { ...devices['Desktop Safari'], storageState: authFile('owner') }, dependencies: ['setup'] },
+        { name: 'firefox', testIgnore: /(crawl|dev-smoke)\.spec\.ts/, use: { ...devices['Desktop Firefox'], storageState: authFile('owner') }, dependencies: ['setup'] },
+        { name: 'webkit', testIgnore: /(crawl|dev-smoke)\.spec\.ts/, use: { ...devices['Desktop Safari'], storageState: authFile('owner') }, dependencies: ['setup'] },
     ],
     webServer: REMOTE
         ? undefined

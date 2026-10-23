@@ -32,7 +32,13 @@ class E2eReset extends Command
             touch($database);
         }
 
-        $this->call('migrate:fresh', ['--force' => true, '--seed' => true, '--seeder' => E2eSeeder::class]);
+        // quiet: only the "ready" line (or the error) shows before the tests start
+        $exit = $this->callSilently('migrate:fresh', ['--force' => true, '--seed' => true, '--seeder' => E2eSeeder::class]);
+        if ($exit !== self::SUCCESS) {
+            $this->error('migrate:fresh failed — run it with -v to see why.');
+
+            return self::FAILURE;
+        }
         $this->info("e2e database ready: {$connection}:{$database}");
 
         return self::SUCCESS;

@@ -1,5 +1,6 @@
 import { test as base, expect, request, type Page } from '@playwright/test';
 import { cacheBuildAssets } from './assets';
+import { showCursor } from './cursor';
 import { BASE_URL, PASSWORD, SEED, USERS, authFile, type Role } from './env';
 
 /** Unique suffix so parallel tests never collide on names in the shared e2e database. */
@@ -66,11 +67,16 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
     // every context serves the (immutable) built assets from memory — see assets.ts
     context: async ({ context }, use) => {
         await cacheBuildAssets(context);
+        if (process.env.E2E_SHOW_CURSOR) await showCursor(context);
         await use(context);
     },
     memberPage: async ({ browser, memberState }, use) => {
-        const context = await browser.newContext({ storageState: memberState });
+        const context = await browser.newContext({
+            storageState: memberState,
+            httpCredentials: process.env.E2E_HTTP_USER ? { username: process.env.E2E_HTTP_USER, password: process.env.E2E_HTTP_PASSWORD ?? '' } : undefined,
+        });
         await cacheBuildAssets(context);
+        if (process.env.E2E_SHOW_CURSOR) await showCursor(context);
         const page = await context.newPage();
         await use(page);
         await context.close();
