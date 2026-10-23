@@ -76,6 +76,19 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.23.0',
+        title: 'AI Connector: Comments, Sprints and Plans',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'Claude and ChatGPT (via the Brainitive connector) can now read a card’s comments and post updates as you — with @email mentions — without touching the description.',
+            'Sprint planning through the connector: list sprints and the backlog, create and edit sprints, move issues (with their subtasks), start and complete sprints with the same rules as the backlog page.',
+            'Gantt plans through the connector: read rows, bars and dependencies and make targeted edits. If you changed the plan in the browser meanwhile, nothing is overwritten; date changes on linked rows update their issues.',
+            'Retries are safe: a connector that repeats a request never posts, moves or edits twice.',
+            'Fixed: two people starting a sprint at the same moment could end up with two active sprints; replies can only attach to comments of the same issue.',
+        ]
+    },
+    {
         version: 'v1.22.0',
         title: 'Share Docs and Issues',
         tag: 'Feature',

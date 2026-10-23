@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\McpRequest;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -17,3 +18,6 @@ Schedule::command('app:send-calendar-reminders')
 Schedule::command('app:send-item-reminders')
     ->everyFiveMinutes()
     ->withoutOverlapping();
+
+// Forget MCP idempotency keys after 7 days.
+Schedule::command('model:prune', ['--model' => [McpRequest::class]])->daily();

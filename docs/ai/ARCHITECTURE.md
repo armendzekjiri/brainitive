@@ -155,6 +155,8 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
   - **Tools:** `app/Mcp/Tools/*Tool.php` (~38), registered in the `$tools` array on `BrainitiveServer`.
   - **Shared helpers:** `app/Mcp/Tools/Concerns/InteractsWithBrainitive` (slug→model resolution + policy enforcement, so the AI can only touch what the user can), `ResolvesCalendarConnections`.
   - **Support:** `app/Support/Mcp/` — `ResourceLocator` (the `location` object every write returns), `PageContentConverter` (Markdown↔editor format), `CalendarFormatter`.
+  - **Comments / sprints / plans (BRAI-67/68/69):** `ListItemCommentsTool`, `AddItemCommentTool`; `ListSprintsTool`, `GetSprintTool`, `CreateSprintTool`, `UpdateSprintTool`, `MoveItemsToSprintTool`, `StartSprintTool`, `CompleteSprintTool` (trait `InteractsWithSprints`); `ListPlansTool`, `GetPlanTool`, `UpdatePlanTool` (trait `InteractsWithPlans`, engine `App\Support\Plans\PlanOperations`). Shared domain actions with the UI: `Support/Boards/ItemComments`, `ItemMentions`, `SprintLifecycle`.
+  - **Writes with `request_id`** go through `App\Support\Mcp\IdempotentRequest` (`mcp_requests`, pruned after 7 days).
   - To add a tool, see the [add-mcp-tool skill](./skills/add-mcp-tool.md).
 - **In-app AI (workspace AI settings):** `AiController` — `generate` (editor toolbar; optional `project_id` adds the project's name + description as context), `projectAssist` / `saveProjectAssist` (project overview assistant: summary / task / implementation prompt → review → copy, draft doc or replace description). All calls go through the private `chat()` helper (SSRF-guarded via `OutboundUrl`). UI: `components/projects/ProjectAiAssistant.tsx`.
 

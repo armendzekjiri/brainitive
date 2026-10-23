@@ -16,6 +16,8 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
+use App\Support\Boards\ItemComments;
+use App\Support\Boards\ItemMentions;
 use App\Support\Uploads;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -375,7 +377,7 @@ class BoardController extends Controller
 
         // Process mentions inside description on item creation
         if (! empty($validated['description'])) {
-            $this->processMentions($validated['description'], $item, $request->user());
+            ItemMentions::notify($validated['description'], $item, $request->user());
         }
 
         return back()->with('success', 'Item created successfully.');
@@ -711,7 +713,7 @@ class BoardController extends Controller
 
         // Process mentions in description
         if (isset($validated['description'])) {
-            $this->processMentions($validated['description'], $item, $request->user());
+            ItemMentions::notify($validated['description'], $item, $request->user());
         }
 
         return back()->with('success', 'Item updated successfully.');
@@ -806,22 +808,11 @@ class BoardController extends Controller
 
         $validated = $request->validate([
             'body' => 'required|string',
-            'parent_id' => 'nullable|exists:comments,id',
-        ]);
-        $comment = $item->comments()->create([
-            'user_id' => $request->user()->id,
-            'body' => $validated['body'],
-            'parent_id' => $validated['parent_id'] ?? null,
+            // A reply belongs to a comment on this issue.
+            'parent_id' => ['nullable', Rule::exists('comments', 'id')->where('item_id', $item->id)],
         ]);
 
-        ActivityLog::log($item, 'commented', null, [
-            'comment_id' => $comment->id,
-            'reply' => $comment->parent_id !== null,
-            'excerpt' => Str::limit(trim(strip_tags($validated['body'])), 120),
-        ]);
-
-        // Process mentions in comment
-        $this->processMentions($validated['body'], $item, $request->user());
+        ItemComments::add($item, $request->user(), $validated['body'], $validated['parent_id'] ?? null);
 
         return back()->with('success', 'Comment added successfully.');
     }
@@ -1030,67 +1021,6 @@ class BoardController extends Controller
         $attachment->delete();
 
         return back()->with('success', 'Attachment deleted successfully.');
-    }
-
-    /**
-     * Extract mentions from HTML content and dispatch notifications.
-     */
-    private function processMentions(?string $content, Item $item, User $actor)
-    {
-        if (empty($content)) {
-            return;
-        }
-
-        \Log::info('processMentions starting extraction', ['length' => strlen($content)]);
-
-        // 1. Regular HTML format: data-mention-user-id="123"
-        preg_match_all('/data-mention-user-id="(\d+)"/', $content, $htmlMatches);
-
-        // 2. Lexical JSON / escaped format: "userId":123 or \"userId\":123 or "userId\":\"123"
-        preg_match_all('/"userId"(?:\\\\)?"?\s*:\s*(?:\\\\)?"?(\d+)/', $content, $jsonMatches);
-
-        // 3. Fallback escaped HTML: data-mention-user-id\":\"123\"
-        preg_match_all('/data-mention-user-id(?:\\\\)?"\s*:\s*(?:\\\\)?"?(\d+)/', $content, $escapedMatches);
-
-        $userIds = array_unique(array_merge(
-            $htmlMatches[1] ?? [],
-            $jsonMatches[1] ?? [],
-            $escapedMatches[1] ?? []
-        ));
-
-        \Log::info('processMentions extraction results', [
-            'html_count' => count($htmlMatches[1] ?? []),
-            'json_count' => count($jsonMatches[1] ?? []),
-            'escaped_count' => count($escapedMatches[1] ?? []),
-            'final_ids' => $userIds,
-        ]);
-
-        if (empty($userIds)) {
-            return;
-        }
-
-        $workspace = $item->board->project->workspace;
-        $project = $item->board->project;
-        $board = $item->board;
-
-        $itemUrl = route('boards.items.show', [$workspace->slug, $project->slug, $board->slug, $item->id]);
-
-        foreach ($userIds as $userId) {
-            // Don't notify the person who made the mention
-            if ((int) $userId === $actor->id) {
-                continue;
-            }
-
-            $user = User::find($userId);
-            if ($user && $user->hasProjectAccess($project)) {
-                $user->notify(new MentionNotification(
-                    contextType: 'issue',
-                    contextTitle: $item->key.' - '.$item->title,
-                    contextUrl: $itemUrl,
-                    actor: $actor
-                ));
-            }
-        }
     }
 
     /**
