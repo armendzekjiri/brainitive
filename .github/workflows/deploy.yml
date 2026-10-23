@@ -16,12 +16,14 @@ jobs:
       url: https://www.brainitive.app
     steps:
       - name: Deploy to server via SSH
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
+          # SHA256 host key fingerprint (ssh-keyscan -p PORT HOST | ssh-keygen -lf -); empty = not checked
+          fingerprint: ${{ secrets.DEPLOY_FINGERPRINT }}
           script: |
             set -e
             cd ${{ secrets.DEPLOY_PATH }}
