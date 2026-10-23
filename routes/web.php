@@ -12,6 +12,8 @@ use App\Http\Controllers\HelpdeskController;
 use App\Http\Controllers\HelpdeskWidgetController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\ItemFieldController;
+use App\Http\Controllers\LeadController;
+use App\Http\Controllers\LeadFormController;
 use App\Http\Controllers\MyDayController;
 use App\Http\Controllers\MyWorkController;
 use App\Http\Controllers\NotificationController;
@@ -25,6 +27,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectGithubController;
 use App\Http\Controllers\ProjectTemplateController;
+use App\Http\Controllers\PublicLeadFormController;
 use App\Http\Controllers\PublicPlanController;
 use App\Http\Controllers\PublicReleaseController;
 use App\Http\Controllers\PushSubscriptionController;
@@ -110,6 +113,14 @@ Route::get('/share/snippet-collections/{uuid}', [SnippetController::class, 'show
 
 // Embed test page (same-origin; use this URL to verify iframe works)
 Route::get('/embed-test/{helpdesk:uuid}', [HelpdeskWidgetController::class, 'embedTestPage'])->name('helpdesks.embed-test');
+
+// Public lead forms (BRAI-93): page to promote, iframe embed, submit + analytics (no CSRF: f/*)
+Route::prefix('f/{publicSlug}')->where(['publicSlug' => '[a-z0-9-]{3,60}'])->group(function () {
+    Route::get('/', [PublicLeadFormController::class, 'show'])->middleware('throttle:120,1')->name('lead-forms.public');
+    Route::get('embed', [PublicLeadFormController::class, 'embed'])->middleware('throttle:120,1')->name('lead-forms.embed');
+    Route::post('submit', [PublicLeadFormController::class, 'submit'])->middleware('throttle:10,1')->name('lead-forms.submit');
+    Route::post('events', [PublicLeadFormController::class, 'event'])->middleware('throttle:120,1')->name('lead-forms.events');
+});
 
 // Public helpdesk widget and portal (no auth, CORS for embedding on external sites)
 Route::middleware('cors')->group(function () {
@@ -197,6 +208,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Workspace-scoped routes
     Route::prefix('workspaces/{workspace}')->group(function () {
         Route::get('users', [WorkspaceController::class, 'users'])->name('workspaces.users.index');
+        Route::get('lead-form-templates', [LeadFormController::class, 'templates'])->name('lead-form-templates.index');
         Route::get('members/{user}', [WorkspaceController::class, 'memberProfile'])->name('workspaces.members.profile');
 
         // AI settings & generation
@@ -359,6 +371,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::patch('task-lists/{taskList:slug}/items/{item}', [TaskListController::class, 'updateItem'])->name('task-lists.items.update');
             Route::delete('task-lists/{taskList:slug}/items/{item}', [TaskListController::class, 'destroyItem'])->name('task-lists.items.destroy');
             Route::post('task-lists/{taskList:slug}/items/{item}/duplicate', [TaskListController::class, 'duplicateItem'])->name('task-lists.items.duplicate');
+
+            // Lead forms (BRAI-93), each with its own leads board
+            Route::post('lead-forms', [LeadFormController::class, 'store'])->name('lead-forms.store');
+            Route::get('lead-forms/{leadForm:slug}', [LeadFormController::class, 'show'])->name('lead-forms.show');
+            Route::put('lead-forms/{leadForm:slug}', [LeadFormController::class, 'update'])->name('lead-forms.update');
+            Route::delete('lead-forms/{leadForm:slug}', [LeadFormController::class, 'destroy'])->name('lead-forms.destroy');
+            Route::post('lead-forms/{leadForm:slug}/publish', [LeadFormController::class, 'publish'])->name('lead-forms.publish');
+            Route::delete('lead-forms/{leadForm:slug}/publish', [LeadFormController::class, 'unpublish'])->name('lead-forms.unpublish');
+            Route::post('lead-forms/{leadForm:slug}/assets', [LeadFormController::class, 'uploadAsset'])->middleware('throttle:30,1')->name('lead-forms.assets');
+            Route::post('lead-forms/{leadForm:slug}/inbound-token', [LeadFormController::class, 'rotateInboundToken'])->name('lead-forms.inbound-token');
+            Route::delete('lead-forms/{leadForm:slug}/inbound-token', [LeadFormController::class, 'revokeInboundToken'])->name('lead-forms.inbound-token.revoke');
+            Route::get('lead-forms/{leadForm:slug}/analytics', [LeadFormController::class, 'analytics'])->name('lead-forms.analytics');
+            Route::post('lead-forms/{leadForm:slug}/columns', [LeadFormController::class, 'storeColumn'])->name('lead-forms.columns.store');
+            Route::post('lead-forms/{leadForm:slug}/columns/reorder', [LeadFormController::class, 'reorderColumns'])->name('lead-forms.columns.reorder');
+            Route::put('lead-forms/{leadForm:slug}/columns/{column}', [LeadFormController::class, 'updateColumn'])->whereNumber('column')->name('lead-forms.columns.update');
+            Route::delete('lead-forms/{leadForm:slug}/columns/{column}', [LeadFormController::class, 'destroyColumn'])->whereNumber('column')->name('lead-forms.columns.destroy');
+            Route::patch('lead-forms/{leadForm:slug}/leads/{lead}/move', [LeadController::class, 'move'])->whereNumber('lead')->name('leads.move');
+            Route::patch('lead-forms/{leadForm:slug}/leads/{lead}', [LeadController::class, 'update'])->whereNumber('lead')->name('leads.update');
+            Route::delete('lead-forms/{leadForm:slug}/leads/{lead}', [LeadController::class, 'destroy'])->whereNumber('lead')->name('leads.destroy');
 
             // Helpdesks (nested under projects)
             Route::post('helpdesks', [HelpdeskController::class, 'store'])->name('helpdesks.store');

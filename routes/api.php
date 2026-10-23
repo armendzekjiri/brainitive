@@ -4,6 +4,7 @@ use App\Http\Controllers\CliController;
 use App\Http\Controllers\Extension\CaptureController;
 use App\Http\Controllers\Extension\ExtensionController;
 use App\Http\Controllers\GithubWebhookController;
+use App\Http\Controllers\LeadFormInboundController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\RejectCaptureTokens;
 use Illuminate\Support\Facades\Route;
@@ -61,3 +62,7 @@ Route::post('/webhooks/github/{uuid}', GithubWebhookController::class)
     ->middleware('throttle:120,1')
     ->where('uuid', '[0-9a-fA-F-]{36}')
     ->name('webhooks.github');
+
+// Lead forms: other tools push leads (Bearer = the form's inbound token)
+Route::post('/lead-forms/{uuid}/inbound', [LeadFormInboundController::class, 'store'])
+    ->whereUuid('uuid')->middleware('throttle:60,1')->name('lead-forms.inbound');
