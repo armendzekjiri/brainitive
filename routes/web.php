@@ -7,6 +7,7 @@ use App\Http\Controllers\BoardViewController;
 use App\Http\Controllers\BookmarkController;
 use App\Http\Controllers\CalendarConnectionController;
 use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\CaptureInboxController;
 use App\Http\Controllers\CommandPaletteController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\HelpdeskController;
@@ -161,6 +162,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/work-timer', [WorkTimerController::class, 'start'])->name('work-timer.start');
     Route::post('/work-timer/stop', [WorkTimerController::class, 'stop'])->name('work-timer.stop');
     Route::delete('/work-timer', [WorkTimerController::class, 'discard'])->name('work-timer.discard');
+
+    // Quick capture (BRAI-70): private inbox of ideas, organized later into content
+    Route::get('/captures', [CaptureInboxController::class, 'index'])->name('captures.index');
+    Route::post('/captures', [CaptureInboxController::class, 'store'])->middleware('throttle:60,1,captures.store')->name('captures.store');
+    Route::get('/captures/destinations', [CaptureInboxController::class, 'destinations'])->middleware(ReadOnlySession::class)->name('captures.destinations');
+    Route::patch('/captures/{capture}', [CaptureInboxController::class, 'update'])->name('captures.update');
+    Route::delete('/captures/{capture}', [CaptureInboxController::class, 'destroy'])->name('captures.destroy');
+    Route::post('/captures/{capture}/archive', [CaptureInboxController::class, 'archive'])->name('captures.archive');
+    Route::post('/captures/{capture}/restore', [CaptureInboxController::class, 'restore'])->name('captures.restore');
+    Route::get('/captures/{capture}/preview', [CaptureInboxController::class, 'preview'])->middleware(ReadOnlySession::class)->name('captures.preview');
+    Route::post('/captures/{capture}/convert', [CaptureInboxController::class, 'convert'])->middleware('throttle:60,1,captures.convert')->name('captures.convert');
 
     // Share links for docs and issues (people who can edit them)
     Route::get('/share-links', [ShareLinkController::class, 'index'])->name('share-links.index');
