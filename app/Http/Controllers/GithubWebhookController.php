@@ -6,7 +6,6 @@ use App\Jobs\ProcessGithubDelivery;
 use App\Models\GithubConnection;
 use App\Models\GithubDelivery;
 use App\Support\Github\DevelopmentSync;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -42,21 +41,18 @@ class GithubWebhookController extends Controller
             return response()->json(['message' => 'Ignored.'], 202);
         }
 
-        try {
-            $delivery = GithubDelivery::create([
-                'github_connection_id' => $connection->id,
-                'delivery_id' => $deliveryId,
-                'event' => $event,
-                'payload' => $body,
-            ]);
-        } catch (UniqueConstraintViolationException) {
-            $existing = $connection->deliveries()->where('delivery_id', $deliveryId)->first();
-            if ($existing?->status !== 'failed') {
+        // createOrFirst: the insert runs in a savepoint, so a duplicate doesn't abort an
+        // enclosing Postgres transaction
+        $delivery = GithubDelivery::createOrFirst(
+            ['github_connection_id' => $connection->id, 'delivery_id' => $deliveryId],
+            ['event' => $event, 'payload' => $body],
+        );
+        if (! $delivery->wasRecentlyCreated) {
+            if ($delivery->status !== 'failed') {
                 return response()->json(['message' => 'Already received.'], 200);
             }
             // GitHub "Redeliver" of a failed delivery: process it again.
-            $existing->update(['status' => 'pending', 'error' => null]);
-            $delivery = $existing;
+            $delivery->update(['status' => 'pending', 'error' => null]);
         }
 
         $connection->forceFill(['last_delivery_at' => now(), 'last_event' => $event])->save();

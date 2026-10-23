@@ -81,8 +81,9 @@ class ItemCommentToolsTest extends TestCase
     public function test_pagination_is_chronological_without_gaps_or_duplicates(): void
     {
         $item = $this->item();
+        $ids = [];
         foreach (range(1, 5) as $n) {
-            $item->comments()->create(['user_id' => $this->editor->id, 'body' => "<p>Comment {$n}</p>"]);
+            $ids[] = $item->comments()->create(['user_id' => $this->editor->id, 'body' => "<p>Comment {$n}</p>"])->id;
         }
 
         $seen = [];
@@ -95,7 +96,7 @@ class ItemCommentToolsTest extends TestCase
                 $seen[] = trim($c['markdown']);
             }
             $cursor = $content['next_cursor'] !== '' ? (int) $content['next_cursor'] : null;
-            if ($cursor === 4) {
+            if ($cursor === $ids[3]) { // ids, not positions: Postgres sequences don't restart per test
                 // A comment added while paginating appears at the end, not in the middle.
                 $item->comments()->create(['user_id' => $this->editor->id, 'body' => '<p>Comment 6</p>']);
             }

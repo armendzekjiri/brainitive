@@ -59,8 +59,8 @@ class ProjectIssues
 
         return $query
             ->when($search !== '', fn (Builder $q) => $q->where(fn (Builder $q) => $q
-                ->where('title', 'like', "%{$search}%")
-                ->orWhere('key', 'like', "%{$search}%")))
+                ->whereLike('title', "%{$search}%")
+                ->orWhereLike('key', "%{$search}%")))
             ->latest('updated_at')
             ->limit($limit)
             ->get();
