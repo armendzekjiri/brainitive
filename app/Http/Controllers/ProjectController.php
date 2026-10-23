@@ -59,8 +59,9 @@ class ProjectController extends Controller
 
         return Inertia::render('Projects/Create', [
             'workspace' => $workspace,
-            // Built-in and workspace templates to start from (BRAI-72)
-            'templates' => TemplateRuns::catalog($workspace, auth()->user()),
+            // Built-in and workspace templates to start from (BRAI-72 / BRAI-91)
+            'templates' => $templates = TemplateRuns::catalog($workspace, auth()->user()),
+            'categories' => TemplateRuns::categories($templates),
         ]);
     }
 

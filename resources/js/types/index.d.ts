@@ -305,6 +305,16 @@ export interface ProjectTemplateSummary {
     labels: number;
     fields: string[];
     item_types: string[];
+    /** Detail view of the gallery (BRAI-91). */
+    issue_types?: string[];
+    sample_issues?: { title: string; type: string; subtask: boolean }[];
+    doc_names?: string[];
+    label_names?: string[];
+}
+
+export interface ProjectTemplateCategory {
+    key: string;
+    name: string;
 }
 
 /** A template on the "New project" page: built-in or saved in the workspace (BRAI-72). */
@@ -312,6 +322,9 @@ export interface ProjectTemplateOption {
     /** "builtin:<key>" or "template:<uuid>" — sent as `template` when creating. */
     id: string;
     source: 'builtin' | 'workspace';
+    /** Gallery category key (BuiltinTemplates::CATEGORIES, or "workspace"). */
+    category: string;
+    tags: string[];
     name: string;
     description: string | null;
     icon: string;

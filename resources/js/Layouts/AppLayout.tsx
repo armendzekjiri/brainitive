@@ -102,6 +102,7 @@ import {
 } from '@/components/ui/select';
 import { flattenPagesForParentSelect } from '@/lib/pageTree';
 import { GlobalCreateModal } from '@/components/GlobalCreateModal';
+import CreateProjectDialog, { openCreateProject } from '@/components/projects/CreateProjectDialog';
 
 interface Props extends PropsWithChildren {
     title?: string;
@@ -319,7 +320,7 @@ function ProjectSwitcher({
                 ))}
                 <DropdownMenuSeparator className="my-2" />
                 <DropdownMenuItem
-                    onClick={() => router.visit(route('projects.create', workspace.slug))}
+                    onClick={() => openCreateProject()}
                     className="flex items-center gap-3 p-2 cursor-pointer rounded-md text-primary"
                 >
                     <div className="size-6 rounded-md border-2 border-dashed border-primary/50 flex items-center justify-center">
@@ -1703,12 +1704,10 @@ function AppSidebar({
                             </div>
                             <p className="text-sm font-medium mb-1">No projects yet</p>
                             <p className="text-xs text-muted-foreground mb-4">Create your first project to get started</p>
-                            <Link href={route('projects.create', currentWorkspace.slug)}>
-                                <Button size="sm" className="w-full">
-                                    <Plus className="size-4 mr-1.5" />
-                                    Create Project
-                                </Button>
-                            </Link>
+                            <Button size="sm" className="w-full" onClick={() => openCreateProject()}>
+                                <Plus className="size-4 mr-1.5" />
+                                Create Project
+                            </Button>
                         </div>
                     </div>
                 ) : null}
@@ -2069,6 +2068,15 @@ export default function AppLayout({ children, title }: Props) {
         // ── Create ──────────────────────────────────────────────────────────
         ...(currentWorkspace ? [
             {
+                id: 'create-project',
+                label: 'Create Project',
+                keywords: 'new add project template scrum kanban marketing',
+                description: 'Start a project from a template or blank',
+                icon: <CmdIcon color="#6366F1"><FolderKanban className="size-4" /></CmdIcon>,
+                group: 'Create',
+                action: () => { openCreateProject(); },
+            },
+            {
                 id: 'create-item',
                 label: 'Create Issue',
                 keywords: 'new add issue task card',
@@ -2220,6 +2228,7 @@ export default function AppLayout({ children, title }: Props) {
                     />
                 </>
             )}
+            <CreateProjectDialog workspace={currentWorkspace ?? null} />
             <HelpModal open={helpModalOpen} onOpenChange={setHelpModalOpen} />
             <GlobalStickyNotes />
             <WelcomeModal />

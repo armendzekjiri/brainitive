@@ -400,6 +400,9 @@ class TemplateDocument
     public static function summary(array $doc): array
     {
         $itemsPerBoard = array_count_values(array_column($doc['items'], 'board'));
+        $typeNames = array_column($doc['item_types'], 'name', 'ref');
+        $typeName = fn (?string $ref) => $ref === null ? 'Task'
+            : ($typeNames[$ref] ?? (str_starts_with($ref, 'slug:') ? ucfirst(str_replace(['-', '_'], ' ', substr($ref, 5))) : 'Task'));
 
         return [
             'boards' => array_map(fn ($board) => [
@@ -416,6 +419,11 @@ class TemplateDocument
             'labels' => count($doc['labels']),
             'fields' => array_column($doc['fields'], 'name'),
             'item_types' => array_column($doc['item_types'], 'name'),
+            // Detail view of the template gallery
+            'issue_types' => array_values(array_unique(array_map(fn ($item) => $typeName($item['type']), $doc['items']))),
+            'sample_issues' => array_map(fn ($item) => ['title' => $item['title'], 'type' => $typeName($item['type']), 'subtask' => $item['parent'] !== null], array_slice($doc['items'], 0, 8)),
+            'doc_names' => array_slice(array_column(array_filter($doc['pages'], fn ($p) => $p['type'] === 'page'), 'name'), 0, 10),
+            'label_names' => array_slice(array_column($doc['labels'], 'name'), 0, 12),
         ];
     }
 
