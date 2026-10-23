@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { router, Link } from '@inertiajs/react';
 import CompleteSubtasksDialog from '@/components/item/CompleteSubtasksDialog';
 import DuplicateItemDialog from '@/components/item/DuplicateItemDialog';
+import ShareButton from '@/components/share/ShareButton';
 import { itemTree, MAX_ITEM_DEPTH } from '@/lib/itemTree';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -1688,9 +1689,12 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                 }}
             />
             <div className="border-t pt-3">
-                <Button variant="ghost" size="sm" className="h-8 gap-2 text-muted-foreground hover:text-foreground" onClick={() => setDuplicating(true)}>
-                    <Copy className="size-3.5" /> Duplicate
-                </Button>
+                <div className="flex flex-wrap items-center gap-1">
+                    <Button variant="ghost" size="sm" className="h-8 gap-2 text-muted-foreground hover:text-foreground" onClick={() => setDuplicating(true)}>
+                        <Copy className="size-3.5" /> Duplicate
+                    </Button>
+                    <ShareButton type="item" id={String(item.id)} label={item.key} className="h-8 gap-2 text-muted-foreground hover:text-foreground" />
+                </div>
                 <DuplicateItemDialog
                     open={duplicating}
                     onOpenChange={setDuplicating}

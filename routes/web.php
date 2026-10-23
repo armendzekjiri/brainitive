@@ -23,6 +23,7 @@ use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\PublicPlanController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\SearchController;
+use App\Http\Controllers\ShareLinkController;
 use App\Http\Controllers\SnippetController;
 use App\Http\Controllers\SprintController;
 use App\Http\Controllers\TaskListController;
@@ -93,6 +94,8 @@ Route::get('/share/bookmarks/{uuid}', [BookmarkController::class, 'showPublic'])
 // Public snippet share views (no auth)
 Route::get('/share/snippets/{uuid}', [SnippetController::class, 'showPublicSnippet'])->name('snippets.public.show');
 Route::get('/share/plans/{token}', [PublicPlanController::class, 'show'])->name('plans.public');
+// Read-only link to one doc / issue (ShareLink); no login
+Route::get('/s/{token}', [ShareLinkController::class, 'show'])->where('token', '[A-Za-z0-9]{20,64}')->middleware('throttle:120,1')->name('share.show');
 Route::get('/share/snippet-collections/{uuid}', [SnippetController::class, 'showPublicCollection'])->name('snippet-collections.public.show');
 
 // Embed test page (same-origin; use this URL to verify iframe works)
@@ -128,6 +131,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // My Work — assigned items across all workspaces
     Route::get('/my-work', [MyWorkController::class, 'index'])->name('my-work.index');
+
+    // Share links for docs and issues (people who can edit them)
+    Route::get('/share-links', [ShareLinkController::class, 'index'])->name('share-links.index');
+    Route::post('/share-links', [ShareLinkController::class, 'store'])->middleware('throttle:30,1')->name('share-links.store');
+    Route::delete('/share-links/{shareLink}', [ShareLinkController::class, 'destroy'])->name('share-links.destroy');
 
     // Poll votes (polls inside docs / issue descriptions)
     Route::get('/polls/{scopeType}/{scopeId}/{pollId}', [PollVoteController::class, 'show'])

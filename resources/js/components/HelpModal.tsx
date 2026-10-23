@@ -76,6 +76,17 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.22.0',
+        title: 'Share Docs and Issues',
+        tag: 'Feature',
+        date: '2026-10-23',
+        items: [
+            'Share a doc or an issue with anyone through a read-only link — from the Share button on the doc or in the issue panel.',
+            'The link shows only that doc or issue: no comments, people, other content or unpublished drafts.',
+            'Links can expire (1, 7, 30 or 90 days) and be revoked any time; you see who created each link and how often it was opened.',
+        ]
+    },
+    {
         version: 'v1.21.0',
         title: 'Nested Subtasks',
         tag: 'Feature',
