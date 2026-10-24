@@ -17,6 +17,7 @@ use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\ItemFieldController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LeadFormController;
+use App\Http\Controllers\MeetingNotesController;
 use App\Http\Controllers\MyDayController;
 use App\Http\Controllers\MyWorkController;
 use App\Http\Controllers\NotificationController;
@@ -353,6 +354,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('boards/{board:slug}/items/{item}/comments', [BoardController::class, 'storeComment'])->name('boards.items.comments.store');
             Route::post('boards/{board:slug}/items/{item}/attachments', [BoardController::class, 'storeAttachment'])->name('boards.items.attachments.store');
             Route::delete('boards/{board:slug}/items/{item}/attachments/{attachment}', [BoardController::class, 'destroyAttachment'])->name('boards.items.attachments.destroy');
+
+            // Meeting notes → issues (BRAI-62): AI proposals, reviewed, then created once
+            Route::get('meeting-notes/options', [MeetingNotesController::class, 'options'])->middleware(ReadOnlySession::class)->name('meeting-notes.options');
+            Route::post('meeting-notes/extract', [MeetingNotesController::class, 'extract'])->middleware('throttle:10,1,meeting-notes.extract')->name('meeting-notes.extract');
+            Route::post('meeting-notes/create', [MeetingNotesController::class, 'store'])->middleware('throttle:30,1,meeting-notes.store')->name('meeting-notes.store');
 
             // Linked content and backlinks between issues, docs, tickets and plans (BRAI-71)
             Route::get('references', [ContentReferenceController::class, 'index'])->middleware(ReadOnlySession::class)->name('references.index');

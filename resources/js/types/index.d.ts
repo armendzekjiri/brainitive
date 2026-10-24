@@ -994,3 +994,68 @@ export interface ContentReferenceList {
 export interface ContentReferenceCandidate extends ContentReferenceSummary {
     linked: boolean;
 }
+
+/** Meeting notes → issues (BRAI-62): what the dialog needs (`meeting-notes.options`). */
+export interface MeetingNotesOptions {
+    ai_configured: boolean;
+    can_configure_ai: boolean;
+    settings_url: string;
+    /** Boards of the project the user can add issues to. */
+    boards: { id: number; name: string }[];
+    /** People who can open the project — the only possible assignees. */
+    members: { id: number; name: string }[];
+    timezone: string;
+    source: MeetingNotesSourceInfo | null;
+    limits: { max_chars: number; max_proposals: number };
+}
+
+export interface MeetingNotesSourceInfo {
+    uuid: string;
+    title: string | null;
+    /** Editors read their unpublished changes; everyone else the live doc. */
+    uses_draft: boolean;
+    length?: number;
+    too_long?: boolean;
+}
+
+export interface MeetingNotesAssignee {
+    /** The name as written in the notes. */
+    mention: string;
+    status: 'matched' | 'ambiguous' | 'unknown';
+    user_id: number | null;
+    /** Members the name could mean (ambiguous only). */
+    candidates: { id: number; name: string }[];
+}
+
+/** One proposed action item — nothing exists until the user clicks Create. */
+export interface MeetingNotesProposal {
+    temp_id: string;
+    title: string;
+    description: string;
+    /** The sentence in the notes this comes from (checked against the notes). */
+    excerpt: string;
+    assignee: MeetingNotesAssignee | null;
+    due: { text: string; date: string | null; status: 'set' | 'needs_meeting_date' | 'unclear' } | null;
+    /** temp_id of an earlier proposal with the same title / quote */
+    duplicate_of: string | null;
+    /** An open issue on the destination board with the same title */
+    existing: { id: number; key: string; title: string; url: string } | null;
+    selected: boolean;
+}
+
+export interface MeetingNotesExtraction {
+    proposals: MeetingNotesProposal[];
+    /** Suggestions whose quote wasn't found in the notes (dropped, never shown as tasks). */
+    dropped: number;
+    truncated: boolean;
+    board: { id: number; name: string };
+    source: MeetingNotesSourceInfo | null;
+}
+
+export interface MeetingNotesCreateResult {
+    count: number;
+    items: { id: number; key: string; title: string; url: string }[];
+    board_url: string;
+    /** A retry of a Create that already went through: nothing new was created. */
+    replayed: boolean;
+}
