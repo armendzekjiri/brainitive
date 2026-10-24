@@ -2,6 +2,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import { PageProps, MyWorkProject, MyWorkItem, MyDayPlan } from '@/types';
 import MyDaySection from '@/components/MyDaySection';
+import WorkDoneToggle from '@/components/WorkDoneToggle';
 import { toast } from 'sonner';
 import { Sun } from 'lucide-react';
 import { ProjectIcon } from '@/components/ProjectIcon';
@@ -13,7 +14,6 @@ import {
     AlertCircle,
     CalendarDays,
     LayoutGrid,
-    CheckCircle2,
     Inbox,
 } from 'lucide-react';
 
@@ -165,14 +165,9 @@ function ItemRow({
                 isDone && 'opacity-70',
             )}
         >
-            <span
-                className={cn(
-                    'hidden size-4 place-items-center rounded-full border bg-card md:grid',
-                    isDone ? 'border-green-500 bg-green-50 text-green-600' : 'border-border group-hover:border-primary',
-                )}
-                aria-hidden
-            >
-                {isDone && <CheckCircle2 className="size-4" />}
+            {/* above the stretched title link, like the ☀ button */}
+            <span className="relative z-10 hidden md:grid">
+                <WorkDoneToggle item={item} workspaceSlug={workspaceSlug} projectSlug={projectSlug} />
             </span>
 
             <span className="font-mono text-[11px] font-medium tracking-normal text-muted-foreground">

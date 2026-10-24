@@ -6,11 +6,14 @@ use App\Models\ActivityLog;
 use App\Models\Comment;
 use App\Models\Item;
 use App\Models\User;
+use App\Support\Events\DomainEvents;
+use App\Support\Events\EventPayloads;
+use App\Support\Notifications\ItemCommentNotifications;
 use Illuminate\Support\Str;
 
 /**
  * Add a comment to an issue with the same side effects everywhere (board UI, MCP): history
- * entry and mention notifications, exactly once.
+ * entry, mention notifications and item_commented for watchers / assignee / reporter, exactly once.
  */
 class ItemComments
 {
@@ -28,7 +31,11 @@ class ItemComments
             'excerpt' => Str::limit(trim(strip_tags($html)), 120),
         ]);
 
-        ItemMentions::notify($html, $item, $author);
+        // Mentioned people get the mention; everyone else involved gets "commented on" (BRAI-103)
+        $mentioned = ItemMentions::notify($html, $item, $author);
+        ItemCommentNotifications::notify($item, $comment, $author, $mentioned);
+
+        DomainEvents::emit(EventPayloads::itemWorkspaceId($item), 'item.commented', fn () => EventPayloads::comment($comment, $item), $author); // webhooks (BRAI-104)
 
         return $comment;
     }

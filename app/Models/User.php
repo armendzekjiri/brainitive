@@ -40,6 +40,8 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
         'calendar_view',
         'timezone',
         'task_digest',
+        'notification_preferences',
+        'sidebar_preferences',
     ];
 
     protected $appends = ['avatar_display'];
@@ -68,6 +70,8 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
             'password' => 'hashed',
             'onboarding_state' => 'array',
             'task_digest' => 'boolean',
+            'notification_preferences' => 'array',
+            'sidebar_preferences' => 'array',
         ];
     }
 

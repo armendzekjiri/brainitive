@@ -4,13 +4,15 @@ namespace App\Notifications;
 
 use App\Models\Item;
 use App\Models\User;
+use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class ItemAssignedNotification extends Notification
 {
-    use Queueable, SendsWebPush;
+    use Queueable, RespectsPreferences, SendsWebPush;
 
     public function __construct(
         public readonly Item $item,
@@ -22,7 +24,7 @@ class ItemAssignedNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        return $this->withWebPush($notifiable, ['database']);
+        return $this->channelsFor($notifiable, 'item_assigned');
     }
 
     public function toWebPush(object $notifiable, $notification)
@@ -67,5 +69,16 @@ class ItemAssignedNotification extends Notification
             'actor_name' => $this->actor->name,
             'actor_avatar' => $this->actor->avatar_display,
         ];
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        $title = NewLeadNotification::plain((string) $this->item->title);
+
+        return (new MailMessage)
+            ->subject("{$this->actor->name} assigned you to {$this->item->key}: {$title}")
+            ->line("{$this->actor->name} assigned you to {$this->item->key}.")
+            ->line($title)
+            ->action('Open issue', $this->toDatabase($notifiable)['item_url']);
     }
 }

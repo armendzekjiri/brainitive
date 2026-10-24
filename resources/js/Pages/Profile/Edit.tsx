@@ -1,9 +1,10 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { PageProps } from '@/types';
+import { NotificationCategoryPreference, PageProps } from '@/types';
 import { Head } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import ConnectedAppsForm, { ConnectedApp } from './Partials/ConnectedAppsForm';
 import DeleteUserForm from './Partials/DeleteUserForm';
+import NotificationPreferencesForm from './Partials/NotificationPreferencesForm';
 import NotificationSettingsForm from './Partials/NotificationSettingsForm';
 import TaskDigestSetting from './Partials/TaskDigestSetting';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm';
@@ -13,7 +14,8 @@ export default function Edit({
     mustVerifyEmail,
     status,
     connectedApps = [],
-}: PageProps<{ mustVerifyEmail: boolean; status?: string; connectedApps?: ConnectedApp[] }>) {
+    notificationCategories = [],
+}: PageProps<{ mustVerifyEmail: boolean; status?: string; connectedApps?: ConnectedApp[]; notificationCategories?: NotificationCategoryPreference[] }>) {
     return (
         <AppLayout>
             <Head title="Profile" />
@@ -38,13 +40,14 @@ export default function Edit({
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card id="notifications" className="scroll-mt-20">
                     <CardHeader>
                         <CardTitle>Notifications</CardTitle>
-                        <CardDescription>Browser push for this device, and your task reminders.</CardDescription>
+                        <CardDescription>Choose what reaches you, and where: in the app, as a browser push, or by email.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                        <NotificationSettingsForm className="max-w-xl" />
+                        <NotificationPreferencesForm categories={notificationCategories} />
+                        <NotificationSettingsForm className="max-w-xl border-t pt-6" />
                         <TaskDigestSetting className="max-w-xl border-t pt-6" />
                     </CardContent>
                 </Card>

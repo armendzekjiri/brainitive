@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\InstanceSettings;
+use App\Notifications\NotificationCatalog;
 use App\Support\Uploads;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
@@ -25,6 +26,7 @@ class ProfileController extends Controller
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail && InstanceSettings::requiresEmailVerification(),
             'status' => session('status'),
             'connectedApps' => $this->connectedApps($request),
+            'notificationCategories' => NotificationCatalog::forUser($request->user()),
         ]);
     }
 

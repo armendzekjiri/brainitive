@@ -110,6 +110,36 @@ then can't create tables in `public` and every PHPUnit test fails with "permissi
 schema public". Use `createdb -h /tmp -O <DB_USERNAME> brainitive_test_<name>` (or `ALTER DATABASE
 … OWNER TO …` + `ALTER SCHEMA public OWNER TO …` on an existing one).
 
+### Outgoing webhooks: sync queue, signature, private targets (v1.39.0, BRAI-104)
+- **Sync queue (dev.brainitive.app, e2e, small self-hosted installs):** `WebhookDispatcher` sends a
+  delivery caused by a web request **after the response** (`dispatch()->afterResponse()`), so a slow or
+  dead endpoint never slows down or breaks the request. Only one attempt there (a sync job can't be
+  released for a retry); Redeliver sends it again. At most 25 per request and 15 s in total, with a
+  5 s timeout per attempt (a bulk action, a template or a slow receiver — also behind the public
+  ticket / lead endpoints — would otherwise hold the PHP worker for minutes); the rest are logged as
+  failed "Not sent" and don't count towards auto-disable. Manual
+  sends (Send test, Redeliver) and console runs go inline (`dispatch_sync`). With a real queue:
+  queued, 4 tries, backoff 30 s / 2 min / 10 min.
+- **Never break the caller:** `DomainEvents` reports (doesn't throw) failures, except in unit tests
+  (`runningUnitTests()`) so payload bugs surface. Deliveries are created in `DB::afterCommit` — a
+  rolled-back change sends nothing.
+- **Signature:** `X-Brainitive-Signature: sha256=` + hex HMAC-SHA256 of `"{X-Brainitive-Timestamp}.{raw body}"`
+  with the webhook secret (timestamped against replays; the BRAI-93 lead-form webhook signs the body
+  only). `X-Brainitive-Delivery` = the delivery uuid; the envelope `id` stays the same on a redelivery.
+- **Private targets** (localhost, 10/8, 169.254…): refused by `OutboundUrl` on save and before every
+  attempt. `WEBHOOKS_ALLOW_PRIVATE_TARGETS` exists for the e2e receiver only and is ignored unless
+  `APP_ENV=e2e` (`WebhookUrl::allowPrivate()`); https is required in production and staging.
+- **Secret:** encrypted + `$hidden`; never an Inertia prop. Returned by store / rotate / reveal as JSON
+  with `Cache-Control: no-store`.
+- **Payloads** carry ids, keys, titles, URLs, status names and people as `{id, name}` — no member
+  emails, no rates (amounts only on `billing_report.*`). Ticket payloads include the contact's name and
+  email and lead payloads the lead's fields (agents / admins see them in the app). Builders never load
+  relations on the caller's model (it may be serialized into the response afterwards).
+- **e2e:** the receiver is a Node server on 127.0.0.1 inside the spec's worker; the spec is skipped
+  against dev.brainitive.app. It deletes its webhook at the end — other journeys create issues in the
+  same workspace in parallel. The crawler (`e2e:crawl`) fills URL fields with `https://example.com/`,
+  so a crawl run can create a webhook that posts to example.com.
+
 ### Quick capture: conversion is idempotent by row lock, not by request id (BRAI-70)
 `CaptureConversion::convert` locks the capture (`lockForUpdate`) inside one transaction; a capture
 that is already processed returns its target (`replayed`, HTTP 200) whatever the second request
@@ -137,7 +167,9 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
 - **Dates:** a deadline is used only if its phrase is in the notes. With a meeting date + timezone
   the model may resolve "by Friday" (accepted from meeting − 31 days to + 2 years); without them a
   date is kept only when the phrase holds the year and the day (a full calendar date). Otherwise the
-  text is shown with a hint and the date stays empty.
+  text is shown with a hint and the date stays empty. The dialog's meeting date **defaults to today**
+  in the user's zone (`options.today`, v1.39.0): with it empty, every "by Friday" stayed without a
+  due date (BRAI-62 feedback). Clearing it keeps the strict full-date rule.
 - **Assignees** match only people who can open the project (project members + workspace admins —
   the set `ProjectMember` accepts): one match is suggested, several are `ambiguous` (Create stays
   disabled until the user picks someone or "Unassigned"), none stays unassigned. No emails are sent
@@ -149,6 +181,30 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
   `…/extract` with `page.route`; Create is real. `page.route` doesn't see requests of a page that a
   service worker controls (`public/sw.js` has a fetch handler), so specs that intercept app requests
   need `test.use({ serviceWorkers: 'block' })`.
+
+### Customisable sidebar: defaults stay invisible, writes are serialised (BRAI-106)
+- **Null means default.** `users.sidebar_preferences` is null until someone changes something, and
+  `SidebarPreferences::apply` stores null again when everything is back to default. Every entry and
+  group is visible by default, so e2e tests and docs that click `link 'Billing' | 'Timesheet' |
+  'Workload' | 'Inbox'` keep working. Hiding is opt-in, and Home + Inbox can't be hidden.
+- **Lost updates.** Two saves of the same user (two tabs, or parallel e2e workers signed in as the
+  owner) used to read-modify-write the JSON and drop each other's change. `apply` now re-reads the
+  column under `lockForUpdate()` inside a transaction, and the frontend store queues its PATCHes.
+- **Pins are filtered twice:** on save (`visiblePins`: right project, exists, page visible to the
+  user) and on render (resolved against the permission-filtered sidebar payload). A pin to content
+  the user lost access to stays stored but never shows.
+- **e2e isolation:** per-user settings (`hidden_nav`) are global for that user. Journeys that change
+  them run as the member and reset in `finally`; per-project settings and pins use a fresh project
+  (`createBlankProject`), so other specs keep the seeded project's default sidebar.
+- **Accessible names on the project page:** the header quick links are named "Project health /
+  workload / releases" (not "Health"), otherwise `link 'Workload', exact` would match twice. Pinned
+  and Recently updated rows use no h3, so `helpdesk.spec.ts`'s card locator (link with an h3) stays
+  unique. Every sidebar row now has a `Pin <name>` button, so a non-exact
+  `getByRole('button', { name: 'Share' })` also matches "Pin Shared doc…": use `exact: true` for
+  generic button names (content.spec's Share button was the one case).
+- **Store hydration is silent.** `useSidebarPreferences()` assigns the new server value during render
+  (no listener notification) to avoid "update a component while rendering another"; while a write is
+  in flight the optimistic state wins over the incoming prop.
 
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
@@ -172,6 +228,30 @@ board access (every policy check starts with BoardPolicy::view).
 - Compare views on normalized params: the server stores `quick` in its fixed order, so the client
   serializes it in the same order (`QUICK_FILTERS`), not click order.
 
+### Bulk edit in the board list view goes through the model, once per issue (BRAI-108)
+`PATCH|DELETE boards/{board}/items/bulk` (`BoardBulkItemController` → `Support/Boards/BulkItemEdit`)
+changes up to 200 issues of **this** board (one query loads them; a missing, deleted or foreign
+id fails `item_ids`, no per-id `exists` rule). Queries grow by a small constant per issue
+(asserted in `BulkItemEditTest`): eager-load and resolve shared lookups once, never per issue.
+- **One `save()` per issue**, all fields at once, so `ItemObserver` writes one history entry per
+  issue (`moved` / `assigned` / `updated`) and any observer hook (notifications, webhooks) fires
+  once per issue, never once per field. Labels are a pivot: one `labels_changed` entry per issue; a
+  sprint move is a second save (`moveToSprint`), so it adds its own entry.
+- **Authorization:** `ItemPolicy::update` depends only on the project, so one check covers all issues;
+  `delete` is checked per issue (creators may delete their own) unless the user may delete any issue.
+  One forbidden issue = 403 for the whole request, nothing changes. The page gets `canDeleteAnyItem` (policy probe with an unsaved
+  item) so the bar disables Delete instead of hitting that 403 (Inertia would show an error modal).
+- **Status** follows `Item::moveToColumn` (`completed_at` set on entering a done column, cleared on
+  leaving) but an issue that is already done keeps its date. Moved cards go to the bottom of the
+  column. Subtasks aren't completed with their parent (no prompt in bulk).
+- **Sprint** uses `moveToSprint()` (subtree travels along); selected subtasks are skipped and
+  counted in the flash ("follow their parent's sprint"). Kanban boards refuse `sprint_id`.
+- **Notifications:** "assigned you" comes from `ItemObserver` → `Support/Notifications/Assignments`
+  (after commit, never for yourself), like every other path; the bulk code sends none itself.
+  `ItemStatusChangedNotification` goes to watchers (≠ actor) after the commit, the same rule as
+  `BoardController::moveItem` (`BulkItemEdit::notifyStatusChange()`).
+- `bulk` routes are registered **before** `items/{item}`; otherwise `bulk` would bind as an item id.
+
 ### Explicit route binders run before implicit ones
 In `Route::bind('page' | 'bookmark', …)` the `{workspace}` / `{project}` parameters are still raw
 slugs — an `instanceof Project` check there is always false. `AppServiceProvider::routeProject()` /
@@ -183,8 +263,9 @@ Policies give workspace *editors* edit rights only in projects they can open
 (`hasProjectAccess`) — workspace *admins* everywhere. A workspace editor outside a project must
 not create items, tasks, plans, releases or tickets there (CLI and extension included).
 User ids from requests (assignees, watchers) use `App\Rules\ProjectMember`, never just
-`exists:users,id` (that lets anyone look up any account). Notification links are app paths only
-(`NotificationController::appPath`, `safeAppHref` in `NotificationMessage.tsx`, `public/sw.js`).
+`exists:users,id` (that lets anyone look up any account). Notification links are built server-side with `route()` and
+the UI opens app paths only (`safeAppHref` in `NotificationMessage.tsx`, `public/sw.js`); the
+old client-called `notify-mention` endpoint is gone (mentions are sent when content is saved).
 `Workspace::$hidden = ['settings']` (AI endpoint + encrypted key) — read AI config server-side.
 
 ### Uploads keep only allowlisted extensions
@@ -306,6 +387,24 @@ some clients (ChatGPT connectors) ignore `nextCursor`, so a tool on page 2 would
 "missing." Keep these above the tool count when adding tools.
 
 ---
+
+### Admin insights: aggregates per tab, never per project (BRAI-105, 2026-10-24)
+- **Same counting as project health.** Issue = live issue/subtask on a live board; done = `completed_at` or
+  a done column; overdue = open and due before the viewer's today. The SQL lives once in
+  `Support/Insights/InsightsQueries` — change a definition there and in `HealthMetrics` together.
+- **No `HealthMetrics` per project.** It runs ~5 queries per project; Insights → Projects groups the same
+  numbers by `boards.project_id` in one query, and "health" is the latest saved report's status (a person's
+  choice; the app never computes one). Every tab has a fixed query count, asserted in `InsightsTest`
+  (overview 8, team 6, projects 4, helpdesk 7, usage 6). No cache.
+- **Ranges are local days.** `from`/`to` are the viewer's dates; SQL compares `[startUtc, endUtc)`. Weekly
+  buckets group by the local day (`at time zone` on Postgres; UTC date elsewhere) and **`group by 1`**:
+  Postgres treats the select's and the group by's `?` as different expressions and refuses the query.
+- **Definitions that may surprise:** completion rate = share of the issues *created* in the range that are
+  done now (bounded 0–100 %); median cycle time = median `completed_at − created_at` of the issues *completed*
+  in the range; storage counts files of soft-deleted issues/tickets (still on disk); the lead funnel only
+  reaches back 90 days (`lead_form_events` are pruned).
+- **e2e numbers are per project.** The shared e2e workspace grows with every parallel spec, so
+  `insights.spec.ts` picks its own new project in the filter before asserting numbers.
 
 ## Known issues / watch-outs
 
@@ -482,14 +581,60 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
     `UniqueConstraintViolationException` and querying on.
   - **Sequences don't restart between tests** (rollback keeps them), so never hard-code ids
     like `=== 4`. Keep the created model's id.
-- **Notification payloads are rendered in one place.** `components/NotificationMessage.tsx`
-  maps every `data.type` to a sentence. The bell and the page used to fall back to
-  "{actor} moved {item_key}", so ticket notifications (`ticket_*`, with no `item_*` keys)
-  showed as "moved". Add a case for each new type.
+- **Notification payloads are rendered in one place.** `describeNotification()` in
+  `components/NotificationMessage.tsx` turns a payload into a row. The bell and the page used to fall
+  back to "{actor} moved {item_key}", so ticket notifications (`ticket_*`, with no `item_*` keys)
+  showed as "moved". Since BRAI-102, unknown types render from the payload contract keys (`title`,
+  `body`, `url`, `actor_*`, `project_name`, `subject_key`): give new types those keys instead of a
+  frontend case. Old rows keep their old keys forever (they are only pruned after 180 days).
+- **Notifications inbox invariants (BRAI-102).** An archived notification is always read (archive
+  sets `read_at`; "mark unread" clears `archived_at` too), so the shared `unreadNotificationsCount`
+  and `unreadNotifications()` never need an `archived_at` filter. Filtering by category reads
+  `data->type` from the `text` column (`data::jsonb ->> 'type'` on Postgres, `json_extract` on
+  SQLite — `NotificationController::whereDataType`). `NotificationCatalog::category()` throws on
+  unknown types; listing code uses `TYPES[$type] ?? null` instead. Only the bell owns the tab-title
+  badge (`useUnreadCount({ manageTitle: true })`): two owners rewrite each other's title forever
+  through the MutationObserver and crash the tab.
+- **Tailwind only scans `.tsx` files** (`tailwind.config.js` content). Class names that live in a
+  `.ts` file (a style map, a constants file) are never generated — that's why
+  `components/notifications/categories.tsx` is a `.tsx`.
+- **New files under `resources/js/components/` on macOS:** git's index has both `Components/` (old
+  Breeze files) and `components/`. A plain `git add` may record a new file under `Components/`,
+  which breaks the `@/components` import on Linux (CI). Add with
+  `git -c core.ignorecase=false add resources/js/components/...` and check `git ls-files`.
+- **Notification coverage (BRAI-103, v1.39.0): who is told, and never twice.**
+  - **Assignments fire from the observers, nowhere else.** `ItemObserver::created/updated` (on an
+    `assigned_to` change) → `Support\Notifications\Assignments::item()` sends `ItemAssignedNotification`;
+    `TaskListItemObserver` → `Assignments::task()` sends `task_assigned`. So the board UI, bulk edit,
+    MCP create/update, meeting-note action items, plan import, whiteboard cards and duplicates all
+    notify exactly once. `BoardController::storeItem/updateItem` no longer send it: don't add a
+    controller-side send back. Leads: `LeadController::update` → `Assignments::lead()`.
+  - **The actor is `auth()->user()`.** Without one (seeders, `E2eSeeder`, console) assignment
+    notifications stay silent; assigning yourself is silent; assignees without project access are
+    skipped. Sent with `DB::afterCommit`, so a rolled-back import tells nobody.
+  - **Mentions are diffed.** `ItemMentions::notify($html, $item, $actor, $previousHtml)` only tells
+    people new compared with the previous description (re-saving re-notified everyone before).
+    Page mentions are sent **on save** by `Page::saveDraft()` → `PageMentions` (diff of the content
+    before the save), no longer at insert time from the editor (the old `notify-mention` endpoint
+    was removed in BRAI-102).
+  - **Comments:** `ItemComments::add()` → `ItemCommentNotifications`: watchers + assignee + reporter,
+    minus the author, minus everyone @mentioned in that comment (they get the mention instead).
+  - **Due dates:** `app:send-item-reminders` sends `item_due` "due tomorrow" from 08:00 the day before
+    and "overdue" once the due time (or the end of the due day) passed, both in the assignee's
+    `localTimezone()`. Dedup key `item_due:{id}:{kind}:{due_date}` in `sent_item_reminders`, so a
+    new due date is reminded again. Overdue only within 2 days, so old issues never flood anyone.
+  - **Sprints:** recipients are the sprint's assignees, read **before** `Sprint::complete()` moves
+    open issues out.
+  - New types extend `CatalogNotification` and store the payload contract
+    (`type, title, body, url, actor_name, actor_avatar, project_name, subject_key`); e2e asserts on
+    `/api/notifications` (`e2e/helpers/notifications.ts`), not on the bell's wording.
 - **Project data hangs off `project_id`; only `projects` stores `workspace_id`.** Moving a
   project is a single update (see `ProjectTransfer`). Keep it that way: a new project-level
   table must not copy `workspace_id`, or moves (and access checks) drift. Workspace-level
   things (bookmarks, snippets, invitations) are not project data and stay behind.
+  Exception: `time_entries` carry `workspace_id` (billing is per workspace). On a move,
+  `ProjectTransfer` moves the **unbilled** entries and maps their activity by name in the target
+  (none → null); entries on a finalized report stay with the old workspace (v1.39.0, BRAI-107).
 - **`projects` unique keys `(workspace_id, slug)` and `(workspace_id, key)` include
   soft-deleted rows.** Check with `withTrashed()` before reusing a slug or key in a workspace.
 - **Error pages are Inertia (`Pages/Error.tsx`), wired in `bootstrap/app.php`
@@ -619,7 +764,9 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
     are never backfilled twice.
   - The activity is **required once the workspace has an active activity** and optional before,
     so workspaces that don't bill aren't blocked. Archived activities can't be picked, but an
-    entry keeps the one it has. `billable` follows the activity unless the form sends it.
+    entry keeps the one it has. `billable` follows the activity; only **workspace admins**
+    (`manageBilling`) can override it — a member's `billable` input is ignored, and on update their
+    entry keeps its flag unless the activity changes (v1.39.0, BRAI-107).
   - **Members never get a rate:** activity options for log forms come from `timesheet.activities`
     (`TimeLogActivities::option()`: name, colour, pricing type label, billable) — never a shared
     Inertia prop, never `rate_cents`. Tests assert it on the JSON and the page.

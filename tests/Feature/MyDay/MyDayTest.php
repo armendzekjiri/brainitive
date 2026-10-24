@@ -82,6 +82,22 @@ class MyDayTest extends TestCase
         $this->assertSame(3, MyDayEntry::count()); // hidden, not deleted
     }
 
+    public function test_board_items_carry_the_columns_the_circle_completes_and_reopens_into(): void
+    {
+        $item = $this->item(['column_id' => $this->column('to-do')]);
+        $this->add('board', $item->id);
+
+        $this->get(route('my-work.index'))->assertInertia(fn (AssertableInertia $p) => $p
+            ->where('myDay.rows.0.item.board.done_column_id', $this->column('done'))
+            ->where('myDay.rows.0.item.board.open_column_id', $this->column('to-do')));
+
+        // the circle uses the normal move endpoint: done, then reopened
+        $this->patch($this->itemRoute('boards.items.move', $item), ['column_id' => $this->column('done'), 'position' => 0])->assertSessionHasNoErrors();
+        $this->assertNotNull($item->fresh()->completed_at);
+        $this->patch($this->itemRoute('boards.items.move', $item), ['column_id' => $this->column('to-do'), 'position' => 0])->assertSessionHasNoErrors();
+        $this->assertNull($item->fresh()->completed_at);
+    }
+
     public function test_only_work_the_user_can_open_can_be_planned_and_removing_works(): void
     {
         $item = $this->item();

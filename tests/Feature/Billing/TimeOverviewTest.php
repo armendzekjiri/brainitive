@@ -180,8 +180,11 @@ class TimeOverviewTest extends TestCase
         $client = Client::create(['workspace_id' => $this->workspace->id, 'name' => 'Muster GmbH']);
         $this->other->forceFill(['client_id' => $client->id])->save();
         $item = Item::factory()->create(['board_id' => $this->otherBoard->id, 'created_by' => $this->admin->id, 'title' => 'Logged here']);
-        $this->entry(['item' => $item, 'minutes' => 60]);
+        $billed = $this->entry(['item' => $item, 'minutes' => 60]);
         $this->entry(['minutes' => 30]);
+        // already on a finalized report: stays with this workspace when the project moves (unbilled time moves along, v1.39.0)
+        $report = BillingReport::create(['workspace_id' => $this->workspace->id, 'kind' => 'report', 'period_from' => '2026-10-01', 'period_to' => '2026-10-31', 'status' => 'finalized']);
+        $billed->forceFill(['billing_report_id' => $report->id])->saveQuietly();
 
         // moved to a workspace this admin doesn't see: no live project name, client or title from there
         $target = Workspace::factory()->create();

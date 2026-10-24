@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin;
 use App\Http\Controllers\AiController;
+use App\Http\Controllers\BoardBulkItemController;
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BoardViewController;
 use App\Http\Controllers\BookmarkController;
@@ -39,6 +40,7 @@ use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\ReleaseController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ShareLinkController;
+use App\Http\Controllers\SidebarPreferencesController;
 use App\Http\Controllers\SnippetController;
 use App\Http\Controllers\SprintController;
 use App\Http\Controllers\TaskListController;
@@ -57,7 +59,12 @@ Route::get('/', function () {
         'canRegister' => Route::has('register'),
         'canLoginWithGoogle' => (bool) config('services.google.client_id'),
         'canLoginWithGitHub' => (bool) config('services.github.client_id'),
-    ]);
+    ])->withViewData(['meta' => [
+        // link previews of the homepage (Open Graph / X), see resources/views/partials/social-meta.blade.php
+        'title' => 'Brainitive – Workspaces, Boards & Wiki',
+        'description' => 'Boards, sprints, docs, whiteboards, Gantt plans, helpdesk and client billing — one workspace for the whole project, from the first workshop to the last release.',
+        'url' => url('/'),
+    ]]);
 });
 
 Route::get('/privacy', function () {
@@ -226,6 +233,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::prefix('workspaces/{workspace}')->group(function () {
         // Time tracking & client billing (v1.38.0)
         require __DIR__.'/billing.php';
+        // Outgoing webhooks + admin insights (v1.39.0)
+        require __DIR__.'/webhooks.php';
+        require __DIR__.'/insights.php';
 
         Route::get('users', [WorkspaceController::class, 'users'])->name('workspaces.users.index');
         Route::get('lead-form-templates', [LeadFormController::class, 'templates'])->name('lead-form-templates.index');
@@ -339,6 +349,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('boards/{board:slug}/swimlanes', [BoardController::class, 'updateSwimlanes'])->name('boards.swimlanes.update');
             Route::post('boards/{board:slug}/columns/reorder', [BoardController::class, 'reorderColumns'])->name('boards.columns.reorder');
             Route::post('boards/{board:slug}/items/reorder', [BoardController::class, 'reorderItems'])->name('boards.items.reorder');
+            // Bulk edit of the list view (BRAI-108); before items/{item} so "bulk" is never an item id
+            Route::patch('boards/{board:slug}/items/bulk', [BoardBulkItemController::class, 'update'])->name('boards.items.bulk.update');
+            Route::delete('boards/{board:slug}/items/bulk', [BoardBulkItemController::class, 'destroy'])->name('boards.items.bulk.destroy');
             Route::put('boards/{board:slug}/columns/{column}', [BoardController::class, 'updateColumn'])->name('boards.columns.update');
             Route::delete('boards/{board:slug}/columns/{column}', [BoardController::class, 'destroyColumn'])->name('boards.columns.destroy');
             Route::post('boards/{board:slug}/items', [BoardController::class, 'storeItem'])->name('boards.items.store');
@@ -508,6 +521,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::patch('/profile/preferences', [ProfileController::class, 'updatePreferences'])->name('profile.preferences');
+    // Customisable sidebar (BRAI-106): hidden entries, project groups, pins
+    Route::patch('/sidebar/preferences', [SidebarPreferencesController::class, 'update'])->name('sidebar.preferences');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::delete('/profile/connected-apps/{clientId}', [ProfileController::class, 'disconnectApp'])->name('profile.connected-apps.destroy');
 
@@ -522,14 +537,18 @@ Route::middleware('auth')->group(function () {
     Route::patch('/api/page-sticky-notes/{note}', [PageStickyNoteController::class, 'update'])->name('page-sticky-notes.update');
     Route::delete('/api/page-sticky-notes/{note}', [PageStickyNoteController::class, 'destroy'])->name('page-sticky-notes.destroy');
 
-    // Notifications
+    // Notifications (BRAI-102): inbox page + one JSON feed for the bell and the page
     Route::get('/notifications', [NotificationController::class, 'page'])->name('notifications.page');
+    // fetched when the bell opens / polled every 30 s: read-only sessions (would race form submits)
     Route::get('/api/notifications', [NotificationController::class, 'index'])->middleware(ReadOnlySession::class)->name('notifications.index');
-    // polled every 30 s / fetched when the bell opens: read-only sessions (would race form submits)
     Route::get('/api/notifications/unread-count', [NotificationController::class, 'unreadCount'])->middleware(ReadOnlySession::class)->name('notifications.unread-count');
-    Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
-    Route::post('/api/notifications/notify-mention', [NotificationController::class, 'notifyMention'])->middleware('throttle:60,1,notifications.notify-mention')->name('notifications.notify-mention');
+    Route::post('/api/notifications/bulk', [NotificationController::class, 'bulk'])->name('notifications.bulk');
+    Route::patch('/api/notifications/preferences', [NotificationController::class, 'updatePreferences'])->name('notifications.preferences');
+    Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markRead'])->whereUuid('id')->name('notifications.read');
+    Route::post('/api/notifications/{id}/unread', [NotificationController::class, 'markUnread'])->whereUuid('id')->name('notifications.unread');
+    Route::post('/api/notifications/{id}/archive', [NotificationController::class, 'archive'])->whereUuid('id')->name('notifications.archive');
+    Route::post('/api/notifications/{id}/unarchive', [NotificationController::class, 'unarchive'])->whereUuid('id')->name('notifications.unarchive');
 
     // Browser push subscriptions
     Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');

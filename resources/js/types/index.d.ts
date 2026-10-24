@@ -552,6 +552,8 @@ export type PageProps<
     };
     /** Onboarding state + computed setup checklist progress (shared by HandleInertiaRequests) */
     onboarding?: OnboardingState | null;
+    /** Customisable sidebar (BRAI-106), normalised by SidebarPreferences::forFrontend */
+    sidebarPreferences?: SidebarPreferences | null;
 };
 
 export type OnboardingFocus = 'project_mgmt' | 'docs' | 'support' | 'all';
@@ -582,7 +584,8 @@ export interface MyWorkItem {
     status?: 'todo' | 'done';
     position: number;
     source: { type: 'board' | 'list'; id: number; name: string; slug: string };
-    board?: { id: number; name: string; slug: string };
+    /** done/open column ids: the circle in My Work / My Day completes or reopens the issue */
+    board?: { id: number; name: string; slug: string; done_column_id?: number | null; open_column_id?: number | null };
     task_list?: { id: number; name: string; slug: string };
     column?: { id: number; name: string; is_done_column: boolean };
     item_type?: ItemType | null;
@@ -1153,6 +1156,8 @@ export interface MeetingNotesOptions {
     /** People who can open the project — the only possible assignees. */
     members: { id: number; name: string }[];
     timezone: string;
+    /** Today in the user's time zone: the default meeting date. */
+    today: string;
     source: MeetingNotesSourceInfo | null;
     limits: { max_chars: number; max_proposals: number };
 }
@@ -1570,4 +1575,266 @@ export interface TimeOverviewOptions {
     clients: BillingClientOption[];
     people: { id: number; name: string }[];
     activities: { id: number; name: string; pricing_type: 'hourly' | 'fixed'; archived: boolean }[];
+}
+
+// ── Admin insights (BRAI-105) — app/Support/Insights/* ─────────────────────────
+export type InsightsPeriod = 'this_month' | 'last_month' | 'last_30' | 'last_90' | 'custom';
+export type InsightsTab = 'overview' | 'team' | 'projects' | 'helpdesk' | 'usage';
+
+/** InsightsFilters::toArray() */
+export interface InsightsFilters {
+    period: InsightsPeriod;
+    from: string;
+    to: string;
+    project: number | null;
+    timezone: string;
+}
+
+/** Props every Insights page receives (InsightsController::tab). */
+export interface InsightsPageProps<T> {
+    workspace: { id: number; name: string; slug: string };
+    filters: InsightsFilters;
+    presets: Record<Exclude<InsightsPeriod, 'custom'>, { from: string; to: string }>;
+    projectOptions: { id: number; name: string }[];
+    /** Query string that reproduces the filters (CSV links). */
+    exportQuery: Record<string, string | number>;
+    insights: T;
+}
+
+export interface InsightsOverview {
+    kpis: {
+        created: number;
+        completed: number;
+        completion_rate: number | null;
+        median_cycle_days: number | null;
+        open: number;
+        overdue: number;
+        hours: number;
+    };
+    weeks: { week: string; created: number; completed: number }[];
+    projects: { id: number; name: string; slug: string; color: string | null; open: number; overdue: number }[];
+    types: { name: string | null; created: number; completed: number }[];
+}
+
+export interface InsightsTeamMember {
+    id: number;
+    name: string;
+    avatar: string | null;
+    role: string;
+    completed: number;
+    open: number;
+    overdue: number;
+    hours: number;
+    comments: number;
+    last_login_at: string | null;
+    last_activity_at: string | null;
+    last_active_at: string | null;
+    profile_url: string;
+}
+
+export interface InsightsProjectRow {
+    id: number;
+    name: string;
+    key: string | null;
+    color: string | null;
+    health: 'on_track' | 'at_risk' | 'off_track' | null;
+    health_at: string | null;
+    issues: number;
+    open: number;
+    overdue: number;
+    done_in_range: number;
+    hours: number;
+    last_activity_at: string | null;
+    url: string;
+    health_url: string;
+}
+
+export interface InsightsHelpdesk {
+    tickets: { created: number; resolved: number; open: number; median_resolution_hours: number | null };
+    helpdesks: { id: number; name: string; project: string; created: number; resolved: number; open: number; url: string }[];
+    leads: { total: number; views: number; starts: number; submits: number };
+    forms: {
+        id: number;
+        name: string;
+        project: string;
+        status: string;
+        leads: number;
+        closed: number;
+        views: number;
+        starts: number;
+        submits: number;
+        conversion: number | null;
+        url: string;
+    }[];
+}
+
+export interface InsightsUsage {
+    members: number;
+    roles: Record<string, number>;
+    pending_invites: number;
+    projects: number;
+    storage: { id: number; name: string; color: string | null; files: number; issue_bytes: number; ticket_bytes: number; bytes: number }[];
+    storage_bytes: number;
+    webhooks: number;
+}
+
+// ── Notifications inbox (BRAI-102) ────────────────────────────────────────────
+
+/** Catalog categories (app/Notifications/NotificationCatalog::CATEGORIES). */
+export type NotificationCategoryKey =
+    | 'mentions'
+    | 'assignments'
+    | 'comments'
+    | 'status'
+    | 'reminders'
+    | 'pages'
+    | 'sprints'
+    | 'helpdesk'
+    | 'leads'
+    | 'workspace';
+
+export type NotificationFilter = 'all' | 'unread' | 'mentions' | 'assigned';
+
+/**
+ * A notification's stored payload. New types follow the contract keys (type, title, body, url,
+ * actor_name, actor_avatar, project_name, subject_key); older types keep their own keys.
+ */
+export interface NotificationData {
+    type?: string;
+    // payload contract (v1.39.0)
+    title?: string;
+    body?: string | null;
+    url?: string;
+    actor_name?: string | null;
+    actor_avatar?: string | null;
+    project_name?: string | null;
+    subject_key?: string | null;
+    // legacy keys
+    item_key?: string;
+    item_title?: string;
+    item_url?: string;
+    old_column?: string;
+    new_column?: string;
+    when_label?: string;
+    due_today?: number;
+    overdue?: number;
+    titles?: string[];
+    context_type?: string;
+    context_title?: string;
+    context_url?: string;
+    page_name?: string;
+    page_url?: string;
+    ticket_key?: string;
+    ticket_subject?: string;
+    ticket_url?: string;
+    reply_preview?: string;
+    contact_name?: string;
+    contact_email?: string;
+    form_name?: string;
+    lead_number?: number;
+    lead_name?: string;
+    lead_url?: string;
+    [key: string]: unknown;
+}
+
+export interface AppNotification {
+    id: string;
+    type: string | null;
+    /** From the catalog; null for a type the catalog doesn't know. */
+    category: NotificationCategoryKey | null;
+    data: NotificationData;
+    read_at: string | null;
+    archived_at: string | null;
+    created_at: string;
+}
+
+export interface NotificationFeed {
+    data: AppNotification[];
+    next_cursor: string | null;
+    unread_count: number;
+}
+
+export interface NotificationChannels {
+    in_app: boolean;
+    push: boolean;
+    email: boolean;
+}
+
+/** One row of Profile → Notifications (NotificationCatalog::forUser). */
+export interface NotificationCategoryPreference {
+    key: NotificationCategoryKey;
+    label: string;
+    description: string;
+    channels: NotificationChannels;
+}
+
+/** Outgoing webhook of a workspace (v1.39.0, BRAI-104). The secret is never part of it. */
+export interface WorkspaceWebhook {
+    id: number;
+    name: string;
+    url: string;
+    /** DomainEvents names, or ["*"] for every event. */
+    events: string[];
+    active: boolean;
+    failure_count: number;
+    disabled_at: string | null;
+    last_delivery_at: string | null;
+    last_status: WebhookDeliveryStatus | null;
+    created_by: string | null;
+    created_at: string | null;
+}
+
+export type WebhookDeliveryStatus = 'pending' | 'success' | 'failed';
+
+export interface WebhookDelivery {
+    id: number;
+    uuid: string;
+    event: string;
+    event_id: string;
+    status: WebhookDeliveryStatus;
+    attempts: number;
+    response_code: number | null;
+    duration_ms: number | null;
+    error: string | null;
+    /** The envelope that was sent: {id, event, occurred_at, workspace, actor, data}. */
+    payload: Record<string, unknown>;
+    response_body: string | null;
+    created_at: string | null;
+    delivered_at: string | null;
+}
+
+// ── Customisable sidebar (BRAI-106) ─────────────────────────────────────────
+/** Top-level sidebar entries a user may hide (Home and Inbox are always shown). */
+export type SidebarNavKey = 'my_work' | 'captures' | 'timesheet' | 'billing' | 'insights' | 'calendar' | 'bookmarks' | 'snippets';
+/** Project groups in the sidebar. */
+export type SidebarGroupKey = 'boards' | 'lists' | 'plans' | 'helpdesks' | 'lead_forms' | 'pages' | 'whiteboards' | 'folders';
+/** What can be pinned; "page" covers pages, whiteboards and folders. */
+export type SidebarPinType = 'board' | 'list' | 'plan' | 'helpdesk' | 'lead_form' | 'page';
+
+export interface SidebarPin {
+    type: SidebarPinType;
+    id: number;
+}
+
+export interface SidebarProjectPreferences {
+    groups: Record<SidebarGroupKey, boolean>;
+    pins: SidebarPin[];
+    pinned_only: boolean;
+}
+
+/** `users.sidebar_preferences`; missing projects use the defaults (all groups, no pins). */
+export interface SidebarPreferences {
+    hidden_nav: SidebarNavKey[];
+    projects: Record<string, SidebarProjectPreferences>;
+}
+
+/** One "Recently updated" row on the project page (RecentContent::for). */
+export interface RecentContentEntry {
+    type: SidebarPinType;
+    id: number;
+    name: string;
+    url: string;
+    updated_at: string;
+    is_whiteboard?: boolean;
+    icon?: string | null;
 }

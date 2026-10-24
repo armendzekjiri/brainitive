@@ -5,7 +5,7 @@ import { expect, test } from '../fixtures';
  * The public homepage (Pages/Welcome.tsx) shows what the latest releases shipped (BRAI-98).
  * When a release adds feature cards to the homepage, add their titles here.
  */
-const SPOTLIGHT = ['Time tracking & client billing', 'Workload planning', 'Quick capture'];
+const SPOTLIGHT = ['A calmer notification inbox', 'Insights for admins', 'Time tracking & client billing'];
 const NEW_FEATURES = [
     'Project templates',
     'Saved board views',
@@ -25,6 +25,11 @@ const NEW_FEATURES = [
     'Time tracking',
     'Team time overview',
     'Client billing',
+    'Bulk edit',
+    'Your sidebar, your way',
+    'Admin insights',
+    'Notifications & push',
+    'Outgoing webhooks',
 ];
 const GROUPS = ['Plan & organize', 'Capture & focus', 'Create & write', 'Collaborate & share', 'Customers, leads & billing', 'Insight & planning', 'Connect & automate'];
 
@@ -60,7 +65,6 @@ test.describe('homepage', () => {
         for (const title of SPOTLIGHT) {
             await expect(spotlight.getByRole('heading', { level: 4, name: title, exact: true })).toBeVisible();
         }
-        await expect(spotlight.locator('kbd', { hasText: 'C' })).toBeVisible();
 
         for (const group of GROUPS) {
             await expect(features.getByRole('heading', { level: 3, name: group, exact: true })).toBeVisible();
@@ -79,6 +83,27 @@ test.describe('homepage', () => {
         await context.close();
     });
 
+    test('a pasted link gets a rich preview (Open Graph + X card)', async ({ browser }) => {
+        const { context, page } = await guestPage(browser);
+        // crawlers read the raw HTML without running JavaScript
+        const response = await page.request.get('/');
+        expect(response.ok()).toBeTruthy();
+        const html = await response.text();
+        const tag = (attr: 'property' | 'name', key: string) => html.match(new RegExp(`<meta ${attr}="${key}" content="([^"]*)">`))?.[1];
+
+        expect(tag('property', 'og:title')).toContain('Brainitive');
+        expect(tag('property', 'og:description')?.length ?? 0).toBeGreaterThan(60);
+        expect(tag('property', 'og:type')).toBe('website');
+        expect(tag('name', 'twitter:card')).toBe('summary_large_image');
+        const image = tag('property', 'og:image');
+        expect(image).toMatch(/\/images\/og-image\.png\?v=\d+$/);
+
+        const png = await page.request.get(new URL(image!).pathname);
+        expect(png.status()).toBe(200);
+        expect(png.headers()['content-type']).toContain('image/png');
+        await context.close();
+    });
+
     test('fits a 375 px phone in light and dark mode', async ({ browser }) => {
         for (const colorScheme of ['light', 'dark'] as const) {
             const { context, page, errors } = await guestPage(browser, { colorScheme, viewport: { width: 375, height: 812 } });
@@ -87,7 +112,7 @@ test.describe('homepage', () => {
 
             const spotlight = page.getByRole('region', { name: 'New in recent releases' });
             await spotlight.scrollIntoViewIfNeeded();
-            await expect(spotlight.getByRole('heading', { name: 'Quick capture', exact: true })).toBeVisible();
+            await expect(spotlight.getByRole('heading', { name: SPOTLIGHT[0], exact: true })).toBeVisible();
             await page.getByRole('heading', { level: 3, name: 'Customers, leads & billing', exact: true }).scrollIntoViewIfNeeded();
             await expect(page.getByRole('heading', { level: 4, name: 'Lead forms', exact: true }).last()).toBeVisible();
             await expectNoHorizontalScroll(page);

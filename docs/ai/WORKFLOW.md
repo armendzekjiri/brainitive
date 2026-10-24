@@ -177,6 +177,13 @@ cards in `resources/js/Pages/Welcome.tsx`, `WELCOME_FEATURES` in `HelpModal.tsx`
 the UI changed visibly — the screenshots in `public/images/screenshots/` (light + `-dark`,
 2880×1720 JPEG, demo data only, no real customer data).
 
+**Link previews (Open Graph / X cards).** Server-rendered in `resources/views/partials/social-meta.blade.php`
+(crawlers don't run JS, so Inertia's `<Head>` can't do it). The homepage route passes `meta`
+(title, description, url) with `->withViewData()`; every other page gets site defaults only, so a
+pasted link to a private board never shows its name. The image `public/images/og-image.png` (1200×630)
+is rendered from `resources/og/og-image.html` by `node scripts/make-og-image.mjs`; re-run it when the
+tagline or the board screenshot changes. The URL carries `?v=<mtime>` so platforms refetch it.
+
 ## Git & PR conventions
 - Branch off `pre-release`; commit/push only when asked.
 - Conventional commits with scope: `feat(mcp): …`, `fix(helpdesk): …`.

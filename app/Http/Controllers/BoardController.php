@@ -17,7 +17,6 @@ use App\Models\Release;
 use App\Models\Sprint;
 use App\Models\User;
 use App\Models\Workspace;
-use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
 use App\Rules\ProjectMember;
 use App\Support\Billing\TimeLog;
@@ -151,6 +150,8 @@ class BoardController extends Controller
             // Admins get a shortcut to field settings; values follow ItemPolicy::update (= board update).
             'canManageFields' => $request->user()->can('update', $project),
             'canEditItems' => $request->user()->can('update', $board),
+            // List view bulk delete (BRAI-108): may delete issues created by someone else (ItemPolicy::delete)
+            'canDeleteAnyItem' => $user->can('delete', (new Item(['created_by' => 0]))->setRelation('board', $board)),
             'activeSprint' => $activeSprint?->only(['id', 'name', 'goal', 'start_date', 'end_date']),
             'canManageSprints' => $request->user()->can('update', $board),
             // can_edit = BoardViewPolicy::update, without re-checking the board per view (authorized above)
@@ -456,14 +457,7 @@ class BoardController extends Controller
             $item->labels()->sync($validLabels);
         }
 
-        // Notify assignee if assigned to someone else
-        $newAssigneeId = $item->assigned_to;
-        if ($newAssigneeId && $newAssigneeId !== $request->user()->id) {
-            $assignee = User::find($newAssigneeId);
-            if ($assignee) {
-                $assignee->notify(new ItemAssignedNotification($item, $request->user()));
-            }
-        }
+        // The assignee hears about it from ItemObserver (Support\Notifications\Assignments), like every path.
 
         // Process mentions inside description on item creation
         if (! empty($validated['description'])) {
@@ -798,26 +792,14 @@ class BoardController extends Controller
                 : Item::parseDuration($validated['original_estimate']);
         }
 
-        $oldAssigneeId = $item->assigned_to;
+        $previousDescription = $item->description;
 
+        // A new assignee hears about it from ItemObserver (Support\Notifications\Assignments).
         $item->update($validated);
 
-        // Notify new assignee if changed
-        $newAssigneeId = $item->assigned_to;
-        if (
-            $newAssigneeId
-            && $newAssigneeId !== $oldAssigneeId
-            && $newAssigneeId !== $request->user()->id
-        ) {
-            $assignee = User::find($newAssigneeId);
-            if ($assignee) {
-                $assignee->notify(new ItemAssignedNotification($item, $request->user()));
-            }
-        }
-
-        // Process mentions in description
+        // Mentions: only people who weren't mentioned in the description before this save
         if (isset($validated['description'])) {
-            ItemMentions::notify($validated['description'], $item, $request->user());
+            ItemMentions::notify($validated['description'], $item, $request->user(), $previousDescription);
         }
 
         return back()->with('success', 'Item updated successfully.');
