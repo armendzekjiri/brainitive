@@ -110,6 +110,34 @@ then can't create tables in `public` and every PHPUnit test fails with "permissi
 schema public". Use `createdb -h /tmp -O <DB_USERNAME> brainitive_test_<name>` (or `ALTER DATABASE
 … OWNER TO …` + `ALTER SCHEMA public OWNER TO …` on an existing one).
 
+### Outgoing webhooks: sync queue, signature, private targets (v1.39.0, BRAI-104)
+- **Sync queue (dev.brainitive.app, e2e, small self-hosted installs):** `WebhookDispatcher` sends a
+  delivery caused by a web request **after the response** (`dispatch()->afterResponse()`), so a slow or
+  dead endpoint never slows down or breaks the request. Only one attempt there (a sync job can't be
+  released for a retry); Redeliver sends it again. At most 25 per request (a bulk action / template
+  would otherwise hold the PHP worker for minutes); the rest are logged as failed "Not sent". Manual
+  sends (Send test, Redeliver) and console runs go inline (`dispatch_sync`). With a real queue:
+  queued, 4 tries, backoff 30 s / 2 min / 10 min.
+- **Never break the caller:** `DomainEvents` reports (doesn't throw) failures, except in unit tests
+  (`runningUnitTests()`) so payload bugs surface. Deliveries are created in `DB::afterCommit` — a
+  rolled-back change sends nothing.
+- **Signature:** `X-Brainitive-Signature: sha256=` + hex HMAC-SHA256 of `"{X-Brainitive-Timestamp}.{raw body}"`
+  with the webhook secret (timestamped against replays; the BRAI-93 lead-form webhook signs the body
+  only). `X-Brainitive-Delivery` = the delivery uuid; the envelope `id` stays the same on a redelivery.
+- **Private targets** (localhost, 10/8, 169.254…): refused by `OutboundUrl` on save and before every
+  attempt. `WEBHOOKS_ALLOW_PRIVATE_TARGETS` exists for the e2e receiver only and is ignored unless
+  `APP_ENV=e2e` (`WebhookUrl::allowPrivate()`); https is required in production and staging.
+- **Secret:** encrypted + `$hidden`; never an Inertia prop. Returned by store / rotate / reveal as JSON
+  with `Cache-Control: no-store`.
+- **Payloads** carry ids, keys, titles, URLs, status names and people as `{id, name}` — no member
+  emails, no rates (amounts only on `billing_report.*`). Ticket payloads include the contact's name and
+  email and lead payloads the lead's fields (agents / admins see them in the app). Builders never load
+  relations on the caller's model (it may be serialized into the response afterwards).
+- **e2e:** the receiver is a Node server on 127.0.0.1 inside the spec's worker; the spec is skipped
+  against dev.brainitive.app. It deletes its webhook at the end — other journeys create issues in the
+  same workspace in parallel. The crawler (`e2e:crawl`) fills URL fields with `https://example.com/`,
+  so a crawl run can create a webhook that posts to example.com.
+
 ### Quick capture: conversion is idempotent by row lock, not by request id (BRAI-70)
 `CaptureConversion::convert` locks the capture (`lockForUpdate`) inside one transaction; a capture
 that is already processed returns its target (`replayed`, HTTP 200) whatever the second request

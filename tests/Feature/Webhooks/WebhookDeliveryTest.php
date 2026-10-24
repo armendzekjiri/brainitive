@@ -275,11 +275,37 @@ class WebhookDeliveryTest extends TestCase
             $console->setValue($this->app, true);
         }
         $this->assertSame(2, WebhookDelivery::where('status', WebhookDelivery::STATUS_FAILED)->where('error', 'like', 'Not sent:%')->count());
+        Bus::assertDispatched(DeliverWebhook::class, fn (DeliverWebhook $job) => $job->afterResponse && ! $job->manual);
 
         // a real queue: queued (and retried there)
         config(['queue.default' => 'database']);
         $this->item();
         Bus::assertDispatched(DeliverWebhook::class, fn (DeliverWebhook $job) => ! $job->manual);
+    }
+
+    public function test_after_a_response_deliveries_share_a_time_budget(): void
+    {
+        Http::fake(['*' => Http::response('ok')]);
+        $webhook = $this->hook();
+        $envelope = DomainEvents::envelope($this->workspace, 'ping', [], null);
+        $first = $webhook->deliveries()->create(['event' => 'ping', 'event_id' => $envelope['id'], 'payload' => $envelope, 'status' => WebhookDelivery::STATUS_PENDING]);
+        $second = $webhook->deliveries()->create(['event' => 'ping', 'event_id' => $envelope['id'], 'payload' => $envelope, 'status' => WebhookDelivery::STATUS_PENDING]);
+
+        $job = new DeliverWebhook($first->id);
+        $job->afterResponse = true;
+        dispatch_sync($job);
+        $this->assertSame(WebhookDelivery::STATUS_SUCCESS, $first->fresh()->status);
+        Http::assertSent(fn ($request) => true);
+
+        // the budget is used up (slow receivers): the rest is logged, not sent, and not held against the webhook
+        $this->app->instance('webhooks.after-response-deadline', hrtime(true));
+        $job = new DeliverWebhook($second->id);
+        $job->afterResponse = true;
+        dispatch_sync($job);
+        $this->assertSame(WebhookDelivery::STATUS_FAILED, $second->fresh()->status);
+        $this->assertStringStartsWith('Not sent:', $second->fresh()->error);
+        $this->assertSame(0, $webhook->fresh()->failure_count);
+        Http::assertSentCount(1);
     }
 
     public function test_a_failing_endpoint_never_breaks_the_users_request(): void

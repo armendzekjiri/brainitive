@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Webhook;
 use App\Models\WebhookDelivery;
 use App\Notifications\WebhookDisabledNotification;
+use App\Support\Webhooks\WebhookDispatcher;
 use App\Support\Webhooks\WebhookUrl;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -24,7 +25,8 @@ use Throwable;
  * - Headers: X-Brainitive-Event, X-Brainitive-Delivery (delivery uuid), X-Brainitive-Timestamp
  *   (unix seconds) and X-Brainitive-Signature: sha256=<hex hmac_sha256(secret, "{timestamp}.{body}")>.
  * - 2xx = success. 5xx, 429 and network errors are retried (30 s, 2 min, 10 min); any other status
- *   fails at once. A sync job can't be released, so it gets one attempt (see WebhookDispatcher).
+ *   fails at once. A sync job can't be released, so it gets one attempt (see WebhookDispatcher);
+ *   after a web response it also gets a shorter timeout and shares the request's time budget.
  * - The webhook's failure_count counts finally failed deliveries in a row; at
  *   Webhook::MAX_CONSECUTIVE_FAILURES it is disabled and the workspace admins are notified.
  *   A success resets it.
@@ -37,6 +39,9 @@ class DeliverWebhook implements ShouldQueue
     public int $tries = 4;
 
     public int $timeout = 30;
+
+    /** Runs after a web response on a sync queue: bound by WebhookDispatcher's time budget. */
+    public bool $afterResponse = false;
 
     public function __construct(public int $deliveryId, public bool $manual = false) {}
 
@@ -71,6 +76,17 @@ class DeliverWebhook implements ShouldQueue
             return;
         }
 
+        $timeout = (int) config('webhooks.timeout', 10);
+        if ($this->afterResponse) {
+            $left = WebhookDispatcher::afterResponseSecondsLeft();
+            if ($left < 1) {
+                WebhookDispatcher::notSent($delivery, 'this request already spent '.WebhookDispatcher::AFTER_RESPONSE_BUDGET.' s on webhooks without a queue worker');
+
+                return;
+            }
+            $timeout = max(1, min($timeout, WebhookDispatcher::AFTER_RESPONSE_TIMEOUT, (int) floor($left)));
+        }
+
         // the receiver's answer is only logged (2 KB): refuse to download more than 1 MB of it
         $options['curl'][CURLOPT_MAXFILESIZE] = 1024 * 1024;
         $body = json_encode($delivery->payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
@@ -81,8 +97,8 @@ class DeliverWebhook implements ShouldQueue
 
         try {
             $response = Http::withOptions($options)
-                ->timeout((int) config('webhooks.timeout', 10))
-                ->connectTimeout(5)
+                ->timeout($timeout)
+                ->connectTimeout(min(5, $timeout))
                 ->withHeaders([
                     'User-Agent' => 'Brainitive-Webhook/1.0',
                     'X-Brainitive-Event' => $delivery->event,
