@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\Events\DomainEvents;
+use App\Support\Events\EventPayloads;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -42,6 +44,9 @@ class TimeEntry extends Model
         static::created(function (TimeEntry $entry) {
             if ($entry->item_id && $entry->source !== self::SOURCE_LEGACY) {
                 Item::withTrashed()->whereKey($entry->item_id)->increment('time_spent', $entry->minutes);
+            }
+            if ($entry->source !== self::SOURCE_LEGACY) {
+                DomainEvents::emit($entry->workspace_id, 'time_entry.created', fn () => EventPayloads::timeEntry($entry)); // webhooks (BRAI-104)
             }
         });
 

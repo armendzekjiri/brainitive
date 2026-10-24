@@ -2,17 +2,16 @@
 
 namespace Tests\Feature\Security;
 
-use App\Http\Controllers\NotificationController;
 use App\Models\Bookmark;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\TaskList;
 use App\Models\User;
 use App\Models\Workspace;
-use App\Notifications\MentionNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Route;
 use Tests\Feature\Boards\InteractsWithBoards;
 use Tests\TestCase;
 
@@ -76,21 +75,16 @@ class AccessControlTest extends TestCase
         $this->assertDatabaseHas('items', ['title' => 'Allowed']);
     }
 
-    public function test_mentions_only_reach_shared_members_and_only_link_into_the_app(): void
+    public function test_mentions_cannot_be_sent_directly(): void
     {
-        $url = route('notifications.notify-mention');
-        $base = ['context_type' => 'page', 'context_title' => 'Roadmap'];
-
-        $this->actingAs($this->editor)->postJson($url, $base + ['user_id' => $this->outsider->id, 'context_url' => '/workspaces'])->assertJsonValidationErrors('user_id');
-        $this->actingAs($this->editor)->postJson($url, $base + ['user_id' => $this->viewer->id, 'context_url' => 'javascript:alert(1)'])->assertJsonValidationErrors('context_url');
-        $this->actingAs($this->editor)->postJson($url, $base + ['user_id' => $this->viewer->id, 'context_url' => 'https://evil.example/login'])->assertJsonValidationErrors('context_url');
-        $this->actingAs($this->editor)->postJson($url, $base + ['user_id' => $this->viewer->id, 'context_url' => '//evil.example'])->assertJsonValidationErrors('context_url');
+        // BRAI-102/103: mentions are only sent when content is saved (ItemMentions / PageMentions,
+        // project members only); the old endpoint that took any user id + link is gone
+        $this->assertFalse(Route::has('notifications.notify-mention'));
+        $status = $this->actingAs($this->editor)->postJson('/api/notifications/notify-mention', [
+            'user_id' => $this->viewer->id, 'context_type' => 'page', 'context_title' => 'Roadmap', 'context_url' => '/workspaces',
+        ])->status();
+        $this->assertContains($status, [404, 405]);
         Notification::assertNothingSent();
-
-        $this->actingAs($this->editor)->postJson($url, $base + ['user_id' => $this->viewer->id, 'context_url' => url('/workspaces/x/projects/y/pages/z?tab=1')])->assertOk();
-        Notification::assertSentTo($this->viewer, MentionNotification::class, fn (MentionNotification $n) => $n->contextUrl === '/workspaces/x/projects/y/pages/z?tab=1');
-
-        $this->assertNull(NotificationController::appPath('/\\evil.example'));
     }
 
     public function test_watchers_and_assignees_must_be_project_members(): void

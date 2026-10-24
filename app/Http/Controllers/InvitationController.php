@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\WorkspaceInvitation;
+use App\Support\Notifications\WorkspaceNotifications;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -99,6 +100,7 @@ class InvitationController extends Controller
 
         $invitation->markAsAccepted();
         $invitation->workspace->addUser($user, $invitation->role, $invitation->inviter ?? null);
+        WorkspaceNotifications::invitationAccepted($invitation, $user);
 
         return redirect()->route('workspaces.show', $invitation->workspace->slug)
             ->with('success', "You've joined {$invitation->workspace->name}.");

@@ -95,6 +95,8 @@ export default function ExtractActionItemsDialog({ open, onOpenChange, workspace
         }).then(({ data }) => {
             setOptions(data);
             setTimezone(data.timezone);
+            // most notes are from today's meeting; with a date, "by Friday" turns into a due date
+            setMeetingDate((current) => current || data.today);
             setBoardId((current) => (data.boards.some((b) => String(b.id) === current) ? current : data.boards.length === 1 ? String(data.boards[0].id) : ''));
         }).catch((e) => {
             if (axios.isCancel(e)) return;
@@ -252,7 +254,7 @@ export default function ExtractActionItemsDialog({ open, onOpenChange, workspace
 
                             <div className="grid gap-3 sm:grid-cols-2">
                                 <div className="space-y-1.5">
-                                    <Label htmlFor="mn-date">Meeting date (optional)</Label>
+                                    <Label htmlFor="mn-date">Meeting date</Label>
                                     <Input id="mn-date" type="date" value={meetingDate} onChange={(e) => setMeetingDate(e.target.value)} />
                                 </div>
                                 <div className="space-y-1.5">
@@ -260,7 +262,7 @@ export default function ExtractActionItemsDialog({ open, onOpenChange, workspace
                                     <Input id="mn-tz" value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Europe/Berlin" disabled={!meetingDate} />
                                 </div>
                                 <p className="text-xs text-muted-foreground sm:col-span-2">
-                                    With the meeting date and time zone, deadlines like “by Friday” become dates. Without them, only full dates are used.
+                                    Deadlines like “by Friday” become due dates counted from the meeting date. Clear it to use only full dates (“14 November 2026”).
                                 </p>
                             </div>
 

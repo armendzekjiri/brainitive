@@ -29,7 +29,7 @@ test.describe('as a guest', () => {
         }
 
         // /profile was asked for last: logging in lands there (a fresh, extra member session)
-        await page.getByLabel('Email').fill(USERS.member.email);
+        await page.getByLabel('Email', { exact: true }).fill(USERS.member.email);
         await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
         await page.getByRole('button', { name: 'Log in' }).click();
         await expect(page).toHaveURL(/\/profile$/);
@@ -50,7 +50,7 @@ test.describe('as a guest', () => {
 
         await expect(page.getByText(BAD_CREDENTIALS)).toBeVisible();
         await expect(page).toHaveURL(/\/login$/);
-        await expect(page.getByLabel('Email')).toHaveValue(email);
+        await expect(page.getByLabel('Email', { exact: true })).toHaveValue(email);
         await expect(page.getByLabel('Password', { exact: true })).toHaveValue('');
     });
 
@@ -62,7 +62,7 @@ test.describe('as a guest', () => {
         await expect(page).toHaveURL(/\/forgot-password$/);
         // labelled (sr-only) since BRAI-96
         // the email field has no label; it is the only textbox on the page
-        const email = page.getByLabel('Email');
+        const email = page.getByLabel('Email', { exact: true });
         await email.fill(newAccount('unknown').email);
         await page.getByRole('button', { name: 'Email Password Reset Link' }).click();
         await expect(page.getByText(confirmation)).toBeVisible();
@@ -127,7 +127,7 @@ test.describe('signed in as the owner', () => {
         await expect(page).toHaveURL(/\/profile$/);
         await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
         await expect(page.getByLabel('Name')).toHaveValue(USERS.owner.name);
-        await expect(page.getByLabel('Email')).toHaveValue(USERS.owner.email);
+        await expect(page.getByLabel('Email', { exact: true })).toHaveValue(USERS.owner.email);
         // verified: no re-send prompt
         await expect(page.getByText('Your email address is unverified.')).toHaveCount(0);
         for (const title of ['Profile information', 'Notifications', 'Update password', 'Connected apps', 'Delete account']) {
@@ -174,10 +174,10 @@ test.describe('a new account', () => {
         await expect(page.getByLabel('Name')).toHaveValue(account.name);
 
         // somebody else's address is refused
-        await page.getByLabel('Email').fill(USERS.owner.email);
+        await page.getByLabel('Email', { exact: true }).fill(USERS.owner.email);
         await page.getByRole('button', { name: 'Save', exact: true }).first().click();
         await expect(page.getByText('The email has already been taken.')).toBeVisible();
-        await page.getByLabel('Email').fill(account.email);
+        await page.getByLabel('Email', { exact: true }).fill(account.email);
 
         const name = `${account.name} renamed`;
         const bio = 'Writes e2e tests for a living.';
@@ -190,7 +190,7 @@ test.describe('a new account', () => {
 
         await page.reload();
         await expect(page.getByLabel('Name')).toHaveValue(name);
-        await expect(page.getByLabel('Email')).toHaveValue(account.email);
+        await expect(page.getByLabel('Email', { exact: true })).toHaveValue(account.email);
         await expect(page.getByLabel('Bio (optional)')).toHaveValue(bio);
         // the sidebar's account button shows the new name
         await expect(page.getByRole('button', { name: new RegExp(name) })).toBeVisible();

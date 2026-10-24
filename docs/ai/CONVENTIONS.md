@@ -166,9 +166,11 @@ database driver before using raw engine-specific SQL such as constraint changes 
 `MODIFY` statements.
 
 ### Notifications
-- Channels via `via()`. Use the `App\Notifications\Concerns\SendsWebPush` trait + its
-  `withWebPush()` / `webPush()` helpers to add browser push **only for `User` notifiables**
-  (never `TicketContact`). DB payload via `toDatabase()`. See the [skill](./skills/add-notification.md).
+- Every in-app type is listed in `NotificationCatalog::TYPES` (type → category) and its `via()` is
+  `RespectsPreferences::channelsFor($notifiable, '<type>')`: the user picks channels per category.
+  Push messages via `SendsWebPush::webPush()`; ticket contacts get mail only. DB payload via
+  `toDatabase()` with the contract keys (`type`, `title`, `body`, `url`, `actor_*`, `project_name`,
+  `subject_key`). See the [skill](./skills/add-notification.md).
 - **Time-based notifications** (reminders, digests) compute dates and times in the recipient's
   `User::localTimezone()`, never the app's UTC, and dedup through `sent_item_reminders` with a
   key that contains the absolute time (or the local date for once-a-day messages). Personal

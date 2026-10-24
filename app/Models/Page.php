@@ -2,6 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\Events\DomainEvents;
+use App\Support\Events\EventPayloads;
+use App\Support\Notifications\PageMentions;
 use App\Support\References\ContentReferences;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -278,6 +281,8 @@ class Page extends Model
     public function saveDraft(User $user, array $changes): void
     {
         $attributes = ['edit_revision' => $this->edit_revision + 1];
+        // what the editor had before this save: @mentions already in it were notified earlier
+        $before = $this->isPublished() && $this->hasUnpublishedChanges() ? $this->draft_content : $this->content;
 
         if ($this->isPublished()) {
             if (array_key_exists('content', $changes)) {
@@ -305,6 +310,10 @@ class Page extends Model
         }
 
         $this->update($attributes);
+
+        if (array_key_exists('content', $changes)) {
+            PageMentions::notify($this, $user, $before, $changes['content']); // BRAI-103: new mentions only
+        }
     }
 
     /**
@@ -312,13 +321,17 @@ class Page extends Model
      */
     public function publish(?User $user = null, ?string $message = null): PageVersion
     {
+        $firstPublish = $this->getOriginal('status') !== 'published';
         $this->update([
             'status' => 'published',
             'published_at' => now(),
             'last_edited_by' => $user?->id ?? $this->last_edited_by,
         ]);
 
-        return $this->recordVersion($user, $message);
+        $version = $this->recordVersion($user, $message);
+        DomainEvents::emit(EventPayloads::projectWorkspaceId($this->project_id), 'page.published', fn () => EventPayloads::page($this, $firstPublish), $user); // webhooks (BRAI-104)
+
+        return $version;
     }
 
     /**
@@ -339,7 +352,10 @@ class Page extends Model
             'edit_revision' => $this->edit_revision + 1,
         ])->save();
 
-        return $this->recordVersion($user, $message);
+        $version = $this->recordVersion($user, $message);
+        DomainEvents::emit(EventPayloads::projectWorkspaceId($this->project_id), 'page.published', fn () => EventPayloads::page($this, false), $user); // webhooks (BRAI-104)
+
+        return $version;
     }
 
     /**

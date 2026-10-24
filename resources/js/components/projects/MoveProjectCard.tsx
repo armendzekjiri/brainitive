@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { formatHoursMinutes } from '@/lib/timesheet';
 import type { Project, Workspace } from '@/types';
 import { router } from '@inertiajs/react';
 import axios from 'axios';
@@ -21,6 +22,7 @@ interface Preview {
     keep: Person[];
     remove: Person[];
     external_links: number;
+    time: { moving_minutes: number; billed_minutes: number; unmatched_activities: string[] };
 }
 
 /**
@@ -124,6 +126,15 @@ export default function MoveProjectCard({ workspace, project, targets }: { works
                                         {preview.external_links > 0 && (
                                             <p className="text-muted-foreground">
                                                 {preview.external_links} link{preview.external_links === 1 ? '' : 's'} to issues in other projects will be removed.
+                                            </p>
+                                        )}
+                                        {preview.time.moving_minutes + preview.time.billed_minutes > 0 && (
+                                            <p className="text-muted-foreground" data-testid="move-time">
+                                                {preview.time.moving_minutes > 0 && <>{formatHoursMinutes(preview.time.moving_minutes)} of unbilled time moves with the project. </>}
+                                                {preview.time.billed_minutes > 0 && <>{formatHoursMinutes(preview.time.billed_minutes)} already on a finalized report stays with “{workspace.name}”. </>}
+                                                {preview.time.unmatched_activities.length > 0 && (
+                                                    <>“{target.name}” has no activity called {preview.time.unmatched_activities.map((n) => `“${n}”`).join(', ')}: those entries move without an activity.</>
+                                                )}
                                             </p>
                                         )}
                                         {preview.new_slug !== project.slug && (

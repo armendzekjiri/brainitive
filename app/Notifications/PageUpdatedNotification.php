@@ -4,13 +4,15 @@ namespace App\Notifications;
 
 use App\Models\Page;
 use App\Models\User;
+use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class PageUpdatedNotification extends Notification
 {
-    use Queueable, SendsWebPush;
+    use Queueable, RespectsPreferences, SendsWebPush;
 
     public function __construct(
         public readonly Page $page,
@@ -19,7 +21,7 @@ class PageUpdatedNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        return $this->withWebPush($notifiable, ['database']);
+        return $this->channelsFor($notifiable, 'page_updated');
     }
 
     public function toWebPush(object $notifiable, $notification)
@@ -53,5 +55,15 @@ class PageUpdatedNotification extends Notification
             'actor_name' => $this->actor->name,
             'actor_avatar' => $this->actor->avatar_display,
         ];
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        $name = NewLeadNotification::plain((string) $this->page->name);
+
+        return (new MailMessage)
+            ->subject("Page updated: {$name}")
+            ->line("{$this->actor->name} updated the page {$name}.")
+            ->action('Open page', $this->toDatabase($notifiable)['page_url']);
     }
 }

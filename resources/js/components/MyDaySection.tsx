@@ -1,10 +1,11 @@
 import { DUE_TONE_CLASSES, dueInfo } from '@/components/lists/taskDates';
 import { Button } from '@/components/ui/button';
+import WorkDoneToggle from '@/components/WorkDoneToggle';
 import { cn } from '@/lib/utils';
 import type { MyDayPlan, MyWorkItem, PageProps } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
 import { format } from 'date-fns';
-import { CheckCircle2, GripVertical, History, Play, Sun, Timer, X } from 'lucide-react';
+import { GripVertical, History, Play, Sun, Timer, X } from 'lucide-react';
 import { useState, type DragEvent } from 'react';
 import { toast } from 'sonner';
 
@@ -20,18 +21,20 @@ function href(row: Row): string | null {
 }
 
 /**
- * Today's hand-picked plan on top of My Work (BRAI-74). The order is the user's; nothing here
- * changes a task's status or due date. Board items can be timed (one timer per person).
+ * Today's hand-picked plan on top of My Work (BRAI-74). The order is the user's, except that done
+ * tasks sink to the bottom. The circle completes / reopens a task (WorkDoneToggle); due dates are
+ * never changed here. Board items can be timed (one timer per person).
  */
 export default function MyDaySection({ plan }: { plan: MyDayPlan }) {
     const timer = usePage<PageProps>().props.activeTimer;
     // A dragged order shows right away and is dropped once the server answered.
     const [optimistic, setOptimistic] = useState<Row[] | null>(null);
-    const rows = optimistic ?? plan.rows;
+    const done = (item: MyWorkItem) => !!item.completed_at || item.status === 'done';
+    // done tasks sink to the bottom (stable: the user's order within open and within done)
+    const rows = [...(optimistic ?? plan.rows)].sort((a, b) => Number(done(a.item)) - Number(done(b.item)));
     const [drag, setDrag] = useState<{ key: string; over: string | null } | null>(null);
 
     const options = { preserveScroll: true, preserveState: true } as const;
-    const done = (item: MyWorkItem) => !!item.completed_at || item.status === 'done';
     const doneCount = rows.filter((r) => done(r.item)).length;
 
     const remove = (item: MyWorkItem) =>
@@ -126,10 +129,11 @@ export default function MyDaySection({ plan }: { plan: MyDayPlan }) {
                                 )}
                             >
                                 <GripVertical className="size-4 shrink-0 cursor-grab text-muted-foreground/0 group-hover:text-muted-foreground/60" aria-hidden />
-                                <span className={cn('grid size-4 shrink-0 place-items-center rounded-full border', isDone ? 'border-brand-green text-brand-green' : 'border-border')} aria-hidden>
-                                    {isDone && <CheckCircle2 className="size-4" />}
-                                </span>
-                                <span className="sr-only">{isDone ? 'Done:' : 'Open:'}</span>
+                                {row.project.workspace?.slug ? (
+                                    <WorkDoneToggle item={item} workspaceSlug={row.project.workspace.slug} projectSlug={row.project.slug} />
+                                ) : (
+                                    <span className="sr-only">{isDone ? 'Done:' : 'Open:'}</span>
+                                )}
                                 <span className="w-16 shrink-0 font-mono text-[11px] text-muted-foreground">{item.key}</span>
                                 <span className="min-w-0 flex-1">
                                     {url ? (

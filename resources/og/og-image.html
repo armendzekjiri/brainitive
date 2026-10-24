@@ -1,0 +1,54 @@
+<!doctype html>
+<!--
+  Social preview card (Open Graph / X), 1200×630. Rendered to public/images/og-image.png by
+  `node scripts/make-og-image.mjs` (v1.39.0, BRAI-109). Edit the copy here, then re-run the script.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    font-family: 'Hanken Grotesk', 'Inter', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    background: radial-gradient(900px 500px at 0% 0%, rgba(14,131,220,.16), transparent 60%),
+                radial-gradient(800px 500px at 100% 100%, rgba(105,167,72,.18), transparent 60%),
+                #f7fafc;
+    color: #485E72;
+    position: relative;
+  }
+  .copy { position: absolute; left: 72px; top: 70px; width: 560px; }
+  .logo { height: 58px; }
+  h1 { margin-top: 44px; font-size: 58px; line-height: 1.06; font-weight: 800; letter-spacing: -1.5px; color: #33475b; }
+  .grad { background: linear-gradient(90deg, #0E83DC, #69A748); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  p { margin-top: 22px; font-size: 24px; line-height: 1.4; color: #5b7084; }
+  .pills { position: absolute; left: 72px; bottom: 64px; display: flex; flex-wrap: wrap; gap: 10px; width: 560px; }
+  .pill { font-size: 17px; font-weight: 600; padding: 8px 15px; border-radius: 999px; background: #fff; border: 1px solid #dbe5ee; color: #485E72; }
+  .shot {
+    position: absolute; left: 690px; top: 92px; width: 760px; height: 454px; border-radius: 18px; overflow: hidden;
+    box-shadow: 0 30px 70px rgba(30,60,90,.28), 0 0 0 1px rgba(30,60,90,.08);
+    transform: perspective(1600px) rotateY(-12deg) rotateX(3deg);
+    transform-origin: left center;
+    background: #fff;
+  }
+  .shot img { width: 100%; height: 100%; object-fit: cover; object-position: left top; display: block; }
+  .domain { position: absolute; right: 56px; bottom: 34px; font-size: 18px; font-weight: 700; color: #0E83DC; letter-spacing: .3px; }
+</style>
+</head>
+<body>
+  <div class="copy">
+    <img class="logo" src="../../public/images/logo.png" alt="">
+    <h1>Your workspace for <span class="grad">projects, boards &amp; docs</span></h1>
+    <p>Boards, sprints, docs, whiteboards, helpdesk and client billing — one app for the whole team.</p>
+  </div>
+  <div class="pills">
+    <span class="pill">Kanban &amp; Scrum</span>
+    <span class="pill">Docs &amp; Wiki</span>
+    <span class="pill">Gantt plans</span>
+    <span class="pill">Time &amp; billing</span>
+    <span class="pill">AI built in</span>
+  </div>
+  <div class="shot"><img src="../../public/images/screenshots/board.jpg" alt=""></div>
+  <div class="domain">brainitive.app</div>
+</body>
+</html>

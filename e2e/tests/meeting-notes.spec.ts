@@ -119,6 +119,30 @@ test.describe('meeting notes to issues', () => {
         await expect(card(page, `${pricing}!`)).toHaveCount(0);
     });
 
+    test('the meeting date defaults to today, so “by Friday” becomes the due date', async ({ page }) => {
+        const title = uid('Send the offer');
+        const requests = await fakeAi(page, () => [
+            proposal(1, title, 'Erin sends the offer by Friday.', { due: { text: 'by Friday', date: '2030-01-18', status: 'set' } }),
+        ]);
+
+        await openFromProject(page);
+        await pickMainBoard(page);
+        const meetingDate = dialog(page).getByLabel('Meeting date');
+        await expect(meetingDate).toHaveValue(/^\d{4}-\d{2}-\d{2}$/); // today in the user's zone
+        await expect(dialog(page).getByLabel('Time zone')).not.toHaveValue('');
+        const today = await meetingDate.inputValue();
+        await dialog(page).getByLabel('Meeting notes').fill('Erin sends the offer by Friday.');
+        await dialog(page).getByRole('button', { name: 'Extract action items' }).click();
+        await expect(suggestion(page, 1)).toBeVisible();
+        expect(requests[0]).toMatchObject({ meeting_date: today, timezone: expect.any(String) });
+
+        await expect(suggestion(page, 1).getByLabel('Due date')).toHaveValue('2030-01-18');
+        const created = page.waitForRequest(/\/meeting-notes\/create$/);
+        await dialog(page).getByRole('button', { name: 'Create 1 issue' }).click();
+        expect((await created).postDataJSON().actions[0]).toMatchObject({ title, due_date: '2030-01-18' });
+        await expect(dialog(page).getByText(/Created 1 issue on Main Board/)).toBeVisible();
+    });
+
     test('a lost response is retried without creating the issues twice', async ({ page }) => {
         const title = uid('Send the recap');
         await fakeAi(page, () => [proposal(1, title, 'Erin sends the recap.')]);
