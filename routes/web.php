@@ -30,6 +30,7 @@ use App\Http\Controllers\PollVoteController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectGithubController;
+use App\Http\Controllers\ProjectHealthController;
 use App\Http\Controllers\ProjectTemplateController;
 use App\Http\Controllers\PublicLeadFormController;
 use App\Http\Controllers\PublicPlanController;
@@ -382,6 +383,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('releases/{release}/notes', [ReleaseController::class, 'saveNotes'])->whereNumber('release')->name('releases.notes.save');
             Route::post('releases/{release}/publish', [ReleaseController::class, 'publish'])->whereNumber('release')->name('releases.publish');
             Route::delete('releases/{release}/publish', [ReleaseController::class, 'unpublish'])->whereNumber('release')->name('releases.unpublish');
+            // Project health: live metrics + saved status updates (BRAI-64)
+            Route::get('health', [ProjectHealthController::class, 'show'])->name('projects.health');
+            Route::post('health/narrative', [ProjectHealthController::class, 'narrative'])->middleware('throttle:10,1,projects.health.narrative')->name('projects.health.narrative');
+            Route::post('health/reports', [ProjectHealthController::class, 'store'])->middleware('throttle:30,1,projects.health.reports.store')->name('projects.health.reports.store');
+            Route::delete('health/reports/{healthReport}', [ProjectHealthController::class, 'destroy'])->whereNumber('healthReport')->name('projects.health.reports.destroy');
             Route::get('plans/{plan:slug}', [PlanController::class, 'show'])->name('plans.show');
             Route::patch('plans/{plan:slug}', [PlanController::class, 'update'])->name('plans.update');
             Route::delete('plans/{plan:slug}', [PlanController::class, 'destroy'])->name('plans.destroy');
