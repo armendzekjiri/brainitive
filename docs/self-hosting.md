@@ -113,9 +113,56 @@ docker run --rm -v brainitive_storage:/storage -v "$PWD":/backup alpine tar czf 
 | AI writing helpers | Workspace settings → AI (bring your own provider key) |
 | MCP (Claude, ChatGPT) | Add `https://<your-domain>/mcp` as a connector; users sign in with OAuth |
 | Browser extension | Nothing to set up: in the extension choose **Self-hosted** and enter your domain. It registers itself over OAuth and needs HTTPS (plain http only for `localhost`) |
+| Email to helpdesk (forwarding address) | A domain for incoming mail + Postmark or Mailgun, see [Email to helpdesk](#email-to-helpdesk-forwarding-addresses) |
 
 After changing `.env`: `docker compose up -d` (the app container rebuilds its config cache
 on start).
+
+## Email to helpdesk (forwarding addresses)
+
+Every helpdesk can get an address like `support-k3x9q2m7ab@inbound.example.com` (Helpdesk
+settings → **Email** → *Forwarding address*). Teams forward their support mailbox there (Gmail,
+Outlook, any alias), and every mail becomes a ticket. Brainitive doesn't run a mail server: an
+inbound-mail provider receives the mail and posts it to Brainitive. Until this is set up, the
+settings explain it and the webhook endpoints answer 404.
+
+1. **Pick a domain (or subdomain) only for this**, e.g. `inbound.example.com`, and point its MX
+   records at the provider:
+   - **Postmark:** `MX 10 inbound.postmarkapp.com`. In the server's *Inbound* stream →
+     Settings, set *Inbound domain forwarding* to your domain.
+   - **Mailgun:** add the domain under *Sending → Domains* (DNS records as shown there; MX
+     `mxa.mailgun.org` / `mxb.mailgun.org`, or `mxa.eu.mailgun.org` / `mxb.eu.mailgun.org` in the EU).
+2. **Send the mail to Brainitive:**
+   - **Postmark:** Inbound stream → Settings → *Webhook URL*:
+     `https://postmark:<token>@<your-domain>/api/inbound-mail/postmark` (basic auth) or
+     `https://<your-domain>/api/inbound-mail/postmark?token=<token>` (if a proxy in front of
+     Brainitive already uses basic auth). `<token>` = a long random string
+     (`openssl rand -hex 32`).
+   - **Mailgun:** *Receiving → Create route*: expression type *Match recipient*,
+     `.*@inbound.example.com`, action *Forward* to `https://<your-domain>/api/inbound-mail/mailgun`,
+     and *Stop*. Requests are verified with the *HTTP webhook signing key* (Sending → Webhooks).
+3. **`.env`:**
+
+   ```dotenv
+   INBOUND_MAIL_DOMAIN=inbound.example.com
+   INBOUND_MAIL_PROVIDER=postmark            # or mailgun: which setup the settings page shows
+   INBOUND_MAIL_POSTMARK_TOKEN=<token>        # Postmark
+   INBOUND_MAIL_MAILGUN_SIGNING_KEY=<key>     # Mailgun
+   ```
+
+   Optional limits: `INBOUND_MAIL_MAX_ATTACHMENT_KB` (10240), `INBOUND_MAIL_MAX_ATTACHMENTS` (10),
+   `INBOUND_MAIL_MAX_TOTAL_KB` (30720) — larger attachments are dropped, the mail still arrives;
+   `INBOUND_MAIL_REPLAY_WINDOW` (900 s) for Mailgun signatures. Your web server / PHP must accept
+   request bodies as large as the provider sends (Postmark: up to 35 MB per message, base64
+   inflates attachments by a third).
+
+Received mail is processed by the queue worker (the `queue` container), and the webhook answers
+at once. A regenerated address replaces the old one immediately. Refused mail (unknown address,
+stale or replayed signature) is answered so that the provider does not retry (Postmark 403,
+Mailgun 406); a wrong token or signature gets 401.
+
+Prefer your own mailbox over IMAP instead? Helpdesk settings → Email → *Connected mailbox* reads
+it directly, no provider needed.
 
 ## Security notes
 

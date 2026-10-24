@@ -109,6 +109,7 @@ import {
     ArrowUp,
     ArrowDown,
     Columns3,
+    Repeat,
 } from 'lucide-react';
 import { useState, useRef, useEffect, DragEvent, FormEvent, useCallback, useMemo } from 'react';
 import { Link } from '@inertiajs/react';
@@ -191,6 +192,7 @@ function ItemCard({
     const [confirmDelete, setConfirmDelete] = useState(false);
     const subtaskCount = item.children_count ?? 0;
     const [duplicating, setDuplicating] = useState(false);
+    const repeatLabel = item.recurring_occurrence?.recurring_issue?.badge_label ?? null;
 
     const assign = (userId: number | null) => {
         setAssignOpen(false);
@@ -247,17 +249,27 @@ function ItemCard({
                 </div>
             )}
 
-            {/* Due date */}
-            {item.due_date && !isDone && (
-                <span className={cn(
-                    'inline-flex w-fit items-center gap-1 h-5 px-1.5 rounded-[3px] border text-[11px] font-medium',
-                    isOverdue ? 'border-destructive/40 bg-destructive/10 text-destructive'
-                        : isDueSoon ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400'
-                        : 'border-border text-muted-foreground',
-                )}>
-                    <Calendar className="size-3" />
-                    {new Date(item.due_date).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
-                </span>
+            {/* Due date + "Repeats weekly" (created by a recurring issue, BRAI-123) */}
+            {((item.due_date && !isDone) || repeatLabel) && (
+                <div className="flex items-center gap-1 flex-wrap">
+                    {item.due_date && !isDone && (
+                        <span className={cn(
+                            'inline-flex w-fit items-center gap-1 h-5 px-1.5 rounded-[3px] border text-[11px] font-medium',
+                            isOverdue ? 'border-destructive/40 bg-destructive/10 text-destructive'
+                                : isDueSoon ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+                                : 'border-border text-muted-foreground',
+                        )}>
+                            <Calendar className="size-3" />
+                            {new Date(item.due_date).toLocaleDateString('en', { month: 'short', day: 'numeric' })}
+                        </span>
+                    )}
+                    {repeatLabel && (
+                        <span className="inline-flex w-fit items-center gap-1 h-5 px-1.5 rounded-[3px] bg-primary/10 text-[11px] font-medium text-primary" title="Created by a recurring issue">
+                            <Repeat className="size-3" />
+                            {repeatLabel}
+                        </span>
+                    )}
+                </div>
             )}
 
             {/* Footer: type + key | points · priority · assignee */}
@@ -2670,6 +2682,7 @@ export default function BoardsShow({
                     board={board}
                     activeTab={currentView}
                     onSelectView={setCurrentView}
+                    canCreateItems={canEditItems}
                 />
 
                 {/* Active sprint bar (Scrum boards) */}
