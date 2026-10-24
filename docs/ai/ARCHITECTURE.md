@@ -236,6 +236,14 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **UI:** `Pages/Workload/Index.tsx` (grid, team totals, review, "How it's calculated"), `components/workload/` (`WorkloadWeekSheet` = one person's week: availability override, planned work, plan work with the remaining-estimate suggestion; `CapacityDialog`; `WorkloadReview`; `workloadActions`), helpers `lib/workload.ts`, types `Workload*` in `types/index.d.ts`. Entry: project sidebar → Boards → "Workload" (after Releases).
 - **Tests:** `tests/Feature/Workload/WorkloadTest.php`, e2e `e2e/tests/workload.spec.ts` (+ `e2e/helpers/workload.ts`). Rules: [`tasks/feat-workload-planning.md`](./tasks/feat-workload-planning.md), traps in KNOWLEDGE.
 
+### Billing → Activities (v1.38.0, BRAI-99)
+Part of time tracking & client billing; the shared contract is [`tasks/release-v1.38.0-billing.md`](./tasks/release-v1.38.0-billing.md).
+- **Models:** `BillingActivity` (`hourly` | `fixed`, `rate_cents`, `billable`, `color`, `position`, `archived_at`; name unique per workspace), `BillingActivityDefault` (workspace + item type → activity).
+- **Controller / routes:** `Billing\BillingActivityController`, `routes/billing.php` (section "agent: activities"): `billing.activities.index|store|update|archive|restore|reorder|destroy` and `billing.activities.defaults.update` (one item type at a time; null clears). All `Gate::authorize('manageBilling', $workspace)`.
+- **Rules:** the price is sent in the currency's major unit (`price`, ≤ 2 decimals) and stored as cents. Names are unique case-insensitively, archived ones included. A used activity can't be deleted (a validation message says to archive it). Archiving also deletes the defaults that point at it, so a default always names an active activity. Usable item types = active global types + the types of the workspace's projects.
+- **UI:** `Pages/Billing/Activities/Index.tsx` inside `Layouts/BillingLayout.tsx`; types `BillingActivity`, `BillingActivityItemType` in `types/index.d.ts`.
+- **Tests:** `tests/Feature/Billing/BillingActivitiesTest.php`, e2e `e2e/tests/billing-activities.spec.ts`.
+
 ### Sharing (read-only links)
 - **Docs and issues:** `ShareLink` (morph `shareable`: `Page` / `Item`, random token, `expires_at`, `revoked_at`, views), `ShareLinkController` — manage via `share-links.*` (needs `update` on the item), public view `/s/{token}` → `Pages/Share/Show.tsx` (`noindex`, 410 when revoked / expired / deleted). UI: `components/share/ShareButton.tsx`.
 - **Plans** keep their own `share_token` (`/share/plans/{token}`); bookmarks / snippets have `visibility = public`.
