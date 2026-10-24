@@ -8,6 +8,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\LeadForms\LeadFormDefinition;
+use App\Support\Notifications\Assignments;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -102,7 +103,9 @@ class LeadController extends Controller
             }
         }
 
+        $previousAssigneeId = $lead->assigned_to;
         $lead->update($validated);
+        Assignments::lead($lead, $previousAssigneeId);
 
         return back();
     }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Notifications\PageMentions;
 use App\Support\References\ContentReferences;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -278,6 +279,8 @@ class Page extends Model
     public function saveDraft(User $user, array $changes): void
     {
         $attributes = ['edit_revision' => $this->edit_revision + 1];
+        // what the editor had before this save: @mentions already in it were notified earlier
+        $before = $this->isPublished() && $this->hasUnpublishedChanges() ? $this->draft_content : $this->content;
 
         if ($this->isPublished()) {
             if (array_key_exists('content', $changes)) {
@@ -305,6 +308,10 @@ class Page extends Model
         }
 
         $this->update($attributes);
+
+        if (array_key_exists('content', $changes)) {
+            PageMentions::notify($this, $user, $before, $changes['content']); // BRAI-103: new mentions only
+        }
     }
 
     /**

@@ -1,4 +1,4 @@
-# Release v1.39.0: Notifications, webhooks, insights, custom sidebar (BRAI-102 … BRAI-107)
+# Release v1.39.0: Notifications, webhooks, insights, custom sidebar, bulk edit (BRAI-102 … BRAI-109)
 
 ## Goal (the user's words, 2026-10-24)
 > "i dont like notifications how they look, make something better ui/ux, check everything that need
@@ -21,6 +21,7 @@ only workspace admins may change an entry's billable flag.
 | 5 | BRAI-106 Custom sidebar + project page | `feat/custom-sidebar` | `Layouts/AppLayout.tsx` (sidebar), sidebar payload in `HandleInertiaRequests`, `Pages/Projects/Show.tsx`, `ProjectController@show`, `users.sidebar_preferences` |
 | 6 | BRAI-107 Billing follow-ups | `fix/billing-followups` (lead) | `ProjectTransfer`, `TimesheetController` billable rule |
 | 7 | BRAI-108 Board list bulk edit | `feat/board-bulk-edit` | the board **list view** components, a bulk-update endpoint (`BoardController` or a new `BulkItemController`) |
+| 8 | BRAI-109 Homepage link previews | `feat/social-meta` (lead, merged) | `partials/social-meta.blade.php`, `public/images/og-image.png`, `scripts/make-og-image.mjs` |
 
 Files touched by two tickets (expected, merged by the lead): `ItemObserver`, `SprintLifecycle`, `TicketController`,
 `ItemComments`, `LeadIntake` (tickets 2 + 3 add calls on different lines), `types/index.d.ts`, `docs/ai/*`.

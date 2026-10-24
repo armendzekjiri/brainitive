@@ -6,8 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatHoursMinutes, localToday } from '@/lib/timesheet';
 import { cn } from '@/lib/utils';
-import type { TimeLogActivity, TimesheetEntry, TimesheetIssueOption, TimesheetProject } from '@/types';
-import { router } from '@inertiajs/react';
+import type { PageProps, TimeLogActivity, TimesheetEntry, TimesheetIssueOption, TimesheetProject } from '@/types';
+import { router, usePage } from '@inertiajs/react';
 import { Loader2, Search, X } from 'lucide-react';
 import { useEffect, useId, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { toast } from 'sonner';
@@ -35,6 +35,8 @@ interface Props {
  */
 export default function TimeEntryDialog({ open, onOpenChange, workspaceSlug, entry, day, projects, activities, activityRequired, defaultActivityId }: Props) {
     const legacy = entry?.source === 'legacy';
+    // only workspace admins choose billable; for everyone else it follows the activity (v1.39.0)
+    const canSetBillable = !!usePage<PageProps>().props.canManageWorkspace;
     const [spentOn, setSpentOn] = useState(day);
     const [projectId, setProjectId] = useState('');
     const [item, setItem] = useState<PickedItem | null>(null);
@@ -88,7 +90,7 @@ export default function TimeEntryDialog({ open, onOpenChange, workspaceSlug, ent
             item_id: item?.id ?? null,
             time: time.trim(),
             activity_id: activityId ? Number(activityId) : null,
-            billable,
+            ...(canSetBillable ? { billable } : {}),
             note: note.trim() || null,
         };
         const options = {
@@ -160,10 +162,16 @@ export default function TimeEntryDialog({ open, onOpenChange, workspaceSlug, ent
                         </div>
                     )}
 
-                    <label className="flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} className="size-4 rounded border-input accent-primary" />
-                        Billable
-                    </label>
+                    {canSetBillable ? (
+                        <label className="flex items-center gap-2 text-sm">
+                            <input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} className="size-4 rounded border-input accent-primary" />
+                            Billable
+                        </label>
+                    ) : (
+                        <p className="text-xs text-muted-foreground" data-testid="entry-billable-hint">
+                            {billable ? 'Billable' : 'Not billable'} — set by the activity. Workspace admins can change it.
+                        </p>
+                    )}
 
                     <div className="space-y-1.5">
                         <Label htmlFor="entry-note">Note <span className="font-normal text-muted-foreground">(optional)</span></Label>

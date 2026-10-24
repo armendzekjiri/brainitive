@@ -52,6 +52,8 @@ class MeetingNotesController extends Controller
             'boards' => $this->writableBoards($user, $project)->map(fn (Board $b) => ['id' => $b->id, 'name' => $b->name])->values(),
             'members' => $this->members($project)->map(fn (User $m) => ['id' => $m->id, 'name' => $m->name])->values(),
             'timezone' => $user->localTimezone(),
+            // the meeting date defaults to today, so "by Friday" becomes a date (BRAI-62 feedback)
+            'today' => now($user->localTimezone())->toDateString(),
             'source' => $source,
             'limits' => ['max_chars' => ActionItemExtractor::MAX_SOURCE_CHARS, 'max_proposals' => ActionItemExtractor::MAX_PROPOSALS],
         ]);
