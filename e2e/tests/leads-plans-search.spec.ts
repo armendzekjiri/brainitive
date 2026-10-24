@@ -314,7 +314,9 @@ test.describe('search', () => {
     });
 
     test('command palette finds the Main Board by "main board" and opens it', async ({ page }) => {
-        await page.goto(urls.home);
+        // from the seeded project: its boards rank first. On Home the "current" project is the owner's
+        // last visited one, which parallel specs keep changing, and they create many other "Main Board"s.
+        await page.goto(urls.project());
         await page.keyboard.press('Control+k');
         const input = page.getByRole('combobox', { name: 'Search or type a command' });
         await input.fill('main board');
