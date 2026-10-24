@@ -14,6 +14,7 @@ use App\Support\Boards\ItemComments;
 use App\Support\Boards\SprintLifecycle;
 use App\Support\Events\DomainEvents;
 use App\Support\LeadForms\LeadIntake;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -195,6 +196,21 @@ class WebhookEventsTest extends TestCase
         $this->assertSame(['id' => $this->editor->id, 'name' => $this->editor->name], $data['user']);
         $this->assertSame($item->key, $data['item']['key']);
         $this->assertStringNotContainsString('rate', json_encode($data));
+    }
+
+    public function test_a_failing_payload_query_does_not_abort_the_callers_transaction(): void
+    {
+        DB::transaction(function () {
+            try {
+                DomainEvents::emit($this->workspace, 'item.created', fn () => DB::select('SELECT * FROM no_such_table'));
+                $this->fail('unit tests surface payload errors');
+            } catch (QueryException) {
+                // in production this is reported, not thrown
+            }
+
+            // the savepoint was rolled back, the caller's transaction is still usable (Postgres)
+            $this->assertSame(1, (int) DB::selectOne('SELECT 1 AS one')->one);
+        });
     }
 
     public function test_every_event_has_a_label_and_area(): void
