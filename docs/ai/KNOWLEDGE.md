@@ -192,9 +192,10 @@ id fails `item_ids`, no per-id `exists` rule). Queries grow by a small constant 
   column. Subtasks aren't completed with their parent (no prompt in bulk).
 - **Sprint** uses `moveToSprint()` (subtree travels along); selected subtasks are skipped and
   counted in the flash ("follow their parent's sprint"). Kanban boards refuse `sprint_id`.
-- **Notifications** are sent after the commit: `ItemAssignedNotification` (new assignee ≠ actor) and
-  `ItemStatusChangedNotification` (watchers ≠ actor), the same rules as the single edit. They live in
-  `BulkItemEdit::notifyAssignee()` / `notifyStatusChange()` so they can move into `ItemObserver`.
+- **Notifications:** "assigned you" comes from `ItemObserver` → `Support/Notifications/Assignments`
+  (after commit, never for yourself), like every other path; the bulk code sends none itself.
+  `ItemStatusChangedNotification` goes to watchers (≠ actor) after the commit, the same rule as
+  `BoardController::moveItem` (`BulkItemEdit::notifyStatusChange()`).
 - `bulk` routes are registered **before** `items/{item}`; otherwise `bulk` would bind as an item id.
 
 ### Explicit route binders run before implicit ones

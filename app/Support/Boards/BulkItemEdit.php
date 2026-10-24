@@ -8,7 +8,6 @@ use App\Models\BoardColumn;
 use App\Models\Item;
 use App\Models\Sprint;
 use App\Models\User;
-use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
@@ -18,8 +17,9 @@ use Illuminate\Support\Facades\DB;
  * Bulk edit / delete of board issues (BRAI-108, the board's list view).
  *
  * Every issue is changed through the model with one save, so `ItemObserver` writes one history
- * entry per issue, exactly like a single edit. Notifications go out after the commit, once per
- * issue (never once per changed field).
+ * entry per issue, exactly like a single edit. "Assigned you" comes from that observer too
+ * (Support\Notifications\Assignments, after commit); status changes notify watchers here, after the
+ * commit, once per issue (never once per changed field).
  */
 class BulkItemEdit
 {
@@ -48,18 +48,16 @@ class BulkItemEdit
             ? collect()
             : $board->project->labels()->whereIn('id', [...$addLabels, ...$removeLabels])->pluck('name', 'id');
 
-        $assignments = [];   // [Item, ?int previous assignee]
         $statusMoves = [];   // [Item, BoardColumn previous column]
         $updated = 0;
         $skippedSubtasks = 0;
 
-        DB::transaction(function () use ($board, $items, $changes, $column, $sprint, $addLabels, $removeLabels, $labelNames, &$assignments, &$statusMoves, &$updated, &$skippedSubtasks) {
+        DB::transaction(function () use ($board, $items, $changes, $column, $sprint, $addLabels, $removeLabels, $labelNames, &$statusMoves, &$updated, &$skippedSubtasks) {
             // New cards land at the bottom of the target column, in the order they were listed
             $nextPosition = $column ? (int) (Item::where('column_id', $column->id)->max('position') ?? 0) : 0;
 
             foreach ($items as $item) {
                 $touched = false;
-                $previousAssignee = $item->assigned_to;
                 $previousColumn = $item->column;
 
                 foreach (['assigned_to', 'priority_id', 'item_type_id'] as $field) {
@@ -86,9 +84,6 @@ class BulkItemEdit
                     $touched = true;
                 }
 
-                if ($item->wasChanged('assigned_to') && $item->assigned_to) {
-                    $assignments[] = [$item, $previousAssignee];
-                }
                 if ($item->wasChanged('column_id') && $previousColumn) {
                     $statusMoves[] = [$item, $previousColumn];
                 }
@@ -113,9 +108,6 @@ class BulkItemEdit
             }
         });
 
-        foreach ($assignments as [$item, $previousAssignee]) {
-            self::notifyAssignee($item, $previousAssignee, $actor);
-        }
         // Fresh watchers (a new assignee joined them on save) and the new column, in two queries
         (new EloquentCollection(array_column($statusMoves, 0)))->load(['watchers', 'column']);
         $access = []; // watcher id => may still open the project (asked once per person)
@@ -180,19 +172,6 @@ class BulkItemEdit
         ]);
 
         return true;
-    }
-
-    /**
-     * Same rule as BoardController::updateItem: tell a new assignee, unless they did it themselves.
-     * BRAI-103 moves assignment notifications into ItemObserver; then this method goes.
-     */
-    private static function notifyAssignee(Item $item, ?int $previousAssignee, User $actor): void
-    {
-        if (! $item->assigned_to || $item->assigned_to === $previousAssignee || $item->assigned_to === $actor->id) {
-            return;
-        }
-
-        User::find($item->assigned_to)?->notify(new ItemAssignedNotification($item, $actor));
     }
 
     /**
