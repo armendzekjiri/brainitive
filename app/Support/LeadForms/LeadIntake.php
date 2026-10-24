@@ -8,6 +8,9 @@ use App\Models\LeadForm;
 use App\Models\User;
 use App\Notifications\LeadConfirmationNotification;
 use App\Notifications\NewLeadNotification;
+use App\Support\Events\DomainEvents;
+use App\Support\Events\EventPayloads;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\RateLimiter;
@@ -53,6 +56,7 @@ class LeadIntake
         });
 
         self::afterCreate($form, $lead);
+        DomainEvents::emit(EventPayloads::projectWorkspaceId($form->project_id), 'lead.created', fn () => Arr::except(self::payload(Lead::findOrFail($lead->id)), ['event'])); // webhooks (BRAI-104)
 
         return $lead;
     }

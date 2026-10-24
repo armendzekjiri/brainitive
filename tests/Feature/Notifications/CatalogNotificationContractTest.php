@@ -9,6 +9,7 @@ use App\Models\Sprint;
 use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\TicketContact;
+use App\Models\Webhook;
 use App\Notifications\CatalogNotification;
 use App\Notifications\InvitationAcceptedNotification;
 use App\Notifications\ItemCommentedNotification;
@@ -19,6 +20,7 @@ use App\Notifications\SprintCompletedNotification;
 use App\Notifications\SprintStartedNotification;
 use App\Notifications\TaskAssignedNotification;
 use App\Notifications\TicketStatusChangedNotification;
+use App\Notifications\WebhookDisabledNotification;
 use App\Notifications\WorkspaceRoleChangedNotification;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -59,6 +61,7 @@ class CatalogNotificationContractTest extends TestCase
         $helpdesk = Helpdesk::create(['project_id' => $this->project->id, 'name' => 'Support', 'slug' => 'support', 'created_by' => $this->editor->id]);
         $contact = TicketContact::create(['email' => 'c@example.com', 'uuid' => (string) Str::uuid()]);
         $ticket = $helpdesk->tickets()->create(['subject' => 'Help', 'column_id' => $helpdesk->columns()->first()->id, 'ticket_contact_id' => $contact->id, 'key' => 'SUP-1', 'position' => 0]);
+        $webhook = Webhook::create(['workspace_id' => $this->workspace->id, 'name' => 'Zapier', 'url' => 'https://hooks.example.com/x?token=secret', 'secret' => Webhook::generateSecret(), 'events' => ['*'], 'created_by' => $this->editor->id]);
         auth()->logout();
 
         return [
@@ -71,6 +74,7 @@ class CatalogNotificationContractTest extends TestCase
             new InvitationAcceptedNotification($this->workspace, $this->editor, 'member'),
             new WorkspaceRoleChangedNotification($this->workspace, $this->editor, 'member', 'admin'),
             new TicketStatusChangedNotification($ticket, $this->editor, 'New', 'Done'),
+            new WebhookDisabledNotification($webhook, 'HTTP 500'), // BRAI-104
         ];
     }
 

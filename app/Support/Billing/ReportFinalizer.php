@@ -7,6 +7,8 @@ use App\Models\BillingReport;
 use App\Models\BillingSetting;
 use App\Models\TimeEntry;
 use App\Models\User;
+use App\Support\Events\DomainEvents;
+use App\Support\Events\EventPayloads;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -114,6 +116,8 @@ class ReportFinalizer
                     ], $result->fixedCharges));
                 }
 
+                DomainEvents::emit($locked->workspace_id, 'billing_report.finalized', fn () => EventPayloads::billingReport($locked), $user); // webhooks (BRAI-104)
+
                 return $locked;
             });
         } catch (UniqueConstraintViolationException) {
@@ -153,6 +157,7 @@ class ReportFinalizer
                 throw ValidationException::withMessages(['report' => 'Only finalized or sent reports can be marked as paid.']);
             }
             $locked->forceFill(['status' => 'paid', 'paid_at' => now()])->save();
+            DomainEvents::emit($locked->workspace_id, 'billing_report.paid', fn () => EventPayloads::billingReport($locked)); // webhooks (BRAI-104)
 
             return $locked;
         });
