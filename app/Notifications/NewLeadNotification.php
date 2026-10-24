@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\Lead;
+use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
 use App\Support\LeadForms\LeadFormDefinition;
 use Illuminate\Bus\Queueable;
@@ -16,13 +17,13 @@ use Illuminate\Support\Str;
  */
 class NewLeadNotification extends Notification implements ShouldQueue
 {
-    use Queueable, SendsWebPush;
+    use Queueable, RespectsPreferences, SendsWebPush;
 
     public function __construct(public readonly Lead $lead) {}
 
     public function via(object $notifiable): array
     {
-        return $this->withWebPush($notifiable, ['database', 'mail']);
+        return $this->channelsFor($notifiable, 'lead_created');
     }
 
     public function toDatabase(object $notifiable): array

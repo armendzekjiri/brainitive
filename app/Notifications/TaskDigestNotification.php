@@ -2,9 +2,11 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 /**
@@ -13,7 +15,7 @@ use Illuminate\Notifications\Notification;
  */
 class TaskDigestNotification extends Notification implements ShouldQueue
 {
-    use Queueable, SendsWebPush;
+    use Queueable, RespectsPreferences, SendsWebPush;
 
     /**
      * @param  list<string>  $titles  a few task titles, most urgent first
@@ -27,7 +29,7 @@ class TaskDigestNotification extends Notification implements ShouldQueue
 
     public function via(object $notifiable): array
     {
-        return $this->withWebPush($notifiable, ['database']);
+        return $this->channelsFor($notifiable, 'task_digest');
     }
 
     public function summary(): string
@@ -52,5 +54,15 @@ class TaskDigestNotification extends Notification implements ShouldQueue
             'titles' => $this->titles,
             'url' => $this->url,
         ];
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        $mail = (new MailMessage)->subject('Your tasks: '.$this->summary());
+        foreach ($this->titles as $title) {
+            $mail->line('- '.NewLeadNotification::plain($title));
+        }
+
+        return $mail->action('Open my tasks', url($this->url));
     }
 }

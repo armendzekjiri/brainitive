@@ -2,9 +2,11 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 /**
@@ -17,7 +19,7 @@ use Illuminate\Notifications\Notification;
  */
 class ItemReminderNotification extends Notification implements ShouldQueue
 {
-    use Queueable, SendsWebPush;
+    use Queueable, RespectsPreferences, SendsWebPush;
 
     public function __construct(
         public readonly string $itemKey,
@@ -28,7 +30,7 @@ class ItemReminderNotification extends Notification implements ShouldQueue
 
     public function via(object $notifiable): array
     {
-        return $this->withWebPush($notifiable, ['database']);
+        return $this->channelsFor($notifiable, 'item_reminder');
     }
 
     public function toWebPush(object $notifiable, $notification)
@@ -49,5 +51,13 @@ class ItemReminderNotification extends Notification implements ShouldQueue
             'item_url' => $this->url,
             'when_label' => $this->whenLabel,
         ];
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        return (new MailMessage)
+            ->subject("{$this->itemKey} {$this->whenLabel}")
+            ->line(NewLeadNotification::plain($this->itemTitle))
+            ->action('Open', url($this->url));
     }
 }

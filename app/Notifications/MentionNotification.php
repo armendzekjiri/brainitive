@@ -3,13 +3,15 @@
 namespace App\Notifications;
 
 use App\Models\User;
+use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class MentionNotification extends Notification
 {
-    use Queueable, SendsWebPush;
+    use Queueable, RespectsPreferences, SendsWebPush;
 
     public function __construct(
         public readonly string $contextType, // 'item' or 'page'
@@ -20,7 +22,7 @@ class MentionNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        return $this->withWebPush($notifiable, ['database']);
+        return $this->channelsFor($notifiable, 'mentioned');
     }
 
     public function toWebPush(object $notifiable, $notification)
@@ -42,5 +44,16 @@ class MentionNotification extends Notification
             'actor_name' => $this->actor->name,
             'actor_avatar' => $this->actor->avatar_display,
         ];
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        $where = $this->contextType === 'page' ? 'on a page' : 'in an issue';
+
+        return (new MailMessage)
+            ->subject("{$this->actor->name} mentioned you: ".NewLeadNotification::plain($this->contextTitle))
+            ->line("{$this->actor->name} mentioned you {$where}.")
+            ->line(NewLeadNotification::plain($this->contextTitle))
+            ->action('Open', url($this->contextUrl));
     }
 }

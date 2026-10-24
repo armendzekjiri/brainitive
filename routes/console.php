@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\GithubDelivery;
+use App\Models\InboxNotification;
 use App\Models\LeadFormEvent;
 use App\Models\McpRequest;
 use Illuminate\Foundation\Inspiring;
@@ -28,3 +29,6 @@ Schedule::command('app:send-task-digest')
 
 // Forget MCP idempotency keys after 7 days.
 Schedule::command('model:prune', ['--model' => [McpRequest::class, GithubDelivery::class, LeadFormEvent::class]])->daily();
+
+// Inbox (BRAI-102): archived notifications after 90 days, every notification after 180 days.
+Schedule::command('model:prune', ['--model' => [InboxNotification::class]])->dailyAt('03:30');

@@ -6,6 +6,7 @@ use App\Models\Ticket;
 use App\Models\TicketContact;
 use App\Models\TicketReply;
 use App\Models\User;
+use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -15,7 +16,7 @@ use Illuminate\Support\Str;
 
 class TicketReplyNotification extends Notification implements ShouldQueue
 {
-    use Queueable, SendsWebPush;
+    use Queueable, RespectsPreferences, SendsWebPush;
 
     public function __construct(
         public readonly Ticket $ticket,
@@ -29,11 +30,8 @@ class TicketReplyNotification extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        if ($notifiable instanceof TicketContact) {
-            return ['mail'];
-        }
-
-        return $this->withWebPush($notifiable, ['database', 'mail']);
+        // contacts: mail only (RespectsPreferences); users: their helpdesk preferences
+        return $this->channelsFor($notifiable, 'ticket_reply');
     }
 
     public function toWebPush(object $notifiable, $notification)
