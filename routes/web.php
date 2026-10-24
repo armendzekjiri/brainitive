@@ -224,6 +224,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Workspace-scoped routes
     Route::prefix('workspaces/{workspace}')->group(function () {
+        // Time tracking & client billing (v1.38.0)
+        require __DIR__.'/billing.php';
+
         Route::get('users', [WorkspaceController::class, 'users'])->name('workspaces.users.index');
         Route::get('lead-form-templates', [LeadFormController::class, 'templates'])->name('lead-form-templates.index');
         Route::get('members/{user}', [WorkspaceController::class, 'memberProfile'])->name('workspaces.members.profile');

@@ -77,6 +77,8 @@ import {
     List,
     ListTodo,
     Lightbulb,
+    Clock,
+    ReceiptText,
     Bookmark as BookmarkIcon,
     Code2,
     PencilRuler,
@@ -1748,6 +1750,35 @@ function AppSidebar({
                                 )}
                             </Link>
                         </SidebarMenuItem>
+                        {/* Time tracking & billing (v1.38.0); the timesheet route comes with BRAI-99 */}
+                        {currentWorkspace && route().has('timesheet.index') && (
+                            <SidebarMenuItem>
+                                <Link
+                                    href={route('timesheet.index', currentWorkspace.slug)}
+                                    className={cn(
+                                        'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                                        route().current() === 'timesheet.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                    )}
+                                >
+                                    <Clock className="size-4" />
+                                    <span>Timesheet</span>
+                                </Link>
+                            </SidebarMenuItem>
+                        )}
+                        {currentWorkspace && canManageWorkspace && (
+                            <SidebarMenuItem>
+                                <Link
+                                    href={route('billing.index', currentWorkspace.slug)}
+                                    className={cn(
+                                        'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                                        route().current()?.startsWith('billing.') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                    )}
+                                >
+                                    <ReceiptText className="size-4" />
+                                    <span>Billing</span>
+                                </Link>
+                            </SidebarMenuItem>
+                        )}
                         <SidebarMenuItem>
                             <Link
                                 href={route('calendar.index')}

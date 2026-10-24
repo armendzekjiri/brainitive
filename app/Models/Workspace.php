@@ -150,6 +150,27 @@ class Workspace extends Model
         return $this->hasMany(Project::class);
     }
 
+    // client billing (v1.38.0)
+    public function clients(): HasMany
+    {
+        return $this->hasMany(Client::class);
+    }
+
+    public function billingActivities(): HasMany
+    {
+        return $this->hasMany(BillingActivity::class);
+    }
+
+    public function timeEntries(): HasMany
+    {
+        return $this->hasMany(TimeEntry::class);
+    }
+
+    public function billingReports(): HasMany
+    {
+        return $this->hasMany(BillingReport::class);
+    }
+
     /**
      * Get all bookmarks in this workspace.
      */

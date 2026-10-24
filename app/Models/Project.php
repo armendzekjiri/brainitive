@@ -86,6 +86,12 @@ class Project extends Model
         return $this->belongsTo(Workspace::class);
     }
 
+    /** The client this project is billed to (v1.38.0); set by workspace admins only. */
+    public function client(): BelongsTo
+    {
+        return $this->belongsTo(Client::class);
+    }
+
     /**
      * Get the user who created this project.
      */

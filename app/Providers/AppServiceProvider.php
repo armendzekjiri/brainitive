@@ -19,6 +19,7 @@ use App\Models\User;
 use App\Models\WorkloadAllocation;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
+use App\Policies\BillingPolicy;
 use App\Policies\BoardPolicy;
 use App\Policies\BoardViewPolicy;
 use App\Policies\BookmarkPolicy;
@@ -121,6 +122,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Capture::class, CapturePolicy::class);
         Gate::policy(ProjectHealthReport::class, ProjectHealthReportPolicy::class);
         Gate::policy(WorkloadAllocation::class, WorkloadPolicy::class);
+        // client billing (v1.38.0): workspace admins only
+        Gate::define('manageBilling', [BillingPolicy::class, 'manageBilling']);
 
         // Resolve page from project's allPages() so child pages (e.g. documents inside folders) are found
         // Explicit binders run BEFORE implicit binding, so {workspace} / {project} are still raw
