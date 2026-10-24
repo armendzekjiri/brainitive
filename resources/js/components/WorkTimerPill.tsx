@@ -5,9 +5,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { LogActivityPicker, useLogActivities } from '@/components/billing/LogActivityPicker';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { formatDuration } from '@/lib/duration';
+import { localToday } from '@/lib/timesheet';
 import type { PageProps } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
 import { Square, Timer } from 'lucide-react';
@@ -36,7 +38,18 @@ export default function WorkTimerPill() {
     const [time, setTime] = useState('');
     const [note, setNote] = useState('');
     const [error, setError] = useState<string | null>(null);
+    const [activityId, setActivityId] = useState('');
+    const [spentOn, setSpentOn] = useState(localToday);
+    const [fieldErrors, setFieldErrors] = useState<{ activity_id?: string; spent_on?: string }>({});
     const [busy, setBusy] = useState(false);
+    // v1.38.0: what you worked on (activity) and the day, asked when you stop
+    const { options, loading: activitiesLoading } = useLogActivities(timer?.item?.workspace, timer?.item?.id, review);
+    const activities = options?.activities ?? [];
+    const activityRequired = options?.required ?? false;
+
+    useEffect(() => {
+        if (review && options?.default_activity_id && !activityId) setActivityId(String(options.default_activity_id));
+    }, [review, options]); // eslint-disable-line react-hooks/exhaustive-deps
     // Count from the server's elapsed time, so a wrong device clock can't skew what gets logged.
     const [base, setBase] = useState(0);
 
@@ -56,6 +69,9 @@ export default function WorkTimerPill() {
         setTime(formatDuration(minutes));
         setNote('');
         setError(null);
+        setFieldErrors({});
+        setActivityId('');
+        setSpentOn(localToday());
         setOpen(false);
         setReview(true);
     };
@@ -63,7 +79,7 @@ export default function WorkTimerPill() {
     const stop = (e: FormEvent) => {
         e.preventDefault();
         setBusy(true);
-        router.post(route('work-timer.stop'), { timer_id: timer.id, time, note }, {
+        router.post(route('work-timer.stop'), { timer_id: timer.id, time, note, activity_id: activityId || null, spent_on: spentOn || null }, {
             preserveScroll: true,
             onSuccess: (page) => {
                 setReview(false);
@@ -72,6 +88,7 @@ export default function WorkTimerPill() {
             },
             onError: (errors) => {
                 setError(errors.time ?? null);
+                setFieldErrors({ activity_id: errors.activity_id, spent_on: errors.spent_on });
                 if (errors.timer) {
                     setReview(false);
                     toast.error(errors.timer);
@@ -144,13 +161,26 @@ export default function WorkTimerPill() {
                                 {error ?? `The timer ran ${formatDuration(minutes)}. Change it if you took a break — e.g. 45m, 1h 30m.`}
                             </p>
                         </div>
+                        {activities.length === 0 && fieldErrors.activity_id && <p className="text-xs text-destructive">{fieldErrors.activity_id}</p>}
+                        {activities.length > 0 && (
+                            <div className="space-y-1.5">
+                                <Label htmlFor="timer-activity">Activity{activityRequired ? '' : <span className="font-normal text-muted-foreground"> (optional)</span>}</Label>
+                                <LogActivityPicker id="timer-activity" activities={activities} value={activityId} onChange={setActivityId} required={activityRequired} invalid={!!fieldErrors.activity_id} />
+                                {fieldErrors.activity_id && <p className="text-xs text-destructive">{fieldErrors.activity_id}</p>}
+                            </div>
+                        )}
+                        <div className="space-y-1.5">
+                            <Label htmlFor="timer-date">Date</Label>
+                            <Input id="timer-date" type="date" value={spentOn} onChange={(e) => setSpentOn(e.target.value)} max={localToday()} aria-invalid={!!fieldErrors.spent_on || undefined} />
+                            {fieldErrors.spent_on && <p className="text-xs text-destructive">{fieldErrors.spent_on}</p>}
+                        </div>
                         <div className="space-y-1.5">
                             <Label htmlFor="timer-note">Note <span className="font-normal text-muted-foreground">(optional)</span></Label>
                             <Input id="timer-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={255} placeholder="What did you do?" />
                         </div>
                         <DialogFooter className="gap-2 sm:justify-between">
                             <Button type="button" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setConfirmDiscard(true)}>Discard</Button>
-                            <Button type="submit" disabled={busy || !time.trim() || !timer.item}>Log time</Button>
+                            <Button type="submit" disabled={busy || activitiesLoading || !time.trim() || !timer.item || (activityRequired && !activityId)}>Log time</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>

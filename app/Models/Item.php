@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 #[ObservedBy([ItemObserver::class])]
@@ -361,36 +362,52 @@ class Item extends Model
     }
 
     /**
-     * Add worked minutes to the item and record a `work_logged` entry (by the signed-in user).
-     * Used by "Log work" and by stopping a focus timer.
+     * Log worked minutes on the item, by the signed-in user: one TimeEntry (the v1.38.0 ledger,
+     * whose model events add the minutes to `time_spent`) plus a `work_logged` history entry.
+     * The one way to log work on an issue: "Log work", stopping a focus timer, the timesheet.
+     * `$spentOn` defaults to today in the user's zone; `$billable` defaults from the activity.
+     * Callers validate the activity (TimeLogActivities::resolve) and the right to log.
      */
-    public function logWork(int $minutes, ?string $note = null): void
-    {
-        // Time ledger (v1.38.0): the entry adds the minutes to time_spent (TimeEntry::created).
-        // Minimal bridge from BRAI-100 (no activity, today); BRAI-99 (log-time) owns this method.
+    public function logWork(
+        int $minutes,
+        ?string $note = null,
+        ?BillingActivity $activity = null,
+        ?string $spentOn = null,
+        string $source = TimeEntry::SOURCE_MANUAL,
+        ?bool $billable = null,
+    ): TimeEntry {
         $user = auth()->user();
-        $projectId = $this->project_id ?? $this->board?->project_id;
-        TimeEntry::create([
-            'workspace_id' => Project::whereKey($projectId)->value('workspace_id'),
-            'project_id' => $projectId,
-            'item_id' => $this->id,
-            'user_id' => $user?->id,
-            'spent_on' => now($user instanceof User ? $user->localTimezone() : null)->toDateString(),
-            'minutes' => $minutes,
-            'note' => $note,
-            'billable' => true,
-            'source' => TimeEntry::SOURCE_MANUAL,
-            'item_key' => $this->key,
-            'item_title' => mb_substr((string) $this->title, 0, 255),
-        ]);
-        $this->time_spent = (int) static::whereKey($this->id)->value('time_spent');
-        $this->syncOriginalAttribute('time_spent');
+        $projectId = $this->project_id ?? Board::withTrashed()->whereKey($this->board_id)->value('project_id');
+        $zone = $user instanceof User ? $user->localTimezone() : config('app.timezone');
 
-        ActivityLog::log($this, 'work_logged', null, [
-            'minutes' => $minutes,
-            'total_minutes' => $this->time_spent,
-            'note' => $note,
-        ]);
+        return DB::transaction(function () use ($minutes, $note, $activity, $spentOn, $source, $billable, $user, $projectId, $zone) {
+            $entry = TimeEntry::create([
+                'workspace_id' => Project::withTrashed()->whereKey($projectId)->value('workspace_id'),
+                'project_id' => $projectId,
+                'item_id' => $this->id,
+                'user_id' => $user?->getAuthIdentifier(),
+                'billing_activity_id' => $activity?->id,
+                'spent_on' => $spentOn ?? now($zone)->toDateString(),
+                'minutes' => $minutes,
+                'note' => $note,
+                'billable' => $billable ?? ($activity ? (bool) $activity->billable : true),
+                'source' => $source,
+                'item_key' => $this->key,
+                'item_title' => Str::limit((string) $this->title, 250, ''),
+            ]);
+
+            // the entry's event incremented the column with the query builder: reload the value
+            $this->time_spent = (int) static::withTrashed()->whereKey($this->id)->value('time_spent');
+            $this->syncOriginalAttribute('time_spent');
+
+            $metadata = ['minutes' => $minutes, 'total_minutes' => $this->time_spent, 'note' => $note, 'time_entry_id' => $entry->id];
+            if ($activity) {
+                $metadata['activity'] = $activity->name; // a display value: stays readable after renames
+            }
+            ActivityLog::log($this, 'work_logged', null, $metadata);
+
+            return $entry;
+        });
     }
 
     /**

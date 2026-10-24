@@ -31,9 +31,17 @@ export async function addToProject(page: Page, project: string, userId: number):
     expect(response.status(), `add member: ${await response.text()}`).toBeLessThan(400);
 }
 
-/** Log work on an issue through the real "Log work" endpoint, as the user signed in on `page` (today, no activity). */
+/**
+ * Log work on an issue through the real "Log work" endpoint, as the user signed in on `page` (today),
+ * with the issue's default activity — required once the workspace has activities (E2eSeeder fixtures).
+ */
 export async function logWork(page: Page, project: string, itemId: number, time: string): Promise<void> {
-    const response = await request(page, 'POST', `${projectPath(project)}/boards/main-board/items/${itemId}/work-logs`, { time });
+    const options = (await (await request(page, 'GET', `/workspaces/${SEED.workspace}/timesheet/activities?item_id=${itemId}`)).json()) as {
+        activities: { id: number }[];
+        default_activity_id: number | null;
+    };
+    const activityId = options.default_activity_id ?? options.activities[0]?.id ?? null;
+    const response = await request(page, 'POST', `${projectPath(project)}/boards/main-board/items/${itemId}/work-logs`, { time, activity_id: activityId });
     expect(response.status(), `log work: ${await response.text()}`).toBeLessThan(400);
 }
 

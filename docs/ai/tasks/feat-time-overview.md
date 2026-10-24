@@ -1,7 +1,7 @@
 # Clients + team time overview + Excel export (BRAI-100)
 
 **Branch:** feat/time-overview (from `release/v1.38.0`)
-**Status:** in-progress
+**Status:** done
 **Started:** 2026-10-24
 **Board card:** BRAI-100
 **Contract:** [release-v1.38.0-billing.md](./release-v1.38.0-billing.md) (foundation: `Client`, `projects.client_id`,
@@ -44,7 +44,9 @@ the user can `manageBilling`, validated against this workspace's clients (`clien
 **E2E entries:** the journey logs time through the real `boards.items.work-logs.store` endpoint. On this
 branch `Item::logWork()` writes a `TimeEntry` (no activity, today, manual) instead of incrementing
 `time_spent` directly — a deliberate bridge: BRAI-99 (log-time) rewrites the same method, so the merge
-conflicts there on purpose and log-time's version wins.
+conflicts there on purpose and log-time's version wins. **Resolved:** `release/v1.38.0` (with BRAI-99) was
+merged into this branch; `Item::logWork()` is BRAI-99's, and the e2e helper sends the issue's default
+activity (`timesheet.activities`), which the seeded e2e activities require.
 
 ## Changes
 - Routes (`routes/billing.php`, BRAI-100 section): `billing.clients.index|store|update|archive|restore`,
@@ -54,7 +56,9 @@ conflicts there on purpose and log-time's version wins.
   (client select for admins).
 - Support: `App\Support\Billing\TimeOverview` (filters, query, grouping, estimate),
   `App\Support\Billing\TimeExport` (xlsx stream).
-- `Item::logWork()` → `TimeEntry` (bridge, see above).
+- `Item::logWork()` → `TimeEntry` (bridge, superseded by BRAI-99 on merge).
+- `ProjectTransfer::move()` clears `client_id`; the overview joins project / client only inside the
+  entry's workspace and while not trashed ("Deleted or moved project"), after review.
 - Frontend: `Pages/Billing/Clients/Index.tsx`, `Pages/Billing/Time/Index.tsx`, `components/billing/*`;
   `Pages/Projects/Edit.tsx` client select; types in `types/index.d.ts`.
 - Foundation test: `billing.index` now redirects (a tab exists) instead of 404.

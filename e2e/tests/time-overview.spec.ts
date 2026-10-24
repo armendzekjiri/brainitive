@@ -53,6 +53,8 @@ test.describe('team time overview', () => {
         await expect(overviewRow(page, new RegExp(`^${owner}`))).toContainText('3.5 h');
         await expect(overviewRow(page, new RegExp(`^${member}`))).toContainText('1.75 h');
         await expect(page.getByTestId('time-total-non-billable')).toContainText('0 h');
+        // the seeded activities are priced, so there is an estimate in the workspace currency
+        await expect(page.getByTestId('time-total-estimate')).toContainText('€');
 
         // entry detail lists all four entries
         await page.getByLabel('Show entries').check();

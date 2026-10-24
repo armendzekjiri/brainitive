@@ -157,11 +157,12 @@ class TimeOverviewTest extends TestCase
     public function test_work_logged_on_an_issue_shows_up_this_month(): void
     {
         $item = $this->item(['title' => 'Checkout bug', 'time_spent' => 30]);
-        $this->actingAs($this->editor)->post($this->itemRoute('boards.items.work-logs.store', $item), ['time' => '1h 30m'])->assertSessionHasNoErrors();
+        $this->actingAs($this->editor)->post($this->itemRoute('boards.items.work-logs.store', $item), ['time' => '1h 30m', 'activity_id' => $this->programming->id])->assertSessionHasNoErrors();
 
         $this->assertSame(120, $item->fresh()->time_spent); // the ledger keeps the running total
         $summary = $this->summary(['period' => 'this_month', 'group' => 'person']);
         $this->assertSame([$this->editor->name, 90, 1], [$summary['groups'][0]['label'], $summary['groups'][0]['minutes'], $summary['totals']['entries']]);
+        $this->assertSame(18000, $summary['totals']['amount_cents']); // 1.5 h × 120 €
     }
 
     public function test_entries_of_other_workspaces_never_show_up(): void
