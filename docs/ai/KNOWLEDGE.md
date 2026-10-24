@@ -600,8 +600,10 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `components/notifications/categories.tsx` is a `.tsx`.
 - **New files under `resources/js/components/` on macOS:** git's index has both `Components/` (old
   Breeze files) and `components/`. A plain `git add` may record a new file under `Components/`,
-  which breaks the `@/components` import on Linux (CI). Add with
-  `git -c core.ignorecase=false add resources/js/components/...` and check `git ls-files`.
+  which breaks the `@/components` import on Linux (CI). Add **one explicit lowercase path**
+  (`git add resources/js/components/x/New.tsx`) and check `git ls-files`. Never combine
+  `core.ignorecase=false` with `add -A` / `add .`: git then sees the whole on-disk `Components/` folder
+  as new files and stages ~160 duplicates (happened once, v1.40.0 foundation).
 - **Notification coverage (BRAI-103, v1.39.0): who is told, and never twice.**
   - **Assignments fire from the observers, nowhere else.** `ItemObserver::created/updated` (on an
     `assigned_to` change) → `Support\Notifications\Assignments::item()` sends `ItemAssignedNotification`;
