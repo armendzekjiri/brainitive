@@ -174,12 +174,16 @@ board access (every policy check starts with BoardPolicy::view).
 
 ### Bulk edit in the board list view goes through the model, once per issue (BRAI-108)
 `PATCH|DELETE boards/{board}/items/bulk` (`BoardBulkItemController` → `Support/Boards/BulkItemEdit`)
-changes up to 200 issues of **this** board (`item_ids.*` exists with `board_id`, `deleted_at` null).
+changes up to 200 issues of **this** board (one query loads them; a missing, deleted or foreign
+id fails `item_ids`, no per-id `exists` rule). Queries grow by a small constant per issue
+(asserted in `BulkItemEditTest`): eager-load and resolve shared lookups once, never per issue.
 - **One `save()` per issue**, all fields at once, so `ItemObserver` writes one history entry per
   issue (`moved` / `assigned` / `updated`) and any observer hook (notifications, webhooks) fires
-  once per issue, never once per field. Labels are a pivot: one `labels_changed` entry per issue.
-- **Authorization is per issue** (`ItemPolicy::update` / `delete`): one forbidden issue = 403 for the
-  whole request, nothing changes. The page gets `canDeleteAnyItem` (policy probe with an unsaved
+  once per issue, never once per field. Labels are a pivot: one `labels_changed` entry per issue; a
+  sprint move is a second save (`moveToSprint`), so it adds its own entry.
+- **Authorization:** `ItemPolicy::update` depends only on the project, so one check covers all issues;
+  `delete` is checked per issue (creators may delete their own) unless the user may delete any issue.
+  One forbidden issue = 403 for the whole request, nothing changes. The page gets `canDeleteAnyItem` (policy probe with an unsaved
   item) so the bar disables Delete instead of hitting that 403 (Inertia would show an error modal).
 - **Status** follows `Item::moveToColumn` (`completed_at` set on entering a done column, cleared on
   leaving) but an issue that is already done keeps its date. Moved cards go to the bottom of the

@@ -12,6 +12,7 @@ use App\Models\Sprint;
 use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
@@ -201,7 +202,7 @@ class BulkItemEditTest extends TestCase
         $other = Board::factory()->create(['project_id' => $this->project->id]);
         $foreign = Item::factory()->create(['board_id' => $other->id, 'created_by' => $this->editor->id]);
 
-        $this->bulk([$mine, $foreign], ['column_id' => $this->column('done')])->assertSessionHasErrors('item_ids.1');
+        $this->bulk([$mine, $foreign], ['column_id' => $this->column('done')])->assertSessionHasErrors('item_ids');
 
         $this->assertNotSame($this->column('done'), $mine->fresh()->column_id);
     }
@@ -296,5 +297,41 @@ class BulkItemEditTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page->where('canDeleteAnyItem', false)->where('canEditItems', true));
         $this->actingAs($this->viewer)->get($url)
             ->assertInertia(fn (AssertableInertia $page) => $page->where('canDeleteAnyItem', false)->where('canEditItems', false));
+    }
+
+    public function test_a_project_without_own_or_enabled_types_offers_all_types_like_the_board(): void
+    {
+        $bug = ItemType::create(['name' => 'Bug', 'slug' => 'bug-fallback', 'is_active' => true]);
+        $this->project->update(['settings' => ['disabled_item_types' => ItemType::whereNull('project_id')->pluck('id')->all()]]);
+        $this->assertSame(0, ItemType::forProject($this->project->fresh())->count());
+        $item = $this->item();
+
+        $this->bulk([$item], ['item_type_id' => $bug->id])->assertSessionHasNoErrors();
+        $this->assertSame($bug->id, $item->fresh()->item_type_id);
+    }
+
+    public function test_queries_grow_by_a_small_constant_per_issue(): void
+    {
+        $label = $this->label('ui');
+        $watcher = $this->projectMember('viewer');
+        $count = function (int $n) use ($label, $watcher): int {
+            $items = collect(range(1, $n))->map(function () use ($watcher) {
+                $item = $this->item();
+                $item->addWatcher($watcher);
+
+                return $item;
+            })->all();
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->bulk($items, ['column_id' => $this->column('done'), 'add_label_ids' => [$label->id]])->assertSessionHasNoErrors();
+            DB::disableQueryLog();
+
+            return count(DB::getQueryLog());
+        };
+
+        $ten = $count(10);
+        $twenty = $count(20);
+        // per issue: the save, its history entry (+ display names), the label attach + entry, a notification
+        $this->assertLessThanOrEqual(12, ($twenty - $ten) / 10, "10 issues: {$ten} queries, 20 issues: {$twenty}");
     }
 }

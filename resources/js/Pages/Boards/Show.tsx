@@ -1336,7 +1336,7 @@ function ListView({
     /** Multi-select + bulk edit (BRAI-108); null = read-only list (no checkboxes). */
     bulk: ListBulkOptions | null;
 }) {
-    const allItems = useMemo(() => columns.flatMap(col => col.items.map(item => ({ ...item, columnName: col.name }))), [columns]);
+    const allItems = columns.flatMap(col => col.items.map(item => ({ ...item, columnName: col.name })));
 
     // Hidden custom field columns, per board and person (new fields show up by default)
     const toggleFieldColumn = (id: number) => setHiddenFieldIds((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
@@ -1395,10 +1395,13 @@ function ListView({
 
     const clearSelection = useCallback(() => { setSelectedIds(new Set()); anchorId.current = null; }, []);
     const toggleRow = (id: number, range: boolean) => {
+        // Read the anchor before the update: React may run the updater after the ref has moved on
+        const anchor = anchorId.current;
+        anchorId.current = id;
         setSelectedIds((current) => {
             const next = new Set(current);
             const select = !current.has(id);
-            const from = anchorId.current === null ? -1 : visibleIds.indexOf(anchorId.current);
+            const from = anchor === null ? -1 : visibleIds.indexOf(anchor);
             const to = visibleIds.indexOf(id);
             if (range && from !== -1 && to !== -1) {
                 // Shift-click: the whole range takes the clicked row's new state
@@ -1408,7 +1411,6 @@ function ListView({
             } else if (select) next.add(id); else next.delete(id);
             return next;
         });
-        anchorId.current = id;
     };
     const toggleAll = () => {
         setSelectedIds(allSelected ? new Set() : new Set(visibleIds));
@@ -1476,7 +1478,7 @@ function ListView({
                                     <input
                                         ref={headerCheckbox}
                                         type="checkbox"
-                                        aria-label={allSelected ? 'Clear selection' : 'Select all issues'}
+                                        aria-label="Select all issues"
                                         className={LIST_CHECKBOX_CLASS}
                                         checked={allSelected}
                                         disabled={visibleIds.length === 0}

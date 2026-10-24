@@ -37,7 +37,8 @@ class BoardBulkItemController extends Controller
             'changes.column_id' => ['sometimes', 'required', 'integer', Rule::exists('board_columns', 'id')->where('board_id', $board->id)],
             'changes.assigned_to' => ['sometimes', 'nullable', 'integer', new ProjectMember($project)],
             'changes.priority_id' => ['sometimes', 'required', 'integer', Rule::in(ItemPriority::forProject($project)->pluck('id')->all())],
-            'changes.item_type_id' => ['sometimes', 'required', 'integer', Rule::in(ItemType::forProject($project)->pluck('id')->all())],
+            // the types the board offers: the project's, or all of them when it has none (BoardController::show)
+            'changes.item_type_id' => ['sometimes', 'required', 'integer', Rule::in(ItemType::forProject($project)->pluck('id')->all() ?: ItemType::pluck('id')->all())],
             'changes.sprint_id' => ['sometimes', 'nullable', 'integer', Rule::exists('sprints', 'id')->where('board_id', $board->id)->whereIn('status', [Sprint::STATUS_PLANNED, Sprint::STATUS_ACTIVE])],
             'changes.due_date' => ['sometimes', 'nullable', 'date'],
             'changes.add_label_ids' => ['sometimes', 'array', 'max:50'],
@@ -58,9 +59,9 @@ class BoardBulkItemController extends Controller
         }
 
         $items = $this->items($board, $validated['item_ids']);
-        foreach ($items as $item) {
-            $this->authorize('update', $item);
-        }
+        // ItemPolicy::update depends only on the issue's project, the same for every issue of this
+        // board: one check covers them all (200 checks would be ~400 role queries)
+        $this->authorize('update', $items->first());
 
         // A subtask needs a parent, as in the issue dialog
         $subtaskTypeId = ItemType::forProject($project)->where('slug', 'subtask')->value('id');
@@ -88,8 +89,12 @@ class BoardBulkItemController extends Controller
         $validated = $request->validate($this->itemIdRules($board));
 
         $items = $this->items($board, $validated['item_ids']);
-        foreach ($items as $item) {
-            $this->authorize('delete', $item);
+        // Admins may delete any issue (one check); everyone else only what they created (per issue)
+        $probe = (new Item(['created_by' => 0]))->setRelation('board', $board);
+        if ($request->user()->cannot('delete', $probe)) {
+            foreach ($items as $item) {
+                $this->authorize('delete', $item);
+            }
         }
 
         $deleted = BulkItemEdit::delete($items);
@@ -104,7 +109,8 @@ class BoardBulkItemController extends Controller
     {
         return [
             'item_ids' => ['required', 'array', 'min:1', 'max:'.BulkItemEdit::MAX_ITEMS],
-            'item_ids.*' => ['integer', 'distinct', Rule::exists('items', 'id')->where('board_id', $board->id)->whereNull('deleted_at')],
+            // existence on this board is checked by items() with one query, not one per id
+            'item_ids.*' => ['integer', 'distinct'],
         ];
     }
 
@@ -118,11 +124,16 @@ class BoardBulkItemController extends Controller
     {
         $order = array_flip(array_map('intval', $ids));
 
-        return Item::where('board_id', $board->id)
+        $items = Item::where('board_id', $board->id)
             ->whereIn('id', array_keys($order))
-            ->with(['column', 'board.project.workspace'])
-            ->get()
-            ->sortBy(fn (Item $item) => $order[$item->id])
-            ->values();
+            ->with(['column', 'labels:id', 'board.project.workspace'])
+            ->get();
+
+        // Every id must be a (not deleted) issue of this board
+        if ($items->count() !== count($order)) {
+            throw ValidationException::withMessages(['item_ids' => 'Some of the selected issues are not on this board any more. Reload and try again.']);
+        }
+
+        return $items->sortBy(fn (Item $item) => $order[$item->id])->values();
     }
 }

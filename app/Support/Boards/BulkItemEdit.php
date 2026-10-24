@@ -10,6 +10,7 @@ use App\Models\Sprint;
 use App\Models\User;
 use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -42,12 +43,17 @@ class BulkItemEdit
         $addLabels = array_map('intval', $changes['add_label_ids'] ?? []);
         $removeLabels = array_map('intval', $changes['remove_label_ids'] ?? []);
 
+        // Label names for the history, resolved once for all issues
+        $labelNames = $addLabels === [] && $removeLabels === []
+            ? collect()
+            : $board->project->labels()->whereIn('id', [...$addLabels, ...$removeLabels])->pluck('name', 'id');
+
         $assignments = [];   // [Item, ?int previous assignee]
         $statusMoves = [];   // [Item, BoardColumn previous column]
         $updated = 0;
         $skippedSubtasks = 0;
 
-        DB::transaction(function () use ($board, $items, $changes, $column, $sprint, $addLabels, $removeLabels, &$assignments, &$statusMoves, &$updated, &$skippedSubtasks) {
+        DB::transaction(function () use ($board, $items, $changes, $column, $sprint, $addLabels, $removeLabels, $labelNames, &$assignments, &$statusMoves, &$updated, &$skippedSubtasks) {
             // New cards land at the bottom of the target column, in the order they were listed
             $nextPosition = $column ? (int) (Item::where('column_id', $column->id)->max('position') ?? 0) : 0;
 
@@ -98,7 +104,7 @@ class BulkItemEdit
                 }
 
                 if ($addLabels !== [] || $removeLabels !== []) {
-                    $touched = self::changeLabels($board, $item, $addLabels, $removeLabels) || $touched;
+                    $touched = self::changeLabels($item, $addLabels, $removeLabels, $labelNames) || $touched;
                 }
 
                 if ($touched) {
@@ -110,8 +116,11 @@ class BulkItemEdit
         foreach ($assignments as [$item, $previousAssignee]) {
             self::notifyAssignee($item, $previousAssignee, $actor);
         }
+        // Fresh watchers (a new assignee joined them on save) and the new column, in two queries
+        (new EloquentCollection(array_column($statusMoves, 0)))->load(['watchers', 'column']);
+        $access = []; // watcher id => may still open the project (asked once per person)
         foreach ($statusMoves as [$item, $previousColumn]) {
-            self::notifyStatusChange($board, $item, $previousColumn, $actor);
+            self::notifyStatusChange($board, $item, $previousColumn, $actor, $access);
         }
 
         return ['updated' => $updated, 'unchanged' => $items->count() - $updated, 'skipped_subtasks' => $skippedSubtasks];
@@ -144,10 +153,12 @@ class BulkItemEdit
      *
      * @param  list<int>  $add
      * @param  list<int>  $remove
+     * @param  Collection<int, string>  $names  label id => name
      */
-    private static function changeLabels(Board $board, Item $item, array $add, array $remove): bool
+    private static function changeLabels(Item $item, array $add, array $remove, Collection $names): bool
     {
-        $current = $item->labels()->pluck('labels.id')->map(fn ($id) => (int) $id)->all();
+        // `labels` is eager-loaded by the caller (one query for all issues)
+        $current = $item->labels->pluck('id')->map(fn ($id) => (int) $id)->all();
         $attached = array_values(array_diff($add, $current));
         $detached = array_values(array_intersect($remove, $current));
         if ($attached === [] && $detached === []) {
@@ -161,7 +172,6 @@ class BulkItemEdit
             $item->labels()->detach($detached);
         }
 
-        $names = $board->project->labels()->whereIn('id', [...$attached, ...$detached])->pluck('name', 'id');
         ActivityLog::log($item, 'labels_changed', [
             'labels' => [
                 'added' => array_map(fn ($id) => $names[$id] ?? "#{$id}", $attached),
@@ -188,13 +198,16 @@ class BulkItemEdit
     /**
      * Same rule as BoardController::moveItem: watchers who can still open the project hear about
      * the new status, except the person who changed it.
+     *
+     * @param  array<int, bool>  $access  watcher id => project access, shared across issues
      */
-    private static function notifyStatusChange(Board $board, Item $item, BoardColumn $previousColumn, User $actor): void
+    private static function notifyStatusChange(Board $board, Item $item, BoardColumn $previousColumn, User $actor, array &$access): void
     {
-        $item->load(['watchers', 'column']);
-
         foreach ($item->watchers as $watcher) {
-            if ($watcher->id === $actor->id || ! $watcher->hasProjectAccess($board->project)) {
+            if ($watcher->id === $actor->id) {
+                continue;
+            }
+            if (! ($access[$watcher->id] ??= $watcher->hasProjectAccess($board->project))) {
                 continue;
             }
 

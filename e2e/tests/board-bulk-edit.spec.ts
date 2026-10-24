@@ -115,7 +115,7 @@ test('select all visible rows, Esc clears; due date set and cleared; cancel keep
 
     await page.getByRole('checkbox', { name: 'Select all issues' }).check();
     await expect(bar(page)).toContainText('2 selected');
-    await expect(page.getByRole('checkbox', { name: 'Clear selection' })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Select all issues' })).toBeChecked();
 
     // the first Esc closes an open menu, the next one clears the selection
     await bar(page).getByRole('button', { name: 'Priority' }).click();

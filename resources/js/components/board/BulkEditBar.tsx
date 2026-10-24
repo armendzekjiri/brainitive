@@ -85,7 +85,7 @@ export function BulkEditBar({
     });
 
     const apply = (changes: BulkChanges, what: string) =>
-        router.patch(route('boards.items.bulk.update', params), { item_ids: ids, changes } as never, options(`${what} for ${count} ${noun}.`));
+        router.patch(route('boards.items.bulk.update', params), { item_ids: ids, changes: { ...changes } }, options(`${what} for ${count} ${noun}.`));
 
     const destroy = () =>
         router.delete(route('boards.items.bulk.destroy', params), { data: { item_ids: ids }, ...options(`Deleted ${count} ${noun}.`, onDeleted) });
@@ -125,7 +125,7 @@ export function BulkEditBar({
             {/* Assignee (searchable) */}
             <Popover open={assigneeOpen} onOpenChange={setAssigneeOpen}>
                 <PopoverTrigger asChild>
-                    <Button variant="ghost" size="sm" className={triggerClass} disabled={busy} aria-haspopup="listbox"><UserRound className="size-3.5" />Assignee</Button>
+                    <Button variant="ghost" size="sm" className={triggerClass} disabled={busy}><UserRound className="size-3.5" />Assignee</Button>
                 </PopoverTrigger>
                 <PopoverContent align="start" side="top" className="w-64 p-0">
                     <Command>
