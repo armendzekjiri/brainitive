@@ -79,6 +79,7 @@ import {
     Lightbulb,
     Clock,
     ReceiptText,
+    ChartColumn,
     Bookmark as BookmarkIcon,
     Code2,
     PencilRuler,
@@ -1776,6 +1777,20 @@ function AppSidebar({
                                 >
                                     <ReceiptText className="size-4" />
                                     <span>Billing</span>
+                                </Link>
+                            </SidebarMenuItem>
+                        )}
+                        {currentWorkspace && canManageWorkspace && route().has('insights.index') && (
+                            <SidebarMenuItem>
+                                <Link
+                                    href={route('insights.index', currentWorkspace.slug)}
+                                    className={cn(
+                                        'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
+                                        route().current()?.startsWith('insights.') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                    )}
+                                >
+                                    <ChartColumn className="size-4" />
+                                    <span>Insights</span>
                                 </Link>
                             </SidebarMenuItem>
                         )}

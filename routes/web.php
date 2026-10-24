@@ -226,6 +226,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::prefix('workspaces/{workspace}')->group(function () {
         // Time tracking & client billing (v1.38.0)
         require __DIR__.'/billing.php';
+        // Outgoing webhooks + admin insights (v1.39.0)
+        require __DIR__.'/webhooks.php';
+        require __DIR__.'/insights.php';
 
         Route::get('users', [WorkspaceController::class, 'users'])->name('workspaces.users.index');
         Route::get('lead-form-templates', [LeadFormController::class, 'templates'])->name('lead-form-templates.index');
