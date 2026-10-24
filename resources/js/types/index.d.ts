@@ -944,6 +944,35 @@ export interface Ticket {
     attachments?: TicketAttachment[];
     created_at: string;
     updated_at: string;
+    /** SLA (BRAI-125): computed by TicketSla; null when the helpdesk has no target for the ticket. */
+    first_responded_at?: string | null;
+    sla_first_response_due_at?: string | null;
+    sla_first_response_warn_at?: string | null;
+    sla_resolution_due_at?: string | null;
+    sla_resolution_warn_at?: string | null;
+    sla_paused_at?: string | null;
+    sla_paused_minutes?: number;
+    sla_breached_at?: string | null;
+    sla_first_response_breached?: boolean;
+    sla_resolution_breached?: boolean;
+}
+
+/** Helpdesk SLA policy as the settings tab edits it (BRAI-125, HelpdeskSlaController). */
+export type SlaUnit = 'minutes' | 'hours' | 'days';
+export interface SlaTarget {
+    value: number | string | null;
+    unit: SlaUnit;
+}
+export interface SlaPolicy {
+    exists: boolean;
+    enabled: boolean;
+    /** key: priority id, or "none" for tickets without a priority */
+    targets: Record<string, { first_response: SlaTarget | null; resolution: SlaTarget | null }>;
+    /** null = 24/7; ISO weekdays (1 = Monday); `to` before `from` = overnight */
+    business_hours: { days: number[]; from: string; to: string } | null;
+    timezone: string;
+    pause_column_ids: number[];
+    warn_percent: number | null;
 }
 
 export interface TicketContact {
@@ -1710,7 +1739,21 @@ export interface InsightsProjectRow {
 
 export interface InsightsHelpdesk {
     tickets: { created: number; resolved: number; open: number; median_resolution_hours: number | null };
-    helpdesks: { id: number; name: string; project: string; created: number; resolved: number; open: number; url: string }[];
+    /** BRAI-125: breaches due in the range; met % of the tickets with an SLA resolved in the range */
+    sla: { breaches: number; resolved: number; met: number; met_percent: number | null };
+    helpdesks: {
+        id: number;
+        name: string;
+        project: string;
+        created: number;
+        resolved: number;
+        open: number;
+        sla_breaches: number;
+        sla_resolved: number;
+        sla_met: number;
+        sla_met_percent: number | null;
+        url: string;
+    }[];
     leads: { total: number; views: number; starts: number; submits: number };
     forms: {
         id: number;

@@ -411,6 +411,29 @@ php artisan tinker --execute="\App\Models\User::where('email','...')->update(['e
 
 ---
 
+### Helpdesk SLA: derived dates, business-time maths, recompute points (v1.40.0, BRAI-125)
+- **Never write the `sla_*` ticket columns by hand.** `TicketSla::apply()` derives all of them from the
+  ticket, its helpdesk's policy and "now"; the `Ticket` `saving` hook runs it on create and when priority,
+  column, `completed_at` or `first_responded_at` change. Bulk writes through the query builder skip it — call
+  `TicketSla::recompute()` for those. Policy saves recompute the **open** tickets only; resolved tickets keep
+  their historical result.
+- **First response = first public reply with a `user_id`** (`TicketReply` `created` hook), so every agent
+  path counts: the reply box, the resolve dialog's closing message, emailed replies (ticket 3). Internal
+  notes and contact replies don't. Resolving a ticket before its first-response due time also meets it.
+- **Business time is built from local wall-clock windows per date** (`BusinessCalendar`), then turned into
+  instants: a DST day's window is an hour shorter / longer, opening times never shift. `to < from` = an
+  overnight shift that belongs to the day it opens. A "day" target = one business day (`to − from`), 24 h
+  when 24/7.
+- **Pauses only stop the resolution clock** (pause columns, e.g. "Waiting on customer"). Paused business
+  minutes are added to the resolution target when the ticket leaves the column; a ticket paused past its due
+  time counts as breached from the moment the pause began.
+- **`warn_at` doubles as "when the checker looks"** (= due when warnings are off), so the checker's query is
+  two indexed comparisons. Notifications are once per (ticket, warning|breached, target, person) via
+  `sent_item_reminders` keys `ticket_sla:<id>:<kind>:<target>`; reassigning sends the new assignee their own.
+- **The badge also computes "breached" in the browser** (`lib/sla.ts`), because dev.brainitive.app runs no
+  scheduler. Keep `lib/sla.ts` and `TicketSla` in sync. e2e triggers the checker through
+  `helpdesks.sla.e2e-check`, which only exists with `APP_ENV=e2e`, so that journey is skipped on dev.
+
 ## Architectural decisions
 
 ### Inline validation over FormRequest classes

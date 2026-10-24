@@ -11,7 +11,9 @@ use Illuminate\Support\Facades\DB;
  * - open = tickets not resolved now (not range-bound);
  * - leads = leads received in the range; closed = of those, the ones in a done column now;
  * - funnel = unique visit sessions that viewed / started / submitted the form in the range
- *   (`lead_form_events`, kept for 90 days).
+ *   (`lead_form_events`, kept for 90 days);
+ * - SLA (BRAI-125): breaches = tickets whose first missed target was due in the range (`sla_breached_at`);
+ *   met % = of the tickets with an SLA resolved in the range, the share that missed no target.
  *
  * Six queries, whatever the number of helpdesks and forms.
  */
@@ -34,13 +36,17 @@ final class HelpdeskInsights
             ->whereNull('helpdesks.deleted_at')
             ->whereNull('tickets.deleted_at');
 
+        $hasSla = '(tickets.sla_first_response_due_at is not null or tickets.sla_resolution_due_at is not null)';
         $perHelpdesk = $tickets()
             ->selectRaw(implode(', ', [
                 'tickets.helpdesk_id',
                 'sum(case when tickets.created_at >= ? and tickets.created_at < ? then 1 else 0 end) as created',
                 'sum(case when tickets.completed_at >= ? and tickets.completed_at < ? then 1 else 0 end) as resolved',
                 'sum(case when tickets.completed_at is null then 1 else 0 end) as open',
-            ]), [$start, $end, $start, $end])
+                'sum(case when tickets.sla_breached_at >= ? and tickets.sla_breached_at < ? then 1 else 0 end) as sla_breaches',
+                "sum(case when tickets.completed_at >= ? and tickets.completed_at < ? and {$hasSla} then 1 else 0 end) as sla_resolved",
+                "sum(case when tickets.completed_at >= ? and tickets.completed_at < ? and {$hasSla} and tickets.sla_breached_at is null then 1 else 0 end) as sla_met",
+            ]), [$start, $end, $start, $end, $start, $end, $start, $end, $start, $end])
             ->groupBy('tickets.helpdesk_id')
             ->get()->keyBy('helpdesk_id');
 
@@ -59,6 +65,10 @@ final class HelpdeskInsights
                 'created' => (int) ($row->created ?? 0),
                 'resolved' => (int) ($row->resolved ?? 0),
                 'open' => (int) ($row->open ?? 0),
+                'sla_breaches' => (int) ($row->sla_breaches ?? 0),
+                'sla_resolved' => (int) ($row->sla_resolved ?? 0),
+                'sla_met' => (int) ($row->sla_met ?? 0),
+                'sla_met_percent' => self::percent((int) ($row->sla_met ?? 0), (int) ($row->sla_resolved ?? 0)),
                 'url' => route('helpdesks.show', [$workspace, $filters->projects[(int) $helpdesk->project_id]['slug'] ?? '', $helpdesk->slug]),
             ];
         })->values()->all();
@@ -114,6 +124,12 @@ final class HelpdeskInsights
                 'open' => array_sum(array_column($helpdeskRows, 'open')),
                 'median_resolution_hours' => $resolutionHours,
             ],
+            'sla' => [
+                'breaches' => array_sum(array_column($helpdeskRows, 'sla_breaches')),
+                'resolved' => $slaResolved = array_sum(array_column($helpdeskRows, 'sla_resolved')),
+                'met' => $slaMet = array_sum(array_column($helpdeskRows, 'sla_met')),
+                'met_percent' => self::percent($slaMet, $slaResolved),
+            ],
             'helpdesks' => $helpdeskRows,
             'leads' => [
                 'total' => array_sum(array_column($formRows, 'leads')),
@@ -123,5 +139,10 @@ final class HelpdeskInsights
             ],
             'forms' => $formRows,
         ];
+    }
+
+    private static function percent(int $part, int $total): ?float
+    {
+        return $total > 0 ? round($part / $total * 100, 1) : null;
     }
 }

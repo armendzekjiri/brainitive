@@ -94,6 +94,8 @@ import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { safeHtmlProp } from '@/lib/sanitize';
 import NewTicketDialog from '@/components/helpdesk/NewTicketDialog';
 import ResolveTicketDialog from '@/components/helpdesk/ResolveTicketDialog';
+import SlaBadge, { SlaDetails } from '@/components/helpdesk/SlaBadge';
+import { matchesSlaFilter, SLA_FILTERS, slaSortKey, slaState, useMinuteClock, type SlaFilter } from '@/lib/sla';
 import RelatedContent from '@/components/references/RelatedContent';
 
 interface Props extends PageProps {
@@ -272,8 +274,9 @@ function TicketCard({
 
                 {/* Footer */}
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
                         <PriorityIcon slug={ticket.priority?.slug} />
+                        <SlaBadge ticket={ticket} />
                         {(ticket.replies?.length ?? 0) > 0 && (
                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                 <MessageSquare className="size-3" />
@@ -680,6 +683,13 @@ function TicketEditModal({
                                                 </Select>
                                             </div>
                                         </div>
+                                        {/* SLA (BRAI-125) */}
+                                        {(ticket.sla_first_response_due_at || ticket.sla_resolution_due_at) && (
+                                            <div className="flex items-start min-h-[40px] py-1" data-testid="ticket-sla">
+                                                <span className="w-[40%] shrink-0 pt-1.5 text-xs text-muted-foreground">SLA</span>
+                                                <div className="flex-1 -ml-2"><SlaDetails ticket={ticket} /></div>
+                                            </div>
+                                        )}
                                         {/* Contact */}
                                         {ticket.contact && (
                                             <div className="flex items-center min-h-[40px] py-1">
@@ -1078,6 +1088,13 @@ function TicketEditModal({
                                     </div>
                                 </div>
 
+                                {/* SLA (BRAI-125) */}
+                                {(ticket.sla_first_response_due_at || ticket.sla_resolution_due_at) && (
+                                    <div className="flex items-start min-h-[40px] py-1" data-testid="ticket-sla">
+                                        <span className="w-[40%] shrink-0 pt-1.5 text-xs text-muted-foreground">SLA</span>
+                                        <div className="flex-1 -ml-2"><SlaDetails ticket={ticket} /></div>
+                                    </div>
+                                )}
                                 {/* Contact */}
                                 {ticket.contact && (
                                     <div className="flex items-center min-h-[40px] py-1">
@@ -1159,14 +1176,23 @@ export default function HelpdesksShow({
     const [filterOpen, setFilterOpen] = useState(false);
     const [assigneeFilter, setAssigneeFilter] = useState<string>('any');
     const [statusFilter, setStatusFilter] = useState<number[]>([]);
+    // SLA (BRAI-125): filter by state, sort by urgency
+    const [slaFilter, setSlaFilter] = useState<SlaFilter>('any');
+    const [sortBy, setSortBy] = useState<'manual' | 'sla'>('manual');
+    const now = useMinuteClock();
+    const hasSla = useMemo(
+        () => helpdesk.columns.some((col) => col.tickets?.some((t) => t.sla_first_response_due_at || t.sla_resolution_due_at)),
+        [helpdesk.columns],
+    );
 
     const currentUserId = auth.user?.id;
 
     const activeFiltersCount = useMemo(
         () =>
             (assigneeFilter !== 'any' ? 1 : 0) +
-            (statusFilter.length ? 1 : 0),
-        [assigneeFilter, statusFilter.length],
+            (statusFilter.length ? 1 : 0) +
+            (slaFilter !== 'any' ? 1 : 0),
+        [assigneeFilter, statusFilter.length, slaFilter],
     );
 
     // Persist view preference per helpdesk
@@ -1268,9 +1294,25 @@ export default function HelpdesksShow({
                     return false;
                 }
 
+                if (slaFilter !== 'any' && !matchesSlaFilter(slaState(ticket, now), slaFilter)) {
+                    return false;
+                }
+
                 return true;
             }) || [],
     }));
+    const bySla = (a: Ticket, b: Ticket) => slaSortKey(slaState(a, now)) - slaSortKey(slaState(b, now)) || a.position - b.position;
+    if (sortBy === 'sla') {
+        filteredColumns.forEach((col) => col.tickets.sort(bySla));
+    }
+    const listTickets = filteredColumns.flatMap((col) => col.tickets);
+    if (sortBy === 'sla') {
+        listTickets.sort(bySla);
+    }
+    // the open panel shows the latest props (SLA dates change after edits)
+    const liveEditingTicket = editingTicket
+        ? helpdesk.columns.flatMap((col) => col.tickets ?? []).find((t) => t.id === editingTicket.id) ?? editingTicket
+        : null;
 
     return (
         <AppLayout>
@@ -1351,6 +1393,7 @@ export default function HelpdesksShow({
                                             onClick={() => {
                                                 setAssigneeFilter('any');
                                                 setStatusFilter([]);
+                                                setSlaFilter('any');
                                             }}
                                         >
                                             Clear all
@@ -1426,6 +1469,40 @@ export default function HelpdesksShow({
                                         </div>
                                     </div>
                                 )}
+
+                                {/* SLA (BRAI-125) */}
+                                {hasSla && (
+                                    <div className="space-y-2">
+                                        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                            SLA
+                                        </p>
+                                        <Select value={slaFilter} onValueChange={(v) => setSlaFilter(v as SlaFilter)}>
+                                            <SelectTrigger className="w-full" aria-label="SLA filter">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {SLA_FILTERS.map((f) => (
+                                                    <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+
+                                <div className="space-y-2">
+                                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                                        Sort
+                                    </p>
+                                    <Select value={sortBy} onValueChange={(v) => setSortBy(v as 'manual' | 'sla')}>
+                                        <SelectTrigger className="w-full" aria-label="Sort tickets">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="manual">Board order</SelectItem>
+                                            <SelectItem value="sla">SLA: most urgent first</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </PopoverContent>
                         </Popover>
 
@@ -1487,13 +1564,14 @@ export default function HelpdesksShow({
                                         <th className="pb-3 font-medium">Contact</th>
                                         <th className="pb-3 font-medium">Status</th>
                                         <th className="pb-3 font-medium">Priority</th>
+                                        <th className="pb-3 font-medium">SLA</th>
                                         <th className="pb-3 font-medium">Assignee</th>
                                         <th className="pb-3 font-medium">Created</th>
                                         <th className="pb-3 pr-4 font-medium">Replies</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {filteredColumns.flatMap(col => col.tickets).map((ticket) => (
+                                    {listTickets.map((ticket) => (
                                         <tr
                                             key={ticket.id}
                                             className="border-b hover:bg-muted/50 cursor-pointer transition-colors"
@@ -1536,6 +1614,9 @@ export default function HelpdesksShow({
                                                 </div>
                                             </td>
                                             <td className="py-3">
+                                                <SlaBadge ticket={ticket} />
+                                            </td>
+                                            <td className="py-3">
                                                 {ticket.assignee ? (
                                                     <div className="flex items-center gap-2">
                                                         <Avatar className="size-5">
@@ -1559,9 +1640,9 @@ export default function HelpdesksShow({
                                             </td>
                                         </tr>
                                     ))}
-                                    {filteredColumns.flatMap(col => col.tickets).length === 0 && (
+                                    {listTickets.length === 0 && (
                                         <tr>
-                                            <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                                            <td colSpan={9} className="py-12 text-center text-muted-foreground">
                                                 No tickets found
                                             </td>
                                         </tr>
@@ -1598,7 +1679,7 @@ export default function HelpdesksShow({
             <TicketEditModal
                 key={editingTicket?.id}
                 onMove={moveTicket}
-                ticket={editingTicket}
+                ticket={liveEditingTicket}
                 workspace={workspace}
                 project={project}
                 helpdesk={helpdesk}

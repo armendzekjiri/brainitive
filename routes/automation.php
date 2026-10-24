@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\HelpdeskSlaController;
 use App\Http\Controllers\RecurringIssueController;
 use Illuminate\Support\Facades\Route;
 
@@ -28,3 +29,9 @@ Route::prefix('boards/{board:slug}/recurring-issues')->group(function () {
 });
 
 // ── Ticket 5: helpdesk SLA — helpdesks.sla.* ──────────────────────────────────
+Route::get('helpdesks/{helpdesk:slug}/sla', [HelpdeskSlaController::class, 'show'])->name('helpdesks.sla.show');
+Route::put('helpdesks/{helpdesk:slug}/sla', [HelpdeskSlaController::class, 'update'])->name('helpdesks.sla.update');
+if (app()->environment('e2e')) {
+    // e2e only: backdate a ticket + run app:check-helpdesk-sla (dev has no scheduler and no such route)
+    Route::post('helpdesks/{helpdesk:slug}/sla/e2e-check', [HelpdeskSlaController::class, 'e2eCheck'])->name('helpdesks.sla.e2e-check');
+}

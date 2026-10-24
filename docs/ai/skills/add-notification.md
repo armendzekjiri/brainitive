@@ -78,6 +78,7 @@ Put the dispatch where every path passes, not in each controller:
 | Sprints (`sprint_started/completed`) | `SprintLifecycle` → `SprintNotifications` |
 | Workspace (`invitation_accepted`, `workspace_role_changed`) | `WorkspaceNotifications` (both invite-accept paths, `updateMemberRole`) |
 | Ticket status (`ticket_status_changed`) | `TicketController::move` |
+| Helpdesk SLA (`sla_warning`, `sla_breached`) | `app:check-helpdesk-sla` (`sent_item_reminders` dedup) |
 
 Rules every sender follows (KNOWLEDGE → "Notification coverage"):
 - **Never notify the actor**, and never someone who can't open the project (`hasProjectAccess`).

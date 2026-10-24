@@ -46,3 +46,6 @@ Schedule::command('app:create-recurring-issues')
 // Ticket 3 (email → helpdesk, IMAP): poll connected mailboxes.
 
 // Ticket 5 (helpdesk SLA): warn before and on breaches.
+Schedule::command('app:check-helpdesk-sla')
+    ->everyMinute()
+    ->withoutOverlapping();
