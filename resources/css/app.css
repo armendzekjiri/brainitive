@@ -113,6 +113,7 @@
   position: absolute;
   left: 0;
   top: 0.25em;
+  top: calc(0.5lh - 0.5rem); /* centred on the first line, whatever the line height */
   width: 1rem;
   height: 1rem;
   border: 2px solid hsl(var(--border));
@@ -600,6 +601,15 @@ html {
 }
 .lexical-editor-content.lexical-doc li::marker {
   color: hsl(var(--muted-foreground));
+}
+/* Checklists: the generic li padding above would put the checkbox on top of the text */
+.lexical-editor-content.lexical-doc ul:has(> .lexical-listitem-checked, > .lexical-listitem-unchecked) {
+  padding-left: 0;
+}
+.lexical-editor-content.lexical-doc li.lexical-listitem-checked,
+.lexical-editor-content.lexical-doc li.lexical-listitem-unchecked {
+  padding-left: 1.75rem;
+  list-style: none;
 }
 .lexical-editor-content.lexical-doc blockquote {
   margin: 1rem 0;

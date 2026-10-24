@@ -1168,6 +1168,9 @@ class BoardController extends Controller
                 'incomingLinks.sourceItem:id,key,title,board_id',
                 'incomingLinks.sourceItem.board:id,name,slug',
                 'fieldValues' => fn ($q) => $q->select(self::FIELD_VALUE_COLUMNS),
+                // "Repeats weekly" badge of issues created by a recurring template (BRAI-123)
+                'recurringOccurrence:id,item_id,recurring_issue_id',
+                'recurringOccurrence.recurringIssue:id,frequency,interval',
             ]);
     }
 }

@@ -46,6 +46,10 @@ Schedule::command('model:prune', ['--model' => [AutomationRun::class]])
     ->withoutOverlapping();
 
 // Ticket 2 (recurring issues): create the issues that are due.
+// Occurrences are due from local midnight in each template's time zone; idempotent, catch-up = latest only.
+Schedule::command('app:create-recurring-issues')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping();
 
 // Ticket 3 (email → helpdesk, IMAP): poll connected mailboxes.
 

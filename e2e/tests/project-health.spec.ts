@@ -80,9 +80,9 @@ test.describe('project health', () => {
         await expect(page.getByTestId('ai-not-configured')).toBeVisible();
         await expect(page.getByRole('button', { name: 'Draft with AI' })).toHaveCount(0);
 
-        // the status is required
+        // the status is required: said right next to the button, nothing is sent
         await page.getByRole('button', { name: 'Save status update' }).click();
-        await expect(page.getByText('Pick a health status.')).toBeVisible();
+        await expect(page.getByTestId('health-save-errors')).toContainText('Pick a health status');
 
         // write the update: status, summary, a risk citing the overdue metric
         const summary = uid('summary');
@@ -107,6 +107,55 @@ test.describe('project health', () => {
         await page.keyboard.press('Escape');
         await expect(sheet).toBeHidden();
         await expect(page.getByRole('list', { name: 'Saved status updates' }).getByText(summary)).toBeVisible();
+    });
+
+    test('what you write survives a refresh, and a saved update stays saved', async ({ page }) => {
+        // BRAI-64 feedback: points were "lost" after Save / refresh
+        const workspace = await createWorkspace(page);
+        const project = await createBlankProject(page, workspace.slug);
+        const healthUrl = `${urls.project(project.slug, workspace.slug)}/health?tz=UTC`;
+        await page.goto(healthUrl);
+
+        const summary = uid('Weekly update');
+        await page.getByLabel('Summary').fill(summary);
+        for (const [section, text] of [['Progress', 'Checkout shipped'], ['Risks', 'Payments vendor is slow'], ['Next steps', 'Max books the load test']] as const) {
+            const region = page.getByRole('region', { name: section });
+            await region.getByRole('button', { name: 'Add point' }).click();
+            await region.getByRole('textbox', { name: `${section} point 1` }).fill(text);
+        }
+
+        // Save without a status: told at the button, the status choice gets focus, nothing is lost
+        await page.getByRole('button', { name: 'Save status update' }).click();
+        await expect(page.getByTestId('health-save-errors')).toContainText('Pick a health status');
+        await expect(page.getByRole('radio', { name: 'On track' })).toBeFocused();
+        await expect(page.getByRole('list', { name: 'Saved status updates' })).toHaveCount(0);
+
+        // a refresh before saving keeps the draft
+        await page.reload();
+        await expect(page.getByText('Your unsaved draft is back.')).toBeVisible();
+        await expect(page.getByLabel('Summary')).toHaveValue(summary);
+        await expect(page.getByRole('textbox', { name: 'Risks point 1' })).toHaveValue('Payments vendor is slow');
+
+        // pick a status and save
+        await page.getByRole('radio', { name: 'On track' }).click();
+        await page.getByRole('button', { name: 'Save status update' }).click();
+        const sheet = page.getByRole('dialog', { name: /Status update ·/ });
+        await expect(sheet).toBeVisible();
+        await expect(sheet.getByText('Checkout shipped')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.getByLabel('Summary')).toHaveValue(''); // the editor is ready for the next one
+
+        // after a refresh: saved in the history with every point, and no stale draft
+        await page.goto(healthUrl);
+        const history = page.getByRole('list', { name: 'Saved status updates' });
+        await expect(history.getByText(summary)).toBeVisible();
+        await expect(page.getByText('Your unsaved draft is back.')).toHaveCount(0);
+        await history.getByText(summary).click();
+        const saved = page.getByRole('dialog', { name: /Status update ·/ });
+        await expect(saved.getByText('On track')).toBeVisible();
+        for (const text of ['Checkout shipped', 'Payments vendor is slow', 'Max books the load test']) {
+            await expect(saved.getByText(text)).toBeVisible();
+        }
     });
 
     test('a teammate reads a saved update; only the author or an admin deletes it', async ({ page, memberPage }) => {

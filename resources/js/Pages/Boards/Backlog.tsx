@@ -160,6 +160,7 @@ export default function BacklogPage({ workspace, project, board, sprints, backlo
                     project={project}
                     board={board}
                     activeTab="backlog"
+                    canCreateItems={canManage}
                     actions={canManage ? (
                         <Button size="sm" variant="secondary" className="h-8 rounded-[4px]" onClick={() => router.post(route('boards.sprints.store', params), {}, { preserveScroll: true })}>
                             Create sprint

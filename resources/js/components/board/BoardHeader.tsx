@@ -1,7 +1,9 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { Link } from '@inertiajs/react';
-import { Calendar, GanttChart, Kanban, LineChart, List, ListOrdered, Settings } from 'lucide-react';
+import { Calendar, GanttChart, Kanban, LineChart, List, ListOrdered, MoreHorizontal, Repeat, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { RecurringIssuesDialog } from '@/components/recurring/RecurringIssuesDialog';
 import { Board, Project, Workspace } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +28,7 @@ export function BoardHeader({
     activeTab,
     onSelectView,
     actions,
+    canCreateItems = false,
 }: {
     workspace: Workspace;
     project: Project;
@@ -34,8 +37,11 @@ export function BoardHeader({
     /** On the board page views switch in place; elsewhere they link to the board. */
     onSelectView?: (view: BoardView) => void;
     actions?: ReactNode;
+    /** May create issues here: shows the board menu with "Recurring issues" (BRAI-123). */
+    canCreateItems?: boolean;
 }) {
     const params = [workspace.slug, project.slug, board.slug];
+    const [recurringOpen, setRecurringOpen] = useState(false);
     const isScrum = board.type === 'scrum';
 
     const tabClass = (active: boolean) => cn(
@@ -61,6 +67,20 @@ export function BoardHeader({
                 </h1>
                 <div className="flex items-center gap-2">
                     {actions}
+                    {canCreateItems && (
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" aria-label="Board menu" title="More">
+                                    <MoreHorizontal className="size-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onSelect={() => setRecurringOpen(true)}>
+                                    <Repeat className="mr-2 size-4" />Recurring issues
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    )}
                     <Link href={route('boards.edit', params)}>
                         <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" title="Board settings">
                             <Settings className="size-4" />
@@ -93,6 +113,9 @@ export function BoardHeader({
                     </Link>
                 )}
             </div>
+            {canCreateItems && (
+                <RecurringIssuesDialog open={recurringOpen} onOpenChange={setRecurringOpen} workspace={workspace} project={project} board={board} />
+            )}
         </div>
     );
 }

@@ -25,6 +25,9 @@ class Helpdesk extends Model
         'settings',
     ];
 
+    /** The forwarding address (BRAI-124) is a capability: only the Email tab's endpoint reveals it. */
+    protected $hidden = ['forwarding_local_part'];
+
     protected function casts(): array
     {
         return [
