@@ -167,7 +167,9 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
 - **Accessible names on the project page:** the header quick links are named "Project health /
   workload / releases" (not "Health"), otherwise `link 'Workload', exact` would match twice. Pinned
   and Recently updated rows use no h3, so `helpdesk.spec.ts`'s card locator (link with an h3) stays
-  unique.
+  unique. Every sidebar row now has a `Pin <name>` button, so a non-exact
+  `getByRole('button', { name: 'Share' })` also matches "Pin Shared doc…": use `exact: true` for
+  generic button names (content.spec's Share button was the one case).
 - **Store hydration is silent.** `useSidebarPreferences()` assigns the new server value during render
   (no listener notification) to avoid "update a component while rendering another"; while a write is
   in flight the optimistic state wins over the incoming prop.
