@@ -55,6 +55,9 @@ import {
     ClipboardList,
     Magnet,
     GitBranch,
+    Gauge,
+    HeartPulse,
+    NotebookPen,
     type LucideIcon,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -383,6 +386,20 @@ const SPOTLIGHT: {
     shortcut?: string;
 }[] = [
     {
+        key: 'workload',
+        version: 'v1.37',
+        icon: Gauge,
+        color: '#69A748',
+        title: 'Workload planning',
+        description:
+            'See who has room before you assign work: each person’s weekly capacity next to the hours planned from real issues.',
+        points: [
+            'Overload shown in hours, week by week',
+            'Capacity per person, with weeks off for leave',
+            'Remaining estimates suggested, never spread on their own',
+        ],
+    },
+    {
         key: 'quick-capture',
         version: 'v1.36',
         icon: Inbox,
@@ -396,20 +413,6 @@ const SPOTLIGHT: {
             'Check the preview before anything is created',
         ],
         shortcut: 'C',
-    },
-    {
-        key: 'lead-forms',
-        version: 'v1.34',
-        icon: Magnet,
-        color: '#69A748',
-        title: 'Lead forms',
-        description:
-            'Multi-step forms with logic and your branding. Every submission lands as a card on the form’s own leads board.',
-        points: [
-            '12 templates, from demo request to webinar',
-            'Share a link or embed it on your website',
-            'Conversion analytics and webhooks to your CRM',
-        ],
     },
 ];
 
@@ -913,10 +916,39 @@ export default function Welcome({
             ],
         },
         {
+            title: 'Insight & planning',
+            tagline: 'Know where a project stands and who has room — from real work, not guesses.',
+            icon: HeartPulse,
+            color: '#69A748',
+            items: [
+                {
+                    icon: HeartPulse,
+                    title: 'Project health',
+                    description:
+                        'Overdue, due soon, blocked and unassigned work at a glance — every number links to its issues. Save dated status updates.',
+                    isNew: true,
+                },
+                {
+                    icon: Gauge,
+                    title: 'Workload planning',
+                    description:
+                        'Weekly capacity per person next to planned hours from real issues, with overload shown in hours.',
+                    isNew: true,
+                },
+                {
+                    icon: NotebookPen,
+                    title: 'Meeting notes → issues',
+                    description:
+                        'AI suggests the action items with the sentence each came from — review, edit, then create only the ones you want.',
+                    isNew: true,
+                },
+            ],
+        },
+        {
             title: 'Connect & automate',
             tagline: 'Plug in AI and GitHub, stay in the loop, sign in your way.',
             icon: Bot,
-            color: '#69A748',
+            color: '#0E83DC',
             items: [
                 {
                     icon: Bot,

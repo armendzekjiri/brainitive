@@ -83,6 +83,23 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.37.0',
+        title: 'Workload, project health and meeting notes → issues',
+        tag: 'Feature',
+        date: '2026-10-24',
+        items: [
+            'New Workload view per project (sidebar → Workload): each person’s planned hours next to their weekly capacity, week by week, with overload shown in hours.',
+            'Set a weekly capacity per person and adjust single weeks for leave. Plan issues into weeks yourself — Brainitive suggests the remaining estimate but never spreads work on its own.',
+            'When estimates, assignees or status change, planned hours stay put and show up under “Needs review”. Unestimated work and capacity that isn’t set are shown separately, never as zero.',
+            'New Project Health view (sidebar → Health): open, completed, overdue, due-soon, unassigned and blocked work at a glance, with the issues behind every number. “Due today” is never overdue, and missing data shows as “Unknown”.',
+            'Save status updates with your own On track / At risk / Off track and link each point to its issue, plan or metric — optionally drafted by your workspace’s AI, always reviewed by you.',
+            'New: turn meeting notes into issues — “Extract action items” in a doc’s ⋯ menu, or paste notes on the project page. AI suggests each action with the sentence it came from; you edit, pick and create only what you want.',
+            'Owners are only matched to project members, deadlines are only filled when the date is clear, possible duplicates are marked, and clicking Create twice never creates issues twice.',
+            'Boards now have a single Create button (top bar) — it creates the card on the board you’re on.',
+            'The homepage shows everything from the latest releases.',
+        ]
+    },
+    {
         version: 'v1.36.0',
         title: 'Quick capture and related content',
         tag: 'Feature',
