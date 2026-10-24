@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Notifications\WorkspaceInvitationNotification;
+use App\Support\Notifications\WorkspaceNotifications;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
@@ -502,9 +503,11 @@ class WorkspaceController extends Controller
                 ->withErrors(['role' => 'Cannot change the owner\'s role.']);
         }
 
+        $oldRole = $user->workspaceRole($workspace);
         $workspace->users()->updateExistingPivot($user->id, [
             'role' => $validated['role'],
         ]);
+        WorkspaceNotifications::roleChanged($workspace, $user, $request->user(), $oldRole, $validated['role']);
 
         return redirect()->back()
             ->with('success', "Updated {$user->name}'s role to {$validated['role']}.");

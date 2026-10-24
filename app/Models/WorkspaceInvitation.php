@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Notifications\WorkspaceNotifications;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
@@ -137,6 +138,7 @@ class WorkspaceInvitation extends Model
             // already a member (added directly meanwhile): the invitation is simply done
             if (! $invitation->workspace->users()->where('users.id', $user->id)->exists()) {
                 $invitation->workspace->addUser($user, $invitation->role, $invitation->inviter ?? null);
+                WorkspaceNotifications::invitationAccepted($invitation, $user);
             }
         }
     }

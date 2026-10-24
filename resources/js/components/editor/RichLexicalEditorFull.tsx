@@ -3246,9 +3246,6 @@ interface RichLexicalEditorProps {
     stickyTopOffset?: number;
     documentMode?: boolean;
     // Mention notification context — passed to MentionsPlugin
-    mentionContextUrl?: string;
-    mentionContextTitle?: string;
-    mentionContextType?: 'page' | 'item' | 'comment';
     /** Where polls in this content store their votes (doc / issue). Omit = no voting. */
     pollScope?: { type: 'page' | 'item'; id: string } | null;
 }
@@ -3271,9 +3268,6 @@ export function RichLexicalEditor({
     stickyToolbar = false,
     stickyTopOffset = 52,
     documentMode = false,
-    mentionContextUrl,
-    mentionContextTitle,
-    mentionContextType = 'page',
     pollScope = null,
 }: RichLexicalEditorProps) {
     const [floatingAnchorElem, setFloatingAnchorElem] = useState<HTMLDivElement | null>(null);
@@ -3376,7 +3370,7 @@ export function RichLexicalEditor({
                     {documentMode && editable && <EmptyBlockPlaceholderPlugin text="Type / for commands" />}
                     <CommandsPlugin />
                     <CodeHighlightPlugin />
-                    {projectId && editable && <MentionsPlugin projectId={projectId} contextUrl={mentionContextUrl} contextTitle={mentionContextTitle} contextType={mentionContextType} />}
+                    {projectId && editable && <MentionsPlugin projectId={projectId} />}
                     <InitialContentPlugin content={content} editable={editable} contentKey={contentKey} isInitializingRef={isInitializingRef} />
                     <HtmlOnChangePlugin onChange={onChange} isInitializingRef={isInitializingRef} />
                     {onHeadingsChange && <HeadingsExtractorPlugin onHeadingsChange={onHeadingsChange} />}

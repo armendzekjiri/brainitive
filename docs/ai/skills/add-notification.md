@@ -1,96 +1,109 @@
 # Skill: Add a notification (in-app + browser push + email)
 
-Notifications are stored in the DB (the bell and the `/notifications` inbox) and optionally
-delivered as a browser web push and an email. **Which channels a user gets is their choice per
-category** (Profile → Notifications, `users.notification_preferences`), not the class's.
-Template: `app/Notifications/ItemAssignedNotification.php`.
+Notifications are stored in the DB (in-app bell), and optionally delivered as a browser web push
+and/or an email. **Which channels** a user gets is their choice per *category* (Profile →
+Notifications), from `app/Notifications/NotificationCatalog.php` (v1.39.0). Template for a new
+type: any subclass of `app/Notifications/CatalogNotification.php`, e.g.
+`ItemCommentedNotification.php`.
 
-## 1. Register the type — `app/Notifications/NotificationCatalog.php`
-Add the type to `TYPES` with its category (`mentions`, `assignments`, `comments`, `status`,
-`reminders`, `pages`, `sprints`, `helpdesk`, `leads`, `workspace`). Every database notification
-type must be listed — `NotificationCatalog::category()` throws on an unknown type. The category
-decides the default channels, the inbox filter tab (Mentions / Assigned) and the row icon.
+## 1. Register the type in the catalog
+`NotificationCatalog::TYPES` maps every stored `type` to one of the `CATEGORIES` (mentions,
+assignments, comments, status, reminders, pages, sprints, helpdesk, leads, workspace).
+**Every database notification type must be listed:** `NotificationCatalog::category()` throws on
+an unknown type, and `CatalogNotificationContractTest` checks the new ones.
 
-## 2. Create the notification — `app/Notifications/WidgetReadyNotification.php`
+```php
+'widget_ready' => 'status',
+```
+
+## 2. Create the class: extend `CatalogNotification`
 ```php
 namespace App\Notifications;
 
 use App\Models\User;
 use App\Models\Widget;
-use App\Notifications\Concerns\RespectsPreferences;
-use App\Notifications\Concerns\SendsWebPush;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
-use Illuminate\Notifications\Notification;
 
-class WidgetReadyNotification extends Notification implements ShouldQueue
+/** A widget you own is ready (category: status). */
+class WidgetReadyNotification extends CatalogNotification
 {
-    use Queueable, RespectsPreferences, SendsWebPush;
-
     public function __construct(
         public readonly Widget $widget,
         public readonly User $actor,
     ) {}
 
-    public function via(object $notifiable): array
+    public function catalogType(): string
     {
-        // the user's channels for the type's category; mail / push only if the class can render them
-        return $this->channelsFor($notifiable, 'widget_ready');
+        return 'widget_ready';
     }
 
-    public function toDatabase(object $notifiable): array
+    protected function message(object $notifiable): array
     {
-        return [ // the payload contract: the inbox renders these keys without a frontend change
-            'type'         => 'widget_ready',
-            'title'        => "{$this->actor->name} finished {$this->widget->name}",
-            'body'         => null,                       // optional preview, plain text ≤ 200 chars
-            'url'          => route('widgets.show', [...]),
-            'actor_name'   => $this->actor->name,
-            'actor_avatar' => $this->actor->avatar_display,
-            'project_name' => $this->widget->project->name, // context line
-            'subject_key'  => null,                       // e.g. "BRAI-12", shown as a chip
+        return [
+            'title' => "{$this->actor->name} finished {$this->widget->name}", // one worded line
+            'body' => $this->widget->summary,          // optional; HTML is stripped, ≤ 200 chars
+            'url' => route('widgets.show', [...]),     // absolute app URL
+            'actor' => $this->actor,                   // optional → actor_name / actor_avatar
+            'project_name' => 'Website · Main Board',  // optional context line
+            'subject_key' => 'WEB-12',                 // optional chip
         ];
-    }
-
-    public function toWebPush(object $notifiable, $notification)
-    {
-        return $this->webPush("{$this->actor->name} finished a widget", $this->widget->name, route('widgets.show', [...]));
-    }
-
-    public function toMail(object $notifiable): MailMessage
-    {
-        return (new MailMessage)
-            ->subject("{$this->actor->name} finished ".NewLeadNotification::plain($this->widget->name))
-            ->action('Open widget', route('widgets.show', [...]));
     }
 }
 ```
 
-## 3. Conventions
-- **Queue** new classes (`ShouldQueue`) so requests stay fast.
-- **`via()` = `channelsFor($notifiable, '<type>')`** (`Concerns\RespectsPreferences`). It drops
-  `mail` / push when the class has no `toMail` / `toWebPush`, and gives non-User notifiables
-  (ticket contacts) mail only. A class that must stay on one channel intersects the result (see
+The base class gives you, for free:
+- `ShouldQueue` + `Queueable` (staging/e2e run the sync queue);
+- `via()` = `RespectsPreferences::channelsFor($notifiable, type)`: the user's choice for the
+  category (`database`, `WebPushChannel`, `mail`); non-User notifiables get mail only;
+- `toDatabase()` = **the payload contract**, exactly these keys:
+  `type, title, body, url, actor_name, actor_avatar, project_name, subject_key`. The bell renders
+  any type generically from them, so a new type needs no frontend change;
+- `toWebPush()` (title, body or context, url) and a generic `toMail()` (Markdown-safe: user text
+  goes through `plain()`).
+
+Older types (`item_assigned`, `mentioned`, `ticket_*`, `lead_created`, …) keep their own keys:
+rows in the DB must keep rendering. Don't change their payloads; new types use the contract.
+
+## 3. Send it from ONE place
+Put the dispatch where every path passes, not in each controller:
+
+| What | Where it's sent |
+|---|---|
+| Issue assigned (`item_assigned`) | `ItemObserver` → `Support\Notifications\Assignments::item()` |
+| Task assigned (`task_assigned`) | `TaskListItemObserver` → `Assignments::task()` |
+| Lead assigned (`lead_assigned`) | `LeadController::update` → `Assignments::lead()` |
+| Comment (`item_commented`) + comment mentions | `Support\Boards\ItemComments::add()` → `ItemCommentNotifications` |
+| Issue description mentions (`mentioned`) | `BoardController` → `ItemMentions::notify($html, $item, $actor, $previousHtml)` |
+| Page mentions (`mentioned`) | `Page::saveDraft()` → `Support\Notifications\PageMentions` |
+| Due tomorrow / overdue (`item_due`) | `app:send-item-reminders` (`sent_item_reminders` dedup) |
+| Sprints (`sprint_started/completed`) | `SprintLifecycle` → `SprintNotifications` |
+| Workspace (`invitation_accepted`, `workspace_role_changed`) | `WorkspaceNotifications` (both invite-accept paths, `updateMemberRole`) |
+| Ticket status (`ticket_status_changed`) | `TicketController::move` |
+
+Rules every sender follows (KNOWLEDGE → "Notification coverage"):
+- **Never notify the actor**, and never someone who can't open the project (`hasProjectAccess`).
+- **Never twice for one event:** a mentioned person gets the mention, not also "commented on";
+  a re-save only notifies people who are new in the content.
+- **The actor is the signed-in user.** No actor (seeders, console) → assignment notifications stay
+  silent.
+- Inside a transaction, send with `DB::afterCommit(...)` so a rollback tells nobody.
+
+## 4. Test it
+- PHPUnit with `Notification::fake()` (real web push needs GMP/BCMath): recipients, no
+  self-notify, dedupe, and `via()` following preferences
+  (`$user->update(['notification_preferences' => ['status' => ['in_app' => true, 'push' => false, 'email' => false]]])`).
+  Add the class to `CatalogNotificationContractTest::notifications()`.
+- e2e: assert on the bell's feed with `e2e/helpers/notifications.ts`
+  (`expectNotification(page, n => n.type === 'widget_ready' && …)`), see
+  `e2e/tests/notifications-coverage.spec.ts`.
+
+## 5. How the inbox shows it (BRAI-102)
+- `describeNotification()` in `components/NotificationMessage.tsx` renders contract types from
+  `title` (the actor's name in bold when the title starts with `actor_name`), `body` (preview
+  line), `subject_key` (chip), `project_name` (context) and `url` (opened in the same tab, app
+  URLs only). Older types have their own case there.
+- The icon is the **category's** (`components/notifications/categories.tsx`): the feed sends
+  `category` per row, computed from `NotificationCatalog::TYPES` (`null` → neutral bell).
+- The Mentions / Assigned tabs filter on the `mentions` / `assignments` categories, so a new
+  type in those categories shows up there automatically.
+- A class that must stay on one channel intersects `channelsFor()` (see
   `CalendarReminderNotification`, push only).
-- **Payload** (`toDatabase`): use the contract keys above. The frontend (`describeNotification` in
-  `components/NotificationMessage.tsx`) renders any type from them; only the older types have
-  their own case. If `title` starts with `actor_name`, the name is shown in bold. URLs must be app
-  URLs (`route(...)`) — the UI drops anything else.
-- **Mail:** visitor- or user-written text goes through `NewLeadNotification::plain()` (Markdown
-  would render links).
-- Push messages: `$this->webPush($title, $body, $url)` (app icon/badge + click URL).
-- The inbox API is `NotificationController` (feed, read / unread / archive, bulk, preferences); see
-  ARCHITECTURE → Notifications.
-
-## 4. Send it
-```php
-$user->notify(new WidgetReadyNotification($widget, $request->user()));
-```
-Don't notify the actor about their own action.
-
-## 5. Verify
-- PHPUnit: `Notification::fake()` + `assertSentTo(...)`; assert `via()` follows preferences
-  (`tests/Feature/Notifications/NotificationPreferencesTest.php`).
-- Run the queue (`composer run dev` includes `queue:listen`), trigger the event, open the bell:
-  the row shows the category icon and the title, and opens the URL in the same tab.

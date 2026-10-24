@@ -61,7 +61,7 @@ test.describe('notifications inbox', () => {
     test('a notification opens in the same tab and counts as read', async ({ page, memberPage }) => {
         const max = await currentUserId(memberPage);
         const topic = uid('same-tab');
-        await mention(page, max, topic, urls.board());
+        await mention(page, max, topic);
 
         await memberPage.goto(urls.home);
         const panel = await openBell(memberPage);
@@ -70,7 +70,7 @@ test.describe('notifications inbox', () => {
         const read = memberPage.waitForResponse((r) => r.request().method() === 'POST' && /\/api\/notifications\/[0-9a-f-]+\/read$/.test(r.url()));
         await row.getByRole('link').click();
         expect((await read).status()).toBeLessThan(400);
-        await expect(memberPage).toHaveURL(new RegExp(`${urls.board()}$`));
+        await expect(memberPage).toHaveURL(new RegExp(urls.board()));
         expect(memberPage.context().pages()).toHaveLength(1);
         await expect(panel).toBeHidden();
 

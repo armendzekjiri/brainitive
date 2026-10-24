@@ -263,4 +263,31 @@ class TimesheetTest extends TestCase
 
         $this->actingAs($this->viewer)->getJson($this->url('timesheet.items', ['project_id' => $this->project->id]))->assertUnprocessable();
     }
+
+    public function test_only_workspace_admins_choose_billable_members_get_the_activity_default(): void
+    {
+        $internal = BillingActivity::create(['workspace_id' => $this->workspace->id, 'name' => 'Internal', 'pricing_type' => 'hourly', 'rate_cents' => 0, 'billable' => false]);
+
+        // a member's billable choice is ignored: the activity decides (v1.39.0)
+        $this->actingAs($this->editor)->post($this->url('timesheet.entries.store'), $this->payload(['billable' => false]))->assertSessionHasNoErrors();
+        $this->post($this->url('timesheet.entries.store'), $this->payload(['activity_id' => $internal->id, 'billable' => true]))->assertSessionHasNoErrors();
+        [$programming, $meeting] = TimeEntry::orderBy('id')->get()->all();
+        $this->assertTrue($programming->billable);
+        $this->assertFalse($meeting->billable);
+
+        // on update the member keeps the flag unless the activity changes
+        $programming->update(['billable' => false]); // e.g. set by an admin
+        $this->put($this->url('timesheet.entries.update', [$programming->id]), $this->payload(['billable' => true, 'note' => 'x']))->assertSessionHasNoErrors();
+        $this->assertFalse($programming->fresh()->billable);
+        $this->put($this->url('timesheet.entries.update', [$meeting->id]), $this->payload(['billable' => false]))->assertSessionHasNoErrors();
+        $this->assertTrue($meeting->fresh()->billable); // switched to Programming → its default
+
+        // the workspace admin can override it
+        $admin = User::find($this->workspace->owner_id);
+        $this->actingAs($admin)->post($this->url('timesheet.entries.store'), $this->payload(['billable' => false]))->assertSessionHasNoErrors();
+        $this->assertFalse(TimeEntry::latest('id')->first()->billable);
+        $own = TimeEntry::latest('id')->first();
+        $this->put($this->url('timesheet.entries.update', [$own->id]), $this->payload(['billable' => true]))->assertSessionHasNoErrors();
+        $this->assertTrue($own->fresh()->billable);
+    }
 }

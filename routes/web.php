@@ -57,7 +57,12 @@ Route::get('/', function () {
         'canRegister' => Route::has('register'),
         'canLoginWithGoogle' => (bool) config('services.google.client_id'),
         'canLoginWithGitHub' => (bool) config('services.github.client_id'),
-    ]);
+    ])->withViewData(['meta' => [
+        // link previews of the homepage (Open Graph / X), see resources/views/partials/social-meta.blade.php
+        'title' => 'Brainitive – Workspaces, Boards & Wiki',
+        'description' => 'Boards, sprints, docs, whiteboards, Gantt plans, helpdesk and client billing — one workspace for the whole project, from the first workshop to the last release.',
+        'url' => url('/'),
+    ]]);
 });
 
 Route::get('/privacy', function () {

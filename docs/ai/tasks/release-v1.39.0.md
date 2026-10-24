@@ -1,4 +1,4 @@
-# Release v1.39.0: Notifications, webhooks, insights, custom sidebar (BRAI-102 … BRAI-107)
+# Release v1.39.0: Notifications, webhooks, insights, custom sidebar, bulk edit (BRAI-102 … BRAI-109)
 
 ## Goal (the user's words, 2026-10-24)
 > "i dont like notifications how they look, make something better ui/ux, check everything that need
@@ -20,6 +20,8 @@ only workspace admins may change an entry's billable flag.
 | 4 | BRAI-105 Admin insights | `feat/admin-insights` | `routes/insights.php`, `app/Support/Insights/*`, `Insights*` controllers, `Pages/Insights/*`, `Layouts/InsightsLayout.tsx` |
 | 5 | BRAI-106 Custom sidebar + project page | `feat/custom-sidebar` | `Layouts/AppLayout.tsx` (sidebar), sidebar payload in `HandleInertiaRequests`, `Pages/Projects/Show.tsx`, `ProjectController@show`, `users.sidebar_preferences` |
 | 6 | BRAI-107 Billing follow-ups | `fix/billing-followups` (lead) | `ProjectTransfer`, `TimesheetController` billable rule |
+| 7 | BRAI-108 Board list bulk edit | `feat/board-bulk-edit` | the board **list view** components, a bulk-update endpoint (`BoardController` or a new `BulkItemController`) |
+| 8 | BRAI-109 Homepage link previews | `feat/social-meta` (lead, merged) | `partials/social-meta.blade.php`, `public/images/og-image.png`, `scripts/make-og-image.mjs` |
 
 Files touched by two tickets (expected, merged by the lead): `ItemObserver`, `SprintLifecycle`, `TicketController`,
 `ItemComments`, `LeadIntake` (tickets 2 + 3 add calls on different lines), `types/index.d.ts`, `docs/ai/*`.
@@ -240,3 +242,27 @@ Add these, each a catalog type with the payload contract above and `RespectsPref
 - `TimesheetController` store/update: `billable` is honoured only for workspace admins. Members get the
   activity default, and on update their entry keeps its flag unless the activity changes.
 - PHPUnit + e2e.
+
+### 7. BRAI-108 Board list view: multi-select + bulk edit (added 2026-10-24)
+> "on boards when we stich to list to be able to multi edit some fileds you decide which"
+
+- In the board's **list view**: a checkbox per row, shift-click to select a range, a header checkbox to select all
+  (visible/filtered) rows, and Esc to clear.
+- A sticky **bulk bar** ("3 selected"):
+  - **Status** (column);
+  - **Assignee** (including Unassigned);
+  - **Priority**;
+  - **Type**;
+  - **Sprint** (including Backlog, when the board is scrum);
+  - **Due date** (set or clear);
+  - **Labels** (add or remove);
+  - **Delete**, with a confirmation.
+- One request per bulk action: `PATCH …/items/bulk` with `{item_ids[], changes{}}`, max 200 ids.
+  - Every id must belong to this board; authorize per item.
+  - Run it in one transaction and go through the model, so `ItemObserver`, activity log, `completed_at` and
+    notifications behave as for single edits. Ticket 2 centralises assignment notifications in the observer.
+  - Notify each assignee once, not once per field.
+  - Reuse the existing bulk-move code if there is one.
+- **Tests:**
+  - PHPUnit: per-field changes, foreign ids rejected, viewer 403, the 200 limit, activity logged.
+  - e2e: switch to list, select 3, set assignee and priority, move to Done, add a label, delete 2.
