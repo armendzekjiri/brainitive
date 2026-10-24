@@ -2546,10 +2546,6 @@ export default function BoardsShow({
                     board={board}
                     activeTab={currentView}
                     onSelectView={setCurrentView}
-                    onCreate={() => {
-                        const firstColumn = [...board.columns].sort((a, b) => a.position - b.position)[0];
-                        if (firstColumn) setCreateInColumnId(firstColumn.id);
-                    }}
                 />
 
                 {/* Active sprint bar (Scrum boards) */}

@@ -38,6 +38,27 @@ test.describe('cards and the issue dialog', () => {
         await expect(card(page, title, 'To Do')).toBeVisible();
     });
 
+    test('the board has one Create button (top bar); it creates the card on this board', async ({ page }) => {
+        // the board header used to have a second Create next to the settings gear
+        const title = uid('topbar-card');
+        await page.goto(urls.board());
+        // only the top bar's Create; the board title row (settings gear) has none. The columns keep their "+ Create".
+        const titleRow = page.getByRole('heading', { level: 1, name: 'Main Board' }).locator('..');
+        await expect(titleRow.getByRole('link', { name: /board settings/i }).or(titleRow.getByTitle('Board settings'))).toBeVisible();
+        await expect(titleRow.getByRole('button', { name: 'Create', exact: true })).toHaveCount(0);
+        const create = page.locator('header').getByRole('button', { name: 'Create', exact: true });
+        await expect(create).toHaveCount(1);
+
+        await create.click();
+        const dialog = page.getByRole('dialog', { name: /^Create/ });
+        await dialog.getByPlaceholder('What needs to be done?').fill(title);
+        await dialog.getByRole('button', { name: /^Create (Task|Issue)/ }).click();
+        await expect(dialog).toBeHidden();
+
+        await page.reload();
+        await expect(card(page, title, 'To Do')).toBeVisible();
+    });
+
     test('a #item link to a card created after the page loaded opens it in the dialog', async ({ page }) => {
         // regression BRAI-97: the hash handler only knew the cards of the first load
         const title = uid('fresh-link');
