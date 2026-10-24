@@ -83,6 +83,23 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.36.0',
+        title: 'Quick capture and related content',
+        tag: 'Feature',
+        date: '2026-10-24',
+        items: [
+            'New Quick capture: press C anywhere (or use the Capture button, or the round button on your phone) to save an idea without picking a project.',
+            'New Captures page: your private inbox with Inbox / Processed / Archived tabs and search. Edit, archive and restore entries — only you can see them.',
+            'Organize a capture into a board card, a task, a doc, a bookmark or a snippet. Check and edit the preview first, then open what was created straight from the link. Markdown, code blocks and links are kept.',
+            'Organizing is safe to retry: a double click never creates two items, and if anything fails the capture stays in your inbox.',
+            'Browser extension: a new Inbox tab saves the current page to your captures, to organize later.',
+            'New “Related content” on issues, docs, whiteboards, helpdesk tickets and plans: link related work in a project with “Link related content”.',
+            'Everything also shows “Referenced by” — what links to it, one click away. Plan rows and whiteboard cards linked to an issue show up there automatically and disappear when you unlink them.',
+            'Private drafts and anything you can’t open never appear in these lists or in the picker; deleted items drop out and come back when restored.',
+            'Fixes: issue numbers in a new project start at KEY-1, #item links to newly created cards open them, and “Mark as read” in notifications works on touch screens and with the keyboard.',
+        ]
+    },
+    {
         version: 'v1.35.1',
         title: 'Fixes found by the new end-to-end tests',
         tag: 'Patch',
