@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\Billing\BuildsReportData;
 use App\Models\Board;
 use App\Models\BoardView;
 use App\Models\Bookmark;
@@ -35,6 +36,7 @@ use App\Policies\SnippetPolicy;
 use App\Policies\WorkloadPolicy;
 use App\Policies\WorkspacePolicy;
 use App\Support\Admin\InstanceMailConfig;
+use App\Support\Billing\ReportBuilder;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -55,6 +57,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // SMTP saved in the admin console overrides .env mail config (see InstanceMailConfig).
         $this->app->afterResolving('mail.manager', fn () => InstanceMailConfig::apply());
+
+        // billing report data, snapshot v1 (v1.38.0): documents render what the report builder computes
+        $this->app->bind(BuildsReportData::class, ReportBuilder::class);
     }
 
     /**

@@ -1241,3 +1241,111 @@ export interface HealthReportDetail extends HealthReportSummary {
     timezone: string;
     can_delete: boolean;
 }
+
+// ── Billing reports (v1.38.0, BRAI-101 reports) ─────────────────────────────────
+// Snapshot v1: docs/ai/tasks/release-v1.38.0-billing.md (built by App\Support\Billing\ReportBuilder).
+
+export type BillingReportStatus = 'draft' | 'finalized' | 'sent' | 'paid' | 'void';
+export type BillingGroupBy = 'ticket' | 'activity' | 'person';
+
+export interface BillingSnapshotLine {
+    item_key: string | null;
+    item_title: string | null;
+    activity: { name: string; pricing_type: 'hourly' | 'fixed' };
+    person: string | null;
+    minutes: number;
+    billed_minutes: number;
+    rate_cents: number;
+    amount_cents: number;
+    fixed_already_billed: boolean;
+    notes: string[];
+    entry_ids: number[];
+}
+
+export interface BillingSnapshotEntry {
+    id: number;
+    date: string;
+    person: string | null;
+    project_key: string | null;
+    item_key: string | null;
+    item_title: string | null;
+    activity: string;
+    minutes: number;
+    billed_minutes: number;
+    billable: boolean;
+    note: string | null;
+}
+
+export interface BillingReportSnapshot {
+    version: 1;
+    kind: 'report' | 'invoice';
+    number: string | null;
+    title: string;
+    issued_on: string;
+    period: { from: string; to: string };
+    currency: string;
+    tax_rate_bp: number;
+    prices_include_tax: boolean;
+    rounding_minutes: number;
+    issuer: {
+        company_name: string; address: string; vat_id: string; email: string; phone: string;
+        bank_name: string; iban: string; bic: string; footer: string; logo_path: string | null; payment_terms_days: number;
+    };
+    client: { name: string; email: string; address: string; vat_id: string };
+    options: { group_by: BillingGroupBy; show_people: boolean; show_notes: boolean };
+    groups: {
+        project: { id: number; name: string; key: string | null };
+        lines: BillingSnapshotLine[];
+        minutes: number;
+        billed_minutes: number;
+        net_cents: number;
+    }[];
+    totals: { minutes: number; billed_minutes: number; net_cents: number; tax_cents: number; gross_cents: number };
+    entries: BillingSnapshotEntry[];
+}
+
+/** BillingReportController::summary() */
+export interface BillingReportSummary {
+    id: number;
+    kind: 'report' | 'invoice';
+    number: string | null;
+    title: string | null;
+    status: BillingReportStatus;
+    client: { id: number; name: string } | null;
+    period_from: string;
+    period_to: string;
+    currency: string;
+    total_minutes: number;
+    total_cents: number;
+    created_at: string | null;
+}
+
+export interface BillingReportOptions {
+    project_ids: number[] | null;
+    group_by: BillingGroupBy;
+    show_people: boolean;
+    show_notes: boolean;
+    excluded_entry_ids: number[];
+}
+
+export interface BillingReportDetail extends BillingReportSummary {
+    options: BillingReportOptions;
+    finalized_at: string | null;
+    sent_at: string | null;
+    sent_to: string | null;
+    paid_at: string | null;
+    voided_at: string | null;
+    client_email: string | null;
+}
+
+/** An entry of a draft for the admin (always with person + note); left-out entries have no billed_minutes. */
+export interface BillingReportRow extends Omit<BillingSnapshotEntry, 'billed_minutes'> {
+    billed_minutes?: number;
+}
+
+export interface BillingReportWarnings {
+    without_activity: number;
+    non_billable: number;
+    nothing_to_bill: boolean;
+    settings_incomplete: boolean;
+}
