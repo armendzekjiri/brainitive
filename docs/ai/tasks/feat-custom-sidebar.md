@@ -1,7 +1,7 @@
 # Custom sidebar + better project page (BRAI-106)
 
 **Branch:** feat/custom-sidebar (from release/v1.39.0)
-**Status:** in-progress
+**Status:** done (gate green apart from two release-branch failures, see report)
 **Started:** 2026-10-24
 **Board card:** BRAI-106 · contract: [release-v1.39.0.md](./release-v1.39.0.md) § 5
 
