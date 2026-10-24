@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Link } from '@inertiajs/react';
-import { Calendar, GanttChart, Kanban, LineChart, List, ListOrdered, Plus, Settings } from 'lucide-react';
+import { Calendar, GanttChart, Kanban, LineChart, List, ListOrdered, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Board, Project, Workspace } from '@/types';
 import { cn } from '@/lib/utils';
@@ -25,7 +25,6 @@ export function BoardHeader({
     board,
     activeTab,
     onSelectView,
-    onCreate,
     actions,
 }: {
     workspace: Workspace;
@@ -34,7 +33,6 @@ export function BoardHeader({
     activeTab: BoardTab;
     /** On the board page views switch in place; elsewhere they link to the board. */
     onSelectView?: (view: BoardView) => void;
-    onCreate?: () => void;
     actions?: ReactNode;
 }) {
     const params = [workspace.slug, project.slug, board.slug];
@@ -68,11 +66,6 @@ export function BoardHeader({
                             <Settings className="size-4" />
                         </Button>
                     </Link>
-                    {onCreate && (
-                        <Button size="sm" className="h-8 gap-1.5" onClick={onCreate}>
-                            <Plus className="size-4" />Create
-                        </Button>
-                    )}
                 </div>
             </div>
 
