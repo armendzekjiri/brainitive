@@ -490,6 +490,9 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   project is a single update (see `ProjectTransfer`). Keep it that way: a new project-level
   table must not copy `workspace_id`, or moves (and access checks) drift. Workspace-level
   things (bookmarks, snippets, invitations) are not project data and stay behind.
+  Exception: `time_entries` carry `workspace_id` (billing is per workspace). On a move,
+  `ProjectTransfer` moves the **unbilled** entries and maps their activity by name in the target
+  (none → null); entries on a finalized report stay with the old workspace (v1.39.0, BRAI-107).
 - **`projects` unique keys `(workspace_id, slug)` and `(workspace_id, key)` include
   soft-deleted rows.** Check with `withTrashed()` before reusing a slug or key in a workspace.
 - **Error pages are Inertia (`Pages/Error.tsx`), wired in `bootstrap/app.php`
@@ -619,7 +622,9 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
     are never backfilled twice.
   - The activity is **required once the workspace has an active activity** and optional before,
     so workspaces that don't bill aren't blocked. Archived activities can't be picked, but an
-    entry keeps the one it has. `billable` follows the activity unless the form sends it.
+    entry keeps the one it has. `billable` follows the activity; only **workspace admins**
+    (`manageBilling`) can override it — a member's `billable` input is ignored, and on update their
+    entry keeps its flag unless the activity changes (v1.39.0, BRAI-107).
   - **Members never get a rate:** activity options for log forms come from `timesheet.activities`
     (`TimeLogActivities::option()`: name, colour, pricing type label, billable) — never a shared
     Inertia prop, never `rate_cents`. Tests assert it on the JSON and the page.

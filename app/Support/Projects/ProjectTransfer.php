@@ -2,10 +2,12 @@
 
 namespace App\Support\Projects;
 
+use App\Models\BillingActivity;
 use App\Models\Board;
 use App\Models\Item;
 use App\Models\ItemLink;
 use App\Models\Project;
+use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Support\Collection;
@@ -23,7 +25,10 @@ use Illuminate\Support\Str;
  * - issue links to issues outside the project are removed (they would show another
  *   workspace's issue titles);
  * - the project key must be free in the target (it's part of every issue / ticket key);
- *   a taken slug gets a suffix.
+ *   a taken slug gets a suffix;
+ * - logged time (v1.39.0): unbilled entries move with the project and take the target's activity
+ *   of the same name (none → no activity, the admin picks one); entries already on a finalized
+ *   report stay with the old workspace's billing.
  */
 class ProjectTransfer
 {
@@ -50,7 +55,7 @@ class ProjectTransfer
     /**
      * What will happen, for the confirmation step.
      *
-     * @return array{key_taken: bool, new_slug: string, keep: list<array{id: int, name: string, email: string}>, remove: list<array{id: int, name: string, email: string}>, external_links: int}
+     * @return array{key_taken: bool, new_slug: string, keep: list<array{id: int, name: string, email: string}>, remove: list<array{id: int, name: string, email: string}>, external_links: int, time: array{moving_minutes: int, billed_minutes: int, unmatched_activities: list<string>}}
      */
     public static function preview(Project $project, Workspace $target): array
     {
@@ -64,6 +69,7 @@ class ProjectTransfer
             'keep' => $members->filter(fn (User $u) => in_array($u->id, $targetMemberIds))->map($person)->values()->all(),
             'remove' => $members->reject(fn (User $u) => in_array($u->id, $targetMemberIds))->map($person)->values()->all(),
             'external_links' => self::externalLinks($project)->count(),
+            'time' => self::timePreview($project, $target),
         ];
     }
 
@@ -84,9 +90,55 @@ class ProjectTransfer
                 'slug' => self::freeSlug($project, $target),
                 'client_id' => null, // clients belong to the old workspace (billing, v1.38.0)
             ])->save();
+
+            self::moveUnbilledTime($project, $target);
         });
 
         return $project->fresh('workspace');
+    }
+
+    /** Unbilled entries follow the project; activities are matched by name in the target. */
+    private static function moveUnbilledTime(Project $project, Workspace $target): void
+    {
+        $unbilled = TimeEntry::query()->where('project_id', $project->id)->whereNull('billing_report_id');
+
+        $targetIds = self::targetActivityIds($project, $target);
+        foreach ($targetIds as $oldId => $newId) {
+            (clone $unbilled)->where('billing_activity_id', $oldId)->update(['billing_activity_id' => $newId]);
+        }
+
+        // query updates: minutes don't change, so the issues' time_spent totals stay right
+        (clone $unbilled)->update(['workspace_id' => $target->id]);
+    }
+
+    /**
+     * Activities used by the project's unbilled entries → the target's activity of the same name (or null).
+     *
+     * @return array<int, int|null>
+     */
+    private static function targetActivityIds(Project $project, Workspace $target): array
+    {
+        $used = BillingActivity::query()
+            ->whereIn('id', TimeEntry::query()->where('project_id', $project->id)->whereNull('billing_report_id')->whereNotNull('billing_activity_id')->select('billing_activity_id'))
+            ->pluck('name', 'id');
+        $byName = BillingActivity::query()->where('workspace_id', $target->id)->whereIn('name', $used->values())->pluck('id', 'name');
+
+        return $used->map(fn (string $name) => $byName[$name] ?? null)->all();
+    }
+
+    /** @return array{moving_minutes: int, billed_minutes: int, unmatched_activities: list<string>} */
+    private static function timePreview(Project $project, Workspace $target): array
+    {
+        $totals = TimeEntry::query()->where('project_id', $project->id)
+            ->selectRaw('COALESCE(SUM(CASE WHEN billing_report_id IS NULL THEN minutes END), 0) AS moving, COALESCE(SUM(CASE WHEN billing_report_id IS NOT NULL THEN minutes END), 0) AS billed')
+            ->first();
+        $unmatched = collect(self::targetActivityIds($project, $target))->filter(fn ($id) => $id === null)->keys();
+
+        return [
+            'moving_minutes' => (int) $totals->moving,
+            'billed_minutes' => (int) $totals->billed,
+            'unmatched_activities' => BillingActivity::query()->whereIn('id', $unmatched)->orderBy('name')->pluck('name')->all(),
+        ];
     }
 
     private static function freeSlug(Project $project, Workspace $target): string
