@@ -552,6 +552,8 @@ export type PageProps<
     };
     /** Onboarding state + computed setup checklist progress (shared by HandleInertiaRequests) */
     onboarding?: OnboardingState | null;
+    /** Customisable sidebar (BRAI-106), normalised by SidebarPreferences::forFrontend */
+    sidebarPreferences?: SidebarPreferences | null;
 };
 
 export type OnboardingFocus = 'project_mgmt' | 'docs' | 'support' | 'all';
@@ -1608,4 +1610,40 @@ export interface WebhookDelivery {
     response_body: string | null;
     created_at: string | null;
     delivered_at: string | null;
+}
+
+// ── Customisable sidebar (BRAI-106) ─────────────────────────────────────────
+/** Top-level sidebar entries a user may hide (Home and Inbox are always shown). */
+export type SidebarNavKey = 'my_work' | 'captures' | 'timesheet' | 'billing' | 'insights' | 'calendar' | 'bookmarks' | 'snippets';
+/** Project groups in the sidebar. */
+export type SidebarGroupKey = 'boards' | 'lists' | 'plans' | 'helpdesks' | 'lead_forms' | 'pages' | 'whiteboards' | 'folders';
+/** What can be pinned; "page" covers pages, whiteboards and folders. */
+export type SidebarPinType = 'board' | 'list' | 'plan' | 'helpdesk' | 'lead_form' | 'page';
+
+export interface SidebarPin {
+    type: SidebarPinType;
+    id: number;
+}
+
+export interface SidebarProjectPreferences {
+    groups: Record<SidebarGroupKey, boolean>;
+    pins: SidebarPin[];
+    pinned_only: boolean;
+}
+
+/** `users.sidebar_preferences`; missing projects use the defaults (all groups, no pins). */
+export interface SidebarPreferences {
+    hidden_nav: SidebarNavKey[];
+    projects: Record<string, SidebarProjectPreferences>;
+}
+
+/** One "Recently updated" row on the project page (RecentContent::for). */
+export interface RecentContentEntry {
+    type: SidebarPinType;
+    id: number;
+    name: string;
+    url: string;
+    updated_at: string;
+    is_whiteboard?: boolean;
+    icon?: string | null;
 }
