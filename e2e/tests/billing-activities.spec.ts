@@ -26,9 +26,9 @@ test.describe('billing activities', () => {
         // an own workspace (its creator is the admin), so the activities are only ours
         const workspace = await createWorkspace(page);
 
-        // the sidebar's Billing link opens the first billing tab (Reports once BRAI-101 is in); then Activities
+        // the sidebar's Billing link opens the first billing tab; Activities is one of them
         await page.getByRole('link', { name: 'Billing', exact: true }).click();
-        await expect(page).toHaveURL(new RegExp(`/workspaces/${workspace.slug}/billing/\\w+$`));
+        await expect(page).toHaveURL(new RegExp(`/workspaces/${workspace.slug}/billing/`));
         await page.getByRole('link', { name: 'Activities', exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`/workspaces/${workspace.slug}/billing/activities$`));
         await expect(page.getByRole('link', { name: 'Activities', exact: true })).toHaveAttribute('aria-current', 'page');

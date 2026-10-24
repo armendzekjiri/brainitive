@@ -62,6 +62,8 @@ export interface Workspace {
 }
 
 export interface Project {
+    /** Billing client (v1.38.0); set by workspace admins. */
+    client_id?: number | null;
     id: number;
     uuid: string;
     workspace_id: number;
@@ -1464,4 +1466,108 @@ export interface BillingActivityItemType {
     /** null = a global type */
     project: string | null;
     billing_activity_id: number | null;
+}
+
+// ── Billing: clients + team time overview (BRAI-100) ───────────────────────────────────────────
+
+/** A client in a select (project settings, overview filter). */
+export interface BillingClientOption {
+    id: number;
+    name: string;
+    archived: boolean;
+}
+
+/** ClientController::index */
+export interface BillingClient {
+    id: number;
+    name: string;
+    email: string | null;
+    address: string | null;
+    vat_id: string | null;
+    /** Percent (19 = 19 %); null = the workspace default. */
+    tax_rate: number | null;
+    notes: string | null;
+    archived: boolean;
+    projects: BillingClientProject[];
+}
+
+export type BillingClientProject = Pick<Project, 'id' | 'name' | 'slug' | 'key' | 'icon' | 'icon_display' | 'color'> & { client_id?: number | null };
+
+export type TimeOverviewPeriod = 'last_month' | 'this_month' | 'custom';
+export type TimeOverviewGroupBy = 'ticket' | 'person' | 'activity' | 'day';
+export type TimeOverviewBillable = 'all' | 'billable' | 'non_billable';
+
+/** TimeOverview::filters() */
+export interface TimeOverviewFilters {
+    period: TimeOverviewPeriod;
+    from: string;
+    to: string;
+    projects: number[];
+    client: number | null;
+    person: number | null;
+    /** An activity id, or 'none' for entries without an activity. */
+    activity: number | 'none' | null;
+    billable: TimeOverviewBillable;
+    group: TimeOverviewGroupBy;
+    detail: boolean;
+}
+
+export interface TimeOverviewEntry {
+    id: number;
+    date: string;
+    person: string | null;
+    project_key: string | null;
+    ticket_key: string | null;
+    ticket_title: string | null;
+    activity: string | null;
+    note: string | null;
+    minutes: number;
+    billable: boolean;
+    /** Billed by a finalized report: no edits. */
+    locked: boolean;
+    report: string | null;
+}
+
+interface TimeOverviewTotals {
+    minutes: number;
+    billable_minutes: number;
+    entries: number;
+    /** Indicative, before rounding / VAT. */
+    amount_cents: number;
+    /** Any billable entry with an activity (otherwise there is no amount to show). */
+    priced: boolean;
+}
+
+export interface TimeOverviewTicketRow extends TimeOverviewTotals {
+    key: string;
+    item_id: number | null;
+    ticket_key: string | null;
+    label: string | null;
+    detail: TimeOverviewEntry[];
+}
+
+export interface TimeOverviewGroup extends TimeOverviewTotals {
+    key: string;
+    label: string;
+    /** Project key (ticket mode) or pricing type (activity mode). */
+    meta: string | null;
+    /** Client name (ticket mode). */
+    client?: string | null;
+    /** Ticket rows (ticket mode only). */
+    rows?: TimeOverviewTicketRow[];
+    /** Entries (person / activity / day modes, with detail on). */
+    detail?: TimeOverviewEntry[];
+}
+
+export interface TimeOverviewSummary {
+    groups: TimeOverviewGroup[];
+    totals: TimeOverviewTotals & { non_billable_minutes: number };
+    detail_truncated: boolean;
+}
+
+export interface TimeOverviewOptions {
+    projects: { id: number; name: string; key: string; client_id: number | null }[];
+    clients: BillingClientOption[];
+    people: { id: number; name: string }[];
+    activities: { id: number; name: string; pricing_type: 'hourly' | 'fixed'; archived: boolean }[];
 }

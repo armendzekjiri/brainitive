@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Board;
+use App\Models\Client;
 use App\Models\ItemType;
 use App\Models\Label;
 use App\Models\Page;
@@ -262,6 +263,13 @@ class ProjectController extends Controller
             'workspaceTemplates' => $request->user()->can('create', [ProjectTemplate::class, $workspace])
                 ? ProjectTemplate::where('workspace_id', $workspace->id)->orderBy('name')->get(['uuid', 'name', 'description'])
                 : [],
+            // billing client select (BRAI-100): workspace admins only; active clients + the current one
+            'billingClients' => $request->user()->can('manageBilling', $workspace)
+                ? Client::where('workspace_id', $workspace->id)
+                    ->where(fn ($q) => $q->whereNull('archived_at')->orWhere('id', $project->client_id))
+                    ->orderBy('name')->get(['id', 'name', 'archived_at'])
+                    ->map(fn (Client $c) => ['id' => $c->id, 'name' => $c->name, 'archived' => $c->archived_at !== null])
+                : null,
         ]);
     }
 
@@ -271,6 +279,9 @@ class ProjectController extends Controller
     public function update(Request $request, Workspace $workspace, Project $project)
     {
         $this->authorize('update', $project);
+
+        // billing client (BRAI-100): only workspace admins set it; ignored for everyone else
+        $setsClient = $request->exists('client_id') && $request->user()->can('manageBilling', $workspace);
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -285,7 +296,13 @@ class ProjectController extends Controller
             'icon' => 'nullable|string|max:500',
             'icon_image' => 'nullable|image|mimes:png,jpeg,jpg|max:2048',
             'color' => 'nullable|string|max:20',
-        ]);
+        ] + ($setsClient ? ['client_id' => ['nullable', 'integer', Rule::exists('clients', 'id')->where('workspace_id', $workspace->id)
+            ->where(fn ($q) => $q->whereNull('archived_at')->orWhere('id', $project->client_id))]] : []));
+
+        if ($setsClient) {
+            $project->client_id = $validated['client_id'] ?? null; // not fillable on purpose
+        }
+        unset($validated['client_id']);
 
         if (array_key_exists('key', $validated)) {
             if (($validated['key'] ?? '') === '') {

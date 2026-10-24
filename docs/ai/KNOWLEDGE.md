@@ -717,3 +717,32 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
     Draft / void documents carry a stamp (PDF heading, Excel "Status" row) and no payment request.
   - **Testing PDFs:** `BillingDocumentTest::pdfText()` inflates the content streams and decodes the
     UTF-16BE strings, so assertions can look for the printed text (dompdf compresses everything).
+
+- **Billing time overview (BRAI-100): one joined query, reduced in PHP.** `TimeOverview::query()`
+  joins entries with project, client, the *live* item (`items.deleted_at IS NULL` in the join, so
+  a trashed issue falls back to the `item_key` / `item_title` snapshot like a deleted one),
+  person, activity and report, and `summary()` walks it with `cursor()`. The page costs the
+  same number of queries for 5 or 5 000 entries (`test_the_page_runs_a_fixed_number_of_queries`
+  — measure after one warm-up request, the first one fills per-request caches). Don't add
+  per-group lookups; add a column to the join. The **estimate** counts billable entries only;
+  a fixed price is charged once per project + ticket (or "no ticket") + activity and credited
+  to the group of the earliest entry, so groups always add up to the total. It doesn't know
+  which fixed prices an earlier report already billed (BRAI-101 owns that), hence the label
+  "estimate before rounding / VAT".
+- **openspout turns any string starting with `=` into a formula.** `Cell::fromValue()` /
+  `Row::fromValues()` build a `FormulaCell` for `"=…"`, so a time-entry note like
+  `=HYPERLINK(…)` became a live formula in the client's Excel. Exports of user text build
+  `StringCell` / `NumericCell` / `EmptyCell` explicitly (`TimeExport::text()`). Stream big
+  exports: `Writer::openToFile('php://output')` inside `response()->streamDownload()`, rows
+  from a `cursor()`; read back in tests with `$response->streamedContent()` + the XLSX `Reader`.
+- **Controlled checkboxes that trigger an Inertia reload need local state.** A checkbox whose
+  `checked` comes only from props flips after the round-trip, and Playwright's `check()` fails
+  with "Clicking the checkbox did not change its state". The overview's project picker and
+  "Show entries" keep an optimistic `useState` that re-syncs from props.
+- **Billing and project moves / trash (BRAI-100).** `ProjectTransfer::move()` clears
+  `projects.client_id` (clients belong to the old workspace). Time entries keep their
+  `workspace_id`, so the old workspace still has that logged work; the overview joins project and
+  client only inside the entry's workspace and only while not trashed, and otherwise shows
+  "Deleted or moved project" with the snapshot ticket key / title — never the new workspace's
+  names. Whether unbilled entries should move with the project is an open decision (activities
+  are per workspace, so moving them would need the activity cleared or mapped).
