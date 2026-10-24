@@ -42,6 +42,19 @@ import {
     Search,
     GanttChart,
     MonitorPlay,
+    Inbox,
+    Timer,
+    Command,
+    ListFilter,
+    SlidersHorizontal,
+    LayoutTemplate,
+    Rocket,
+    Network,
+    Link2,
+    Headset,
+    ClipboardList,
+    Magnet,
+    GitBranch,
     type LucideIcon,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -352,6 +365,117 @@ function PricingSection() {
     );
 }
 
+/**
+ * "New in recent releases": the biggest features of the latest releases, shown larger at the top
+ * of #features. With a new release, put its headline feature first and keep 2 (at most 3) cards —
+ * the oldest drops out here but keeps its card in `featureGroups`. `version` is the release that
+ * shipped it (CHANGELOG in HelpModal.tsx). Only advertise what is built and released.
+ */
+const SPOTLIGHT: {
+    key: string;
+    version: string;
+    icon: LucideIcon;
+    color: string;
+    title: string;
+    description: string;
+    points: string[];
+    /** keyboard shortcut shown as a key cap next to the title */
+    shortcut?: string;
+}[] = [
+    {
+        key: 'quick-capture',
+        version: 'v1.36',
+        icon: Inbox,
+        color: '#0E83DC',
+        title: 'Quick capture',
+        description:
+            'Press C anywhere to save an idea without picking a project. Sort it later into an issue, a task, a doc, a bookmark or a snippet.',
+        points: [
+            'A private inbox only you can see',
+            'From the app, your phone or the browser extension',
+            'Check the preview before anything is created',
+        ],
+        shortcut: 'C',
+    },
+    {
+        key: 'lead-forms',
+        version: 'v1.34',
+        icon: Magnet,
+        color: '#69A748',
+        title: 'Lead forms',
+        description:
+            'Multi-step forms with logic and your branding. Every submission lands as a card on the form’s own leads board.',
+        points: [
+            '12 templates, from demo request to webinar',
+            'Share a link or embed it on your website',
+            'Conversion analytics and webhooks to your CRM',
+        ],
+    },
+];
+
+function WhatsNew() {
+    return (
+        <RevealSection className="mb-16 sm:mb-20">
+            <section aria-labelledby="whats-new-title">
+                <div className="flex flex-wrap items-center gap-3 mb-6">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#69A748] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
+                        <Sparkles className="h-3 w-3" />
+                        New
+                    </span>
+                    <h3 id="whats-new-title" className="text-lg sm:text-xl font-bold text-[#485E72] dark:text-slate-100 leading-tight">
+                        New in recent releases
+                    </h3>
+                </div>
+                <div className={`grid gap-5 ${SPOTLIGHT.length > 2 ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-2'}`}>
+                    {SPOTLIGHT.map((s) => (
+                        <article
+                            key={s.key}
+                            className="relative h-full overflow-hidden rounded-2xl border border-border/70 bg-card p-6 sm:p-7 shadow-lg shadow-[#485E72]/[0.06] dark:shadow-black/20 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl"
+                        >
+                            <div
+                                aria-hidden
+                                className="pointer-events-none absolute -top-20 -right-20 h-56 w-56 rounded-full blur-3xl"
+                                style={{ backgroundColor: `${s.color}1f` }}
+                            />
+                            <div className="relative flex items-start justify-between gap-4">
+                                <div
+                                    className="flex h-12 w-12 items-center justify-center rounded-xl shrink-0"
+                                    style={{ backgroundColor: `${s.color}14`, color: s.color }}
+                                >
+                                    <s.icon className="h-6 w-6" strokeWidth={1.8} />
+                                </div>
+                                <span className="rounded-full border border-border/70 bg-background/60 px-2.5 py-0.5 text-[11px] font-semibold text-[#485E72]/70 dark:text-slate-400">
+                                    {s.version}
+                                </span>
+                            </div>
+                            <div className="relative mt-4 flex items-center gap-2.5">
+                                <h4 className="text-xl font-bold text-[#485E72] dark:text-slate-100 leading-tight">{s.title}</h4>
+                                {s.shortcut && (
+                                    <kbd
+                                        title={`Press ${s.shortcut}`}
+                                        className="inline-flex h-7 min-w-7 items-center justify-center rounded-md border border-border border-b-2 bg-background px-2 font-mono text-sm font-bold text-[#0E83DC] shadow-sm"
+                                    >
+                                        {s.shortcut}
+                                    </kbd>
+                                )}
+                            </div>
+                            <p className="relative mt-2 text-sm leading-relaxed text-[#485E72]/70 dark:text-slate-300">{s.description}</p>
+                            <ul className="relative mt-4 space-y-2">
+                                {s.points.map((point) => (
+                                    <li key={point} className="flex items-start gap-2.5 text-sm text-[#485E72]/75 dark:text-slate-300">
+                                        <Check className="h-4 w-4 shrink-0 mt-0.5 text-[#69A748]" strokeWidth={2.5} />
+                                        {point}
+                                    </li>
+                                ))}
+                            </ul>
+                        </article>
+                    ))}
+                </div>
+            </section>
+        </RevealSection>
+    );
+}
+
 /** Product screenshots (light + dark) for the "See it in action" section. */
 const TOUR = [
     {
@@ -480,7 +604,7 @@ const EXTENSION_DOWNLOAD = 'https://github.com/armendzekjiri/brainitive/releases
 function ExtensionSection() {
     const features = [
         { icon: MousePointerClick, title: 'Issue from any page', text: 'Link, selected text and a screenshot of an area, in two clicks.' },
-        { icon: Bookmark, title: 'Bookmarks & docs', text: 'Save links or clip a whole article as a clean doc.' },
+        { icon: Bookmark, title: 'Bookmarks & docs', text: 'Save links, clip an article as a clean doc, or send the page to your capture inbox.' },
         { icon: Code2, title: 'Snippets', text: 'Right-click selected code: saved with its language.' },
         { icon: LayoutDashboard, title: 'My Work alongside', text: 'Your assigned issues and tasks in the side panel; “bt” searches from the address bar.' },
     ];
@@ -561,36 +685,93 @@ export default function Welcome({
         return () => window.removeEventListener('scroll', onScroll);
     }, []);
 
+    /*
+     * Feature cards, grouped. Keep groups at 6 cards (3 also works) so the 3-column grid stays
+     * even; when one gets too long, split it into a new group rather than a 7th card.
+     * A release adds a card for each new module to the matching group with `isNew: true` (green
+     * "New" pill) and removes `isNew` from cards a few releases old. Only advertise what is built.
+     * Group colors alternate brand blue / green (slate #485E72 is unreadable in dark mode).
+     */
     const featureGroups: {
         title: string;
         tagline: string;
         icon: LucideIcon;
         color: string;
-        items: { icon: LucideIcon; title: string; description: string }[];
+        items: { icon: LucideIcon; title: string; description: string; isNew?: boolean }[];
     }[] = [
         {
             title: 'Plan & organize',
             tagline: 'Keep every team, project, and task moving.',
-            icon: LayoutDashboard,
+            icon: FolderKanban,
             color: '#0E83DC',
             items: [
                 {
-                    icon: LayoutDashboard,
-                    title: 'Workspaces',
+                    icon: LayoutTemplate,
+                    title: 'Project templates',
                     description:
-                        'Group teams and projects into dedicated workspaces with their own members.',
+                        'Start from 20 templates — software, marketing, HR, sales and more — or save your own project as one.',
+                    isNew: true,
                 },
                 {
                     icon: FolderKanban,
                     title: 'Boards, Kanban & Scrum',
                     description:
-                        'Kanban or Scrum with sprints, backlog and burndown — plus issue history, WIP limits and time tracking.',
+                        'Kanban or Scrum with sprints, backlog and burndown — plus swimlanes, WIP limits, history and time tracking.',
+                },
+                {
+                    icon: ListFilter,
+                    title: 'Saved board views',
+                    description:
+                        'Save filters, layout and sorting as a named view — keep it to yourself or share it with the board.',
+                    isNew: true,
+                },
+                {
+                    icon: SlidersHorizontal,
+                    title: 'Custom fields',
+                    description:
+                        'Add text, number, date, yes/no or option fields to issues — then filter, sort and show them as columns.',
+                    isNew: true,
                 },
                 {
                     icon: GanttChart,
                     title: 'Gantt timelines',
                     description:
                         'Phases, milestones and dependencies on a timeline. Start in a workshop, then link rows to real issues.',
+                },
+                {
+                    icon: Rocket,
+                    title: 'Releases & release notes',
+                    description:
+                        'Plan fix versions with live progress, then publish release notes to a public page and changelog.',
+                    isNew: true,
+                },
+            ],
+        },
+        {
+            title: 'Capture & focus',
+            tagline: 'Catch every idea, then focus on what matters today.',
+            icon: Inbox,
+            color: '#69A748',
+            items: [
+                {
+                    icon: Inbox,
+                    title: 'Quick capture',
+                    description:
+                        'Press C anywhere to drop an idea into your private inbox, then turn it into the right thing later.',
+                    isNew: true,
+                },
+                {
+                    icon: Sun,
+                    title: 'My Day & focus timer',
+                    description:
+                        'Pick today’s tasks from boards and lists, then run a focus timer that logs the time on the issue.',
+                    isNew: true,
+                },
+                {
+                    icon: Briefcase,
+                    title: 'My Work',
+                    description:
+                        'One view of everything assigned to you, across all workspaces and projects.',
                 },
                 {
                     icon: ListChecks,
@@ -605,10 +786,11 @@ export default function Welcome({
                         'Connect Google Calendar and Tasks, see your schedule, and reschedule in place.',
                 },
                 {
-                    icon: Briefcase,
-                    title: 'My Work',
+                    icon: Command,
+                    title: 'Command palette',
                     description:
-                        'One view of everything assigned to you, across all workspaces and projects.',
+                        'Press ⌘K to search everything, jump back to recent items and run commands from the keyboard.',
+                    isNew: true,
                 },
             ],
         },
@@ -616,7 +798,7 @@ export default function Welcome({
             title: 'Create & write',
             tagline: 'Documents, diagrams, and reusable content.',
             icon: FileText,
-            color: '#69A748',
+            color: '#0E83DC',
             items: [
                 {
                     icon: FileText,
@@ -637,6 +819,13 @@ export default function Welcome({
                         'Excalidraw with templates, autosave and history — turn sticky notes into board issues.',
                 },
                 {
+                    icon: Network,
+                    title: 'Related content & backlinks',
+                    description:
+                        'Link issues, docs, whiteboards, tickets and plans — and see what references each one.',
+                    isNew: true,
+                },
+                {
                     icon: Code2,
                     title: 'Snippets',
                     description:
@@ -654,8 +843,14 @@ export default function Welcome({
             title: 'Collaborate & share',
             tagline: 'Bring the right people in, control what they see.',
             icon: Users,
-            color: '#485E72',
+            color: '#69A748',
             items: [
+                {
+                    icon: LayoutDashboard,
+                    title: 'Workspaces',
+                    description:
+                        'Group teams and projects into dedicated workspaces with their own members.',
+                },
                 {
                     icon: Users,
                     title: 'Roles & permissions',
@@ -675,10 +870,11 @@ export default function Welcome({
                         'Keep content internal or generate public links for pages, snippets, and bookmarks.',
                 },
                 {
-                    icon: LifeBuoy,
-                    title: 'Helpdesk portal',
+                    icon: Link2,
+                    title: 'Share links',
                     description:
-                        'An embeddable support widget and portal for customer tickets and replies.',
+                        'Share a single doc or issue read-only with anyone — links can expire and be revoked any time.',
+                    isNew: true,
                 },
                 {
                     icon: CircleUser,
@@ -689,22 +885,57 @@ export default function Welcome({
             ],
         },
         {
-            title: 'Connect & automate',
-            tagline: 'Plug in AI, stay in the loop, sign in your way.',
-            icon: Bot,
+            title: 'Customers & leads',
+            tagline: 'Support customers and win new ones, on the boards you already use.',
+            icon: Headset,
             color: '#0E83DC',
+            items: [
+                {
+                    icon: LifeBuoy,
+                    title: 'Helpdesk portal',
+                    description:
+                        'An embeddable support widget, portal and support page for customer tickets and replies.',
+                },
+                {
+                    icon: ClipboardList,
+                    title: 'Helpdesk templates',
+                    description:
+                        '17 templates — IT helpdesk, bug reports, returns, registrations and more — each with its own columns and fields.',
+                    isNew: true,
+                },
+                {
+                    icon: Magnet,
+                    title: 'Lead forms',
+                    description:
+                        'Branded multi-step forms with logic, analytics and webhooks — every lead lands as a card.',
+                    isNew: true,
+                },
+            ],
+        },
+        {
+            title: 'Connect & automate',
+            tagline: 'Plug in AI and GitHub, stay in the loop, sign in your way.',
+            icon: Bot,
+            color: '#69A748',
             items: [
                 {
                     icon: Bot,
                     title: 'AI agents (MCP)',
                     description:
-                        'Connect ChatGPT or Claude over MCP to read and update your workspace safely.',
+                        'Connect ChatGPT or Claude over MCP to work with your issues, docs, comments, sprints and Gantt plans.',
                 },
                 {
                     icon: Sparkles,
                     title: 'In-app AI',
                     description:
-                        'Bring your own AI provider for writing and suggestions inside docs and items.',
+                        'Bring your own AI provider for writing in docs and issues — with your project as context.',
+                },
+                {
+                    icon: GitBranch,
+                    title: 'GitHub development',
+                    description:
+                        'Branches, commits, pull requests and deployments show up on the issue they mention.',
+                    isNew: true,
                 },
                 {
                     icon: Bell,
@@ -1096,10 +1327,12 @@ export default function Welcome({
                                 Everything you need, in one place
                             </h2>
                             <p className="text-[#485E72]/60 dark:text-slate-400 max-w-xl mx-auto text-lg">
-                                Plan, write, collaborate, and connect &mdash; from Scrum
-                                boards and timelines to wiki pages, calendar sync and AI agents.
+                                Capture, plan, write and share &mdash; from quick capture and
+                                Scrum boards to wiki pages, lead forms and AI agents.
                             </p>
                         </RevealSection>
+
+                        <WhatsNew />
 
                         <div className="space-y-14 sm:space-y-16">
                             {featureGroups.map((group) => (
@@ -1151,6 +1384,11 @@ export default function Welcome({
                                                     <h4 className="font-bold text-[#485E72] dark:text-slate-100 text-[15px] leading-tight">
                                                         {item.title}
                                                     </h4>
+                                                    {item.isNew && (
+                                                        <span className="ml-auto shrink-0 rounded-full bg-[#69A748]/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#69A748]">
+                                                            New
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <p className="text-sm leading-relaxed text-[#485E72]/60 dark:text-slate-400">
                                                     {item.description}
