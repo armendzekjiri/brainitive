@@ -12,6 +12,7 @@ use App\Notifications\CalendarReminderNotification;
 use App\Notifications\ItemAssignedNotification;
 use App\Notifications\MentionNotification;
 use App\Notifications\NewLeadNotification;
+use App\Notifications\NotificationCatalog;
 use App\Notifications\TicketCreatedNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -40,6 +41,14 @@ class NotificationPreferencesTest extends TestCase
         $this->assertSame(['in_app' => true, 'push' => false, 'email' => true], $stored['mentions']);
         $this->assertSame(['in_app' => false, 'push' => true, 'email' => false], $stored['comments']);
         $this->assertArrayNotHasKey('helpdesk', $stored);
+    }
+
+    public function test_ticket_assignments_are_still_emailed_by_default(): void
+    {
+        $user = User::factory()->create();
+
+        // helpdesk category: in-app, push and email on by default, as before v1.39.0
+        $this->assertSame(['database', WebPushChannel::class, 'mail'], NotificationCatalog::channels($user, 'ticket_assigned'));
     }
 
     public function test_an_inertia_save_goes_back(): void

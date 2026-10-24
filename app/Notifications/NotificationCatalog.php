@@ -42,12 +42,13 @@ final class NotificationCatalog
     public const TYPES = [
         'mentioned' => 'mentions',
         'item_assigned' => 'assignments',
-        'ticket_assigned' => 'assignments',
         'item_status_changed' => 'status',
         'item_reminder' => 'reminders',
         'task_digest' => 'reminders',
         'calendar_reminder' => 'reminders',
         'page_updated' => 'pages',
+        // helpdesk (not assignments): ticket assignments have always been emailed; the inbox's Assigned tab still lists them
+        'ticket_assigned' => 'helpdesk',
         'ticket_created' => 'helpdesk',
         'ticket_reply' => 'helpdesk',
         'lead_created' => 'leads',

@@ -140,7 +140,11 @@ class NotificationController extends Controller
 
         if (isset(self::FILTER_CATEGORIES[$filter])) {
             $category = self::FILTER_CATEGORIES[$filter];
-            self::whereDataType($query, array_keys(array_filter(NotificationCatalog::TYPES, fn (string $c) => $c === $category)));
+            $types = array_keys(array_filter(NotificationCatalog::TYPES, fn (string $c) => $c === $category));
+            if ($filter === 'assigned') {
+                $types[] = 'ticket_assigned'; // a helpdesk notification (email on by default), but still an assignment
+            }
+            self::whereDataType($query, $types);
         }
 
         $page = $query->orderByDesc('created_at')->orderByDesc('id')->cursorPaginate(self::PER_PAGE, ['*'], 'cursor', $cursor);
