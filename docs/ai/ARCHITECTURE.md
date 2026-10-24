@@ -172,7 +172,11 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
     `plan_date` + position), `MyDayController` (`my-day.*`: add / remove / reorder /
     carry-over), `Support/MyDay/MyDayPlan` (today in the user's zone, resolves entries to
     work the user can still open, carry-over candidates). UI: `components/MyDaySection.tsx`
-    on top of My Work + ☀ toggle on every row. Never changes the task itself.
+    on top of My Work + ☀ toggle on every row. Adding / ordering never changes the task itself.
+    The circle (`components/WorkDoneToggle.tsx`, My Day + My Work rows) completes / reopens it:
+    board issues go through `boards.items.move` to the board's first done / open column
+    (`board.done_column_id` / `open_column_id` in the My Work payload), list tasks through
+    `task-lists.items.update` `status`. Done tasks sink to the bottom of My Day (v1.39.0).
   - **Focus timer:** `WorkTimer` (`work_timers`, unique `user_id` = one running timer),
     `WorkTimerController` (`work-timer.start/stop/discard`), shared prop `activeTimer` →
     `components/WorkTimerPill.tsx` in the top bar. Stop logs through `Item::logWork()` (also
