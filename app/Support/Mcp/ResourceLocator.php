@@ -7,11 +7,13 @@ use App\Models\Bookmark;
 use App\Models\BookmarkItem;
 use App\Models\Item;
 use App\Models\Page;
+use App\Models\Plan;
 use App\Models\Project;
 use App\Models\Snippet;
 use App\Models\SnippetCollection;
 use App\Models\TaskList;
 use App\Models\TaskListItem;
+use App\Models\Ticket;
 use App\Models\Workspace;
 use Illuminate\Database\Eloquent\Model;
 
@@ -33,6 +35,8 @@ class ResourceLocator
             $model instanceof Page => self::page($model),
             $model instanceof Board => self::board($model),
             $model instanceof Item => self::boardItem($model),
+            $model instanceof Plan => self::plan($model),
+            $model instanceof Ticket => self::ticket($model),
             $model instanceof TaskList => self::taskList($model),
             $model instanceof TaskListItem => self::taskListItem($model),
             $model instanceof Bookmark => self::bookmark($model),
@@ -81,6 +85,36 @@ class ResourceLocator
             : url('/');
 
         return self::build('board item', $item->title ?: ($item->key ?? 'Item'), $workspace, $project, $url, $board?->name);
+    }
+
+    private static function plan(Plan $plan): array
+    {
+        $project = $plan->project;
+        $workspace = $project?->workspace;
+
+        return self::build(
+            'plan',
+            $plan->name,
+            $workspace,
+            $project,
+            $workspace ? route('plans.show', [$workspace->slug, $project->slug, $plan->slug]) : url('/'),
+        );
+    }
+
+    private static function ticket(Ticket $ticket): array
+    {
+        $helpdesk = $ticket->helpdesk;
+        $project = $helpdesk?->project;
+        $workspace = $project?->workspace;
+
+        return self::build(
+            'ticket',
+            $ticket->subject ?: ($ticket->key ?? 'Ticket'),
+            $workspace,
+            $project,
+            $workspace ? route('tickets.show', [$workspace->slug, $project->slug, $helpdesk->slug, $ticket->id]) : url('/'),
+            $helpdesk?->name,
+        );
     }
 
     private static function taskList(TaskList $list): array

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\References\ContentReferences;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -64,6 +65,14 @@ class Plan extends Model
             $plan->data ??= self::emptyData();
             $plan->settings = array_replace(self::defaultSettings(), $plan->settings ?? []);
         });
+
+        // Rows linked to issues are derived references (BRAI-71); every write path saves the model.
+        static::saved(function (Plan $plan) {
+            if ($plan->wasRecentlyCreated || $plan->wasChanged('data')) {
+                ContentReferences::syncPlan($plan);
+            }
+        });
+        static::forceDeleted(fn (Plan $plan) => ContentReferences::pruneMissing((int) $plan->project_id));
     }
 
     public function getRouteKeyName(): string

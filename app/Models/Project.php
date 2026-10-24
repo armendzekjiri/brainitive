@@ -177,6 +177,14 @@ class Project extends Model
     }
 
     /**
+     * Linked content between this project's issues, docs, tickets and plans (BRAI-71).
+     */
+    public function contentReferences(): HasMany
+    {
+        return $this->hasMany(ContentReference::class);
+    }
+
+    /**
      * Get all pages including nested ones.
      */
     public function allPages(): HasMany

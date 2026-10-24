@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 import {
     AlertTriangle, Check, ChevronDown, CloudOff, Copy, Download, FileSpreadsheet, GanttChart, Globe, History, Loader2,
-    MoreHorizontal, Printer, Save, Trash2, Upload,
+    MoreHorizontal, Network, Printer, Save, Trash2, Upload,
 } from 'lucide-react';
 import AppLayout from '@/Layouts/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,8 @@ import {
 import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import RelatedContent from '@/components/references/RelatedContent';
 import { PlanChart } from '@/components/plan/PlanChart';
 import { PlanHistoryDialog } from '@/components/plan/PlanHistoryDialog';
 import { ImportDialog } from '@/components/plan/ImportDialog';
@@ -61,6 +63,7 @@ export default function PlanShow({ workspace, project, plan, members, issues: in
     });
 
     const [historyOpen, setHistoryOpen] = useState(false);
+    const [relatedOpen, setRelatedOpen] = useState(false);
     const [shareOpen, setShareOpen] = useState(false);
     const [importOpen, setImportOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -272,6 +275,9 @@ export default function PlanShow({ workspace, project, plan, members, issues: in
                             <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={() => setHistoryOpen(true)}>
                                 <History className="size-3.5" /><span className="hidden md:inline">History</span>
                             </Button>
+                            <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={() => setRelatedOpen(true)} aria-label="Related content">
+                                <Network className="size-3.5" /><span className="hidden md:inline">Related</span>
+                            </Button>
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" size="sm" className="h-8 gap-1 text-muted-foreground">
@@ -329,6 +335,23 @@ export default function PlanShow({ workspace, project, plan, members, issues: in
                 />
             </div>
 
+            {/* Linked content + backlinks (BRAI-71); rows linked to issues show up as "Plan row". The sheet
+                content mounts on open, so every open loads the current links. */}
+            <Sheet open={relatedOpen} onOpenChange={setRelatedOpen}>
+                <SheetContent side="right" className="w-[340px] overflow-y-auto sm:w-[420px]">
+                    <SheetHeader>
+                        <SheetTitle>{plan.name}</SheetTitle>
+                        <SheetDescription>Issues, docs, tickets and plans linked with this plan.</SheetDescription>
+                    </SheetHeader>
+                    <RelatedContent
+                        workspaceSlug={workspace.slug}
+                        projectSlug={project.slug}
+                        type="plan"
+                        id={plan.id}
+                        className="mt-4"
+                    />
+                </SheetContent>
+            </Sheet>
             <PlanHistoryDialog
                 open={historyOpen}
                 onOpenChange={setHistoryOpen}

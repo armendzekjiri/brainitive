@@ -78,6 +78,7 @@ import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallbac
 import { usePagePresence } from '@/hooks/usePagePresence';
 import { PageHistoryDialog } from '@/components/page/PageHistoryDialog';
 import { ExcalidrawViewMode } from '@/components/page/ExcalidrawViewMode';
+import RelatedContent from '@/components/references/RelatedContent';
 import { Textarea } from '@/components/ui/textarea';
 
 // Lazy-load emoji-mart to prevent customElements.define() firing at module load time
@@ -1529,6 +1530,18 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                                         </div>
                                     )}
                                 </div>
+                            )}
+
+                            {/* Related content + backlinks (BRAI-71); folders aren't linkable */}
+                            {page.type === 'page' && (
+                                <RelatedContent
+                                    workspaceSlug={workspace.slug}
+                                    projectSlug={project.slug}
+                                    type="page"
+                                    id={page.id}
+                                    refreshKey={page.edit_revision}
+                                    className="mt-10"
+                                />
                             )}
                         </div>
                     </div>
