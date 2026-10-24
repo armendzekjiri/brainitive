@@ -19,6 +19,11 @@ class TicketReply extends Model
         'ticket_contact_id',
         'body',
         'is_internal_note',
+        // sent by email (BRAI-79): stable Message-ID + delivery state
+        'email_message_id',
+        'email_status',
+        'email_error',
+        'email_sent_at',
     ];
 
     /**
@@ -37,6 +42,7 @@ class TicketReply extends Model
     {
         return [
             'is_internal_note' => 'boolean',
+            'email_sent_at' => 'datetime',
         ];
     }
 

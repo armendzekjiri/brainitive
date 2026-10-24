@@ -1,0 +1,14 @@
+Message-ID: <reply.outlook@mail.customer.example>
+Date: Sat, 24 Oct 2026 11:30:00 +0200
+From: Cleo Customer <cleo@customer.example>
+To: support@helpdesk.example
+Subject: AW: Printer says no SUBJECT-TAG
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="b1"
+
+--b1
+Content-Type: text/html; charset="UTF-8"
+
+<html><head><style>p{color:red}</style></head><body><p>It broke again.</p><div id="divRplyFwdMsg"><b>From:</b> Support<br><b>Sent:</b> Saturday</div><div><p>Please restart the printer.</p></div></body></html>
+
+--b1--

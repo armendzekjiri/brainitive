@@ -13,6 +13,7 @@ use App\Http\Controllers\CommandPaletteController;
 use App\Http\Controllers\ContentReferenceController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\HelpdeskController;
+use App\Http\Controllers\HelpdeskMailboxController;
 use App\Http\Controllers\HelpdeskWidgetController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\ItemFieldController;
@@ -489,6 +490,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('helpdesks/{helpdesk:slug}/tickets/{ticket}/attachments/{attachment}', [TicketController::class, 'destroyAttachment'])->name('tickets.attachments.destroy');
             Route::post('helpdesks/{helpdesk:slug}/tickets/{ticket}/watch', [TicketController::class, 'toggleWatch'])->name('tickets.watch');
             Route::patch('helpdesks/{helpdesk:slug}/tickets/{ticket}/fields', [TicketController::class, 'updateFieldValues'])->name('tickets.fields.update');
+
+            // Email → helpdesk: connected IMAP mailbox (v1.40.0, BRAI-79)
+            Route::get('helpdesks/{helpdesk:slug}/mailbox', [HelpdeskMailboxController::class, 'show'])->name('helpdesks.mailbox.show');
+            Route::put('helpdesks/{helpdesk:slug}/mailbox', [HelpdeskMailboxController::class, 'update'])->name('helpdesks.mailbox.update');
+            Route::delete('helpdesks/{helpdesk:slug}/mailbox', [HelpdeskMailboxController::class, 'destroy'])->name('helpdesks.mailbox.destroy');
+            Route::post('helpdesks/{helpdesk:slug}/mailbox/test', [HelpdeskMailboxController::class, 'test'])->middleware('throttle:10,1,helpdesks.mailbox.test')->name('helpdesks.mailbox.test');
+            Route::post('helpdesks/{helpdesk:slug}/tickets/{ticket}/replies/{reply}/resend-email', [HelpdeskMailboxController::class, 'resendReply'])->middleware('throttle:10,1,tickets.replies.resend-email')->name('tickets.replies.resend-email');
+            if (app()->environment('e2e')) {
+                Route::post('helpdesks/{helpdesk:slug}/mailbox/e2e-receive', [HelpdeskMailboxController::class, 'e2eReceive'])->name('helpdesks.mailbox.e2e-receive');
+            }
 
             // Pages (nested under projects)
             Route::post('pages', [PageController::class, 'store'])->name('pages.store');

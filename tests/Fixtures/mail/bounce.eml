@@ -1,0 +1,21 @@
+Message-ID: <bounce.1@mx.customer.example>
+Date: Sat, 24 Oct 2026 11:06:00 +0200
+From: Mail Delivery System <MAILER-DAEMON@mx.customer.example>
+To: support@helpdesk.example
+Subject: Undelivered Mail Returned to Sender
+MIME-Version: 1.0
+Content-Type: multipart/report; report-type=delivery-status; boundary="r1"
+
+--r1
+Content-Type: text/plain; charset="UTF-8"
+
+This is the mail system. Your message could not be delivered.
+
+--r1
+Content-Type: message/delivery-status
+
+Final-Recipient: rfc822; nobody@customer.example
+Action: failed
+Status: 5.1.1
+
+--r1--

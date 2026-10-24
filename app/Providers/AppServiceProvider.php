@@ -37,6 +37,11 @@ use App\Policies\WorkloadPolicy;
 use App\Policies\WorkspacePolicy;
 use App\Support\Admin\InstanceMailConfig;
 use App\Support\Billing\ReportBuilder;
+use App\Support\Helpdesks\Mail\FakeMailboxConnector;
+use App\Support\Helpdesks\Mail\ImapMailboxConnector;
+use App\Support\Helpdesks\Mail\MailboxConnector;
+use App\Support\Helpdesks\Mail\MailHost;
+use App\Support\Helpdesks\Mail\MailTransports;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -60,6 +65,10 @@ class AppServiceProvider extends ServiceProvider
 
         // billing report data, snapshot v1 (v1.38.0): documents render what the report builder computes
         $this->app->bind(BuildsReportData::class, ReportBuilder::class);
+
+        // helpdesk mailboxes (v1.40.0, BRAI-79): the IMAP client, faked only in e2e (no network)
+        $this->app->bind(MailboxConnector::class, fn () => MailHost::fake() ? new FakeMailboxConnector : new ImapMailboxConnector);
+        $this->app->singleton(MailTransports::class);
     }
 
     /**

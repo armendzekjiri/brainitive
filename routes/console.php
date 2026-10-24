@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\GithubDelivery;
+use App\Models\HelpdeskInboundEmail;
 use App\Models\InboxNotification;
 use App\Models\LeadFormEvent;
 use App\Models\McpRequest;
@@ -39,6 +40,10 @@ Schedule::command('model:prune', ['--model' => [InboxNotification::class]])->dai
 
 // Ticket 2 (recurring issues): create the issues that are due.
 
-// Ticket 3 (email → helpdesk, IMAP): poll connected mailboxes.
+// Ticket 3 (email → helpdesk, IMAP): poll connected mailboxes; forget inbound dedupe rows after 180 days.
+Schedule::command('app:poll-helpdesk-mailboxes')
+    ->everyMinute()
+    ->withoutOverlapping();
+Schedule::command('model:prune', ['--model' => [HelpdeskInboundEmail::class]])->dailyAt('03:45');
 
 // Ticket 5 (helpdesk SLA): warn before and on breaches.
