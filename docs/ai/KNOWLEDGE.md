@@ -114,8 +114,10 @@ schema public". Use `createdb -h /tmp -O <DB_USERNAME> brainitive_test_<name>` (
 - **Sync queue (dev.brainitive.app, e2e, small self-hosted installs):** `WebhookDispatcher` sends a
   delivery caused by a web request **after the response** (`dispatch()->afterResponse()`), so a slow or
   dead endpoint never slows down or breaks the request. Only one attempt there (a sync job can't be
-  released for a retry); Redeliver sends it again. At most 25 per request (a bulk action / template
-  would otherwise hold the PHP worker for minutes); the rest are logged as failed "Not sent". Manual
+  released for a retry); Redeliver sends it again. At most 25 per request and 15 s in total, with a
+  5 s timeout per attempt (a bulk action, a template or a slow receiver — also behind the public
+  ticket / lead endpoints — would otherwise hold the PHP worker for minutes); the rest are logged as
+  failed "Not sent" and don't count towards auto-disable. Manual
   sends (Send test, Redeliver) and console runs go inline (`dispatch_sync`). With a real queue:
   queued, 4 tries, backoff 30 s / 2 min / 10 min.
 - **Never break the caller:** `DomainEvents` reports (doesn't throw) failures, except in unit tests
