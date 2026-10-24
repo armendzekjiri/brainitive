@@ -216,6 +216,14 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 
 ---
 
+### Linked content and backlinks (BRAI-71)
+- **Model:** `ContentReference` (`content_references`: `project_id`, `source_type` / `source_id`, `target_type` / `target_id`, `origin` = `manual` | `derived`, `created_by`; unique per source + target + origin). Types are stable keys `item`, `page` (docs + whiteboards, not folders), `ticket`, `plan` — `ContentReference::TYPES`.
+- **Support:** `App\Support\References\ContentReferences` — `resolve` (endpoint of the project, live), `link` (no self-links, no issue → issue: that stays an `ItemLink`), `forEndpoint` (related + referenced-by, visibility in batch, manual + derived merged), `candidates` (picker search), `syncDerived` / `syncPlan` / `syncWhiteboard`, `pruneMissing`, `summary` (canonical URLs = `ResourceLocator`, which now also locates plans and tickets).
+- **Derived references** come from model hooks: `Plan::saved` (rows with `itemId`) and `Page::saved` (whiteboard issue cards). Pruning: `Page::deleted`, `forceDeleted` on Item / Ticket / Plan, `BoardController::moveItemToBoard` across projects.
+- **Controller / routes:** `ContentReferenceController` — `references.index` / `references.candidates` (GET, ReadOnlySession), `references.store`, `references.destroy` under `projects/{project}`.
+- **UI:** `components/references/RelatedContent.tsx` (sections + "Link related content" picker), mounted in `ItemDetail`, `Pages/Pages/Show`, the ticket dialog in `Helpdesks/Show` and the "Related" sheet on `Plans/Show`. Types `ContentReference*` in `types/index.d.ts`.
+- **Tests:** `tests/Feature/References/ContentReferencesTest.php`, `e2e/tests/backlinks.spec.ts`.
+
 ### Sharing (read-only links)
 - **Docs and issues:** `ShareLink` (morph `shareable`: `Page` / `Item`, random token, `expires_at`, `revoked_at`, views), `ShareLinkController` — manage via `share-links.*` (needs `update` on the item), public view `/s/{token}` → `Pages/Share/Show.tsx` (`noindex`, 410 when revoked / expired / deleted). UI: `components/share/ShareButton.tsx`.
 - **Plans** keep their own `share_token` (`/share/plans/{token}`); bookmarks / snippets have `visibility = public`.

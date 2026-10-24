@@ -511,6 +511,17 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `Components`, so `git add` of a *new* file there records the capital-C path, which breaks
   the lowercase import on Linux. After adding a component, check `git ls-files | grep -i <name>`
   and re-stage with `git update-index --add --cacheinfo` under `resources/js/components/…`.
+- **Linked content (BRAI-71): derived references are written by model hooks, never by the UI.**
+  Plan rows and whiteboard cards linked to an issue become `content_references` rows with
+  `origin = derived` in `Plan::saved` / `Page::saved`, so every write path (editor, MCP
+  `update_plan`, version restore, duplicate, templates) keeps them in step. Writing plan `data` or
+  whiteboard `content` with the query builder would skip the hook — go through the model.
+  Visibility is decided in batch in `ContentReferences` and mirrors the view policies inside a
+  project the user can open (pages via `visibleTo`, the rest: not trashed, board / helpdesk not
+  trashed). If a view policy gets a new rule, mirror it there, or backlinks leak titles. Soft
+  deletes keep references (hidden, back on restore); hard deletes and cross-project issue moves
+  prune them (`pruneMissing`). Whiteboard vs doc labels come from a `content like
+  '{"type":"excalidraw"%'` check so lists don't load whole scenes.
 - **Share links expose only a whitelist.** `ShareLinkController::show` builds the payload
   field by field (title, content / description, status, type, priority, dates) and never
   serializes the model, so new columns can't leak into public pages. Docs share the live

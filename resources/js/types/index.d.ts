@@ -897,3 +897,44 @@ export interface AdminAuditEntry {
     ip_address: string | null;
     created_at: string | null;
 }
+
+/** Linked content (BRAI-71): an endpoint type of a content reference. Whiteboards are pages. */
+export type ContentReferenceType = 'item' | 'page' | 'ticket' | 'plan';
+
+/** A resource as linked content shows it (ContentReferences::summary). */
+export interface ContentReferenceSummary {
+    /** `${type}:${id}` */
+    key: string;
+    type: ContentReferenceType;
+    id: number;
+    /** Issue / Doc / Whiteboard / Ticket / Plan */
+    label: string;
+    title: string;
+    /** Issue or ticket key */
+    subtitle: string | null;
+    /** Canonical URL that opens it */
+    url: string;
+    status: 'draft' | 'archived' | null;
+}
+
+/** One entry of "Related content" / "Referenced by" (manual and derived links of a pair merged). */
+export interface ContentReferenceEntry extends ContentReferenceSummary {
+    manual: boolean;
+    derived: boolean;
+    /** "Plan row" / "Whiteboard card" when derived */
+    derived_label: string | null;
+    /** The manual reference's id (what removing deletes) */
+    reference_id: number | null;
+    can_remove: boolean;
+}
+
+export interface ContentReferenceList {
+    related: ContentReferenceEntry[];
+    referenced_by: ContentReferenceEntry[];
+    can_link: boolean;
+}
+
+/** A picker search result. */
+export interface ContentReferenceCandidate extends ContentReferenceSummary {
+    linked: boolean;
+}

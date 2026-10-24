@@ -8,6 +8,7 @@ use App\Http\Controllers\BookmarkController;
 use App\Http\Controllers\CalendarConnectionController;
 use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\CommandPaletteController;
+use App\Http\Controllers\ContentReferenceController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\HelpdeskController;
 use App\Http\Controllers\HelpdeskWidgetController;
@@ -340,6 +341,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('boards/{board:slug}/items/{item}/comments', [BoardController::class, 'storeComment'])->name('boards.items.comments.store');
             Route::post('boards/{board:slug}/items/{item}/attachments', [BoardController::class, 'storeAttachment'])->name('boards.items.attachments.store');
             Route::delete('boards/{board:slug}/items/{item}/attachments/{attachment}', [BoardController::class, 'destroyAttachment'])->name('boards.items.attachments.destroy');
+
+            // Linked content and backlinks between issues, docs, tickets and plans (BRAI-71)
+            Route::get('references', [ContentReferenceController::class, 'index'])->middleware(ReadOnlySession::class)->name('references.index');
+            Route::get('references/candidates', [ContentReferenceController::class, 'candidates'])->middleware(ReadOnlySession::class)->name('references.candidates');
+            Route::post('references', [ContentReferenceController::class, 'store'])->middleware('throttle:60,1,references.store')->name('references.store');
+            Route::delete('references/{contentReference}', [ContentReferenceController::class, 'destroy'])->whereNumber('contentReference')->name('references.destroy');
 
             // Task Lists (nested under projects)
             Route::post('plans', [PlanController::class, 'store'])->name('plans.store');

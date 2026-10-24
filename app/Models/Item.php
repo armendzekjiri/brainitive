@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Observers\ItemObserver;
+use App\Support\References\ContentReferences;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -80,6 +81,14 @@ class Item extends Model
         static::updated(function (Item $item) {
             if ($item->wasChanged('assigned_to') && $item->assigned_to) {
                 $item->watchers()->syncWithoutDetaching([$item->assigned_to]);
+            }
+        });
+
+        // Soft deletes keep linked content (back on restore); a hard delete prunes it (BRAI-71)
+        static::forceDeleted(function (Item $item) {
+            $projectId = Board::withTrashed()->whereKey($item->board_id)->value('project_id');
+            if ($projectId) {
+                ContentReferences::pruneMissing((int) $projectId);
             }
         });
     }
