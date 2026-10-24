@@ -189,7 +189,7 @@ final class InboundMail
     private static function ticketCreated(Helpdesk $helpdesk, Ticket $ticket, TicketContact $contact, string $from): void
     {
         $project = $helpdesk->project;
-        DomainEvents::emit($project->workspace_id, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'email']); // webhooks (BRAI-104)
+        DomainEvents::emit($project->workspace_id, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'email'], subject: $ticket); // webhooks (BRAI-104) + automation rules (BRAI-63)
 
         // The customer's confirmation: a threaded auto-reply from the helpdesk address, or the usual
         // notification. A few per address and hour, like the public form (no mail cannon).

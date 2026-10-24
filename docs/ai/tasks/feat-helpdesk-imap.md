@@ -35,7 +35,7 @@ right ticket, and agent public replies go back out by email in the same thread. 
 - Migration `2026_10_29_300000_create_helpdesk_mail_tables`.
 - `app/Support/Helpdesks/Inbound/*` (pipeline, MIME parser, body, filters, threading),
   `app/Support/Helpdesks/Mail/*` (host checks, IMAP connector + fake, poller, ticket mailer),
-  `app/Jobs/SendTicketReplyEmail`, `app:poll-helpdesk-mailboxes`, `HelpdeskMailboxController`.
+  `app/Jobs/SendTicketEmail`, `app:poll-helpdesk-mailboxes`, `HelpdeskMailboxController`.
 - UI: `components/helpdesk/email/ImapMailboxSection.tsx`; email status on replies in the ticket
   dialog (`Helpdesks/Show`).
 

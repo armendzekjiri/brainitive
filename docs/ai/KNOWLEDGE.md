@@ -161,6 +161,56 @@ schema public". Use `createdb -h /tmp -O <DB_USERNAME> brainitive_test_<name>` (
 - **e2e** turns forwarding on in `e2e/env.ts` (`INBOUND_MAIL_*`, Postmark). dev.brainitive.app has no
   inbound domain, so `helpdesk-forwarding.spec.ts` skips there.
 
+### Inbound email pipeline, threading and loops (v1.40.0, BRAI-79)
+- **Libraries:** ext-imap is gone from PHP 8.4, so IMAP is `webklex/php-imap` (MIT), used only for its
+  socket protocol (`ImapProtocol`: LOGIN, SELECT, UID SEARCH UNSEEN, RFC822.SIZE, `BODY.PEEK[]`, STORE,
+  MOVE with COPY+EXPUNGE fallback). Parsing is `zbateson/mail-mime-parser` (BSD-2): webklex's own
+  parser leaves RFC 2047 words (subjects, names, file names) undecoded without ext-imap. webklex's
+  `fetch()` matches single items by the requested name, so `BODY.PEEK[]` is fetched together with `UID`
+  (multi-item path) and read back as `BODY[]`.
+- **Dedupe in the same transaction.** `receive()` inserts the `helpdesk_inbound_emails` row (unique
+  helpdesk + sha256 of the Message-ID) inside the transaction that creates the ticket / reply: a crash
+  rolls both back, a concurrent delivery hits the unique index → DUPLICATE. Ignored / rejected mail is
+  recorded too (audit + dedupe). A row with status `failed` (unexpected error) is retried on the next
+  delivery. Notifications and DomainEvents run after the commit and never undo it.
+- **Poller crash safety:** `BODY.PEEK[]` doesn't set `\Seen`; `markProcessed()` runs after
+  `receive()`. A crash in between leaves the mail unread and the next run gets DUPLICATE and only marks
+  it. Mail without Message-ID is keyed `imap.<mailbox>.<uidvalidity>.<uid>@inbound`. Only UNSEEN mail
+  is imported: a mailbox someone reads in a client loses mail (documented: support-only mailbox).
+- **Threading:** In-Reply-To / References matched against `ticket_email_messages` (in + out, this
+  helpdesk, not trashed), then the subject tag `[KEY #token]` (token = first 10 hex of
+  HMAC(`ticket-mail|uuid`, APP_KEY); rotating APP_KEY breaks only the subject fallback). The subject
+  text alone never threads. No `+t<token>` sub-address: plus addressing isn't supported everywhere and
+  a bounced reply would be lost.
+- **Who may reply:** the ticket's contact or an address that was on Cc of the first message
+  (`tickets.metadata.email.participants`); anyone else → REJECTED `not_participant` (visible in the
+  mailbox log), and `Authentication-Results: dmarc=fail` → REJECTED `dmarc_fail`. Knowing a ticket key
+  or Message-ID is not enough. A forwarded thread answered by a colleague is rejected in v1.
+- **Loops:** ignored: `Auto-Submitted` ≠ no, `Precedence: bulk|junk|list|auto_reply`, `X-Autoreply`,
+  `X-Autorespond`, `List-Id` / `List-Post`, mailer-daemon / postmaster / `Return-Path: <>` /
+  `X-Failed-Recipients` / `multipart/report`, our `X-Brainitive-Loop` header, mail from the mailbox or
+  app address, and Message-IDs we sent. Plus at most 10 new tickets per sender, helpdesk and hour.
+  Our acknowledgment carries `Auto-Submitted: auto-replied`; agent replies don't (they are personal).
+  Exception: Gmail's forwarding confirmation (`forwarding-noreply@google.com`, BRAI-124 setup) is never
+  filtered and never acknowledged; no-reply senders get no acknowledgment.
+- **Outgoing:** a helpdesk with an enabled mailbox emails agent public replies itself (Message-ID fixed
+  before the job, stored on the reply; In-Reply-To / References from the thread; Cc participants) and
+  skips `TicketReplyNotification` for the contact — never both. Email tickets get the threaded
+  acknowledgment instead of `TicketCreatedNotification`. Internal notes never send.
+  `TicketResolvedNotification` is unchanged (link mail from the app address). App-mailer mode sends
+  *from the app address* with Reply-To the mailbox (sending as the customer's domain from our servers
+  fails SPF / DMARC); SMTP mode sends from the mailbox address. Without a mailbox (forwarding-only
+  helpdesks) the old notifications go out; `TicketMailer::replyAddress()` is where that could change.
+- **Sockets to user hosts:** `MailHost` = `OutboundUrl::publicAddress()` (all resolved IPs public) +
+  mail-port allowlist + TLS required; the socket connects to the checked IP and TLS verifies the host
+  name (`peer_name`). Private hosts / no TLS only in e2e, or `APP_ENV=local` +
+  `HELPDESK_MAIL_ALLOW_PRIVATE_HOSTS`. Login errors shown to admins have the password scrubbed.
+- **e2e:** `HELPDESK_MAIL_FAKE` (e2e only) binds `FakeMailboxConnector` and skips DNS; the password
+  `wrong-password` fails the login. `helpdesks.mailbox.e2e-receive` (registered only with
+  `APP_ENV=e2e`) feeds a fixture, optionally with `reply_to_ticket` (In-Reply-To = the ticket's last
+  outgoing Message-ID). A local GreenMail container (`greenmail/standalone`, IMAP on 143, SMTP on
+  2525, `APP_ENV=local` + the private-hosts flag) is handy for trying the real client by hand.
+
 ### Recurring issues: dates, catch-up and the actor (v1.40.0, BRAI-123)
 - **Dates are calendar maths, the zone only picks "today".** `RecurrenceSchedule` works on `Y-m-d`
   dates (midnight UTC), so DST never moves an occurrence. An occurrence is due from **local midnight**

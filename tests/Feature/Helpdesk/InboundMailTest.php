@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Helpdesk;
 
+use App\Models\AutomationRule;
 use App\Models\HelpdeskInboundEmail;
+use App\Models\Item;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketContact;
@@ -82,6 +84,19 @@ class InboundMailTest extends TestCase
 
         $this->assertSame($contact->id, $ticket->ticket_contact_id);
         $this->assertSame(1, TicketContact::count());
+    }
+
+    public function test_an_emailed_ticket_reaches_the_automation_rules(): void
+    {
+        AutomationRule::create([
+            'project_id' => $this->project->id, 'name' => 'Email to issue', 'enabled' => true, 'version' => 1,
+            'actor_id' => $this->editor->id, 'trigger' => 'ticket.created', 'trigger_config' => [], 'conditions' => [],
+            'actions' => [['type' => 'create_issue', 'value' => $this->board->id, 'text' => null]],
+        ]);
+
+        $this->newTicket();
+
+        $this->assertSame('Printer says “no”', Item::where('board_id', $this->board->id)->sole()->title);
     }
 
     public function test_the_same_message_twice_creates_one_ticket(): void

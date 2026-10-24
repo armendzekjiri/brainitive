@@ -164,6 +164,34 @@ Mailgun 406); a wrong token or signature gets 401.
 Prefer your own mailbox over IMAP instead? Helpdesk settings → Email → *Connected mailbox* reads
 it directly, no provider needed.
 
+## Email to helpdesk (connected mailbox, IMAP)
+
+Helpdesk settings → **Email** → *Connected mailbox*: Brainitive logs in to a mailbox over IMAP every
+minute, turns new mail into tickets (or replies, when someone answers a ticket mail) and sends agent
+replies back by email in the same thread. Nothing to set up on the server besides the scheduler:
+
+- **The scheduler must run** (`php artisan schedule:run` every minute; the Docker setup's
+  `scheduler` container does it). It runs `app:poll-helpdesk-mailboxes`, which you can also run by
+  hand (`--helpdesk=<id>`, `--force` to skip the pause after errors).
+- **Use a mailbox only for support.** Only *unread* mail is imported; afterwards it is marked as
+  read, or moved to the folder you set. Mail somebody reads in a mail client first is skipped.
+- **Credentials:** many providers need an *app password* for IMAP (Gmail / Google Workspace and
+  Microsoft 365 with two-step sign-in; Microsoft 365 may need IMAP / SMTP AUTH enabled for the
+  mailbox). Passwords are stored encrypted with `APP_KEY` and never shown again.
+- **Replies** go out either through the app's mailer (`MAIL_*`, from your app address with the
+  helpdesk's name and `Reply-To` the support address — this needs no DNS changes) or through the
+  mailbox's own SMTP server (from the support address itself; its SPF / DKIM then apply).
+- **Servers must be on the public internet** and use the standard ports (IMAP 143 / 993, SMTP 25 /
+  465 / 587 / 2525) with SSL/TLS or STARTTLS. Local / private mail servers are refused (the server
+  connects to what users type in); for local development only, `APP_ENV=local` plus
+  `HELPDESK_MAIL_ALLOW_PRIVATE_HOSTS=true` allows them and unencrypted connections.
+- **Limits:** messages above `HELPDESK_MAIL_MAX_MESSAGE_MB` (25) are not downloaded (listed as
+  "too large" under *Recently received*); attachments follow the public upload rules (10 MB each,
+  10 per message, no programs or scripts).
+- **Loops:** auto-replies, bounces, mailing lists and Brainitive's own mail are ignored, and one
+  sender can open at most 10 tickets per hour and helpdesk. *Recently received* in the settings
+  shows what came in and why something was ignored or rejected.
+
 ## Security notes
 
 - **Uploads are served from `/storage` and must never run as code.** The Docker image ships
