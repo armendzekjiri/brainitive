@@ -388,6 +388,24 @@ some clients (ChatGPT connectors) ignore `nextCursor`, so a tool on page 2 would
 
 ---
 
+### Admin insights: aggregates per tab, never per project (BRAI-105, 2026-10-24)
+- **Same counting as project health.** Issue = live issue/subtask on a live board; done = `completed_at` or
+  a done column; overdue = open and due before the viewer's today. The SQL lives once in
+  `Support/Insights/InsightsQueries` — change a definition there and in `HealthMetrics` together.
+- **No `HealthMetrics` per project.** It runs ~5 queries per project; Insights → Projects groups the same
+  numbers by `boards.project_id` in one query, and "health" is the latest saved report's status (a person's
+  choice; the app never computes one). Every tab has a fixed query count, asserted in `InsightsTest`
+  (overview 8, team 6, projects 4, helpdesk 7, usage 6). No cache.
+- **Ranges are local days.** `from`/`to` are the viewer's dates; SQL compares `[startUtc, endUtc)`. Weekly
+  buckets group by the local day (`at time zone` on Postgres; UTC date elsewhere) and **`group by 1`**:
+  Postgres treats the select's and the group by's `?` as different expressions and refuses the query.
+- **Definitions that may surprise:** completion rate = share of the issues *created* in the range that are
+  done now (bounded 0–100 %); median cycle time = median `completed_at − created_at` of the issues *completed*
+  in the range; storage counts files of soft-deleted issues/tickets (still on disk); the lead funnel only
+  reaches back 90 days (`lead_form_events` are pruned).
+- **e2e numbers are per project.** The shared e2e workspace grows with every parallel spec, so
+  `insights.spec.ts` picks its own new project in the filter before asserting numbers.
+
 ## Known issues / watch-outs
 
 _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
