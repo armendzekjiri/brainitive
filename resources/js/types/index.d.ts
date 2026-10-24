@@ -1154,6 +1154,8 @@ export interface MeetingNotesOptions {
     /** People who can open the project — the only possible assignees. */
     members: { id: number; name: string }[];
     timezone: string;
+    /** Today in the user's time zone: the default meeting date. */
+    today: string;
     source: MeetingNotesSourceInfo | null;
     limits: { max_chars: number; max_proposals: number };
 }

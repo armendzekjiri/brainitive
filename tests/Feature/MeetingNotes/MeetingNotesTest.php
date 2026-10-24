@@ -312,6 +312,7 @@ class MeetingNotesTest extends TestCase
         $this->assertNotContains($this->outsider->id, array_column($options['members'], 'id'));
         $this->assertArrayNotHasKey('email', $options['members'][0]);
         $this->assertTrue($options['ai_configured']);
+        $this->assertSame(now($this->editor->localTimezone())->toDateString(), $options['today']); // the default meeting date
 
         // viewers may look, but have no board to add issues to
         $this->actingAs($this->viewer)->getJson($this->route('meeting-notes.options'))->assertOk()->assertJsonPath('boards', []);
