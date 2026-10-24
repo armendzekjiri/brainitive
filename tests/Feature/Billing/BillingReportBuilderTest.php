@@ -193,10 +193,12 @@ class BillingReportBuilderTest extends TestCase
     public function test_entries_without_activity_are_shown_as_no_activity_and_not_billed(): void
     {
         $this->log($this->ada, 'WEB-1', null, 45, '2026-10-20');
+        // a work log from before activities existed, backfilled as a legacy entry
+        $this->log($this->bob, 'WEB-1', null, 30, '2026-10-21')->forceFill(['source' => TimeEntry::SOURCE_LEGACY])->save();
         $computation = app(ReportBuilder::class)->compute($this->draft());
 
         $this->assertSame(0, $this->lines($computation->snapshot)['WEB-1 No activity']);
-        $this->assertSame(1, $computation->warnings['without_activity']);
+        $this->assertSame(2, $computation->warnings['without_activity']);
         $this->assertSame(86250, $computation->snapshot['totals']['net_cents']);
     }
 

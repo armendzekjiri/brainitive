@@ -98,7 +98,6 @@ class TimeTrackingFoundationTest extends TestCase
         $this->assertFalse(Gate::forUser($this->outsider)->allows('manageBilling', $this->workspace));
 
         $this->actingAs($this->editor)->get(route('billing.index', $this->workspace->slug))->assertForbidden();
-        // opens the first billing tab that exists (404 only while no tab is built)
-        $this->assertContains($this->actingAs($admin)->get(route('billing.index', $this->workspace->slug))->status(), [302, 404]);
+        $this->actingAs($admin)->get(route('billing.index', $this->workspace->slug))->assertRedirect(); // to the first billing tab that exists
     }
 }

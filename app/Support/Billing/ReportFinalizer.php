@@ -98,7 +98,11 @@ class ReportFinalizer
                     'snapshot' => $snapshot,
                 ])->save();
 
-                TimeEntry::whereIn('id', $ids)->update(['billing_report_id' => $locked->id]);
+                // claim only entries nobody billed: the rows are locked, so this is a belt-and-braces check
+                $claimed = TimeEntry::whereIn('id', $ids)->whereNull('billing_report_id')->update(['billing_report_id' => $locked->id]);
+                if ($claimed !== count($ids)) {
+                    throw ValidationException::withMessages(['report' => 'Some time entries were billed by another report in the meantime. Nothing was finalized; check the report again.']);
+                }
 
                 $now = now();
                 if ($result->fixedCharges !== []) {

@@ -63,39 +63,41 @@ class E2eSeeder extends Seeder
     }
 
     /**
-     * ── v1.38.0 billing fixtures (BRAI-101 reports, e2e/tests/billing-reports.spec.ts) ──────────
-     * Activities Programming 120 €/h + Testing 45 €/h (firstOrCreate by name: the log-time fixtures
-     * may create the same two), client "Muster GmbH" on `website`, and time logged last month:
-     * WEB-3 Programming 200 min (Erin) + 60 min (Max) = 520.00 €, WEB-1 Programming 45 min (Erin)
-     * = 90.00 €, WEB-2 Testing 90 min (Max) = 67.50 € → 677.50 € (no VAT, no rounding by default).
-     * Only the reports journey bills them; it voids its report again at the end.
+     * ── v1.38.0 billing fixtures ────────────────────────────────────────────────────────────────
+     * - Two hourly activities, Programming 120 €/h and Testing 45 €/h, so logging time in e2e-workspace
+     *   has one to pick (time-log journeys). Idempotent (firstOrCreate by name).
+     * - Client "Muster GmbH" on `website` and time logged last month, billed only by the reports
+     *   journey (e2e/tests/billing-reports.spec.ts), which voids its report again at the end:
+     *   WEB-3 Programming 200 min (Erin) + 60 min (Max) = 520.00 €, WEB-1 Programming 45 min (Erin)
+     *   = 90.00 €, WEB-2 Testing 90 min (Max) = 67.50 € → 677.50 € (no VAT, no rounding by default).
+     *   Plain TimeEntry rows, so items.time_spent follows through the model events.
      */
     private function billingFixtures(Workspace $workspace, Project $project, User $owner, User $member, Item $hero, Item $pricing, Item $checkout): void
     {
-        $programming = BillingActivity::firstOrCreate(
-            ['workspace_id' => $workspace->id, 'name' => 'Programming'],
-            ['pricing_type' => BillingActivity::HOURLY, 'rate_cents' => 12000, 'billable' => true, 'position' => 0],
-        );
-        $testing = BillingActivity::firstOrCreate(
-            ['workspace_id' => $workspace->id, 'name' => 'Testing'],
-            ['pricing_type' => BillingActivity::HOURLY, 'rate_cents' => 4500, 'billable' => true, 'position' => 1],
-        );
+        $activities = [];
+        foreach ([['Programming', 12000, '#0E83DC', 1], ['Testing', 4500, '#69A748', 2]] as [$name, $rate, $color, $position]) {
+            $activities[$name] = BillingActivity::firstOrCreate(
+                ['workspace_id' => $workspace->id, 'name' => $name],
+                ['pricing_type' => BillingActivity::HOURLY, 'rate_cents' => $rate, 'billable' => true, 'color' => $color, 'position' => $position],
+            );
+        }
+
         $client = Client::firstOrCreate(['workspace_id' => $workspace->id, 'name' => 'Muster GmbH'], ['email' => 'buchhaltung@muster.example']);
         $project->update(['client_id' => $client->id]);
 
         $lastMonth = now()->startOfMonth()->subMonthNoOverflow();
         foreach ([
-            [$owner, $checkout, $programming, 200, 3, 'Fixed rounding in cart'],
-            [$member, $checkout, $programming, 60, 4, 'Code review'],
-            [$owner, $hero, $programming, 45, 10, 'Hero layout'],
-            [$member, $pricing, $testing, 90, 17, 'Tested pricing copy'],
+            [$owner, $checkout, 'Programming', 200, 3, 'Fixed rounding in cart'],
+            [$member, $checkout, 'Programming', 60, 4, 'Code review'],
+            [$owner, $hero, 'Programming', 45, 10, 'Hero layout'],
+            [$member, $pricing, 'Testing', 90, 17, 'Tested pricing copy'],
         ] as [$user, $item, $activity, $minutes, $day, $note]) {
             TimeEntry::create([
                 'workspace_id' => $workspace->id,
                 'project_id' => $project->id,
                 'item_id' => $item->id,
                 'user_id' => $user->id,
-                'billing_activity_id' => $activity->id,
+                'billing_activity_id' => $activities[$activity]->id,
                 'spent_on' => $lastMonth->copy()->day($day)->format('Y-m-d'),
                 'minutes' => $minutes,
                 'note' => $note,
