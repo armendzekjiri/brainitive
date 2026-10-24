@@ -26,6 +26,7 @@ use App\Support\Boards\ItemFieldValues;
 use App\Support\Boards\ItemMentions;
 use App\Support\Boards\Swimlanes;
 use App\Support\Github\ItemDevelopment;
+use App\Support\References\ContentReferences;
 use App\Support\Uploads;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -1065,7 +1066,8 @@ class BoardController extends Controller
 
         // Update item (and its whole subtree) to the new board and column; it leaves any
         // sprint, which belongs to the old board.
-        DB::transaction(function () use ($item, $targetBoard, $targetColumn) {
+        $fromProjectId = (int) $board->project_id;
+        DB::transaction(function () use ($item, $targetBoard, $targetColumn, $fromProjectId) {
             Item::whereIn('id', $item->descendantIds())->update([
                 'board_id' => $targetBoard->id,
                 'project_id' => $targetBoard->project_id,
@@ -1082,6 +1084,10 @@ class BoardController extends Controller
             ]);
             // Custom fields are per project: values of the old project's fields can't follow.
             ItemFieldValues::dropForeign([$item->id, ...$item->descendantIds()], $targetBoard->project_id);
+            // Linked content is per project too (BRAI-71): the old project's references go.
+            if ((int) $targetBoard->project_id !== $fromProjectId) {
+                ContentReferences::pruneMissing($fromProjectId);
+            }
         });
 
         return back()->with('success', 'Item moved successfully.');

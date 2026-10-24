@@ -55,6 +55,8 @@ Route::prefix('ext/v1')
         Route::post('projects/{project:id}/pages', [CaptureController::class, 'page'])->name('projects.pages.store');
         Route::post('task-lists/{taskList:id}/items', [CaptureController::class, 'task'])->name('task-lists.items.store');
         Route::post('snippet-collections/{snippetCollection:id}/snippets', [CaptureController::class, 'snippet'])->name('snippet-collections.snippets.store');
+        // "Save to inbox" (BRAI-70): create only, the inbox is never readable with a capture token
+        Route::post('captures', [CaptureController::class, 'inbox'])->name('captures.store');
     });
 
 // GitHub webhooks: stateless, verified by the per-project HMAC secret (BRAI-61).

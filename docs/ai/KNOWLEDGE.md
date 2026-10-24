@@ -59,7 +59,9 @@ App bugs it found (all fixed, each with a test). Patterns to keep:
   prefix: `throttle:10,1,<route name>`. `RouteThrottleTest` fails on an unprefixed one.
 - **Laravel writes the whole session at the end of every request; the last write wins.** A
   background fetch that started before a form submit wiped the submit's validation errors.
-  Read-only fetches fired on page load get `ReadOnlySession` (`page-sticky-notes.index`).
+  Read-only fetches fired on page load or polled get `ReadOnlySession`:
+  `page-sticky-notes.index`, `notifications.index`, and `notifications.unread-count` (every 30 s).
+  Every new background GET needs it too.
 - **Inertia sends `X-Requested-With` too.** "JSON for XHR" endpoints must exclude
   `X-Inertia`, or Inertia forms get JSON (`storeLabel`, `storeItemType`).
 - **Key counters:** `Project::bumpCounter()` increments under a row lock. Reading the loaded
@@ -90,6 +92,27 @@ App bugs it found (all fixed, each with a test). Patterns to keep:
 - **Production `.env`** was world-readable (664; every site's PHP runs as `www-data`). It has
   been 640 since 2026-10-23 (`www-data` reads it through `webdev`). An own FPM pool for production
   would isolate it fully.
+
+### Git worktrees with a symlinked `vendor/` run the MAIN checkout's code (2026-10-24)
+PHP resolves `__DIR__` through symlinks, so a worktree whose `vendor` links to the main checkout
+autoloads `App\`, `Database\` and `Tests\` classes **from the main checkout**, and PHPUnit even
+boots the main checkout's app (`Application::inferBasePath()` = dirname of vendor's real path):
+its routes, migrations and code. New classes are "not found", changed ones silently run the old
+version — tests can pass without testing your change. **Give every worktree a real copy:**
+`cp -R <main>/vendor vendor` (then `composer dump-autoload -o` there); `node_modules` may stay a
+symlink. Check with `(new ReflectionClass(SomeController::class))->getFileName()`: it must point
+into the worktree. (BRAI-70 worked around it with an `auto_prepend_file` that sets
+`APP_BASE_PATH`; the copy is simpler.)
+
+### Quick capture: conversion is idempotent by row lock, not by request id (BRAI-70)
+`CaptureConversion::convert` locks the capture (`lockForUpdate`) inside one transaction; a capture
+that is already processed returns its target (`replayed`, HTTP 200) whatever the second request
+asked for, so a double click or a retry never creates a second item. A failure anywhere (policy,
+validation, `ProjectIssues` without columns, the final update) rolls the target back and leaves
+the capture in the inbox. Inbox ownership grants nothing: the destination's own policy is checked
+through `ContentCapture::authorize`. The UI calls the feature **Captures** because the sidebar's
+"Inbox" is notifications. The **C** shortcut goes through `isCaptureShortcut()` (`lib/captures.ts`):
+no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open dialogs or menus.
 
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
@@ -489,10 +512,10 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   people who aren't members of the source project (only published docs, issues, lists and
   plans that were included). That's why only workspace admins save templates, and the save
   dialog says so.
-- **Issue keys start at KEY-2 in blank projects.** `projects.next_item_number` stores the
-  last number used and `getNextItemKey()` increments first, but the column defaults to 1.
-  Template-created projects set it to 0 (first issue KEY-1). Fixing the blank-project path
-  needs a default of 0 (existing projects must keep their counter).
+- **`projects.next_item_number` holds the last issue number used.** `getNextItemKey()` bumps it
+  first, under a row lock. The default is 0 since BRAI-97, so the first issue is KEY-1; before
+  that, blank projects started at KEY-2. `next_ticket_number` is the other way round: it holds
+  the next number to use.
 - **The `projects/{project:slug}` route group isn't scope-bound** (labels, item types,
   fields, templates): a project of another workspace binds by slug. Controllers there must
   check `$project->workspace_id === $workspace->id` when the workspace matters (templates do).
@@ -511,6 +534,17 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `Components`, so `git add` of a *new* file there records the capital-C path, which breaks
   the lowercase import on Linux. After adding a component, check `git ls-files | grep -i <name>`
   and re-stage with `git update-index --add --cacheinfo` under `resources/js/components/…`.
+- **Linked content (BRAI-71): derived references are written by model hooks, never by the UI.**
+  Plan rows and whiteboard cards linked to an issue become `content_references` rows with
+  `origin = derived` in `Plan::saved` / `Page::saved`, so every write path (editor, MCP
+  `update_plan`, version restore, duplicate, templates) keeps them in step. Writing plan `data` or
+  whiteboard `content` with the query builder would skip the hook — go through the model.
+  Visibility is decided in batch in `ContentReferences` and mirrors the view policies inside a
+  project the user can open (pages via `visibleTo`, the rest: not trashed, board / helpdesk not
+  trashed). If a view policy gets a new rule, mirror it there, or backlinks leak titles. Soft
+  deletes keep references (hidden, back on restore); hard deletes and cross-project issue moves
+  prune them (`pruneMissing`). Whiteboard vs doc labels come from a `content like
+  '{"type":"excalidraw"%'` check so lists don't load whole scenes.
 - **Share links expose only a whitelist.** `ShareLinkController::show` builds the payload
   field by field (title, content / description, status, type, priority, dates) and never
   serializes the model, so new columns can't leak into public pages. Docs share the live

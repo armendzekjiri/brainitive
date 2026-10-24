@@ -119,4 +119,24 @@ test.describe('collaboration', () => {
         await expect(memberPage.getByText(new RegExp(`Erin Owner moved ${key} from`)).first()).toBeVisible();
         await expect(memberPage.getByText(new RegExp(`assigned you to ${key}`)).first()).toBeVisible();
     });
+
+    test('the bell: a new notification can be marked as read', async ({ page, memberPage }) => {
+        const title = uid('bell');
+        await page.goto(urls.board());
+        const created = await createCard(page, title);
+        const key = (await created.getByText(/^[A-Z]+-\d+$/).textContent())?.trim();
+        await created.getByTitle('Unassigned — click to assign').click();
+        await page.getByRole('button', { name: 'Max Member' }).click();
+        await expect(created.getByTitle(/Assignee: Max Member/)).toBeVisible();
+
+        // Max opens the bell; the entry is unread and has its "Mark as read" button
+        await memberPage.goto(urls.home);
+        await memberPage.getByRole('button', { name: 'Notifications' }).click();
+        const entry = memberPage.getByText(`assigned you to ${key}`).locator('xpath=ancestor::div[contains(@class,"group")][1]');
+        await expect(entry).toBeVisible();
+        const read = memberPage.waitForResponse((r) => r.request().method() !== 'GET' && /\/notifications\//.test(r.url()));
+        await entry.getByRole('button', { name: 'Mark as read' }).click();
+        expect((await read).status()).toBeLessThan(400);
+        await expect(entry.getByRole('button', { name: 'Mark as read' })).toHaveCount(0);
+    });
 });

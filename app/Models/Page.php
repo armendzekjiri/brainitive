@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\References\ContentReferences;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -131,6 +132,15 @@ class Page extends Model
                 $page->watchers()->syncWithoutDetaching([$page->created_by]);
             }
         });
+
+        // Issue cards on a whiteboard are derived references (BRAI-71)
+        static::saved(function (Page $page) {
+            if ($page->type === 'page' && ($page->wasRecentlyCreated || $page->wasChanged('content')) && $page->is_whiteboard) {
+                ContentReferences::syncWhiteboard($page);
+            }
+        });
+        // Pages are hard-deleted and their subpages go with them (FK cascade, no events)
+        static::deleted(fn (Page $page) => ContentReferences::pruneMissing((int) $page->project_id));
     }
 
     public function project(): BelongsTo

@@ -270,7 +270,8 @@ export class Crawler {
     private async tag(): Promise<Control[]> {
         return this.page.$$eval(CONTROLS, (els) =>
             els
-                .filter((e) => (e as HTMLElement).checkVisibility?.() !== false && !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true')
+                // hidden form mirrors (Radix renders an aria-hidden native <select> behind each Select) are not controls
+                .filter((e) => (e as HTMLElement).checkVisibility?.() !== false && !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true' && !e.closest('[aria-hidden="true"]'))
                 .map((e, index) => {
                     const label = e.getAttribute('aria-label') || (e as HTMLElement).innerText || e.getAttribute('title') || e.getAttribute('name') || e.getAttribute('placeholder') || e.tagName.toLowerCase();
                     e.setAttribute('data-crawl', String(index));
@@ -283,7 +284,7 @@ export class Crawler {
     private async inner(scope: string): Promise<InnerControl[]> {
         const list = await this.page.locator(scope).last().locator(CONTROLS).evaluateAll((els) =>
             els
-                .filter((e) => (e as HTMLElement).checkVisibility?.() !== false && !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true')
+                .filter((e) => (e as HTMLElement).checkVisibility?.() !== false && !(e as HTMLButtonElement).disabled && e.getAttribute('aria-disabled') !== 'true' && !e.closest('[aria-hidden="true"]'))
                 .map((e) => {
                     const tag = e.tagName.toLowerCase();
                     const type = (e.getAttribute('type') ?? '').toLowerCase();
@@ -310,16 +311,31 @@ export class Crawler {
         return this.page.locator('[data-crawl-target="1"]').first();
     }
 
-    /** The tagged control again — re-tagging after a reload (the order of controls is stable). */
+    /**
+     * The tagged control again. After a reload the positions can shift (a menu item that switched
+     * the workspace changes the sidebar), so it's found by its name; the position only breaks ties.
+     */
     private async find(href: string, control: Control): Promise<Locator | null> {
-        let loc = this.page.locator(`[data-crawl="${control.index}"]`);
-        if ((await loc.count()) === 0) {
-            await this.open(href);
-            await this.tag();
-            loc = this.page.locator(`[data-crawl="${control.index}"]`);
-            if ((await loc.count()) === 0) return null;
-        }
-        return loc.first();
+        const same = async () => {
+            const tagged = await this.tag();
+            const byName = tagged.filter((c) => c.name === control.name);
+            if (!byName.length) return null;
+            const best = byName.reduce((a, b) => (Math.abs(b.index - control.index) < Math.abs(a.index - control.index) ? b : a));
+            return this.page.locator(`[data-crawl="${best.index}"]`).first();
+        };
+        const here = this.page.locator(`[data-crawl="${control.index}"]`);
+        if ((await here.count()) && (await this.tagName(here)) === control.name) return here.first();
+        const found = await same();
+        if (found) return found;
+        await this.open(href);
+        return same();
+    }
+
+    private async tagName(loc: Locator): Promise<string> {
+        return loc.first().evaluate((e) => {
+            const label = e.getAttribute('aria-label') || (e as HTMLElement).innerText || e.getAttribute('title') || e.getAttribute('name') || e.getAttribute('placeholder') || e.tagName.toLowerCase();
+            return `${e.getAttribute('role') || e.tagName.toLowerCase()} "${label.replace(/\s+/g, ' ').trim().slice(0, 60)}"`;
+        }).catch(() => '');
     }
 
     /** Click, then classify: did it open a menu / dialog, navigate, get blocked, or break? */

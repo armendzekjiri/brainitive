@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\References\ContentReferences;
 use App\Support\SafeHtml;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -75,6 +76,14 @@ class Ticket extends Model
         static::updated(function (Ticket $ticket) {
             if ($ticket->wasChanged('assigned_to') && $ticket->assigned_to) {
                 $ticket->watchers()->syncWithoutDetaching([$ticket->assigned_to]);
+            }
+        });
+
+        // Soft deletes keep linked content (back on restore); a hard delete prunes it (BRAI-71)
+        static::forceDeleted(function (Ticket $ticket) {
+            $projectId = Helpdesk::withTrashed()->whereKey($ticket->helpdesk_id)->value('project_id');
+            if ($projectId) {
+                ContentReferences::pruneMissing((int) $projectId);
             }
         });
     }

@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\Board;
 use App\Models\BoardView;
 use App\Models\Bookmark;
+use App\Models\Capture;
 use App\Models\InstanceSettings;
 use App\Models\Item;
 use App\Models\LeadForm;
@@ -19,6 +20,7 @@ use App\Models\WorkspaceInvitation;
 use App\Policies\BoardPolicy;
 use App\Policies\BoardViewPolicy;
 use App\Policies\BookmarkPolicy;
+use App\Policies\CapturePolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\LeadFormPolicy;
 use App\Policies\PagePolicy;
@@ -112,6 +114,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(SnippetCollection::class, SnippetPolicy::class);
         Gate::policy(ProjectTemplate::class, ProjectTemplatePolicy::class);
         Gate::policy(LeadForm::class, LeadFormPolicy::class);
+        Gate::policy(Capture::class, CapturePolicy::class);
 
         // Resolve page from project's allPages() so child pages (e.g. documents inside folders) are found
         // Explicit binders run BEFORE implicit binding, so {workspace} / {project} are still raw

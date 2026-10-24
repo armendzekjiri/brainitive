@@ -7,7 +7,9 @@ use App\Http\Controllers\BoardViewController;
 use App\Http\Controllers\BookmarkController;
 use App\Http\Controllers\CalendarConnectionController;
 use App\Http\Controllers\CalendarController;
+use App\Http\Controllers\CaptureInboxController;
 use App\Http\Controllers\CommandPaletteController;
+use App\Http\Controllers\ContentReferenceController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\HelpdeskController;
 use App\Http\Controllers\HelpdeskWidgetController;
@@ -161,6 +163,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/work-timer', [WorkTimerController::class, 'start'])->name('work-timer.start');
     Route::post('/work-timer/stop', [WorkTimerController::class, 'stop'])->name('work-timer.stop');
     Route::delete('/work-timer', [WorkTimerController::class, 'discard'])->name('work-timer.discard');
+
+    // Quick capture (BRAI-70): private inbox of ideas, organized later into content
+    Route::get('/captures', [CaptureInboxController::class, 'index'])->name('captures.index');
+    Route::post('/captures', [CaptureInboxController::class, 'store'])->middleware('throttle:60,1,captures.store')->name('captures.store');
+    Route::get('/captures/destinations', [CaptureInboxController::class, 'destinations'])->middleware(ReadOnlySession::class)->name('captures.destinations');
+    Route::patch('/captures/{capture}', [CaptureInboxController::class, 'update'])->name('captures.update');
+    Route::delete('/captures/{capture}', [CaptureInboxController::class, 'destroy'])->name('captures.destroy');
+    Route::post('/captures/{capture}/archive', [CaptureInboxController::class, 'archive'])->name('captures.archive');
+    Route::post('/captures/{capture}/restore', [CaptureInboxController::class, 'restore'])->name('captures.restore');
+    Route::get('/captures/{capture}/preview', [CaptureInboxController::class, 'preview'])->middleware(ReadOnlySession::class)->name('captures.preview');
+    Route::post('/captures/{capture}/convert', [CaptureInboxController::class, 'convert'])->middleware('throttle:60,1,captures.convert')->name('captures.convert');
 
     // Share links for docs and issues (people who can edit them)
     Route::get('/share-links', [ShareLinkController::class, 'index'])->name('share-links.index');
@@ -341,6 +354,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('boards/{board:slug}/items/{item}/attachments', [BoardController::class, 'storeAttachment'])->name('boards.items.attachments.store');
             Route::delete('boards/{board:slug}/items/{item}/attachments/{attachment}', [BoardController::class, 'destroyAttachment'])->name('boards.items.attachments.destroy');
 
+            // Linked content and backlinks between issues, docs, tickets and plans (BRAI-71)
+            Route::get('references', [ContentReferenceController::class, 'index'])->middleware(ReadOnlySession::class)->name('references.index');
+            Route::get('references/candidates', [ContentReferenceController::class, 'candidates'])->middleware(ReadOnlySession::class)->name('references.candidates');
+            Route::post('references', [ContentReferenceController::class, 'store'])->middleware('throttle:60,1,references.store')->name('references.store');
+            Route::delete('references/{contentReference}', [ContentReferenceController::class, 'destroy'])->whereNumber('contentReference')->name('references.destroy');
+
             // Task Lists (nested under projects)
             Route::post('plans', [PlanController::class, 'store'])->name('plans.store');
             Route::get('releases', [ReleaseController::class, 'index'])->name('releases.index');
@@ -481,8 +500,9 @@ Route::middleware('auth')->group(function () {
 
     // Notifications
     Route::get('/notifications', [NotificationController::class, 'page'])->name('notifications.page');
-    Route::get('/api/notifications', [NotificationController::class, 'index'])->name('notifications.index');
-    Route::get('/api/notifications/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unread-count');
+    Route::get('/api/notifications', [NotificationController::class, 'index'])->middleware(ReadOnlySession::class)->name('notifications.index');
+    // polled every 30 s / fetched when the bell opens: read-only sessions (would race form submits)
+    Route::get('/api/notifications/unread-count', [NotificationController::class, 'unreadCount'])->middleware(ReadOnlySession::class)->name('notifications.unread-count');
     Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::post('/api/notifications/notify-mention', [NotificationController::class, 'notifyMention'])->middleware('throttle:60,1,notifications.notify-mention')->name('notifications.notify-mention');

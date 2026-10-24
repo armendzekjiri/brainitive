@@ -56,6 +56,8 @@ export function createApi(getToken: TokenProvider) {
             post<Created>(`snippet-collections/${collectionId}/snippets`, data),
         createTask: (taskListId: number, data: { title: string; notes?: string; due_date?: string; assign_to_me: boolean }) =>
             post<Created>(`task-lists/${taskListId}/items`, data),
+        /** "Save to inbox" (BRAI-70): no destination, organized later in Brainitive → Captures. */
+        saveToInbox: (data: { text: string; url?: string; source?: string }) => post<Created>('captures', data),
     };
 }
 

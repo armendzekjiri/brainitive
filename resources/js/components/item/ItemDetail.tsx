@@ -20,6 +20,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { DevelopmentPanel, type Development } from '@/components/item/DevelopmentPanel';
 import { ItemFieldsSection } from '@/components/item/ItemFieldsSection';
+import RelatedContent from '@/components/references/RelatedContent';
 import { formatDuration } from '@/lib/duration';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { ItemTypeIcon } from '@/components/ItemTypeIcon';
@@ -1171,6 +1172,9 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                     </div>
                 )}
             </section>
+
+            {/* Related content + backlinks (BRAI-71) */}
+            <RelatedContent workspaceSlug={workspace.slug} projectSlug={project.slug} type="item" id={item.id} />
 
             {/* Attachments */}
             <section className="py-5 border-t border-border/60">

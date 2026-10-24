@@ -23,6 +23,24 @@ agents producing consistent, locatable work.
    pre-release    + Brainitive card                       (+ move card → Testing)  into pre-release
 ```
 
+### Releases: 3–4 tickets per release branch (since 2026-10-24)
+We work in releases, not single PRs:
+
+1. Pick 3–4 board tickets. Create **`release/vX.Y.Z`** from **`pre-release`**, named after the next
+   version in the HelpModal changelog (new features → minor bump, fixes only → patch).
+2. Create one branch per ticket **from the release branch** (`feat/…`, `fix/…`), each with its own
+   `docs/ai/tasks/<branch>.md` and card, as below.
+3. Merge the ticket branches into the release branch **locally**. Run the gate on the release
+   branch, add the changelog entry (one entry for the release), and **push only the release branch**.
+4. Open one PR `release/vX.Y.Z` → `pre-release`. Its checks run, then the merge → dev deploy →
+   live e2e on dev → the automatic release PR to `main`.
+
+**Every feature or change ships with e2e tests:** journeys in `e2e/tests/` for what a user can now
+do, or what was broken, next to PHPUnit. See `e2e/README.md`; use `npm run e2e:ui` to watch them.
+Parallel checkouts (worktrees) use their own databases: `TEST_DB_SUFFIX=<name>` for PHPUnit
+(`brainitive_test_<name>`) and `E2E_PORT=<port>` for e2e. A worktree needs a **real copy of
+`vendor`**: a symlinked `vendor` runs the main checkout's code (KNOWLEDGE).
+
 ### Release flow: pre-release → main (BRAI-95)
 **Nothing goes straight to `main`.** `main` is production: every push to it deploys.
 
@@ -135,7 +153,8 @@ symptom. 3. Smallest correct change matching surrounding code. 4. Add a test tha
 caught it. 5. Run the gate. 6. Promote any non-obvious trap into [`KNOWLEDGE.md`](./KNOWLEDGE.md).
 
 ## Definition of done — the gate
-The four commands above, all green, plus verified in the running app. Plus docs updated
+The four commands above, all green, plus verified in the running app, plus **e2e journeys for the
+change** (`npx playwright test -c e2e --project=chromium` green). Plus docs updated
 (step 4), `tasks/<branch>.md` marked done, and — when MCP is connected — the Brainitive board
 card moved to **Testing**.
 

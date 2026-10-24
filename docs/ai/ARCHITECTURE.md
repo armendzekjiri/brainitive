@@ -177,6 +177,7 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
     `WorkTimerController` (`work-timer.start/stop/discard`), shared prop `activeTimer` →
     `components/WorkTimerPill.tsx` in the top bar. Stop logs through `Item::logWork()` (also
     used by `BoardController::logWork`) after a review; board items only.
+- **Quick capture (BRAI-70):** private per-user inbox of ideas captured without a project. `Capture` model (`captures`: uuid route key, `text`, `url`, `intended_type`, `source`, `captured_at`, `archived_at`, `processed_at`, `target_type` + `target_id` + `target_location` snapshot), `CapturePolicy` (owner only, others 404), `CaptureInboxController` (`captures.*`: index with Inbox / Processed / Archived + search, store, update, archive / restore, destroy (archived only), `destinations` + `preview` JSON, `convert`). Domain: `app/Support/Captures/` — `ContentCapture` (the shared create path of the extension **and** the conversion: policy per destination type, rules, create), `CaptureDestinations` (writable targets, also `ext.destinations`), `CaptureFields` (preview fields per type), `CaptureConversion` (one transaction on the locked capture row: replay when processed, authorize, validate, create, mark processed), `CaptureAccess` (which created targets the owner can still open, from access sets loaded once — never live details of content they lost access to). Shared prop `captureInboxCount` (sidebar badge). UI: `components/captures/QuickCaptureDialog.tsx` (mounted in `AppLayout`; `openQuickCapture()`, shortcut **C** via `lib/captures.ts` `isCaptureShortcut`, `QuickCaptureFab` on phones), `components/captures/ConvertCaptureDialog.tsx`, `Pages/Captures/Index.tsx`. Tests: `tests/Feature/Captures/`, e2e `e2e/tests/quick-capture.spec.ts`.
 - **Search:** `SearchController` (invokable) → `/search` (workspaces, projects, boards, plans, issues, documents, snippets, bookmarks; optional `project` param ranks that project first)
 - **GitHub development panel (BRAI-61):** per-project webhook (`GithubConnection`, settings in `ProjectGithubController` → Projects/Edit "Integrations", `components/projects/GithubIntegrationCard.tsx`). `POST /api/webhooks/github/{uuid}` (`GithubWebhookController`: HMAC check, `GithubDelivery` dedupe) → `ProcessGithubDelivery` job → `Support/Github/DevelopmentSync` writes `ItemDevLink` rows (branch / commit / pull_request / deployment) for keys found by `IssueKeys`. Shown by `ItemDevelopment` in the item-details JSON and `components/item/DevelopmentPanel.tsx`.
 - **Swimlanes (BRAI-87):** setup in `board.settings.swimlanes` (validated by `Support/Boards/Swimlanes`, saved via `BoardController@updateSwimlanes`), builder `components/board/SwimlaneSettings.tsx` on Boards/Edit, rules + grouping in `resources/js/lib/swimlanes.ts`, rendering `SwimlaneBoard` in Boards/Show (personal mode in localStorage `board-{id}-lane-mode`).
@@ -211,10 +212,19 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
   `Mcp::oauthRoutes()`), scope `capture`; consent screen `resources/views/mcp/authorize.blade.php`.
 - **API:** `routes/api.php` → `/api/ext/v1/*` (`ext.*` routes):
   `Extension/ExtensionController` (me, destinations, search, my-work) and
-  `Extension/CaptureController` (issue + screenshot, bookmark item, doc, task). Ids are numeric;
-  same policies as the app. Tests: `tests/Feature/Extension/ExtensionApiTest.php`.
+  `Extension/CaptureController` (issue + screenshot, bookmark item, doc, task, snippet, and
+  `ext.captures.store` = "Save to inbox", create only). Create logic + policies are shared with
+  the capture inbox (`App\Support\Captures\ContentCapture`). Ids are numeric; same policies as the app. Tests: `tests/Feature/Extension/ExtensionApiTest.php`.
 
 ---
+
+### Linked content and backlinks (BRAI-71)
+- **Model:** `ContentReference` (`content_references`: `project_id`, `source_type` / `source_id`, `target_type` / `target_id`, `origin` = `manual` | `derived`, `created_by`; unique per source + target + origin). Types are stable keys `item`, `page` (docs + whiteboards, not folders), `ticket`, `plan` — `ContentReference::TYPES`.
+- **Support:** `App\Support\References\ContentReferences` — `resolve` (endpoint of the project, live), `link` (no self-links, no issue → issue: that stays an `ItemLink`), `forEndpoint` (related + referenced-by, visibility in batch, manual + derived merged), `candidates` (picker search), `syncDerived` / `syncPlan` / `syncWhiteboard`, `pruneMissing`, `summary` (canonical URLs = `ResourceLocator`, which now also locates plans and tickets).
+- **Derived references** come from model hooks: `Plan::saved` (rows with `itemId`) and `Page::saved` (whiteboard issue cards). Pruning: `Page::deleted`, `forceDeleted` on Item / Ticket / Plan, `BoardController::moveItemToBoard` across projects.
+- **Controller / routes:** `ContentReferenceController` — `references.index` / `references.candidates` (GET, ReadOnlySession), `references.store`, `references.destroy` under `projects/{project}`.
+- **UI:** `components/references/RelatedContent.tsx` (sections + "Link related content" picker), mounted in `ItemDetail`, `Pages/Pages/Show`, the ticket dialog in `Helpdesks/Show` and the "Related" sheet on `Plans/Show`. Types `ContentReference*` in `types/index.d.ts`.
+- **Tests:** `tests/Feature/References/ContentReferencesTest.php`, `e2e/tests/backlinks.spec.ts`.
 
 ### Sharing (read-only links)
 - **Docs and issues:** `ShareLink` (morph `shareable`: `Page` / `Item`, random token, `expires_at`, `revoked_at`, views), `ShareLinkController` — manage via `share-links.*` (needs `update` on the item), public view `/s/{token}` → `Pages/Share/Show.tsx` (`noindex`, 410 when revoked / expired / deleted). UI: `components/share/ShareButton.tsx`.
@@ -241,7 +251,7 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 | A policy | `app/Policies/` **and register it** in `AppServiceProvider` |
 | An Inertia page | `resources/js/Pages/<Module>/` + type in `types/index.d.ts` — [add-inertia-page skill](./skills/add-inertia-page.md) |
 | An MCP tool | `app/Mcp/Tools/` + `BrainitiveServer::$tools` — [add-mcp-tool skill](./skills/add-mcp-tool.md) |
-| A browser-extension capture | `Extension/CaptureController` + `ext.*` route, then `browser-extension/lib/api.ts` + a form in `components/forms.tsx` |
+| A browser-extension capture | `Support/Captures/ContentCapture` (rules, policy, create — also used by the capture inbox) + `Extension/CaptureController` + `ext.*` route, then `browser-extension/lib/api.ts` + a form in `components/forms.tsx` |
 | A notification | `app/Notifications/` (+ `SendsWebPush` for push) — [add-notification skill](./skills/add-notification.md) |
 | A queued job | `app/Jobs/` |
 | An artisan command | `app/Console/Commands/` |
