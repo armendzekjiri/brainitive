@@ -58,6 +58,9 @@ import {
     Gauge,
     HeartPulse,
     NotebookPen,
+    ChartColumn,
+    Webhook,
+    PanelLeft,
     Clock,
     FileSpreadsheet,
     ReceiptText,
@@ -389,6 +392,34 @@ const SPOTLIGHT: {
     shortcut?: string;
 }[] = [
     {
+        key: 'notifications',
+        version: 'v1.39',
+        icon: Bell,
+        color: '#0E83DC',
+        title: 'A calmer notification inbox',
+        description:
+            'Hear about what matters — comments, due dates, sprints, assignments — grouped by day, filtered your way, on the channels you pick.',
+        points: [
+            'All, Unread, Mentions and Assigned in one click',
+            'In-app, push or email — per category',
+            'Mark unread, archive, open right where you are',
+        ],
+    },
+    {
+        key: 'insights',
+        version: 'v1.39',
+        icon: ChartColumn,
+        color: '#69A748',
+        title: 'Insights for admins',
+        description:
+            'One place to see how the whole workspace is doing: throughput, cycle time, the team, project health, helpdesk and usage.',
+        points: [
+            'Created vs completed, week by week',
+            'Per person: done, overdue and hours logged',
+            'Every project’s health side by side',
+        ],
+    },
+    {
         key: 'billing',
         version: 'v1.38',
         icon: ReceiptText,
@@ -401,35 +432,6 @@ const SPOTLIGHT: {
             'PDF and Excel, sent to the client from Brainitive',
             'Finalized hours are locked — nothing billed twice',
         ],
-    },
-    {
-        key: 'workload',
-        version: 'v1.37',
-        icon: Gauge,
-        color: '#69A748',
-        title: 'Workload planning',
-        description:
-            'See who has room before you assign work: each person’s weekly capacity next to the hours planned from real issues.',
-        points: [
-            'Overload shown in hours, week by week',
-            'Capacity per person, with weeks off for leave',
-            'Remaining estimates suggested, never spread on their own',
-        ],
-    },
-    {
-        key: 'quick-capture',
-        version: 'v1.36',
-        icon: Inbox,
-        color: '#0E83DC',
-        title: 'Quick capture',
-        description:
-            'Press C anywhere to save an idea without picking a project. Sort it later into an issue, a task, a doc, a bookmark or a snippet.',
-        points: [
-            'A private inbox only you can see',
-            'From the app, your phone or the browser extension',
-            'Check the preview before anything is created',
-        ],
-        shortcut: 'C',
     },
 ];
 
@@ -753,6 +755,20 @@ export default function Welcome({
                     isNew: true,
                 },
                 {
+                    icon: ListChecks,
+                    title: 'Bulk edit',
+                    description:
+                        'Select issues in the list view and change status, assignee, priority, sprint, due date or labels in one go.',
+                    isNew: true,
+                },
+                {
+                    icon: PanelLeft,
+                    title: 'Your sidebar, your way',
+                    description:
+                        'Hide what you don’t use, choose what each project shows and pin the boards, lists and docs you open every day.',
+                    isNew: true,
+                },
+                {
                     icon: GanttChart,
                     title: 'Gantt timelines',
                     description:
@@ -980,6 +996,13 @@ export default function Welcome({
                         'AI suggests the action items with the sentence each came from — review, edit, then create only the ones you want.',
                     isNew: true,
                 },
+                {
+                    icon: ChartColumn,
+                    title: 'Admin insights',
+                    description:
+                        'Throughput, cycle time, team activity, project health, helpdesk and usage across the whole workspace.',
+                    isNew: true,
+                },
             ],
         },
         {
@@ -1011,7 +1034,15 @@ export default function Welcome({
                     icon: Bell,
                     title: 'Notifications & push',
                     description:
-                        'In-app alerts plus web push for assignments, replies, and updates.',
+                        'A grouped inbox for comments, mentions, due dates, sprints and assignments — choose in-app, push or email per category.',
+                    isNew: true,
+                },
+                {
+                    icon: Webhook,
+                    title: 'Outgoing webhooks',
+                    description:
+                        'Send signed events — issues, pages, sprints, tickets, leads, time and invoices — to your own systems, with a delivery log.',
+                    isNew: true,
                 },
                 {
                     icon: KeyRound,
