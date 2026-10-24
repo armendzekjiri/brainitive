@@ -112,7 +112,7 @@ class TicketController extends Controller
             User::find($ticket->assigned_to)?->notify(new TicketAssignedNotification($ticket, $request->user()));
         }
 
-        DomainEvents::emit($workspace, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'agent']); // webhooks (BRAI-104)
+        DomainEvents::emit($workspace, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'agent'], subject: $ticket); // webhooks (BRAI-104) + automation rules (BRAI-63)
 
         if ($request->boolean('notify_contact', true)) {
             $contact->notify(new TicketCreatedNotification($ticket));
@@ -184,7 +184,7 @@ class TicketController extends Controller
         // with any email address).
         $accessToken = $ticket->publicAccessToken();
 
-        DomainEvents::emit($project->workspace_id, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'portal']); // webhooks (BRAI-104)
+        DomainEvents::emit($project->workspace_id, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'portal'], subject: $ticket); // webhooks (BRAI-104) + automation rules (BRAI-63)
 
         // The public form must not become a mail cannon: a few confirmations per address and hour
         if (RateLimiter::attempt('ticket-confirmation:'.$helpdesk->id.':'.sha1(strtolower($contact->email)), 3, fn () => true, 3600)) {

@@ -10,6 +10,7 @@ use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\TicketContact;
 use App\Models\Webhook;
+use App\Notifications\AutomationNoticeNotification;
 use App\Notifications\CatalogNotification;
 use App\Notifications\InvitationAcceptedNotification;
 use App\Notifications\ItemCommentedNotification;
@@ -75,6 +76,8 @@ class CatalogNotificationContractTest extends TestCase
             new WorkspaceRoleChangedNotification($this->workspace, $this->editor, 'member', 'admin'),
             new TicketStatusChangedNotification($ticket, $this->editor, 'New', 'Done'),
             new WebhookDisabledNotification($webhook, 'HTTP 500'), // BRAI-104
+            new AutomationNoticeNotification($item, 'Triage', 'Look at {{item.key}}', $this->editor), // BRAI-63
+            new AutomationNoticeNotification($ticket, 'Triage', null, null), // BRAI-63
         ];
     }
 

@@ -42,7 +42,7 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag, Users, ListTodo, Power, PowerOff, Settings, Shield, Plug, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag, Users, ListTodo, Power, PowerOff, Settings, Shield, Plug, SlidersHorizontal, Workflow } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -987,6 +987,17 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                         </TabsContent>
 
                         <TabsContent value="integrations" className="space-y-8">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2"><Workflow className="size-5" />Automations</CardTitle>
+                                    <CardDescription>WHEN / IF / THEN rules that assign, move, set fields, comment, notify or create linked issues for you.</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                    <Button variant="outline" asChild>
+                                        <Link href={route('automations.index', [workspace.slug, project.slug])}>Open automations</Link>
+                                    </Button>
+                                </CardContent>
+                            </Card>
                             <GithubIntegrationCard workspace={workspace} project={project} github={github} />
                         </TabsContent>
 
