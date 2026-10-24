@@ -31,7 +31,10 @@ export async function newIssue(page: Page, project: string, title: string, field
         expect(response.status(), `estimate: ${await response.text()}`).toBeLessThan(400);
     }
     if (fields.logged) {
-        const response = await request(page, 'POST', `${itemUrl}/work-logs`, { time: fields.logged });
+        // v1.38.0: logging needs an activity once the workspace has any (E2eSeeder billing fixtures)
+        const options = await (await request(page, 'GET', `/workspaces/${SEED.workspace}/timesheet/activities?item_id=${id}`)).json() as { activities: { id: number }[]; default_activity_id: number | null };
+        const activityId = options.default_activity_id ?? options.activities[0]?.id ?? null;
+        const response = await request(page, 'POST', `${itemUrl}/work-logs`, { time: fields.logged, activity_id: activityId });
         expect(response.status(), `log work: ${await response.text()}`).toBeLessThan(400);
     }
     return id;

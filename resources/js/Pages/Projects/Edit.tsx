@@ -5,7 +5,7 @@ import MoveProjectCard from '@/components/projects/MoveProjectCard';
 import GithubIntegrationCard, { type GithubSettings } from '@/components/projects/GithubIntegrationCard';
 import ItemFieldsCard from '@/components/projects/ItemFieldsCard';
 import SaveAsTemplateCard from '@/components/projects/SaveAsTemplateCard';
-import { PageProps, Workspace, Project, Label as LabelType, User, ItemType, ItemField, ProjectTemplate } from '@/types';
+import { PageProps, Workspace, Project, Label as LabelType, User, ItemType, ItemField, ProjectTemplate, BillingClientOption } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -69,6 +69,8 @@ interface Props extends PageProps {
     /** Workspace admins can save the project as a template (BRAI-72). */
     canSaveTemplate?: boolean;
     workspaceTemplates?: ProjectTemplate[];
+    /** Billing clients (BRAI-100): workspace admins only, null for everyone else. */
+    billingClients?: BillingClientOption[] | null;
 }
 
 // Predefined colors for labels and project
@@ -287,7 +289,7 @@ function ItemTypeForm({
     );
 }
 
-export default function ProjectsEdit({ auth, workspace, project, workspaceUsers, canManageMembers, projectItemTypes = [], moveTargets = [], github = null, itemFields = [], projectBoards = [], canSaveTemplate = false, workspaceTemplates = [] }: Props) {
+export default function ProjectsEdit({ auth, workspace, project, workspaceUsers, canManageMembers, projectItemTypes = [], moveTargets = [], github = null, itemFields = [], projectBoards = [], canSaveTemplate = false, workspaceTemplates = [], billingClients = null }: Props) {
     // Deep links like ?tab=integrations (from an issue's Development section).
     const initialTab = (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tab')) || 'general';
     const [createLabelOpen, setCreateLabelOpen] = useState(false);
@@ -297,12 +299,14 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
     const [addMemberUserId, setAddMemberUserId] = useState<string>('');
     const [addMemberRole, setAddMemberRole] = useState<ProjectMemberRole>('viewer');
 
-    const { data, setData, put, processing, errors, isDirty } = useForm({
+    const { data, setData, put, processing, errors, isDirty } = useForm<{ name: string; description: string; key: string; icon: string; color: string; client_id?: string }>({
         name: project.name || '',
         description: project.description || '',
         key: project.key || '',
         icon: project.icon_display ?? project.icon ?? '',
         color: project.color ?? '',
+        // only sent (and only honoured) for workspace admins
+        ...(billingClients ? { client_id: project.client_id ? String(project.client_id) : '' } : {}),
     });
 
     const handleSaveProject = (e: React.FormEvent) => {
@@ -468,6 +472,22 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                     {errors.key && <p className="text-sm text-destructive">{errors.key}</p>}
                                     {errors.icon && <p className="text-sm text-destructive">{errors.icon}</p>}
                                 </div>
+                                {billingClients && (
+                                    <div className="space-y-2 max-w-xs">
+                                        <Label htmlFor="project-client">Client</Label>
+                                        <Select value={data.client_id || 'none'} onValueChange={(v) => setData('client_id', v === 'none' ? '' : v)}>
+                                            <SelectTrigger id="project-client"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">No client</SelectItem>
+                                                {billingClients.map((c) => (
+                                                    <SelectItem key={c.id} value={String(c.id)}>{c.name}{c.archived ? ' (archived)' : ''}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <p className="text-xs text-muted-foreground">Time on this project is billed to this client. Manage clients under Billing → Clients.</p>
+                                        {errors.client_id && <p className="text-sm text-destructive">{errors.client_id}</p>}
+                                    </div>
+                                )}
                                 <div className="space-y-2">
                                     <Label>Color</Label>
                                     <div className="flex flex-wrap gap-2">

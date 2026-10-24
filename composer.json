@@ -7,6 +7,7 @@
     "license": "AGPL-3.0-only",
     "require": {
         "php": "^8.2",
+        "barryvdh/laravel-dompdf": "^3.1",
         "inertiajs/inertia-laravel": "^2.0",
         "laravel-notification-channels/webpush": "^11.0",
         "laravel/framework": "^12.0",
@@ -15,6 +16,7 @@
         "laravel/sanctum": "^4.0",
         "laravel/socialite": "^5.24",
         "laravel/tinker": "^2.10.1",
+        "openspout/openspout": "^5.12",
         "spatie/laravel-permission": "^6.24",
         "symfony/html-sanitizer": "^7.3",
         "tightenco/ziggy": "^2.0"

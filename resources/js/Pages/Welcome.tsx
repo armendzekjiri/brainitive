@@ -58,6 +58,9 @@ import {
     Gauge,
     HeartPulse,
     NotebookPen,
+    Clock,
+    FileSpreadsheet,
+    ReceiptText,
     type LucideIcon,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -385,6 +388,20 @@ const SPOTLIGHT: {
     /** keyboard shortcut shown as a key cap next to the title */
     shortcut?: string;
 }[] = [
+    {
+        key: 'billing',
+        version: 'v1.38',
+        icon: ReceiptText,
+        color: '#0E83DC',
+        title: 'Time tracking & client billing',
+        description:
+            'Your team logs time on tickets; at month end you send each client a clean report or invoice — your own rates, your VAT.',
+        points: [
+            'Activities you price yourself: per hour or fixed',
+            'PDF and Excel, sent to the client from Brainitive',
+            'Finalized hours are locked — nothing billed twice',
+        ],
+    },
     {
         key: 'workload',
         version: 'v1.37',
@@ -888,8 +905,8 @@ export default function Welcome({
             ],
         },
         {
-            title: 'Customers & leads',
-            tagline: 'Support customers and win new ones, on the boards you already use.',
+            title: 'Customers, leads & billing',
+            tagline: 'Support customers, win new ones and bill them — on the boards you already use.',
             icon: Headset,
             color: '#0E83DC',
             items: [
@@ -911,6 +928,27 @@ export default function Welcome({
                     title: 'Lead forms',
                     description:
                         'Branded multi-step forms with logic, analytics and webhooks — every lead lands as a card.',
+                    isNew: true,
+                },
+                {
+                    icon: Clock,
+                    title: 'Time tracking',
+                    description:
+                        'Log time on tickets with an activity — from the issue, the timer or your weekly timesheet.',
+                    isNew: true,
+                },
+                {
+                    icon: FileSpreadsheet,
+                    title: 'Team time overview',
+                    description:
+                        'Last month’s hours by project, ticket, person or activity, with billable share — export to Excel.',
+                    isNew: true,
+                },
+                {
+                    icon: ReceiptText,
+                    title: 'Client billing',
+                    description:
+                        'Your own activities and rates, VAT net or gross, PDF reports or invoices sent to the client — nothing billed twice.',
                     isNew: true,
                 },
             ],

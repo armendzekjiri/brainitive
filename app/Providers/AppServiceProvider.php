@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\Billing\BuildsReportData;
 use App\Models\Board;
 use App\Models\BoardView;
 use App\Models\Bookmark;
@@ -19,6 +20,7 @@ use App\Models\User;
 use App\Models\WorkloadAllocation;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
+use App\Policies\BillingPolicy;
 use App\Policies\BoardPolicy;
 use App\Policies\BoardViewPolicy;
 use App\Policies\BookmarkPolicy;
@@ -34,6 +36,7 @@ use App\Policies\SnippetPolicy;
 use App\Policies\WorkloadPolicy;
 use App\Policies\WorkspacePolicy;
 use App\Support\Admin\InstanceMailConfig;
+use App\Support\Billing\ReportBuilder;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -54,6 +57,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // SMTP saved in the admin console overrides .env mail config (see InstanceMailConfig).
         $this->app->afterResolving('mail.manager', fn () => InstanceMailConfig::apply());
+
+        // billing report data, snapshot v1 (v1.38.0): documents render what the report builder computes
+        $this->app->bind(BuildsReportData::class, ReportBuilder::class);
     }
 
     /**
@@ -121,6 +127,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Capture::class, CapturePolicy::class);
         Gate::policy(ProjectHealthReport::class, ProjectHealthReportPolicy::class);
         Gate::policy(WorkloadAllocation::class, WorkloadPolicy::class);
+        // client billing (v1.38.0): workspace admins only
+        Gate::define('manageBilling', [BillingPolicy::class, 'manageBilling']);
 
         // Resolve page from project's allPages() so child pages (e.g. documents inside folders) are found
         // Explicit binders run BEFORE implicit binding, so {workspace} / {project} are still raw
