@@ -41,6 +41,8 @@ Rules every ticket follows:
   per project.
 
 Also in the foundation:
+- `billing_activity_defaults` (`BillingActivityDefault`): ticket type → default activity, one per workspace and
+  item type. The **activities** agent builds the admin UI for it; the **log-time** agent reads it to preselect.
 - `billing_settings` (one row per workspace, `BillingSetting::forWorkspace()`) and `billing_reports`
   (`BillingReport`). `time_entries.billing_report_id` → `billing_reports` (null on delete).
 - `Gate::authorize('manageBilling', $workspace)` (`BillingPolicy`). The shared Inertia prop
