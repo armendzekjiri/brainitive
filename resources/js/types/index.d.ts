@@ -1241,3 +1241,29 @@ export interface HealthReportDetail extends HealthReportSummary {
     timezone: string;
     can_delete: boolean;
 }
+
+/** Billing → Activities (v1.38.0, BRAI-99): BillingActivityController@index, workspace admins only. */
+export type BillingPricingType = 'hourly' | 'fixed';
+
+export interface BillingActivity {
+    id: number;
+    name: string;
+    pricing_type: BillingPricingType;
+    /** hourly: per hour; fixed: the flat price — in cents of the workspace's currency */
+    rate_cents: number;
+    billable: boolean;
+    color: string | null;
+    archived_at: string | null;
+    /** time was logged with it: it can only be archived, not deleted */
+    used: boolean;
+}
+
+/** An item type usable in the workspace, with its default activity for logging time. */
+export interface BillingActivityItemType {
+    id: number;
+    name: string;
+    color: string | null;
+    /** null = a global type */
+    project: string | null;
+    billing_activity_id: number | null;
+}
