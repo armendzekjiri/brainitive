@@ -584,7 +584,8 @@ export interface MyWorkItem {
     status?: 'todo' | 'done';
     position: number;
     source: { type: 'board' | 'list'; id: number; name: string; slug: string };
-    board?: { id: number; name: string; slug: string };
+    /** done/open column ids: the circle in My Work / My Day completes or reopens the issue */
+    board?: { id: number; name: string; slug: string; done_column_id?: number | null; open_column_id?: number | null };
     task_list?: { id: number; name: string; slug: string };
     column?: { id: number; name: string; is_done_column: boolean };
     item_type?: ItemType | null;
@@ -1155,6 +1156,8 @@ export interface MeetingNotesOptions {
     /** People who can open the project — the only possible assignees. */
     members: { id: number; name: string }[];
     timezone: string;
+    /** Today in the user's time zone: the default meeting date. */
+    today: string;
     source: MeetingNotesSourceInfo | null;
     limits: { max_chars: number; max_proposals: number };
 }

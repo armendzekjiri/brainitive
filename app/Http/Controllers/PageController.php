@@ -6,7 +6,6 @@ use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
-use App\Notifications\MentionNotification;
 use App\Notifications\PageUpdatedNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -617,66 +616,6 @@ class PageController extends Controller
         }
 
         return false;
-    }
-
-    /**
-     * Extract mentions from HTML/JSON content and dispatch notifications.
-     */
-    private function processMentions(?string $content, Page $page, User $actor)
-    {
-        if (empty($content)) {
-            return;
-        }
-
-        \Log::info('Page processMentions starting extraction', ['length' => strlen($content)]);
-
-        // 1. Lexical JSON / escaped format: "userId":123 or \"userId\":123 or "userId\":\"123"
-        preg_match_all('/"userId"(?:\\\\)?"?\s*:\s*(?:\\\\)?"?(\d+)/', $content, $jsonMatches);
-
-        // 2. Regular HTML format: data-mention-user-id="123"
-        preg_match_all('/data-mention-user-id="(\d+)"/', $content, $htmlMatches);
-
-        // 3. Fallback escaped HTML: data-mention-user-id\":\"123\"
-        preg_match_all('/data-mention-user-id(?:\\\\)?"\s*:\s*(?:\\\\)?"?(\d+)/', $content, $escapedMatches);
-
-        $userIds = array_unique(array_merge(
-            $jsonMatches[1] ?? [],
-            $htmlMatches[1] ?? [],
-            $escapedMatches[1] ?? []
-        ));
-
-        \Log::info('Page processMentions extraction results', [
-            'json_count' => count($jsonMatches[1] ?? []),
-            'html_count' => count($htmlMatches[1] ?? []),
-            'escaped_count' => count($escapedMatches[1] ?? []),
-            'final_ids' => $userIds,
-        ]);
-
-        if (empty($userIds)) {
-            return;
-        }
-
-        $workspace = $page->project->workspace;
-        $project = $page->project;
-
-        $pageUrl = route('pages.show', [$workspace->slug, $project->slug, $page->uuid]);
-
-        foreach ($userIds as $userId) {
-            // Don't notify the person who made the mention
-            if ((int) $userId === $actor->id) {
-                continue;
-            }
-
-            $user = User::find($userId);
-            if ($user && $user->hasProjectAccess($project)) {
-                $user->notify(new MentionNotification(
-                    contextType: 'page',
-                    contextTitle: $page->name,
-                    contextUrl: $pageUrl,
-                    actor: $actor
-                ));
-            }
-        }
     }
 
     /**

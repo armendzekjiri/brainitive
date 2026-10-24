@@ -5,7 +5,10 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title inertia>{{ config('app.name', 'Laravel') }}</title>
+        <title inertia>{{ $meta['title'] ?? config('app.name', 'Laravel') }}</title>
+
+        <!-- Link previews: Open Graph + X cards (server-rendered, crawlers don't run JS) -->
+        @include('partials.social-meta')
 
         <!-- PWA: installable on mobile and desktop -->
         <meta name="theme-color" content="#0E83DC">

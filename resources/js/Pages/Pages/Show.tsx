@@ -1484,9 +1484,6 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                                     stickyToolbar={isEditing}
                                     stickyTopOffset={0}
                                     projectId={project.id}
-                                    mentionContextType="page"
-                                    mentionContextTitle={displayName}
-                                    mentionContextUrl={route('pages.show', [workspace.slug, project.slug, page.uuid])}
                                 />
                             )}
 

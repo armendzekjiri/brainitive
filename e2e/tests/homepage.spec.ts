@@ -79,6 +79,27 @@ test.describe('homepage', () => {
         await context.close();
     });
 
+    test('a pasted link gets a rich preview (Open Graph + X card)', async ({ browser }) => {
+        const { context, page } = await guestPage(browser);
+        // crawlers read the raw HTML without running JavaScript
+        const response = await page.request.get('/');
+        expect(response.ok()).toBeTruthy();
+        const html = await response.text();
+        const tag = (attr: 'property' | 'name', key: string) => html.match(new RegExp(`<meta ${attr}="${key}" content="([^"]*)">`))?.[1];
+
+        expect(tag('property', 'og:title')).toContain('Brainitive');
+        expect(tag('property', 'og:description')?.length ?? 0).toBeGreaterThan(60);
+        expect(tag('property', 'og:type')).toBe('website');
+        expect(tag('name', 'twitter:card')).toBe('summary_large_image');
+        const image = tag('property', 'og:image');
+        expect(image).toMatch(/\/images\/og-image\.png\?v=\d+$/);
+
+        const png = await page.request.get(new URL(image!).pathname);
+        expect(png.status()).toBe(200);
+        expect(png.headers()['content-type']).toContain('image/png');
+        await context.close();
+    });
+
     test('fits a 375 px phone in light and dark mode', async ({ browser }) => {
         for (const colorScheme of ['light', 'dark'] as const) {
             const { context, page, errors } = await guestPage(browser, { colorScheme, viewport: { width: 375, height: 812 } });
