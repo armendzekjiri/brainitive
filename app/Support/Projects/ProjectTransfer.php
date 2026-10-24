@@ -82,6 +82,7 @@ class ProjectTransfer
             $project->forceFill([
                 'workspace_id' => $target->id,
                 'slug' => self::freeSlug($project, $target),
+                'client_id' => null, // clients belong to the old workspace (billing, v1.38.0)
             ])->save();
         });
 

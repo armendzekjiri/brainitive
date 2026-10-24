@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Billing\BillingDocumentController;
+use App\Http\Controllers\Billing\ClientController;
+use App\Http\Controllers\Billing\TimeOverviewController;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +31,14 @@ Route::get('billing', function (Workspace $workspace) {
 // ── BRAI-99 Time log: log time, timer, my timesheet (agent: log-time) ─────────────────────────
 
 // ── BRAI-100 Clients + team time overview + Excel export (agent: overview) ─────────────────────
+Route::get('billing/time', [TimeOverviewController::class, 'index'])->name('billing.time.index');
+Route::get('billing/time/export', [TimeOverviewController::class, 'export'])->middleware('throttle:20,1,billing.time.export')->name('billing.time.export');
+Route::get('billing/clients', [ClientController::class, 'index'])->name('billing.clients.index');
+Route::post('billing/clients', [ClientController::class, 'store'])->middleware('throttle:30,1,billing.clients.store')->name('billing.clients.store');
+Route::put('billing/clients/{client}', [ClientController::class, 'update'])->whereNumber('client')->middleware('throttle:60,1,billing.clients.update')->name('billing.clients.update');
+Route::post('billing/clients/{client}/archive', [ClientController::class, 'archive'])->whereNumber('client')->middleware('throttle:60,1,billing.clients.archive')->name('billing.clients.archive');
+Route::post('billing/clients/{client}/restore', [ClientController::class, 'restore'])->whereNumber('client')->middleware('throttle:60,1,billing.clients.restore')->name('billing.clients.restore');
+Route::put('billing/clients/{client}/projects', [ClientController::class, 'syncProjects'])->whereNumber('client')->middleware('throttle:60,1,billing.clients.projects.update')->name('billing.clients.projects.update');
 
 // ── BRAI-101 Billing settings + documents: PDF / Excel / email (agent: documents) ─────────────
 // Defined here so the report pages (agent: reports) can link to them before documents are built.

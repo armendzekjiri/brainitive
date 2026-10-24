@@ -366,7 +366,25 @@ class Item extends Model
      */
     public function logWork(int $minutes, ?string $note = null): void
     {
-        $this->increment('time_spent', $minutes);
+        // Time ledger (v1.38.0): the entry adds the minutes to time_spent (TimeEntry::created).
+        // Minimal bridge from BRAI-100 (no activity, today); BRAI-99 (log-time) owns this method.
+        $user = auth()->user();
+        $projectId = $this->project_id ?? $this->board?->project_id;
+        TimeEntry::create([
+            'workspace_id' => Project::whereKey($projectId)->value('workspace_id'),
+            'project_id' => $projectId,
+            'item_id' => $this->id,
+            'user_id' => $user?->id,
+            'spent_on' => now($user instanceof User ? $user->localTimezone() : null)->toDateString(),
+            'minutes' => $minutes,
+            'note' => $note,
+            'billable' => true,
+            'source' => TimeEntry::SOURCE_MANUAL,
+            'item_key' => $this->key,
+            'item_title' => mb_substr((string) $this->title, 0, 255),
+        ]);
+        $this->time_spent = (int) static::whereKey($this->id)->value('time_spent');
+        $this->syncOriginalAttribute('time_spent');
 
         ActivityLog::log($this, 'work_logged', null, [
             'minutes' => $minutes,
