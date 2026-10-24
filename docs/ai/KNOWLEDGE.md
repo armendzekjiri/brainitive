@@ -549,3 +549,26 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   field by field (title, content / description, status, type, priority, dates) and never
   serializes the model, so new columns can't leak into public pages. Docs share the live
   `content`, never `draft_*`; whiteboards aren't shareable yet (they need the Excalidraw viewer).
+- **Project health (BRAI-64): numbers are evidence, never a score.** There is no computed
+  health status; a person picks On track / At risk / Off track when saving. Missing data is
+  `null` + a reason ("Unknown"), never 0: no boards → every issue metric; open issues but none
+  with a due date → overdue / due soon; no plans → milestones. *Completed* = `completed_at` set
+  **or** in a done column (other modules use only `completed_at`; done-column issues without it
+  count as completed but have no completion date for the period). Due dates are wall-clock days
+  compared with *today in the chosen zone* (due today is not overdue); `completed_at` /
+  `created_at` periods convert the local day bounds to UTC. Blocked = open issue + open blocker
+  via `blocks` / `is_blocked_by` (a pair stored both ways counts once), and the blocker must be
+  in a project the viewer can open. Plan rows with a valid `itemId` *are* the issue and never
+  count twice. Nothing is cached — every number is for the current viewer.
+- **Health reports store ids, not titles.** `metrics.lists` keeps `item:<id>` refs only, and
+  every source is resolved for the reader (`ReportSources::resolve`); deleted, moved or
+  inaccessible sources render as "Unavailable source" without title or link. The claim *text*
+  is what the author reviewed and saved, so it can still mention a title — the AI snapshot only
+  contains this project's issues (blockers elsewhere are anonymous) to keep that small. Save
+  rejects any ref that isn't a live issue / plan of the project or a known metric (422).
+- **The AI health narrative is optional and treats project content as data.** `HealthNarrator`
+  sends the bounded snapshot inside `<project_data>` with a system prompt that forbids following
+  instructions in it, asks for JSON claims, and drops claims whose source ids aren't in the
+  snapshot. Without AI settings the page still works (`aiConfigured` false, narrative 422
+  `ai_unavailable`); e2e has no provider, so only that state is tested there — PHPUnit fakes
+  the provider with `Http::fake`.

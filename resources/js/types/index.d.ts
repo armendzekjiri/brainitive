@@ -994,3 +994,102 @@ export interface ContentReferenceList {
 export interface ContentReferenceCandidate extends ContentReferenceSummary {
     linked: boolean;
 }
+
+/** Project health (BRAI-64): metric keys (`metric:<key>` in sources). */
+export type HealthMetricKey =
+    | 'open' | 'completed' | 'completed_in_period' | 'created_in_period' | 'overdue' | 'due_soon'
+    | 'no_due_date' | 'unassigned' | 'blocked' | 'milestones_upcoming' | 'milestones_missed'
+    | 'plan_rows_open' | 'plan_rows_late';
+
+/** An issue in a health list (live, for the viewer). */
+export interface HealthItemRef {
+    /** `item:<id>` */
+    ref: string;
+    id: number;
+    key: string;
+    title: string;
+    due_date: string | null;
+    assignee: string | null;
+    url: string;
+    /** Blockers only: the blocker lives in another project */
+    external?: boolean;
+}
+
+export interface HealthMilestone {
+    /** `plan:<id>` */
+    ref: string;
+    plan_id: number;
+    plan: string;
+    bar: string;
+    name: string;
+    date: string;
+    state: 'upcoming' | 'missed';
+    item_ref: string | null;
+    url: string;
+}
+
+/** HealthMetrics::compute() — `null` values are Unknown (reason in `unknown`). */
+export interface ProjectHealthData {
+    as_of: string;
+    timezone: string;
+    today: string;
+    period: { from: string; to: string };
+    values: Record<HealthMetricKey, number | null>;
+    unknown: Partial<Record<HealthMetricKey, string>>;
+    lists: {
+        overdue: HealthItemRef[];
+        due_soon: HealthItemRef[];
+        unassigned: HealthItemRef[];
+        completed: HealthItemRef[];
+        blocked: { item: HealthItemRef; blockers: HealthItemRef[] }[];
+        milestones: HealthMilestone[];
+    };
+}
+
+export type HealthStatus = 'on_track' | 'at_risk' | 'off_track';
+
+export type HealthSection = 'progress' | 'risks' | 'next_steps';
+
+export interface HealthClaim {
+    text: string;
+    /** `item:<id>`, `plan:<id>`, `metric:<key>` */
+    sources: string[];
+}
+
+/** A source ref resolved for the reader; unavailable ones carry no title or link. */
+export interface HealthSource {
+    ref: string;
+    available: boolean;
+    type: 'item' | 'plan' | 'metric';
+    label: string;
+    url: string | null;
+}
+
+export interface HealthReportSummary {
+    id: number;
+    status: HealthStatus;
+    summary: string | null;
+    author: string | null;
+    as_of: string | null;
+    created_at: string | null;
+    ai_assisted: boolean;
+}
+
+/** ReportSources::present() */
+export interface HealthReportDetail extends HealthReportSummary {
+    sections: Record<HealthSection, HealthClaim[]>;
+    values: Partial<Record<HealthMetricKey, number | null>>;
+    unknown: Partial<Record<HealthMetricKey, string>>;
+    lists: {
+        overdue?: string[];
+        due_soon?: string[];
+        unassigned?: string[];
+        completed?: string[];
+        blocked?: { item: string; blockers: string[] }[];
+        milestones?: { plan: string; date: string; state: 'upcoming' | 'missed' }[];
+    };
+    sources: Record<string, HealthSource>;
+    period: { from: string | null; to: string | null };
+    timezone: string;
+    can_delete: boolean;
+}

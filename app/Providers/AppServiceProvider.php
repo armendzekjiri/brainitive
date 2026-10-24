@@ -11,6 +11,7 @@ use App\Models\Item;
 use App\Models\LeadForm;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\ProjectHealthReport;
 use App\Models\ProjectTemplate;
 use App\Models\Release;
 use App\Models\SnippetCollection;
@@ -24,6 +25,7 @@ use App\Policies\CapturePolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\LeadFormPolicy;
 use App\Policies\PagePolicy;
+use App\Policies\ProjectHealthReportPolicy;
 use App\Policies\ProjectPolicy;
 use App\Policies\ProjectTemplatePolicy;
 use App\Policies\ReleasePolicy;
@@ -115,6 +117,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(ProjectTemplate::class, ProjectTemplatePolicy::class);
         Gate::policy(LeadForm::class, LeadFormPolicy::class);
         Gate::policy(Capture::class, CapturePolicy::class);
+        Gate::policy(ProjectHealthReport::class, ProjectHealthReportPolicy::class);
 
         // Resolve page from project's allPages() so child pages (e.g. documents inside folders) are found
         // Explicit binders run BEFORE implicit binding, so {workspace} / {project} are still raw

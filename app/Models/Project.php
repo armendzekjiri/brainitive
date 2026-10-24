@@ -335,4 +335,10 @@ class Project extends Model
     {
         return $this->hasMany(Release::class);
     }
+
+    /** Saved status updates (BRAI-64). */
+    public function healthReports(): HasMany
+    {
+        return $this->hasMany(ProjectHealthReport::class);
+    }
 }

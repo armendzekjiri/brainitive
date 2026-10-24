@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Project health report (BRAI-64)](./feat-project-health.md) | done |
 | [Quick capture: private inbox + convert to content (BRAI-70)](./feat-quick-capture.md) | done |
 | [Linked content and backlinks (BRAI-71)](./feat-backlinks.md) | done |
 | [Helpdesk templates (BRAI-92)](./feat-helpdesk-templates.md) | done |
