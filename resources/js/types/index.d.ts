@@ -594,7 +594,70 @@ export interface ActiveTimer {
     started_at: string;
     elapsed_seconds: number;
     elapsed_minutes: number;
-    item: { id: number; key: string; title: string; url: string | null } | null;
+    /** `workspace` = slug, for the activity picker of the stop dialog (v1.38.0). */
+    item: { id: number; key: string; title: string; workspace?: string; url: string | null } | null;
+}
+
+// ── Time log & My timesheet (v1.38.0, BRAI-99) — member-facing: never a rate or amount ─────────
+
+/** A billing activity as everyone who logs time sees it (`timesheet.activities`). */
+export interface TimeLogActivity {
+    id: number;
+    name: string;
+    color: string | null;
+    pricing_type: 'hourly' | 'fixed';
+    pricing_label: string;
+    billable: boolean;
+    /** Only on timesheet entries: the activity was archived after it was used. */
+    archived?: boolean;
+}
+
+export interface TimeLogActivityOptions {
+    activities: TimeLogActivity[];
+    /** The workspace has activities: logging needs one. */
+    required: boolean;
+    /** Ticket type default, then the user's last-used activity. */
+    default_activity_id: number | null;
+}
+
+export interface TimesheetEntry {
+    id: number;
+    spent_on: string;
+    minutes: number;
+    note: string | null;
+    billable: boolean;
+    source: 'manual' | 'timer' | 'legacy';
+    /** On a finalized billing report: can't change. */
+    locked: boolean;
+    project: { id: number; name: string; key: string } | null;
+    /** Live key / title while the issue exists, the snapshot after; url null when it can't be opened. */
+    item: { id: number | null; key: string | null; title: string | null; url: string | null } | null;
+    activity: TimeLogActivity | null;
+}
+
+/** A project you can log time on (timesheet). */
+export interface TimesheetProject {
+    id: number;
+    name: string;
+    key: string;
+    slug: string;
+}
+
+/** An issue in the timesheet's issue picker (`timesheet.items`). */
+export interface TimesheetIssueOption {
+    id: number;
+    key: string | null;
+    title: string | null;
+}
+
+export interface TimesheetWeek {
+    start: string;
+    end: string;
+    previous: string;
+    next: string;
+    current: string;
+    number: number;
+    today: string;
 }
 
 /** Today's hand-picked plan on My Work (BRAI-74). `keys` = "board:12" / "list:5". */
