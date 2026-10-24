@@ -233,6 +233,12 @@ class InsightsTest extends TestCase
         // nonsense falls back to the default
         $props = $this->tab('overview', ['period' => 'custom', 'from' => '2026-02-31', 'to' => 'x'])['_props'];
         $this->assertSame(InsightsFilters::DEFAULT_PERIOD, $props['filters']['period']);
+        // years Postgres can't store after the shift to UTC fall back too (no 500)
+        foreach ([['0000-01-01', '0000-01-31'], ['9999-12-01', '9999-12-31']] as [$from, $to]) {
+            $props = $this->tab('overview', ['period' => 'custom', 'from' => $from, 'to' => $to])['_props'];
+            $this->assertSame(InsightsFilters::DEFAULT_PERIOD, $props['filters']['period']);
+        }
+        $this->actingAs($this->admin)->get(route('insights.export', [$this->workspace->slug, 'overview', 'period' => 'custom', 'from' => '0000-01-01', 'to' => '0000-01-02']))->assertOk();
     }
 
     public function test_ranges_follow_the_viewers_time_zone(): void

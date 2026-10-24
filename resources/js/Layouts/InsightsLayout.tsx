@@ -53,7 +53,15 @@ export default function InsightsLayout({ tab, props, description, showRange = tr
             delete clean.from;
             delete clean.to;
         }
-        router.get(route(`insights.${tab}`, workspace.slug), clean, { preserveScroll: true, preserveState: true });
+        router.get(route(`insights.${tab}`, workspace.slug), clean, {
+            preserveScroll: true,
+            preserveState: true,
+            // the server orders and clamps a custom range (≤ 366 days): show what it applied
+            onSuccess: (page) => {
+                const applied = (page.props as unknown as Shared).filters;
+                setRange({ from: applied.from, to: applied.to });
+            },
+        });
     };
 
     const pickPeriod = (period: InsightsPeriod) => {
@@ -141,6 +149,7 @@ export default function InsightsLayout({ tab, props, description, showRange = tr
                                 <Input type="date" aria-label="To" value={range.to} min={range.from} onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))} className="h-9 w-40" required />
                             </label>
                             <Button type="submit" size="sm" variant="secondary" className="h-9">Apply</Button>
+                            <span className="pb-2 text-xs text-muted-foreground">up to 366 days</span>
                         </form>
                     )}
                     <div className="space-y-1.5">

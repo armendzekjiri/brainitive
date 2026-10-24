@@ -158,6 +158,7 @@ class InsightsFilters
             return null;
         }
 
-        return $date && $date->format('Y-m-d') === $value ? $date : null;
+        // years Postgres can't hold once shifted to UTC fall back to the default period
+        return $date && $date->format('Y-m-d') === $value && $date->year >= 1970 && $date->year <= 9998 ? $date : null;
     }
 }

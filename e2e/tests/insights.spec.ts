@@ -25,19 +25,21 @@ test.describe('admin insights', () => {
 
         // one project: its one issue (created today, open) and 1.5 h
         await pickProject(page, project.name);
-        await expect(page.getByTestId('kpi-created')).toContainText('1');
-        await expect(page.getByTestId('kpi-completed')).toContainText('0');
-        await expect(page.getByTestId('kpi-completion-rate')).toContainText('0%');
-        await expect(page.getByTestId('kpi-hours')).toContainText('1.5 h');
-        await expect(page.getByRole('img', { name: 'Issues created and completed per week' })).toBeVisible();
-        await expect(page.getByRole('table', { name: 'Open and overdue by project' }).getByRole('row', { name: new RegExp(project.name) })).toContainText('1');
+        await expect(page.getByTestId('kpi-created-value')).toHaveText('1');
+        await expect(page.getByTestId('kpi-completed-value')).toHaveText('0');
+        await expect(page.getByTestId('kpi-completion-rate-value')).toHaveText('0%');
+        await expect(page.getByTestId('kpi-hours-value')).toHaveText('1.5 h');
+        await expect(page.getByRole('group', { name: 'Issues created and completed per week' })).toBeVisible();
+        const openRow = page.getByRole('table', { name: 'Open and overdue by project' }).getByRole('row', { name: new RegExp(project.name) });
+        await expect(openRow.getByRole('cell').nth(2)).toHaveText('1'); // open
+        await expect(openRow.getByRole('cell').nth(3)).toHaveText('0'); // overdue
 
         // another period keeps the project
         await page.getByRole('button', { name: 'Last 90 days' }).click();
         await expect(page.getByRole('button', { name: 'Last 90 days' })).toHaveAttribute('aria-pressed', 'true');
         await expect(page).toHaveURL(/period=last_90/);
         await expect(page).toHaveURL(/project=\d+/);
-        await expect(page.getByTestId('kpi-created')).toContainText('1');
+        await expect(page.getByTestId('kpi-created-value')).toHaveText('1');
 
         // a custom range that ends before today has nothing of this project
         await page.getByRole('button', { name: 'Custom' }).click();
@@ -45,8 +47,8 @@ test.describe('admin insights', () => {
         await page.getByRole('textbox', { name: 'To', exact: true }).fill('2024-01-31');
         await page.getByRole('button', { name: 'Apply' }).click();
         await expect(page).toHaveURL(/from=2024-01-01/);
-        await expect(page.getByTestId('kpi-created')).toContainText('0');
-        await expect(page.getByTestId('kpi-hours')).toContainText('0 h');
+        await expect(page.getByTestId('kpi-created-value')).toHaveText('0');
+        await expect(page.getByTestId('kpi-hours-value')).toHaveText('0 h');
         await page.getByRole('button', { name: 'This month' }).click();
         await expect(page).not.toHaveURL(/from=/);
 
@@ -63,7 +65,7 @@ test.describe('admin insights', () => {
         await expect(row).toContainText('1.5 h');
 
         await openTab(page, 'Helpdesk & leads', 'helpdesk');
-        await expect(page.getByTestId('kpi-tickets-created')).toContainText('0');
+        await expect(page.getByTestId('kpi-tickets-created-value')).toHaveText('0');
         await expect(page.getByRole('region', { name: 'Lead funnel' })).toBeVisible();
 
         await openTab(page, 'Usage', 'usage');

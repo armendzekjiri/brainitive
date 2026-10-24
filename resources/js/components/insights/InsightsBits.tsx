@@ -32,7 +32,7 @@ export function StatTile({ label, value, hint, testId }: { label: string; value:
     return (
         <div className="rounded-xl border bg-card px-4 py-3 text-card-foreground shadow-sm" data-testid={testId}>
             <div className="text-xs font-medium text-muted-foreground">{label}</div>
-            <div className="mt-1 text-2xl font-semibold tabular-nums">{value}</div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums" data-testid={testId ? `${testId}-value` : undefined}>{value}</div>
             {hint && <div className="mt-0.5 text-xs text-muted-foreground">{hint}</div>}
         </div>
     );
@@ -132,7 +132,7 @@ export function WeeklyChart({ weeks }: { weeks: { week: string; created: number;
     const [hover, setHover] = useState<number | null>(null);
     useEffect(() => {
         if (!ref.current) return;
-        const observer = new ResizeObserver(([entry]) => setWidth(Math.max(280, entry.contentRect.width)));
+        const observer = new ResizeObserver(([entry]) => setWidth(Math.max(160, entry.contentRect.width)));
         observer.observe(ref.current);
         return () => observer.disconnect();
     }, []);
@@ -144,12 +144,13 @@ export function WeeklyChart({ weeks }: { weeks: { week: string; created: number;
     const y = (v: number) => MARGIN.top + innerH - (v / yMax) * innerH;
     const base = MARGIN.top + innerH;
     const band = innerW / Math.max(1, weeks.length);
-    const barW = Math.max(2, Math.min(18, (band - 8) / 2));
+    const gap = band < 12 ? 0.5 : 2;
+    const barW = Math.max(0.5, Math.min(18, (band - gap - (band < 12 ? 1 : 8)) / 2));
     const labelEvery = Math.ceil(weeks.length / Math.max(1, Math.floor(innerW / 56)));
 
     return (
-        <div ref={ref} className="viz-root relative">
-            <svg width={width} height={HEIGHT} role="img" aria-label="Issues created and completed per week">
+        <div ref={ref} className="viz-root relative overflow-hidden">
+            <svg width={width} height={HEIGHT} role="group" aria-label="Issues created and completed per week">
                 {ticks.map((t) => (
                     <g key={t}>
                         <line x1={MARGIN.left} x2={width - MARGIN.right} y1={y(t)} y2={y(t)} stroke="var(--viz-grid)" strokeWidth={1} />
@@ -157,15 +158,25 @@ export function WeeklyChart({ weeks }: { weeks: { week: string; created: number;
                     </g>
                 ))}
                 {weeks.map((w, i) => {
-                    const left = MARGIN.left + band * i + (band - (barW * 2 + 2)) / 2;
+                    const left = MARGIN.left + band * i + (band - (barW * 2 + gap)) / 2;
                     return (
                         <g key={w.week} opacity={hover !== null && hover !== i ? 0.55 : 1}>
                             <path d={column(left, y(w.created), barW, base)} fill="var(--viz-reference)" />
-                            <path d={column(left + barW + 2, y(w.completed), barW, base)} fill="var(--viz-series-1)" />
+                            <path d={column(left + barW + gap, y(w.completed), barW, base)} fill="var(--viz-series-1)" />
                             {i % labelEvery === 0 && (
                                 <text x={MARGIN.left + band * i + band / 2} y={HEIGHT - 8} textAnchor="middle" className="fill-muted-foreground text-[11px]">{weekLabel(w.week)}</text>
                             )}
-                            <rect x={MARGIN.left + band * i} y={MARGIN.top} width={band} height={innerH} fill="transparent" onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)} />
+                            {/* hit target: the whole week band; hover, tap (pins) or keyboard focus shows the numbers */}
+                            <rect
+                                x={MARGIN.left + band * i} y={MARGIN.top} width={band} height={innerH} fill="transparent"
+                                tabIndex={0} aria-label={`Week of ${weekLabel(w.week)}: ${w.created} created, ${w.completed} completed`}
+                                className="outline-none focus-visible:stroke-[var(--viz-series-1)]"
+                                onPointerEnter={(e) => e.pointerType === 'mouse' && setHover(i)}
+                                onPointerLeave={(e) => e.pointerType === 'mouse' && setHover(null)}
+                                onClick={() => setHover((h) => (h === i ? null : i))}
+                                onFocus={() => setHover(i)}
+                                onBlur={() => setHover(null)}
+                            />
                         </g>
                     );
                 })}
