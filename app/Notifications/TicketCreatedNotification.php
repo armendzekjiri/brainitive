@@ -5,6 +5,7 @@ namespace App\Notifications;
 use App\Models\Ticket;
 use App\Models\TicketContact;
 use App\Models\User;
+use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -12,7 +13,7 @@ use Illuminate\Notifications\Notification;
 
 class TicketCreatedNotification extends Notification
 {
-    use Queueable, SendsWebPush;
+    use Queueable, RespectsPreferences, SendsWebPush;
 
     public function __construct(
         public readonly Ticket $ticket,
@@ -24,12 +25,8 @@ class TicketCreatedNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        // For contacts, send email only; for users, send database + email + push
-        if ($notifiable instanceof TicketContact) {
-            return ['mail'];
-        }
-
-        return $this->withWebPush($notifiable, ['database', 'mail']);
+        // contacts: mail only (RespectsPreferences); users: their helpdesk preferences
+        return $this->channelsFor($notifiable, 'ticket_created');
     }
 
     public function toWebPush(object $notifiable, $notification)

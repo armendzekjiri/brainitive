@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Security;
 
-use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Middleware\GuardOAuthFlows;
 use App\Models\Helpdesk;
@@ -187,14 +186,6 @@ class AuthOAuthHardeningTest extends TestCase
     }
 
     // ── batch 2 review follow-ups ───────────────────────────────────────────────
-
-    public function test_mention_paths_reject_control_characters_and_double_slashes(): void
-    {
-        foreach (["/\t/evil.com", "/\n/evil.com", "/\r/evil.com", '/ /evil.com', url('//evil.com/x'), 'https://'.parse_url(config('app.url'), PHP_URL_HOST).'//evil.com/x'] as $url) {
-            $this->assertNull(NotificationController::appPath($url), json_encode($url));
-        }
-        $this->assertSame('/workspaces/a?b=1', NotificationController::appPath('/workspaces/a?b=1'));
-    }
 
     public function test_ticket_watchers_follow_the_same_rules_as_board_watchers(): void
     {

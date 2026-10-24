@@ -131,8 +131,8 @@ test.describe('collaboration', () => {
 
         // Max opens the bell; the entry is unread and has its "Mark as read" button
         await memberPage.goto(urls.home);
-        await memberPage.getByRole('button', { name: 'Notifications' }).click();
-        const entry = memberPage.getByText(`assigned you to ${key}`).locator('xpath=ancestor::div[contains(@class,"group")][1]');
+        await memberPage.getByRole('button', { name: /^Notifications/ }).click();
+        const entry = memberPage.getByRole('dialog', { name: 'Notifications' }).getByRole('listitem').filter({ hasText: `assigned you to ${key}` });
         await expect(entry).toBeVisible();
         const read = memberPage.waitForResponse((r) => r.request().method() !== 'GET' && /\/notifications\//.test(r.url()));
         await entry.getByRole('button', { name: 'Mark as read' }).click();

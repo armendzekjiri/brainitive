@@ -1577,6 +1577,96 @@ export interface TimeOverviewOptions {
     activities: { id: number; name: string; pricing_type: 'hourly' | 'fixed'; archived: boolean }[];
 }
 
+// ── Notifications inbox (BRAI-102) ────────────────────────────────────────────
+
+/** Catalog categories (app/Notifications/NotificationCatalog::CATEGORIES). */
+export type NotificationCategoryKey =
+    | 'mentions'
+    | 'assignments'
+    | 'comments'
+    | 'status'
+    | 'reminders'
+    | 'pages'
+    | 'sprints'
+    | 'helpdesk'
+    | 'leads'
+    | 'workspace';
+
+export type NotificationFilter = 'all' | 'unread' | 'mentions' | 'assigned';
+
+/**
+ * A notification's stored payload. New types follow the contract keys (type, title, body, url,
+ * actor_name, actor_avatar, project_name, subject_key); older types keep their own keys.
+ */
+export interface NotificationData {
+    type?: string;
+    // payload contract (v1.39.0)
+    title?: string;
+    body?: string | null;
+    url?: string;
+    actor_name?: string | null;
+    actor_avatar?: string | null;
+    project_name?: string | null;
+    subject_key?: string | null;
+    // legacy keys
+    item_key?: string;
+    item_title?: string;
+    item_url?: string;
+    old_column?: string;
+    new_column?: string;
+    when_label?: string;
+    due_today?: number;
+    overdue?: number;
+    titles?: string[];
+    context_type?: string;
+    context_title?: string;
+    context_url?: string;
+    page_name?: string;
+    page_url?: string;
+    ticket_key?: string;
+    ticket_subject?: string;
+    ticket_url?: string;
+    reply_preview?: string;
+    contact_name?: string;
+    contact_email?: string;
+    form_name?: string;
+    lead_number?: number;
+    lead_name?: string;
+    lead_url?: string;
+    [key: string]: unknown;
+}
+
+export interface AppNotification {
+    id: string;
+    type: string | null;
+    /** From the catalog; null for a type the catalog doesn't know. */
+    category: NotificationCategoryKey | null;
+    data: NotificationData;
+    read_at: string | null;
+    archived_at: string | null;
+    created_at: string;
+}
+
+export interface NotificationFeed {
+    data: AppNotification[];
+    next_cursor: string | null;
+    unread_count: number;
+}
+
+export interface NotificationChannels {
+    in_app: boolean;
+    push: boolean;
+    email: boolean;
+}
+
+/** One row of Profile → Notifications (NotificationCatalog::forUser). */
+export interface NotificationCategoryPreference {
+    key: NotificationCategoryKey;
+    label: string;
+    description: string;
+    channels: NotificationChannels;
+}
+
 /** Outgoing webhook of a workspace (v1.39.0, BRAI-104). The secret is never part of it. */
 export interface WorkspaceWebhook {
     id: number;

@@ -263,8 +263,9 @@ Policies give workspace *editors* edit rights only in projects they can open
 (`hasProjectAccess`) — workspace *admins* everywhere. A workspace editor outside a project must
 not create items, tasks, plans, releases or tickets there (CLI and extension included).
 User ids from requests (assignees, watchers) use `App\Rules\ProjectMember`, never just
-`exists:users,id` (that lets anyone look up any account). Notification links are app paths only
-(`NotificationController::appPath`, `safeAppHref` in `NotificationMessage.tsx`, `public/sw.js`).
+`exists:users,id` (that lets anyone look up any account). Notification links are built server-side with `route()` and
+the UI opens app paths only (`safeAppHref` in `NotificationMessage.tsx`, `public/sw.js`); the
+old client-called `notify-mention` endpoint is gone (mentions are sent when content is saved).
 `Workspace::$hidden = ['settings']` (AI endpoint + encrypted key) — read AI config server-side.
 
 ### Uploads keep only allowlisted extensions
@@ -562,10 +563,27 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
     `UniqueConstraintViolationException` and querying on.
   - **Sequences don't restart between tests** (rollback keeps them), so never hard-code ids
     like `=== 4`. Keep the created model's id.
-- **Notification payloads are rendered in one place.** `components/NotificationMessage.tsx`
-  maps every `data.type` to a sentence. The bell and the page used to fall back to
-  "{actor} moved {item_key}", so ticket notifications (`ticket_*`, with no `item_*` keys)
-  showed as "moved". Add a case for each new type.
+- **Notification payloads are rendered in one place.** `describeNotification()` in
+  `components/NotificationMessage.tsx` turns a payload into a row. The bell and the page used to fall
+  back to "{actor} moved {item_key}", so ticket notifications (`ticket_*`, with no `item_*` keys)
+  showed as "moved". Since BRAI-102, unknown types render from the payload contract keys (`title`,
+  `body`, `url`, `actor_*`, `project_name`, `subject_key`): give new types those keys instead of a
+  frontend case. Old rows keep their old keys forever (they are only pruned after 180 days).
+- **Notifications inbox invariants (BRAI-102).** An archived notification is always read (archive
+  sets `read_at`; "mark unread" clears `archived_at` too), so the shared `unreadNotificationsCount`
+  and `unreadNotifications()` never need an `archived_at` filter. Filtering by category reads
+  `data->type` from the `text` column (`data::jsonb ->> 'type'` on Postgres, `json_extract` on
+  SQLite — `NotificationController::whereDataType`). `NotificationCatalog::category()` throws on
+  unknown types; listing code uses `TYPES[$type] ?? null` instead. Only the bell owns the tab-title
+  badge (`useUnreadCount({ manageTitle: true })`): two owners rewrite each other's title forever
+  through the MutationObserver and crash the tab.
+- **Tailwind only scans `.tsx` files** (`tailwind.config.js` content). Class names that live in a
+  `.ts` file (a style map, a constants file) are never generated — that's why
+  `components/notifications/categories.tsx` is a `.tsx`.
+- **New files under `resources/js/components/` on macOS:** git's index has both `Components/` (old
+  Breeze files) and `components/`. A plain `git add` may record a new file under `Components/`,
+  which breaks the `@/components` import on Linux (CI). Add with
+  `git -c core.ignorecase=false add resources/js/components/...` and check `git ls-files`.
 - **Notification coverage (BRAI-103, v1.39.0): who is told, and never twice.**
   - **Assignments fire from the observers, nowhere else.** `ItemObserver::created/updated` (on an
     `assigned_to` change) → `Support\Notifications\Assignments::item()` sends `ItemAssignedNotification`;
@@ -579,8 +597,8 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   - **Mentions are diffed.** `ItemMentions::notify($html, $item, $actor, $previousHtml)` only tells
     people new compared with the previous description (re-saving re-notified everyone before).
     Page mentions are sent **on save** by `Page::saveDraft()` → `PageMentions` (diff of the content
-    before the save), no longer at insert time from the editor (`MentionsPlugin` doesn't POST
-    `notify-mention` any more; that endpoint is unused).
+    before the save), no longer at insert time from the editor (the old `notify-mention` endpoint
+    was removed in BRAI-102).
   - **Comments:** `ItemComments::add()` → `ItemCommentNotifications`: watchers + assignee + reporter,
     minus the author, minus everyone @mentioned in that comment (they get the mention instead).
   - **Due dates:** `app:send-item-reminders` sends `item_due` "due tomorrow" from 08:00 the day before

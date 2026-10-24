@@ -5,13 +5,15 @@ namespace App\Notifications;
 use App\Models\BoardColumn;
 use App\Models\Item;
 use App\Models\User;
+use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class ItemStatusChangedNotification extends Notification
 {
-    use Queueable, SendsWebPush;
+    use Queueable, RespectsPreferences, SendsWebPush;
 
     public function __construct(
         public readonly Item $item,
@@ -25,7 +27,7 @@ class ItemStatusChangedNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        return $this->withWebPush($notifiable, ['database']);
+        return $this->channelsFor($notifiable, 'item_status_changed');
     }
 
     public function toWebPush(object $notifiable, $notification)
@@ -72,5 +74,14 @@ class ItemStatusChangedNotification extends Notification
             'actor_name' => $this->actor->name,
             'actor_avatar' => $this->actor->avatar_display,
         ];
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        return (new MailMessage)
+            ->subject("{$this->item->key} moved to {$this->newColumn->name}")
+            ->line("{$this->actor->name} moved {$this->item->key} from {$this->oldColumn->name} to {$this->newColumn->name}.")
+            ->line(NewLeadNotification::plain((string) $this->item->title))
+            ->action('Open issue', $this->toDatabase($notifiable)['item_url']);
     }
 }

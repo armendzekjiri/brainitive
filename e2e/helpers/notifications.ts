@@ -1,4 +1,5 @@
-import { expect, type Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
+import { expect, urls } from '../fixtures';
 
 /**
  * Helpers for the notification coverage journeys (BRAI-103). New notification types share one
@@ -37,4 +38,51 @@ export async function expectNotification(page: Page, match: (n: NotificationPayl
         }, { message: `notification: ${description}`, timeout: 30_000 })
         .toBe(true);
     return found!;
+}
+
+// ── Inbox UI (BRAI-102) ─────────────────────────────────────────────────────────
+
+/** The signed-in user's id, from the Inertia props of the current page. */
+export async function currentUserId(page: Page): Promise<number> {
+    if (!page.url().startsWith('http')) await page.goto(urls.home);
+    return page.locator('#app').evaluate((el) => JSON.parse((el as HTMLElement).dataset.page ?? '{}').props.auth.user.id as number);
+}
+
+/**
+ * Setup shortcut: `from` creates an issue titled `title` on the seeded board whose description
+ * @mentions the user `toId` (the same endpoint the create dialog posts to). The recipient gets
+ * "<from> mentioned you in WEB-n - <title>", linking to the issue.
+ */
+export async function mention(from: Page, toId: number, title: string): Promise<void> {
+    await from.goto(urls.board());
+    const props = await from.locator('#app').evaluate((el) => JSON.parse((el as HTMLElement).dataset.page ?? '{}').props);
+    const columnId = props.board.columns[0].id as number;
+    const xsrf = (await from.context().cookies()).find((c) => c.name === 'XSRF-TOKEN')?.value ?? '';
+    const response = await from.request.post(`${urls.board()}/items`, {
+        headers: { 'X-XSRF-TOKEN': decodeURIComponent(xsrf), Accept: 'text/html' },
+        data: { title, column_id: columnId, description: `<p>Please look <span data-mention-user-id="${toId}">@someone</span></p>` },
+        maxRedirects: 0,
+    });
+    expect(response.status(), `create issue with a mention: ${response.status()}`).toBeLessThan(400);
+}
+
+/** Open the bell; returns the panel. */
+export async function openBell(page: Page): Promise<Locator> {
+    await page.getByRole('button', { name: /^Notifications/ }).click();
+    const panel = page.getByRole('dialog', { name: 'Notifications' });
+    await expect(panel).toBeVisible();
+    return panel;
+}
+
+/** One notification row (list item) that contains `text`. */
+export function notificationRow(scope: Page | Locator, text: string | RegExp): Locator {
+    return scope.getByRole('listitem').filter({ hasText: text });
+}
+
+/** Click a row action (they show on hover / focus) and wait for the request it sends. */
+export async function rowAction(page: Page, row: Locator, label: 'Mark as read' | 'Mark as unread' | 'Archive' | 'Unarchive'): Promise<void> {
+    const sent = page.waitForResponse((r) => r.request().method() === 'POST' && /\/api\/notifications\//.test(r.url()));
+    await row.hover();
+    await row.getByRole('button', { name: label, exact: true }).click();
+    expect((await sent).status()).toBeLessThan(400);
 }

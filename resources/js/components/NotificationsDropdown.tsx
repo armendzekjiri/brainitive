@@ -1,233 +1,174 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { usePage, Link } from '@inertiajs/react';
-import axios from 'axios';
-import { Bell, CheckCheck, X, BellOff } from 'lucide-react';
+import { NotificationList } from '@/components/notifications/NotificationList';
+import { NotificationRow } from '@/components/notifications/NotificationRow';
+import { emptyStateFor, FILTER_TABS } from '@/components/notifications/filters';
+import { useNotificationFeed, useUnreadCount, type NotificationAction } from '@/components/notifications/useNotifications';
 import { Button } from '@/components/ui/button';
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from '@/components/ui/popover';
-import { NotificationAvatar, type NotificationData, notificationDetail, NotificationMessage } from '@/components/NotificationMessage';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { PageProps } from '@/types';
+import type { AppNotification, NotificationFilter } from '@/types';
+import { Link } from '@inertiajs/react';
+import { ArrowRight, Bell, CheckCheck, Settings } from 'lucide-react';
+import { useCallback, useState, type ReactNode } from 'react';
+import { toast } from 'sonner';
 
-
-interface Notification {
-    id: string;
-    type: string;
-    data: NotificationData;
-    read_at: string | null;
-    created_at: string;
-}
-
-function timeAgo(dateStr: string): string {
-    const date = new Date(dateStr);
-    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-    if (seconds < 60) return 'just now';
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
-}
-
+/**
+ * The bell (BRAI-102): a ~420px popover on desktop, a full-screen sheet on phones. Tabs filter on
+ * the server (All · Unread · Mentions · Assigned); rows open in this tab and are marked read.
+ */
 export function NotificationsDropdown() {
-    const { unreadNotificationsCount: initialCount = 0 } = usePage<PageProps>().props;
-
+    const { count } = useUnreadCount({ manageTitle: true });
     const [open, setOpen] = useState(false);
-    const [unreadCount, setUnreadCount] = useState(initialCount);
-    const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [loading, setLoading] = useState(false);
+    const isMobile = useIsMobile();
+    const close = useCallback(() => setOpen(false), []);
 
-    // Poll unread count every 30 seconds
-    useEffect(() => {
-        const poll = async () => {
-            try {
-                const res = await axios.get<{ count: number }>('/api/notifications/unread-count');
-                setUnreadCount(res.data.count);
-            } catch {
-                // silently ignore
-            }
-        };
+    const trigger = (
+        <Button
+            variant="ghost"
+            size="icon"
+            className="relative size-8 text-muted-foreground hover:text-foreground"
+            aria-label={count > 0 ? `Notifications (${count} unread)` : 'Notifications'}
+        >
+            <Bell className="size-4" />
+            {count > 0 && (
+                <span
+                    aria-hidden
+                    className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white ring-2 ring-background"
+                >
+                    {count > 99 ? '99+' : count}
+                </span>
+            )}
+        </Button>
+    );
 
-        const interval = setInterval(poll, 30_000);
-        return () => clearInterval(interval);
-    }, []);
-
-    // Fetch notifications when dropdown opens
-    const fetchNotifications = useCallback(async () => {
-        setLoading(true);
-        try {
-            const res = await axios.get<{ data: Notification[] }>('/api/notifications');
-            setNotifications(res.data.data);
-        } catch {
-            //
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        if (open) {
-            fetchNotifications();
-        }
-    }, [open, fetchNotifications]);
-
-    const markRead = async (id: string) => {
-        try {
-            await axios.post(`/api/notifications/${id}/read`);
-            setNotifications(prev =>
-                prev.map(n => n.id === id ? { ...n, read_at: new Date().toISOString() } : n)
-            );
-            setUnreadCount(prev => Math.max(0, prev - 1));
-        } catch {
-            //
-        }
-    };
-
-    const markAllRead = async () => {
-        try {
-            await axios.post('/api/notifications/read-all');
-            setNotifications(prev => prev.map(n => ({ ...n, read_at: n.read_at ?? new Date().toISOString() })));
-            setUnreadCount(0);
-        } catch {
-            //
-        }
-    };
+    if (isMobile) {
+        return (
+            <Sheet open={open} onOpenChange={setOpen}>
+                <SheetTrigger asChild>{trigger}</SheetTrigger>
+                <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-full" aria-describedby={undefined} onOpenAutoFocus={focusActiveTab}>
+                    {open && (
+                        <NotificationPanel
+                            unreadCount={count}
+                            onClose={close}
+                            title={<SheetTitle className="text-base font-semibold">Notifications</SheetTitle>}
+                            className="pr-12"
+                        />
+                    )}
+                </SheetContent>
+            </Sheet>
+        );
+    }
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="relative size-8 text-muted-foreground hover:text-foreground"
-                    aria-label="Notifications"
-                >
-                    <Bell className="size-4" />
-                    {unreadCount > 0 && (
-                        <span className="absolute -top-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white leading-none">
-                            {unreadCount > 9 ? '9+' : unreadCount}
-                        </span>
-                    )}
-                </Button>
-            </PopoverTrigger>
-
+            <PopoverTrigger asChild>{trigger}</PopoverTrigger>
             <PopoverContent
                 align="end"
                 sideOffset={8}
-                className="w-[380px] p-0 shadow-xl"
+                aria-labelledby="notifications-panel-title"
+                onOpenAutoFocus={focusActiveTab}
+                className="flex max-h-[min(640px,calc(100vh-5rem))] w-[420px] max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-0 shadow-xl"
             >
-                {/* Header */}
-                <div className="flex items-center justify-between border-b px-4 py-3">
-                    <div className="flex items-center gap-2">
-                        <Bell className="size-4 text-muted-foreground" />
-                        <span className="font-semibold text-sm">Notifications</span>
-                        {unreadCount > 0 && (
-                            <span className="rounded-full bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 leading-none">
-                                {unreadCount}
-                            </span>
-                        )}
-                    </div>
-                    {unreadCount > 0 && (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-muted-foreground gap-1.5"
-                            onClick={markAllRead}
-                        >
-                            <CheckCheck className="size-3.5" />
-                            Mark all read
-                        </Button>
-                    )}
-                </div>
-
-                {/* Notification list */}
-                <ScrollArea className="max-h-[420px]">
-                    {loading ? (
-                        <div className="flex flex-col gap-3 p-4">
-                            {[1, 2, 3].map(i => (
-                                <div key={i} className="flex gap-3 animate-pulse">
-                                    <div className="size-8 rounded-full bg-muted shrink-0" />
-                                    <div className="flex-1 space-y-1.5">
-                                        <div className="h-3 bg-muted rounded w-3/4" />
-                                        <div className="h-2.5 bg-muted rounded w-1/2" />
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : notifications.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
-                            <BellOff className="size-8 opacity-40" />
-                            <p className="text-sm">No notifications yet</p>
-                        </div>
-                    ) : (
-                        <div className="divide-y">
-                            {notifications.map(n => {
-                                const isUnread = !n.read_at;
-                                const d = n.data;
-
-                                return (
-                                    <div
-                                        key={n.id}
-                                        className={cn(
-                                            'flex items-start gap-3 px-4 py-3 transition-colors group',
-                                            isUnread
-                                                ? 'bg-primary/5 hover:bg-primary/10'
-                                                : 'hover:bg-muted/50'
-                                        )}
-                                    >
-                                        {/* Avatar / Icon */}
-                                        <div className="size-8 rounded-full bg-muted flex items-center justify-center shrink-0 text-xs font-medium uppercase overflow-hidden border">
-                                            <NotificationAvatar data={d} />
-                                        </div>
-
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm leading-snug">
-                                                <NotificationMessage data={d} newTab onOpen={() => { if (isUnread) markRead(n.id); }} />
-                                            </p>
-                                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{notificationDetail(d)}</p>
-                                            <p className="text-[11px] text-muted-foreground/70 mt-1">{timeAgo(n.created_at)}</p>
-                                        </div>
-
-                                        {/* Mark read button: always visible on touch screens; on desktop on hover or keyboard focus */}
-                                        {isUnread && (
-                                            <button
-                                                type="button"
-                                                onClick={() => markRead(n.id)}
-                                                className="shrink-0 mt-0.5 p-1 rounded hover:bg-muted text-muted-foreground transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 focus-visible:opacity-100"
-                                                title="Mark as read"
-                                                aria-label="Mark as read"
-                                            >
-                                                <X className="size-3" />
-                                            </button>
-                                        )}
-
-                                        {/* Unread dot */}
-                                        {isUnread && (
-                                            <div className="size-2 rounded-full bg-primary mt-1.5 shrink-0" />
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </ScrollArea>
-
-                {/* Footer - link to full page */}
-                <div className="border-t px-4 py-2.5">
-                    <Link
-                        href="/notifications"
-                        className="block text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
-                        onClick={() => setOpen(false)}
-                    >
-                        View all notifications
-                    </Link>
-                </div>
+                <NotificationPanel
+                    unreadCount={count}
+                    onClose={close}
+                    title={
+                        <h2 id="notifications-panel-title" className="text-base font-semibold">
+                            Notifications
+                        </h2>
+                    }
+                />
             </PopoverContent>
         </Popover>
+    );
+}
+
+/** Opening the panel puts focus on the active tab (arrow keys switch tabs, Tab reaches the rows). */
+function focusActiveTab(e: Event) {
+    const panel = e.currentTarget as HTMLElement | null;
+    const tab = panel?.querySelector<HTMLElement>('[role="tab"][data-state="active"]');
+    if (!tab) return;
+    e.preventDefault();
+    tab.focus({ preventScroll: true });
+}
+
+function NotificationPanel({ unreadCount, onClose, title, className }: { unreadCount: number; onClose: () => void; title: ReactNode; className?: string }) {
+    const [filter, setFilter] = useState<NotificationFilter>('all');
+    const feed = useNotificationFeed({ filter, archived: false });
+
+    const act = useCallback(
+        (n: AppNotification, action: NotificationAction) => {
+            feed.act([n.id], action).catch(() => toast.error('Could not update the notification.'));
+        },
+        [feed],
+    );
+
+    const openRow = useCallback(
+        (n: AppNotification) => {
+            if (!n.read_at) feed.act([n.id], 'read').catch(() => {});
+            onClose();
+        },
+        [feed, onClose],
+    );
+
+    const markAllRead = () => feed.markAllRead().catch(() => toast.error('Could not mark everything as read.'));
+
+    return (
+        <Tabs value={filter} onValueChange={(v) => setFilter(v as NotificationFilter)} className="flex min-h-0 flex-1 flex-col">
+            <div className={cn('flex items-center justify-between gap-2 px-4 pb-1 pt-3', className)}>
+                {title}
+                <div className="flex items-center gap-0.5">
+                    <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-xs text-muted-foreground" onClick={markAllRead} disabled={unreadCount === 0}>
+                        <CheckCheck className="size-3.5" />
+                        Mark all read
+                    </Button>
+                    <Button asChild variant="ghost" size="icon" className="size-8 text-muted-foreground">
+                        <Link href={`${route('profile.edit')}#notifications`} onClick={onClose} aria-label="Notification settings" title="Notification settings">
+                            <Settings className="size-4" />
+                        </Link>
+                    </Button>
+                </div>
+            </div>
+
+            <TabsList className="h-auto w-full justify-start gap-4 rounded-none border-b bg-transparent px-4 py-0">
+                {FILTER_TABS.map((tab) => (
+                    <TabsTrigger
+                        key={tab.value}
+                        value={tab.value}
+                        className="-mb-px gap-1.5 rounded-none border-b-2 border-transparent px-0 pb-2 pt-1.5 text-[13px] data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                    >
+                        {tab.label}
+                        {tab.value === 'unread' && unreadCount > 0 && (
+                            <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-semibold leading-4 text-primary">{unreadCount > 99 ? '99+' : unreadCount}</span>
+                        )}
+                    </TabsTrigger>
+                ))}
+            </TabsList>
+
+            <TabsContent value={filter} className="mt-0 min-h-0 flex-1 overflow-y-auto overscroll-contain focus-visible:ring-0 focus-visible:ring-offset-0">
+                <NotificationList
+                    items={feed.items}
+                    loading={feed.loading}
+                    error={feed.error}
+                    hasMore={feed.hasMore}
+                    loadingMore={feed.loadingMore}
+                    onLoadMore={feed.loadMore}
+                    onRetry={() => feed.reload()}
+                    empty={emptyStateFor(filter)}
+                    renderRow={(n) => <NotificationRow key={n.id} notification={n} onOpen={openRow} onAction={act} />}
+                />
+            </TabsContent>
+
+            <div className="border-t p-1.5">
+                <Button asChild variant="ghost" size="sm" className="w-full justify-center gap-1.5 text-xs text-muted-foreground">
+                    <Link href={route('notifications.page')} onClick={onClose}>
+                        Open inbox
+                        <ArrowRight className="size-3.5" />
+                    </Link>
+                </Button>
+            </div>
+        </Tabs>
     );
 }
