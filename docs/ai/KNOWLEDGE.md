@@ -630,6 +630,36 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
     allows up to one day ahead for zone slack.
   - E2E: `E2eSeeder` gives `e2e-workspace` two activities, so any e2e that logs work there must
     send `activity_id` (`e2e/helpers/workload.ts` `newIssue` fetches the default).
+- **Billing reports (v1.38.0, BRAI-101): a draft is computed live, a final report is frozen.**
+  - A draft's snapshot comes from `ReportBuilder` on every view; only finalize stores `snapshot` and
+    the totals columns. Draft totals columns are a cache for the list, refreshed on view / update.
+    Pages and documents show a final report's stored `snapshot` — never recompute it (rates change).
+  - **Finalize locks what the admin reviewed, nothing else.** The page sends `entry_ids` (the
+    preview's entries). `ReportFinalizer` locks the report row, the settings row and the candidate
+    entries `FOR UPDATE` in id order (unbilled ones in scope **plus** the reviewed ids, whatever
+    their state), then refuses with 422 and changes nothing when a reviewed entry was billed by
+    another report meanwhile, or the set differs (time logged / edited / removed since the
+    preview). A parallel finalize waits on the row locks and then sees the other report's id —
+    a plain `whereNull('billing_report_id') FOR UPDATE` would silently drop those rows instead.
+    The claim itself is `update … whereNull('billing_report_id')` with a count check.
+  - A second finalize of a final report returns it unchanged (double click: one number).
+  - **Fixed prices bill once per ticket through `billing_fixed_charges`** (unique item + activity).
+    Concurrent finalizes charging the same ticket → unique violation → 422 "try again"; the retry
+    sees the charge and bills 0 (`fixed_already_billed`). No ticket = once per report and project
+    (NULL item ids never collide). Void deletes the report's charges, so a later report bills them.
+  - **Invoice numbers** = `InvoiceNumber::format(prefix, next_number)` → "2026-014", taken under the
+    settings row lock, unique per workspace, never reused (void keeps the number). A next number
+    that is already used is a 422, not a silent skip. Plain time reports have `number = null`.
+  - **Lines:** non-billable entries are only in `entries` (billed 0), never in lines / totals.
+    Entries without an activity (also `legacy` ones) are "No activity", rate 0, and warned about;
+    finalizing them locks them at 0 €, so the page offers "Leave them out". Left-out entries stay
+    unbilled. Fixed-price entries stay one line per ticket in every grouping. `show_people` /
+    `show_notes` off also hide names / notes in `entries` (the Excel detail sheet), not only lines.
+  - Status: draft → finalized → sent (documents) → paid; void from finalized / sent / paid (paid
+    needs `confirm`). Void keeps the snapshot for the record and unlocks the entries.
+  - E2E: only `billing-reports.spec.ts` bills Muster GmbH's seeded entries; it starts by voiding /
+    deleting leftovers of an earlier attempt (CI retries) and voids its report at the end. Don't
+    log time on `website` last month in other specs, or its totals change.
 - **Share links expose only a whitelist.** `ShareLinkController::show` builds the payload
   field by field (title, content / description, status, type, priority, dates) and never
   serializes the model, so new columns can't leak into public pages. Docs share the live

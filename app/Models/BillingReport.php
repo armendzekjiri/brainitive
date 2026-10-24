@@ -16,6 +16,11 @@ class BillingReport extends Model
 {
     public const STATUSES = ['draft', 'finalized', 'sent', 'paid', 'void'];
 
+    /** Statuses whose entries are locked to the report (finalized and later, until voided). */
+    public const LOCKING_STATUSES = ['finalized', 'sent', 'paid'];
+
+    public const GROUP_BY = ['ticket', 'activity', 'person'];
+
     protected $fillable = [
         'workspace_id', 'client_id', 'kind', 'number', 'title', 'period_from', 'period_to', 'status', 'currency',
         'tax_rate_bp', 'prices_include_tax', 'total_minutes', 'subtotal_cents', 'tax_cents', 'total_cents',
@@ -47,6 +52,12 @@ class BillingReport extends Model
         return $this->status === 'draft';
     }
 
+    /** Finalized, sent or paid: the snapshot is frozen and the entries are locked. */
+    public function isFinal(): bool
+    {
+        return in_array($this->status, self::LOCKING_STATUSES, true);
+    }
+
     public function workspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class);
@@ -65,5 +76,11 @@ class BillingReport extends Model
     public function timeEntries(): HasMany
     {
         return $this->hasMany(TimeEntry::class);
+    }
+
+    /** Fixed prices this report charged (BRAI-101); deleted when it is voided. */
+    public function fixedCharges(): HasMany
+    {
+        return $this->hasMany(BillingFixedCharge::class);
     }
 }

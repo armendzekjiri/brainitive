@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Billing\BillingActivityController;
 use App\Http\Controllers\Billing\BillingDocumentController;
+use App\Http\Controllers\Billing\BillingReportController;
 use App\Http\Controllers\Billing\BillingSettingsController;
 use App\Http\Controllers\Billing\TimesheetController;
 use App\Http\Middleware\ReadOnlySession;
@@ -64,3 +65,13 @@ Route::get('billing/reports/{billingReport}/xlsx', [BillingDocumentController::c
 Route::post('billing/reports/{billingReport}/send', [BillingDocumentController::class, 'send'])->whereNumber('billingReport')->middleware('throttle:billing-send')->name('billing.reports.send'); // 10/min per admin + daily cap per workspace (BillingServiceProvider)
 
 // ── BRAI-101 Billing reports: builder, finalize, status (agent: reports) ───────────────────────
+Route::controller(BillingReportController::class)->group(function () {
+    Route::get('billing/reports', 'index')->name('billing.reports.index');
+    Route::post('billing/reports', 'store')->middleware('throttle:30,1,billing.reports.store')->name('billing.reports.store');
+    Route::get('billing/reports/{billingReport}', 'show')->whereNumber('billingReport')->name('billing.reports.show');
+    Route::patch('billing/reports/{billingReport}', 'update')->whereNumber('billingReport')->middleware('throttle:120,1,billing.reports.update')->name('billing.reports.update');
+    Route::delete('billing/reports/{billingReport}', 'destroy')->whereNumber('billingReport')->middleware('throttle:30,1,billing.reports.destroy')->name('billing.reports.destroy');
+    Route::post('billing/reports/{billingReport}/finalize', 'finalize')->whereNumber('billingReport')->middleware('throttle:20,1,billing.reports.finalize')->name('billing.reports.finalize');
+    Route::post('billing/reports/{billingReport}/paid', 'markPaid')->whereNumber('billingReport')->middleware('throttle:30,1,billing.reports.paid')->name('billing.reports.paid');
+    Route::post('billing/reports/{billingReport}/void', 'void')->whereNumber('billingReport')->middleware('throttle:20,1,billing.reports.void')->name('billing.reports.void');
+});
