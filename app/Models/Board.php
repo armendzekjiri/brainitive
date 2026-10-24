@@ -107,6 +107,12 @@ class Board extends Model
         return $this->hasMany(Item::class);
     }
 
+    /** Recurring issue templates on this board (BRAI-123). */
+    public function recurringIssues(): HasMany
+    {
+        return $this->hasMany(RecurringIssue::class);
+    }
+
     /**
      * Get items grouped by column.
      */
