@@ -1241,3 +1241,31 @@ export interface HealthReportDetail extends HealthReportSummary {
     timezone: string;
     can_delete: boolean;
 }
+
+// ── Client billing (v1.38.0): settings + documents (BRAI-101) ───────────────────────────────
+
+/** billing_reports.status: draft → finalized → sent → paid; void unlocks the entries. */
+export type BillingReportStatus = 'draft' | 'finalized' | 'sent' | 'paid' | 'void';
+
+/** One workspace's billing settings as the settings page edits them (Billing\BillingSettingsController). */
+export interface BillingSettings {
+    currency: string;
+    /** Percent with up to two decimals ("19.00"); stored as basis points. */
+    default_tax_rate: string;
+    prices_include_tax: boolean;
+    /** 0 = exact; 5 | 15 | 30 minutes per entry, reports only. */
+    rounding_minutes: number;
+    invoice_mode: boolean;
+    number_prefix: string;
+    next_number: number | string;
+    payment_terms_days: number | string | null;
+    company_name: string;
+    company_address: string;
+    company_vat_id: string;
+    company_email: string;
+    company_phone: string;
+    bank_name: string;
+    iban: string;
+    bic: string;
+    footer: string;
+}

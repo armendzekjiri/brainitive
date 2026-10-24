@@ -633,3 +633,33 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   snapshot. Without AI settings the page still works (`aiConfigured` false, narrative 422
   `ai_unavailable`); e2e has no provider, so only that state is tested there — PHPUnit fakes
   the provider with `Http::fake`.
+- **Billing documents (v1.38.0, BRAI-101) render the snapshot, they never compute.** `BillingDocument`
+  only formats cents / minutes / basis points from the snapshot v1 array (contract in
+  `tasks/release-v1.38.0-billing.md`); fix a wrong amount in the report builder, never in the PDF /
+  Excel code. Traps worth knowing:
+  - **openspout turns any string starting with `=` into a formula** (`Cell::fromValue()` /
+    `Row::fromValues()`). Ticket titles and notes are user text, so every text cell is an explicit
+    `StringCell` (`BillingDocument::text()`). Any other xlsx export must do the same.
+  - **dompdf runs locked down:** remote, PHP and JS off, only `data://` allowed, chroot to
+    `resources/views/billing`. The logo goes in as a data URI read server-side, only for a path
+    `BillingLogo::owns()` (the workspace's own `billing-logos/<id>/<uuid>.png`) — a snapshot is data,
+    not a path to trust. DejaVu Sans (ships with dompdf) prints € and accents; its metrics cache is
+    `storage/framework/cache/dompdf`. Page numbers are drawn on the canvas after `render()`.
+  - **Billing logos are private.** `local` disk, re-encoded to PNG with GD (drops metadata and
+    anything appended; max 2500 px per side before decoding, scaled into 1200 × 600). The settings
+    page shows it through the admin-only `billing.settings.logo` route. A replaced logo is deleted
+    unless a non-draft report's snapshot still prints it.
+  - **Drafts need the reports ticket's builder.** `BuildsReportData` is bound (`BillingServiceProvider`)
+    only when `App\Support\Billing\ReportBuilder` exists; until then a draft's PDF / Excel is 409.
+    Sending is for finalized / sent / paid only and moves finalized → sent; the PDF is rendered in
+    the queue worker from the frozen snapshot (a report voided while the mail waits in the queue
+    still goes out, stamped VOID — accepted race).
+  - **Sending is abuse-capped.** Anyone can register and own a workspace, so `billing.reports.send`
+    uses the named limiter `throttle:billing-send` (`BillingServiceProvider`): 10 a minute per admin
+    plus 50 a day per workspace. The mail comes from the app's address but is named
+    "<admin> via Brainitive", with reply-to the admin; addresses are `email:rfc,strict`.
+  - **Hidden names / notes stay hidden in Excel too.** `show_people` / `show_notes` drop the Person
+    and Note columns of the "Entries" sheet, not just the PDF lines — the client receives the file.
+    Draft / void documents carry a stamp (PDF heading, Excel "Status" row) and no payment request.
+  - **Testing PDFs:** `BillingDocumentTest::pdfText()` inflates the content streams and decodes the
+    UTF-16BE strings, so assertions can look for the printed text (dompdf compresses everything).
