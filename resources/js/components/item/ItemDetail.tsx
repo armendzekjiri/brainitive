@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { router, Link } from '@inertiajs/react';
 import CompleteSubtasksDialog from '@/components/item/CompleteSubtasksDialog';
 import DuplicateItemDialog from '@/components/item/DuplicateItemDialog';
+import LogWorkPopover from '@/components/item/LogWorkPopover';
 import ShareButton from '@/components/share/ShareButton';
 import { itemTree, MAX_ITEM_DEPTH } from '@/lib/itemTree';
 import { cn } from '@/lib/utils';
@@ -409,31 +410,6 @@ export function useItemDetail(args: UseItemDetailArgs) {
         refreshDetails();
     }, [detailsKey]);
 
-    // ── Time tracking ─────────────────────────────────────────────────────
-    const [logWorkOpen, setLogWorkOpen] = useState(false);
-    const [logWorkTime, setLogWorkTime] = useState('');
-    const [logWorkNote, setLogWorkNote] = useState('');
-    const [logWorkError, setLogWorkError] = useState<string | null>(null);
-    const [isLoggingWork, setIsLoggingWork] = useState(false);
-
-    const handleLogWork = () => {
-        if (!item || !logWorkTime.trim()) return;
-        setIsLoggingWork(true);
-        setLogWorkError(null);
-        router.post(route('boards.items.work-logs.store', [workspace.slug, project.slug, board.slug, item.id]), {
-            time: logWorkTime.trim(),
-            note: logWorkNote.trim() || null,
-        }, {
-            preserveScroll: true,
-            onSuccess: () => {
-                setLogWorkOpen(false);
-                setLogWorkTime('');
-                setLogWorkNote('');
-            },
-            onError: (errors) => setLogWorkError(errors.time ?? 'Could not log work.'),
-            onFinish: () => setIsLoggingWork(false),
-        });
-    };
     const subtaskTypeId = itemTypes.find((t) => t.slug === 'subtask')?.id;
 
     // ── Linked issues ──────────────────────────────────────────────────────
@@ -710,8 +686,6 @@ export function useItemDetail(args: UseItemDetailArgs) {
         history, detailsLoading, timeSpent, development, releaseOptions, releaseId, setReleaseId,
         // custom fields
         customFields, canEditItems,
-        logWorkOpen, setLogWorkOpen, logWorkTime, setLogWorkTime, logWorkNote, setLogWorkNote,
-        logWorkError, isLoggingWork, handleLogWork,
     };
 }
 
@@ -779,7 +753,22 @@ function HistoryEntryBody({ entry }: { entry: ItemHistoryEntry }) {
             return (
                 <span>
                     logged <HistoryValue value={formatDuration(Number(meta.minutes))} />
+                    {meta.activity ? <> · {String(meta.activity)}</> : null}
                     {meta.note ? <> — <span className="text-foreground/80">{String(meta.note)}</span></> : null}
+                </span>
+            );
+        case 'work_log_updated':
+            return (
+                <span>
+                    changed logged time: <HistoryValue value={formatDuration(Number(meta.from_minutes))} /> <span className="text-muted-foreground">→</span>{' '}
+                    <HistoryValue value={formatDuration(Number(meta.minutes))} />
+                </span>
+            );
+        case 'work_log_removed':
+            return (
+                <span>
+                    removed <HistoryValue value={formatDuration(Number(meta.minutes))} /> of logged time
+                    {meta.moved_to ? <> (moved to <HistoryValue value={meta.moved_to} />)</> : null}
                 </span>
             );
         case 'field_changed': {
@@ -1273,7 +1262,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
 
                 {activityTab === 'history' || activityTab === 'worklog' ? (
                     <ItemHistoryList
-                        history={activityTab === 'worklog' ? history.filter((entry) => entry.action === 'work_logged') : history}
+                        history={activityTab === 'worklog' ? history.filter((entry) => entry.action.startsWith('work_log')) : history}
                         loading={detailsLoading}
                         emptyText={activityTab === 'worklog' ? 'No work logged yet.' : undefined}
                     />
@@ -1351,8 +1340,6 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
         itemTypeId, setItemTypeId, parentId, setParentId, priorityId, setPriorityId,
         storyPoints, setStoryPoints, startDate, setStartDate, startTime, setStartTime, dueDate, setDueDate, dueTime, setDueTime,
         originalEstimate, setOriginalEstimate, timeSpent,
-        logWorkOpen, setLogWorkOpen, logWorkTime, setLogWorkTime, logWorkNote, setLogWorkNote,
-        logWorkError, isLoggingWork, handleLogWork,
         rootItemsForParent, watcherIds, toggleWatcher,
         selectedLabels, labelSearch, setLabelSearch, labelPopoverOpen, setLabelPopoverOpen,
         newLabelName, setNewLabelName, filteredLabels, toggleLabel, handleCreateLabel,
@@ -1587,34 +1574,7 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                             </>
                         );
                     })()}
-                    <Popover open={logWorkOpen} onOpenChange={setLogWorkOpen}>
-                        <PopoverTrigger asChild>
-                            <button type="button" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-                                <Clock className="size-3.5" /> Log work
-                            </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-72 p-3" align="start">
-                            <form className="space-y-2.5" onSubmit={(e) => { e.preventDefault(); handleLogWork(); }}>
-                                <div className="space-y-1">
-                                    <Label htmlFor="log-work-time" className="text-xs">Time spent</Label>
-                                    <Input id="log-work-time" value={logWorkTime} onChange={(e) => setLogWorkTime(e.target.value)} placeholder="e.g. 45m, 1h 30m, 1d" autoFocus />
-                                    <p className="text-[11px] text-muted-foreground">1d = 8h · 1w = 5d</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <Label htmlFor="log-work-note" className="text-xs">What did you work on? (optional)</Label>
-                                    <Input id="log-work-note" value={logWorkNote} onChange={(e) => setLogWorkNote(e.target.value)} maxLength={255} />
-                                </div>
-                                {logWorkError && <p className="text-xs text-destructive">{logWorkError}</p>}
-                                <div className="flex justify-end gap-2">
-                                    <Button type="button" size="sm" variant="outline" onClick={() => setLogWorkOpen(false)}>Cancel</Button>
-                                    <Button type="submit" size="sm" disabled={isLoggingWork || !logWorkTime.trim()}>
-                                        {isLoggingWork && <Loader2 className="size-3.5 mr-1.5 animate-spin" />}
-                                        Log
-                                    </Button>
-                                </div>
-                            </form>
-                        </PopoverContent>
-                    </Popover>
+                    <LogWorkPopover key={item.id} workspaceSlug={workspace.slug} projectSlug={project.slug} boardSlug={board.slug} itemId={item.id} />
                 </div>
             </div>
 

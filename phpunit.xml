@@ -18,6 +18,8 @@
         </include>
     </source>
     <php>
+        <!-- ~600 tests (PDF/xlsx rendering since v1.38.0) peak above PHP's default 128M -->
+        <ini name="memory_limit" value="512M"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>

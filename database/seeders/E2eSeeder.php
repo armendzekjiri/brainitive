@@ -2,7 +2,11 @@
 
 namespace Database\Seeders;
 
+use App\Models\BillingActivity;
+use App\Models\Client;
+use App\Models\Item;
 use App\Models\Project;
+use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Database\Seeder;
@@ -51,9 +55,58 @@ class E2eSeeder extends Seeder
         $board = $project->boards()->create(['name' => 'Main Board', 'slug' => 'main-board', 'type' => 'kanban', 'created_by' => $owner->id]);
         $columns = $board->columns()->orderBy('position')->pluck('id');
 
-        $this->issue($project, $board->id, $columns[0], 'Homepage hero', $owner);
-        $this->issue($project, $board->id, $columns[0], 'Pricing page copy', $owner, $member);
-        $this->issue($project, $board->id, $columns[1], 'Checkout bug', $owner, $owner);
+        $hero = $this->issue($project, $board->id, $columns[0], 'Homepage hero', $owner);
+        $pricing = $this->issue($project, $board->id, $columns[0], 'Pricing page copy', $owner, $member);
+        $checkout = $this->issue($project, $board->id, $columns[1], 'Checkout bug', $owner, $owner);
+
+        $this->billingFixtures($workspace, $project, $owner, $member, $hero, $pricing, $checkout);
+    }
+
+    /**
+     * ── v1.38.0 billing fixtures ────────────────────────────────────────────────────────────────
+     * - Two hourly activities, Programming 120 €/h and Testing 45 €/h, so logging time in e2e-workspace
+     *   has one to pick (time-log journeys). Idempotent (firstOrCreate by name).
+     * - Client "Muster GmbH" on `website` and time logged last month, billed only by the reports
+     *   journey (e2e/tests/billing-reports.spec.ts), which voids its report again at the end:
+     *   WEB-3 Programming 200 min (Erin) + 60 min (Max) = 520.00 €, WEB-1 Programming 45 min (Erin)
+     *   = 90.00 €, WEB-2 Testing 90 min (Max) = 67.50 € → 677.50 € (no VAT, no rounding by default).
+     *   Plain TimeEntry rows, so items.time_spent follows through the model events.
+     */
+    private function billingFixtures(Workspace $workspace, Project $project, User $owner, User $member, Item $hero, Item $pricing, Item $checkout): void
+    {
+        $activities = [];
+        foreach ([['Programming', 12000, '#0E83DC', 1], ['Testing', 4500, '#69A748', 2]] as [$name, $rate, $color, $position]) {
+            $activities[$name] = BillingActivity::firstOrCreate(
+                ['workspace_id' => $workspace->id, 'name' => $name],
+                ['pricing_type' => BillingActivity::HOURLY, 'rate_cents' => $rate, 'billable' => true, 'color' => $color, 'position' => $position],
+            );
+        }
+
+        $client = Client::firstOrCreate(['workspace_id' => $workspace->id, 'name' => 'Muster GmbH'], ['email' => 'buchhaltung@muster.example']);
+        $project->update(['client_id' => $client->id]);
+
+        $lastMonth = now()->startOfMonth()->subMonthNoOverflow();
+        foreach ([
+            [$owner, $checkout, 'Programming', 200, 3, 'Fixed rounding in cart'],
+            [$member, $checkout, 'Programming', 60, 4, 'Code review'],
+            [$owner, $hero, 'Programming', 45, 10, 'Hero layout'],
+            [$member, $pricing, 'Testing', 90, 17, 'Tested pricing copy'],
+        ] as [$user, $item, $activity, $minutes, $day, $note]) {
+            TimeEntry::create([
+                'workspace_id' => $workspace->id,
+                'project_id' => $project->id,
+                'item_id' => $item->id,
+                'user_id' => $user->id,
+                'billing_activity_id' => $activities[$activity]->id,
+                'spent_on' => $lastMonth->copy()->day($day)->format('Y-m-d'),
+                'minutes' => $minutes,
+                'note' => $note,
+                'billable' => true,
+                'source' => TimeEntry::SOURCE_MANUAL,
+                'item_key' => $item->key,
+                'item_title' => $item->title,
+            ]);
+        }
     }
 
     private function user(string $name, string $email): User
@@ -68,9 +121,9 @@ class E2eSeeder extends Seeder
         ]);
     }
 
-    private function issue(Project $project, int $boardId, int $columnId, string $title, User $reporter, ?User $assignee = null): void
+    private function issue(Project $project, int $boardId, int $columnId, string $title, User $reporter, ?User $assignee = null): Item
     {
-        $project->items()->create([
+        return $project->items()->create([
             'board_id' => $boardId,
             'column_id' => $columnId,
             'key' => $project->getNextItemKey(),

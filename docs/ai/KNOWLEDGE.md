@@ -606,6 +606,60 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
     `minutes`, not a silent overwrite. `createOrFirst` keeps parallel inserts to one row.
   - The page is labelled "This project only": capacity is declared per project, so it is *not* a
     person's company-wide availability. Don't sum it across projects without a new design.
+- **Time ledger (v1.38.0, BRAI-99): every piece of logged work is a `TimeEntry`, written only
+  through `Item::logWork()` (issues) or `TimesheetController` (project time without an issue).**
+  Rules worth knowing:
+  - Never touch `items.time_spent` directly any more: the entry's model events add / move / take
+    off the minutes. Saving with the query builder skips them (only the legacy backfill does that,
+    on purpose). Totals from before the ledger stay, so `time_spent` ≥ Σ non-legacy entries.
+  - `legacy` entries (backfilled from old `work_logged` logs) never change `time_spent`: their
+    minutes and issue are read-only and they can't be deleted (mark them not billable instead);
+    date, activity and note can change. The backfill is idempotent through `legacy_log_id` (unique)
+    and skips logs that carry `metadata.time_entry_id` (written with a ledger entry) — so new logs
+    are never backfilled twice.
+  - The activity is **required once the workspace has an active activity** and optional before,
+    so workspaces that don't bill aren't blocked. Archived activities can't be picked, but an
+    entry keeps the one it has. `billable` follows the activity unless the form sends it.
+  - **Members never get a rate:** activity options for log forms come from `timesheet.activities`
+    (`TimeLogActivities::option()`: name, colour, pricing type label, billable) — never a shared
+    Inertia prop, never `rate_cents`. Tests assert it on the JSON and the page.
+  - Locked entries (`billing_report_id`) answer 422 on `entry` for update / delete, also for admins.
+  - The timer's stop validates the activity inside its transaction: a bad activity rolls back,
+    so the timer keeps running and the user fixes the form.
+  - `spent_on` is a calendar day in the user's zone; forms send the browser's date, the server
+    allows up to one day ahead for zone slack.
+  - E2E: `E2eSeeder` gives `e2e-workspace` two activities, so any e2e that logs work there must
+    send `activity_id` (`e2e/helpers/workload.ts` `newIssue` fetches the default).
+- **Billing reports (v1.38.0, BRAI-101): a draft is computed live, a final report is frozen.**
+  - A draft's snapshot comes from `ReportBuilder` on every view; only finalize stores `snapshot` and
+    the totals columns. Draft totals columns are a cache for the list, refreshed on view / update.
+    Pages and documents show a final report's stored `snapshot` — never recompute it (rates change).
+  - **Finalize locks what the admin reviewed, nothing else.** The page sends `entry_ids` (the
+    preview's entries). `ReportFinalizer` locks the report row, the settings row and the candidate
+    entries `FOR UPDATE` in id order (unbilled ones in scope **plus** the reviewed ids, whatever
+    their state), then refuses with 422 and changes nothing when a reviewed entry was billed by
+    another report meanwhile, or the set differs (time logged / edited / removed since the
+    preview). A parallel finalize waits on the row locks and then sees the other report's id —
+    a plain `whereNull('billing_report_id') FOR UPDATE` would silently drop those rows instead.
+    The claim itself is `update … whereNull('billing_report_id')` with a count check.
+  - A second finalize of a final report returns it unchanged (double click: one number).
+  - **Fixed prices bill once per ticket through `billing_fixed_charges`** (unique item + activity).
+    Concurrent finalizes charging the same ticket → unique violation → 422 "try again"; the retry
+    sees the charge and bills 0 (`fixed_already_billed`). No ticket = once per report and project
+    (NULL item ids never collide). Void deletes the report's charges, so a later report bills them.
+  - **Invoice numbers** = `InvoiceNumber::format(prefix, next_number)` → "2026-014", taken under the
+    settings row lock, unique per workspace, never reused (void keeps the number). A next number
+    that is already used is a 422, not a silent skip. Plain time reports have `number = null`.
+  - **Lines:** non-billable entries are only in `entries` (billed 0), never in lines / totals.
+    Entries without an activity (also `legacy` ones) are "No activity", rate 0, and warned about;
+    finalizing them locks them at 0 €, so the page offers "Leave them out". Left-out entries stay
+    unbilled. Fixed-price entries stay one line per ticket in every grouping. `show_people` /
+    `show_notes` off also hide names / notes in `entries` (the Excel detail sheet), not only lines.
+  - Status: draft → finalized → sent (documents) → paid; void from finalized / sent / paid (paid
+    needs `confirm`). Void keeps the snapshot for the record and unlocks the entries.
+  - E2E: only `billing-reports.spec.ts` bills Muster GmbH's seeded entries; it starts by voiding /
+    deleting leftovers of an earlier attempt (CI retries) and voids its report at the end. Don't
+    log time on `website` last month in other specs, or its totals change.
 - **Share links expose only a whitelist.** `ShareLinkController::show` builds the payload
   field by field (title, content / description, status, type, priority, dates) and never
   serializes the model, so new columns can't leak into public pages. Docs share the live
@@ -633,3 +687,62 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   snapshot. Without AI settings the page still works (`aiConfigured` false, narrative 422
   `ai_unavailable`); e2e has no provider, so only that state is tested there — PHPUnit fakes
   the provider with `Http::fake`.
+- **Billing documents (v1.38.0, BRAI-101) render the snapshot, they never compute.** `BillingDocument`
+  only formats cents / minutes / basis points from the snapshot v1 array (contract in
+  `tasks/release-v1.38.0-billing.md`); fix a wrong amount in the report builder, never in the PDF /
+  Excel code. Traps worth knowing:
+  - **openspout turns any string starting with `=` into a formula** (`Cell::fromValue()` /
+    `Row::fromValues()`). Ticket titles and notes are user text, so every text cell is an explicit
+    `StringCell` (`BillingDocument::text()`). Any other xlsx export must do the same.
+  - **dompdf runs locked down:** remote, PHP and JS off, only `data://` allowed, chroot to
+    `resources/views/billing`. The logo goes in as a data URI read server-side, only for a path
+    `BillingLogo::owns()` (the workspace's own `billing-logos/<id>/<uuid>.png`) — a snapshot is data,
+    not a path to trust. DejaVu Sans (ships with dompdf) prints € and accents; its metrics cache is
+    `storage/framework/cache/dompdf`. Page numbers are drawn on the canvas after `render()`.
+  - **Billing logos are private.** `local` disk, re-encoded to PNG with GD (drops metadata and
+    anything appended; max 2500 px per side before decoding, scaled into 1200 × 600). The settings
+    page shows it through the admin-only `billing.settings.logo` route. A replaced logo is deleted
+    unless a non-draft report's snapshot still prints it.
+  - **Drafts need the reports ticket's builder.** `BuildsReportData` is bound (`BillingServiceProvider`)
+    only when `App\Support\Billing\ReportBuilder` exists; until then a draft's PDF / Excel is 409.
+    Sending is for finalized / sent / paid only and moves finalized → sent; the PDF is rendered in
+    the queue worker from the frozen snapshot (a report voided while the mail waits in the queue
+    still goes out, stamped VOID — accepted race).
+  - **Sending is abuse-capped.** Anyone can register and own a workspace, so `billing.reports.send`
+    uses the named limiter `throttle:billing-send` (`BillingServiceProvider`): 10 a minute per admin
+    plus 50 a day per workspace. The mail comes from the app's address but is named
+    "<admin> via Brainitive", with reply-to the admin; addresses are `email:rfc,strict`.
+  - **Hidden names / notes stay hidden in Excel too.** `show_people` / `show_notes` drop the Person
+    and Note columns of the "Entries" sheet, not just the PDF lines — the client receives the file.
+    Draft / void documents carry a stamp (PDF heading, Excel "Status" row) and no payment request.
+  - **Testing PDFs:** `BillingDocumentTest::pdfText()` inflates the content streams and decodes the
+    UTF-16BE strings, so assertions can look for the printed text (dompdf compresses everything).
+
+- **Billing time overview (BRAI-100): one joined query, reduced in PHP.** `TimeOverview::query()`
+  joins entries with project, client, the *live* item (`items.deleted_at IS NULL` in the join, so
+  a trashed issue falls back to the `item_key` / `item_title` snapshot like a deleted one),
+  person, activity and report, and `summary()` walks it with `cursor()`. The page costs the
+  same number of queries for 5 or 5 000 entries (`test_the_page_runs_a_fixed_number_of_queries`
+  — measure after one warm-up request, the first one fills per-request caches). Don't add
+  per-group lookups; add a column to the join. The **estimate** counts billable entries only;
+  a fixed price is charged once per project + ticket (or "no ticket") + activity and credited
+  to the group of the earliest entry, so groups always add up to the total. It doesn't know
+  which fixed prices an earlier report already billed (BRAI-101 owns that), hence the label
+  "estimate before rounding / VAT".
+- **openspout turns any string starting with `=` into a formula.** `Cell::fromValue()` /
+  `Row::fromValues()` build a `FormulaCell` for `"=…"`, so a time-entry note like
+  `=HYPERLINK(…)` became a live formula in the client's Excel. Exports of user text build
+  `StringCell` / `NumericCell` / `EmptyCell` explicitly (`TimeExport::text()`). Stream big
+  exports: `Writer::openToFile('php://output')` inside `response()->streamDownload()`, rows
+  from a `cursor()`; read back in tests with `$response->streamedContent()` + the XLSX `Reader`.
+- **Controlled checkboxes that trigger an Inertia reload need local state.** A checkbox whose
+  `checked` comes only from props flips after the round-trip, and Playwright's `check()` fails
+  with "Clicking the checkbox did not change its state". The overview's project picker and
+  "Show entries" keep an optimistic `useState` that re-syncs from props.
+- **Billing and project moves / trash (BRAI-100).** `ProjectTransfer::move()` clears
+  `projects.client_id` (clients belong to the old workspace). Time entries keep their
+  `workspace_id`, so the old workspace still has that logged work; the overview joins project and
+  client only inside the entry's workspace and only while not trashed, and otherwise shows
+  "Deleted or moved project" with the snapshot ticket key / title — never the new workspace's
+  names. Whether unbilled entries should move with the project is an open decision (activities
+  are per workspace, so moving them would need the activity cleared or mapped).

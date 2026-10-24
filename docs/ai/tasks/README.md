@@ -43,6 +43,10 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Release v1.38.0: time tracking & client billing (BRAI-99/100/101)](./release-v1.38.0-billing.md) | done |
+| [Billing settings + documents: PDF, Excel, email (BRAI-101, part 1)](./feat-billing-documents.md) | done |
+| [Time log: activity on logging, timer, legacy backfill, My timesheet (BRAI-99 part 2)](./feat-time-log.md) | done |
+| [Billing reports: builder, finalize / lock, status (BRAI-101 reports)](./feat-billing-reports.md) | done |
 | [Homepage: features of the latest releases (BRAI-98)](./feat-homepage-features.md) | done |
 | [Meeting notes to tasks: AI extraction with review (BRAI-62)](./feat-meeting-notes-to-tasks.md) | done |
 | [Project health report (BRAI-64)](./feat-project-health.md) | done |

@@ -83,6 +83,23 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.38.0',
+        title: 'Time tracking & client billing',
+        tag: 'Feature',
+        date: '2026-10-24',
+        items: [
+            'New Billing → Activities (workspace admins): define what your team bills — per hour (e.g. Programming €120/h) or as a fixed price (e.g. SSM setup €450) — and pick a default activity per issue type.',
+            'Log time with an activity: “Log work” and the focus timer now ask what you worked on and on which day. The activity is preselected from the issue type, then your last choice.',
+            'New My timesheet (sidebar): your week with day and week totals — add time on an issue or a project, edit or delete entries. Time you logged before this release is there too, and issue totals stay the same.',
+            'Billing → Clients: the companies you bill, with address, VAT ID and their own VAT rate. Assign their projects on the client page or in project settings.',
+            'Billing → Time: everyone’s logged time for last month (or any period) — filter by project, client, person, activity or billable, group by ticket, person, activity or day, and export exactly that to Excel.',
+            'Billing → Reports: build a time report (or, in invoice mode, an invoice) for a client and period with a live preview of net, VAT and total. Leave single entries out, show or hide names and notes.',
+            'Finalize to freeze a report: its hours are locked so nothing is billed twice, fixed prices are charged once per ticket, and invoice mode takes the next consecutive number. Track it as sent or paid, or void it to make the hours billable again.',
+            'Download any report as an A4 PDF or Excel, or send the PDF to your client by email — replies come back to you. Billing → Settings holds your currency, VAT (net or gross), rounding, company and bank details and logo.',
+            'Prices, clients and reports are only visible to workspace admins; members see activities and their own hours, never rates.',
+        ]
+    },
+    {
         version: 'v1.37.0',
         title: 'Workload, project health and meeting notes → issues',
         tag: 'Feature',

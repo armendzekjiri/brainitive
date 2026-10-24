@@ -5,7 +5,7 @@ import { expect, test } from '../fixtures';
  * The public homepage (Pages/Welcome.tsx) shows what the latest releases shipped (BRAI-98).
  * When a release adds feature cards to the homepage, add their titles here.
  */
-const SPOTLIGHT = ['Workload planning', 'Quick capture'];
+const SPOTLIGHT = ['Time tracking & client billing', 'Workload planning', 'Quick capture'];
 const NEW_FEATURES = [
     'Project templates',
     'Saved board views',
@@ -22,8 +22,11 @@ const NEW_FEATURES = [
     'Project health',
     'Workload planning',
     'Meeting notes → issues',
+    'Time tracking',
+    'Team time overview',
+    'Client billing',
 ];
-const GROUPS = ['Plan & organize', 'Capture & focus', 'Create & write', 'Collaborate & share', 'Customers & leads', 'Insight & planning', 'Connect & automate'];
+const GROUPS = ['Plan & organize', 'Capture & focus', 'Create & write', 'Collaborate & share', 'Customers, leads & billing', 'Insight & planning', 'Connect & automate'];
 
 /** A signed-out visitor, collecting uncaught page errors. */
 async function guestPage(browser: Browser, options: { colorScheme?: 'light' | 'dark'; viewport?: { width: number; height: number } } = {}) {
@@ -85,7 +88,7 @@ test.describe('homepage', () => {
             const spotlight = page.getByRole('region', { name: 'New in recent releases' });
             await spotlight.scrollIntoViewIfNeeded();
             await expect(spotlight.getByRole('heading', { name: 'Quick capture', exact: true })).toBeVisible();
-            await page.getByRole('heading', { level: 3, name: 'Customers & leads', exact: true }).scrollIntoViewIfNeeded();
+            await page.getByRole('heading', { level: 3, name: 'Customers, leads & billing', exact: true }).scrollIntoViewIfNeeded();
             await expect(page.getByRole('heading', { level: 4, name: 'Lead forms', exact: true }).last()).toBeVisible();
             await expectNoHorizontalScroll(page);
 

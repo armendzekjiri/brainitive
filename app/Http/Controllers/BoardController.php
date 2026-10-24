@@ -20,6 +20,8 @@ use App\Models\Workspace;
 use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
 use App\Rules\ProjectMember;
+use App\Support\Billing\TimeLog;
+use App\Support\Billing\TimeLogActivities;
 use App\Support\Boards\BoardViewConfig;
 use App\Support\Boards\ItemComments;
 use App\Support\Boards\ItemFieldValues;
@@ -533,7 +535,8 @@ class BoardController extends Controller
     }
 
     /**
-     * Log time worked on an item ("1h 30m"), Jira-style.
+     * Log time worked on an item ("1h 30m"), Jira-style, with the activity (v1.38.0: required
+     * once the workspace has activities) and an optional work day.
      */
     public function logWork(Request $request, Workspace $workspace, Project $project, Board $board, Item $item)
     {
@@ -542,10 +545,13 @@ class BoardController extends Controller
         $validated = $request->validate([
             'time' => Item::durationRules(),
             'note' => 'nullable|string|max:255',
+            'activity_id' => 'nullable',
+            'spent_on' => TimeLog::spentOnRules($request->user()),
         ]);
+        $activity = TimeLogActivities::resolve($item->board->project->workspace_id, $validated['activity_id'] ?? null);
 
         $minutes = Item::parseDuration($validated['time']);
-        $item->logWork($minutes, $validated['note'] ?? null);
+        $item->logWork($minutes, $validated['note'] ?? null, $activity, $validated['spent_on'] ?? null);
 
         return back()->with('success', 'Work logged: '.Item::formatDuration($minutes).'.');
     }
