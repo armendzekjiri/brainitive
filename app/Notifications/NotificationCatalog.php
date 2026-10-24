@@ -61,6 +61,7 @@ final class NotificationCatalog
         'invitation_accepted' => 'workspace',
         'workspace_role_changed' => 'workspace',
         'ticket_status_changed' => 'helpdesk',
+        'webhook_disabled' => 'workspace', // BRAI-104: a webhook was auto-disabled
     ];
 
     public static function category(string $type): string

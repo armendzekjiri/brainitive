@@ -17,7 +17,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia;
 use Tests\Feature\Boards\InteractsWithBoards;
@@ -336,6 +335,12 @@ class InsightsTest extends TestCase
             DB::table('workspace_invitations')->insert(['workspace_id' => $this->workspace->id, 'email' => "i{$i}@example.test", 'role' => 'member', 'token' => Str::random(40), 'invited_by' => $this->admin->id, 'expires_at' => $expires, 'accepted_at' => $accepted, 'created_at' => now(), 'updated_at' => now()]);
         }
 
+        // one webhook here, one in another workspace
+        $foreign = Workspace::factory()->create(['owner_id' => $this->admin->id]);
+        foreach ([$this->workspace->id, $foreign->id] as $workspaceId) {
+            DB::table('webhooks')->insert(['workspace_id' => $workspaceId, 'name' => 'Hook', 'url' => 'https://example.test/hook', 'secret' => 'x', 'events' => '["*"]', 'created_at' => now(), 'updated_at' => now()]);
+        }
+
         $data = $this->tab('usage');
         $this->assertSame(3, $data['members']);
         $this->assertSame(['admin' => 1, 'member' => 2], collect($data['roles'])->sortKeys()->all());
@@ -343,7 +348,7 @@ class InsightsTest extends TestCase
         $this->assertSame(2, $data['projects']);
         $this->assertSame(1500, $data['storage_bytes']);
         $this->assertSame([$this->project->id, 2, 1000, 500], [$data['storage'][0]['id'], $data['storage'][0]['files'], $data['storage'][0]['issue_bytes'], $data['storage'][0]['ticket_bytes']]);
-        $this->assertSame(Schema::hasTable('webhooks') ? 0 : null, $data['webhooks']);
+        $this->assertSame(1, $data['webhooks']);
     }
 
     // ── query count ──────────────────────────────────────────────────────────
@@ -383,7 +388,7 @@ class InsightsTest extends TestCase
 
         $this->assertSame($small, $large);
         // projects list + the tab's own aggregates
-        $this->assertSame(['overview' => 8, 'team' => 6, 'projects' => 4, 'helpdesk' => 7, 'usage' => Schema::hasTable('webhooks') ? 7 : 6], $large);
+        $this->assertSame(['overview' => 8, 'team' => 6, 'projects' => 4, 'helpdesk' => 7, 'usage' => 6], $large);
     }
 
     // ── CSV ──────────────────────────────────────────────────────────────────

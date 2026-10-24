@@ -12,6 +12,7 @@ use App\Models\ProjectTemplate;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Projects\ProjectTransfer;
+use App\Support\Projects\RecentContent;
 use App\Support\Templates\TemplateDocument;
 use App\Support\Templates\TemplateRuns;
 use App\Support\Uploads;
@@ -163,7 +164,7 @@ class ProjectController extends Controller
             'helpdesks' => function ($query) {
                 $query->orderBy('created_at', 'desc');
             },
-            'leadForms:id,project_id,name,slug,status,position',
+            'leadForms:id,project_id,name,slug,status,position,updated_at',
         ]);
 
         $project->pages->load(['children' => function ($query) use ($request) {
@@ -172,9 +173,15 @@ class ProjectController extends Controller
 
         $ai = $workspace->settings ?? [];
 
+        // Project page order (BRAI-106): member avatars in the header, then "Recently updated"
+        $members = $project->users()->select('users.id', 'users.name', 'users.avatar')->orderBy('users.name')->limit(8)->get();
+        $recentlyUpdated = RecentContent::for((clone $project)->setRelation('workspace', $workspace), $request->user());
+
         return Inertia::render('Projects/Show', [
             'workspace' => $workspace,
             'project' => $project,
+            'members' => $members,
+            'recentlyUpdated' => $recentlyUpdated,
             'canUpdate' => $request->user()->can('update', $project),
             'canCreatePages' => $request->user()->can('create', [Page::class, $project]),
             'aiConfigured' => ! empty($ai['ai_endpoint']) && ! empty($ai['ai_api_key']) && ! empty($ai['ai_model']),

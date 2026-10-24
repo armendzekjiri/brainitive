@@ -3,16 +3,15 @@
 namespace App\Support\Insights;
 
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Insights → Usage (BRAI-105): the workspace as it is now (not range-bound).
  * - members by role (`workspace_user`), pending invitations (not accepted, not expired);
  * - storage by project = issue attachments + ticket attachments (bytes as stored; files of
  *   soft-deleted issues and tickets still count, they are still on disk);
- * - webhooks, once the `webhooks` table exists (ticket 3 of v1.39.0).
+ * - webhooks of the workspace (BRAI-104).
  *
- * Six queries at most.
+ * Six queries.
  */
 final class UsageInsights
 {
@@ -61,9 +60,7 @@ final class UsageInsights
         }
         usort($storage, fn (array $a, array $b) => [$b['bytes'], $a['name']] <=> [$a['bytes'], $b['name']]);
 
-        $webhooks = Schema::hasTable('webhooks')
-            ? DB::table('webhooks')->where('workspace_id', $workspaceId)->count()
-            : null;
+        $webhooks = DB::table('webhooks')->where('workspace_id', $workspaceId)->count();
 
         return [
             'members' => array_sum($roles),

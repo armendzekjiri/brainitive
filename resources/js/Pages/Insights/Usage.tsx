@@ -17,7 +17,7 @@ export default function InsightsUsagePage(props: InsightsPageProps<InsightsUsage
                 <StatTile testId="usage-invites" label="Pending invitations" value={usage.pending_invites} hint="not accepted, not expired" />
                 <StatTile testId="usage-projects" label="Projects" value={usage.projects} />
                 <StatTile testId="usage-storage" label="Storage" value={formatBytes(usage.storage_bytes)} hint="issue + ticket attachments" />
-                {usage.webhooks !== null && <StatTile testId="usage-webhooks" label="Webhooks" value={usage.webhooks} />}
+                <StatTile testId="usage-webhooks" label="Webhooks" value={usage.webhooks} hint="outgoing, all states" />
             </div>
 
             <Section title="Members by role">

@@ -21,7 +21,7 @@ test.describe('admin insights', () => {
         await expect(page).toHaveURL(new RegExp(`${insightsUrl('overview')}$`));
         await expect(page.getByRole('heading', { name: 'Insights', level: 1 })).toBeVisible();
         await expect(page.getByRole('link', { name: 'Overview', exact: true })).toHaveAttribute('aria-current', 'page');
-        await expect(page.getByRole('button', { name: 'Last 30 days' })).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.getByRole('button', { name: 'Last 30 days', exact: true })).toHaveAttribute('aria-pressed', 'true');
 
         // one project: its one issue (created today, open) and 1.5 h
         await pickProject(page, project.name);
@@ -35,21 +35,21 @@ test.describe('admin insights', () => {
         await expect(openRow.getByRole('cell').nth(3)).toHaveText('0'); // overdue
 
         // another period keeps the project
-        await page.getByRole('button', { name: 'Last 90 days' }).click();
-        await expect(page.getByRole('button', { name: 'Last 90 days' })).toHaveAttribute('aria-pressed', 'true');
+        await page.getByRole('button', { name: 'Last 90 days', exact: true }).click();
+        await expect(page.getByRole('button', { name: 'Last 90 days', exact: true })).toHaveAttribute('aria-pressed', 'true');
         await expect(page).toHaveURL(/period=last_90/);
         await expect(page).toHaveURL(/project=\d+/);
         await expect(page.getByTestId('kpi-created-value')).toHaveText('1');
 
         // a custom range that ends before today has nothing of this project
-        await page.getByRole('button', { name: 'Custom' }).click();
+        await page.getByRole('button', { name: 'Custom', exact: true }).click();
         await page.getByRole('textbox', { name: 'From', exact: true }).fill('2024-01-01');
         await page.getByRole('textbox', { name: 'To', exact: true }).fill('2024-01-31');
-        await page.getByRole('button', { name: 'Apply' }).click();
+        await page.getByRole('button', { name: 'Apply', exact: true }).click();
         await expect(page).toHaveURL(/from=2024-01-01/);
         await expect(page.getByTestId('kpi-created-value')).toHaveText('0');
         await expect(page.getByTestId('kpi-hours-value')).toHaveText('0 h');
-        await page.getByRole('button', { name: 'This month' }).click();
+        await page.getByRole('button', { name: 'This month', exact: true }).click();
         await expect(page).not.toHaveURL(/from=/);
 
         // Team: the owner logged the 1.5 h

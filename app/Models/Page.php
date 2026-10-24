@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\Events\DomainEvents;
+use App\Support\Events\EventPayloads;
 use App\Support\Notifications\PageMentions;
 use App\Support\References\ContentReferences;
 use Illuminate\Database\Eloquent\Builder;
@@ -319,13 +321,17 @@ class Page extends Model
      */
     public function publish(?User $user = null, ?string $message = null): PageVersion
     {
+        $firstPublish = $this->getOriginal('status') !== 'published';
         $this->update([
             'status' => 'published',
             'published_at' => now(),
             'last_edited_by' => $user?->id ?? $this->last_edited_by,
         ]);
 
-        return $this->recordVersion($user, $message);
+        $version = $this->recordVersion($user, $message);
+        DomainEvents::emit(EventPayloads::projectWorkspaceId($this->project_id), 'page.published', fn () => EventPayloads::page($this, $firstPublish), $user); // webhooks (BRAI-104)
+
+        return $version;
     }
 
     /**
@@ -346,7 +352,10 @@ class Page extends Model
             'edit_revision' => $this->edit_revision + 1,
         ])->save();
 
-        return $this->recordVersion($user, $message);
+        $version = $this->recordVersion($user, $message);
+        DomainEvents::emit(EventPayloads::projectWorkspaceId($this->project_id), 'page.published', fn () => EventPayloads::page($this, false), $user); // webhooks (BRAI-104)
+
+        return $version;
     }
 
     /**

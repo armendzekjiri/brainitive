@@ -100,7 +100,7 @@ final class InsightsCsv
                     ['Pending invitations', $data['pending_invites']],
                     ['Projects', $data['projects']],
                     ['Storage (bytes)', $data['storage_bytes']],
-                    ...($data['webhooks'] !== null ? [['Webhooks', $data['webhooks']]] : []),
+                    ['Webhooks', $data['webhooks']],
                 ],
                 [['Project', 'Files', 'Issue attachments (bytes)', 'Ticket attachments (bytes)', 'Total (bytes)'], ...array_map(fn ($s) => [$s['name'], $s['files'], $s['issue_bytes'], $s['ticket_bytes'], $s['bytes']], $data['storage'])],
             ],

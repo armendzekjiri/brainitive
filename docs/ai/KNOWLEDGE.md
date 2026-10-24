@@ -110,6 +110,36 @@ then can't create tables in `public` and every PHPUnit test fails with "permissi
 schema public". Use `createdb -h /tmp -O <DB_USERNAME> brainitive_test_<name>` (or `ALTER DATABASE
 … OWNER TO …` + `ALTER SCHEMA public OWNER TO …` on an existing one).
 
+### Outgoing webhooks: sync queue, signature, private targets (v1.39.0, BRAI-104)
+- **Sync queue (dev.brainitive.app, e2e, small self-hosted installs):** `WebhookDispatcher` sends a
+  delivery caused by a web request **after the response** (`dispatch()->afterResponse()`), so a slow or
+  dead endpoint never slows down or breaks the request. Only one attempt there (a sync job can't be
+  released for a retry); Redeliver sends it again. At most 25 per request and 15 s in total, with a
+  5 s timeout per attempt (a bulk action, a template or a slow receiver — also behind the public
+  ticket / lead endpoints — would otherwise hold the PHP worker for minutes); the rest are logged as
+  failed "Not sent" and don't count towards auto-disable. Manual
+  sends (Send test, Redeliver) and console runs go inline (`dispatch_sync`). With a real queue:
+  queued, 4 tries, backoff 30 s / 2 min / 10 min.
+- **Never break the caller:** `DomainEvents` reports (doesn't throw) failures, except in unit tests
+  (`runningUnitTests()`) so payload bugs surface. Deliveries are created in `DB::afterCommit` — a
+  rolled-back change sends nothing.
+- **Signature:** `X-Brainitive-Signature: sha256=` + hex HMAC-SHA256 of `"{X-Brainitive-Timestamp}.{raw body}"`
+  with the webhook secret (timestamped against replays; the BRAI-93 lead-form webhook signs the body
+  only). `X-Brainitive-Delivery` = the delivery uuid; the envelope `id` stays the same on a redelivery.
+- **Private targets** (localhost, 10/8, 169.254…): refused by `OutboundUrl` on save and before every
+  attempt. `WEBHOOKS_ALLOW_PRIVATE_TARGETS` exists for the e2e receiver only and is ignored unless
+  `APP_ENV=e2e` (`WebhookUrl::allowPrivate()`); https is required in production and staging.
+- **Secret:** encrypted + `$hidden`; never an Inertia prop. Returned by store / rotate / reveal as JSON
+  with `Cache-Control: no-store`.
+- **Payloads** carry ids, keys, titles, URLs, status names and people as `{id, name}` — no member
+  emails, no rates (amounts only on `billing_report.*`). Ticket payloads include the contact's name and
+  email and lead payloads the lead's fields (agents / admins see them in the app). Builders never load
+  relations on the caller's model (it may be serialized into the response afterwards).
+- **e2e:** the receiver is a Node server on 127.0.0.1 inside the spec's worker; the spec is skipped
+  against dev.brainitive.app. It deletes its webhook at the end — other journeys create issues in the
+  same workspace in parallel. The crawler (`e2e:crawl`) fills URL fields with `https://example.com/`,
+  so a crawl run can create a webhook that posts to example.com.
+
 ### Quick capture: conversion is idempotent by row lock, not by request id (BRAI-70)
 `CaptureConversion::convert` locks the capture (`lockForUpdate`) inside one transaction; a capture
 that is already processed returns its target (`replayed`, HTTP 200) whatever the second request
@@ -151,6 +181,30 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
   `…/extract` with `page.route`; Create is real. `page.route` doesn't see requests of a page that a
   service worker controls (`public/sw.js` has a fetch handler), so specs that intercept app requests
   need `test.use({ serviceWorkers: 'block' })`.
+
+### Customisable sidebar: defaults stay invisible, writes are serialised (BRAI-106)
+- **Null means default.** `users.sidebar_preferences` is null until someone changes something, and
+  `SidebarPreferences::apply` stores null again when everything is back to default. Every entry and
+  group is visible by default, so e2e tests and docs that click `link 'Billing' | 'Timesheet' |
+  'Workload' | 'Inbox'` keep working. Hiding is opt-in, and Home + Inbox can't be hidden.
+- **Lost updates.** Two saves of the same user (two tabs, or parallel e2e workers signed in as the
+  owner) used to read-modify-write the JSON and drop each other's change. `apply` now re-reads the
+  column under `lockForUpdate()` inside a transaction, and the frontend store queues its PATCHes.
+- **Pins are filtered twice:** on save (`visiblePins`: right project, exists, page visible to the
+  user) and on render (resolved against the permission-filtered sidebar payload). A pin to content
+  the user lost access to stays stored but never shows.
+- **e2e isolation:** per-user settings (`hidden_nav`) are global for that user. Journeys that change
+  them run as the member and reset in `finally`; per-project settings and pins use a fresh project
+  (`createBlankProject`), so other specs keep the seeded project's default sidebar.
+- **Accessible names on the project page:** the header quick links are named "Project health /
+  workload / releases" (not "Health"), otherwise `link 'Workload', exact` would match twice. Pinned
+  and Recently updated rows use no h3, so `helpdesk.spec.ts`'s card locator (link with an h3) stays
+  unique. Every sidebar row now has a `Pin <name>` button, so a non-exact
+  `getByRole('button', { name: 'Share' })` also matches "Pin Shared doc…": use `exact: true` for
+  generic button names (content.spec's Share button was the one case).
+- **Store hydration is silent.** `useSidebarPreferences()` assigns the new server value during render
+  (no listener notification) to avoid "update a component while rendering another"; while a write is
+  in flight the optimistic state wins over the incoming prop.
 
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
@@ -340,7 +394,7 @@ some clients (ChatGPT connectors) ignore `nextCursor`, so a tool on page 2 would
 - **No `HealthMetrics` per project.** It runs ~5 queries per project; Insights → Projects groups the same
   numbers by `boards.project_id` in one query, and "health" is the latest saved report's status (a person's
   choice; the app never computes one). Every tab has a fixed query count, asserted in `InsightsTest`
-  (overview 8, team 6, projects 4, helpdesk 7, usage 6 + 1 once the `webhooks` table exists). No cache.
+  (overview 8, team 6, projects 4, helpdesk 7, usage 6). No cache.
 - **Ranges are local days.** `from`/`to` are the viewer's dates; SQL compares `[startUtc, endUtc)`. Weekly
   buckets group by the local day (`at time zone` on Postgres; UTC date elsewhere) and **`group by 1`**:
   Postgres treats the select's and the group by's `?` as different expressions and refuses the query.

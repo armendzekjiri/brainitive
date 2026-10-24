@@ -552,6 +552,8 @@ export type PageProps<
     };
     /** Onboarding state + computed setup checklist progress (shared by HandleInertiaRequests) */
     onboarding?: OnboardingState | null;
+    /** Customisable sidebar (BRAI-106), normalised by SidebarPreferences::forFrontend */
+    sidebarPreferences?: SidebarPreferences | null;
 };
 
 export type OnboardingFocus = 'project_mgmt' | 'docs' | 'support' | 'all';
@@ -1673,6 +1675,76 @@ export interface InsightsUsage {
     projects: number;
     storage: { id: number; name: string; color: string | null; files: number; issue_bytes: number; ticket_bytes: number; bytes: number }[];
     storage_bytes: number;
-    /** null until the webhooks table exists. */
-    webhooks: number | null;
+    webhooks: number;
+}
+
+/** Outgoing webhook of a workspace (v1.39.0, BRAI-104). The secret is never part of it. */
+export interface WorkspaceWebhook {
+    id: number;
+    name: string;
+    url: string;
+    /** DomainEvents names, or ["*"] for every event. */
+    events: string[];
+    active: boolean;
+    failure_count: number;
+    disabled_at: string | null;
+    last_delivery_at: string | null;
+    last_status: WebhookDeliveryStatus | null;
+    created_by: string | null;
+    created_at: string | null;
+}
+
+export type WebhookDeliveryStatus = 'pending' | 'success' | 'failed';
+
+export interface WebhookDelivery {
+    id: number;
+    uuid: string;
+    event: string;
+    event_id: string;
+    status: WebhookDeliveryStatus;
+    attempts: number;
+    response_code: number | null;
+    duration_ms: number | null;
+    error: string | null;
+    /** The envelope that was sent: {id, event, occurred_at, workspace, actor, data}. */
+    payload: Record<string, unknown>;
+    response_body: string | null;
+    created_at: string | null;
+    delivered_at: string | null;
+}
+
+// ── Customisable sidebar (BRAI-106) ─────────────────────────────────────────
+/** Top-level sidebar entries a user may hide (Home and Inbox are always shown). */
+export type SidebarNavKey = 'my_work' | 'captures' | 'timesheet' | 'billing' | 'insights' | 'calendar' | 'bookmarks' | 'snippets';
+/** Project groups in the sidebar. */
+export type SidebarGroupKey = 'boards' | 'lists' | 'plans' | 'helpdesks' | 'lead_forms' | 'pages' | 'whiteboards' | 'folders';
+/** What can be pinned; "page" covers pages, whiteboards and folders. */
+export type SidebarPinType = 'board' | 'list' | 'plan' | 'helpdesk' | 'lead_form' | 'page';
+
+export interface SidebarPin {
+    type: SidebarPinType;
+    id: number;
+}
+
+export interface SidebarProjectPreferences {
+    groups: Record<SidebarGroupKey, boolean>;
+    pins: SidebarPin[];
+    pinned_only: boolean;
+}
+
+/** `users.sidebar_preferences`; missing projects use the defaults (all groups, no pins). */
+export interface SidebarPreferences {
+    hidden_nav: SidebarNavKey[];
+    projects: Record<string, SidebarProjectPreferences>;
+}
+
+/** One "Recently updated" row on the project page (RecentContent::for). */
+export interface RecentContentEntry {
+    type: SidebarPinType;
+    id: number;
+    name: string;
+    url: string;
+    updated_at: string;
+    is_whiteboard?: boolean;
+    icon?: string | null;
 }

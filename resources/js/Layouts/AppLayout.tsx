@@ -2,7 +2,7 @@ import { Link, router, usePage, useForm } from '@inertiajs/react';
 import axios from 'axios';
 import { Toaster } from 'sonner';
 import React, { PropsWithChildren, useState, useRef, FormEvent, useEffect, useCallback, createContext, useContext } from 'react';
-import { PageProps, Workspace, Project, Board, TaskList, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn, Helpdesk, PlanSummary } from '@/types';
+import { PageProps, Workspace, Project, Board, TaskList, Page as PageType, ItemType, ItemPriority, User as UserType, BoardColumn, Helpdesk, PlanSummary, SidebarGroupKey, SidebarNavKey, SidebarPin } from '@/types';
 import { cn } from '@/lib/utils';
 import { CommandPalette, CmdIcon, PaletteCommand, useRecentTracking } from '@/components/CommandPalette';
 import { useTimezoneSync } from '@/hooks/useTimezoneSync';
@@ -29,6 +29,7 @@ import {
     SidebarMenuItem,
     SidebarProvider,
     SidebarTrigger,
+    useSidebar,
 } from '@/components/ui/sidebar';
 import {
     DropdownMenu,
@@ -59,14 +60,12 @@ import { Separator } from '@/components/ui/separator';
 import {
     ChevronRight,
     ChevronsUpDown,
-    Home,
     LayoutGrid,
     LogOut,
     Plus,
     Search,
     Settings,
     User,
-    Bell,
     HelpCircle,
     FolderKanban,
     Check,
@@ -75,11 +74,7 @@ import {
     Folder,
     Kanban,
     List,
-    ListTodo,
     Lightbulb,
-    Clock,
-    ReceiptText,
-    ChartColumn,
     Bookmark as BookmarkIcon,
     Code2,
     PencilRuler,
@@ -90,12 +85,14 @@ import {
     Magnet,
     Moon,
     Sun,
-    CalendarDays,
     GanttChart,
     ShieldCheck,
     Rocket,
     HeartPulse,
     Gauge,
+    Pencil,
+    PanelLeft,
+    ArrowRight,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { ThemeMenu } from '@/components/ThemeMenu';
@@ -113,6 +110,11 @@ import CreateProjectDialog, { openCreateProject } from '@/components/projects/Cr
 import { QuickCaptureDialog, QuickCaptureFab, openQuickCapture } from '@/components/captures/QuickCaptureDialog';
 import HelpdeskTemplatePicker from '@/components/helpdesk/HelpdeskTemplatePicker';
 import LeadFormTemplatePicker from '@/components/leadForms/LeadFormTemplatePicker';
+import { CustomizeSidebarSheet } from '@/components/sidebar/CustomizeSidebarSheet';
+import { PinButton } from '@/components/sidebar/PinButton';
+import { useSidebarNavItems } from '@/components/sidebar/navItems';
+import { PinIcon, resolvePins, type SidebarProject } from '@/components/sidebar/pins';
+import { SIDEBAR_GROUPS, openCustomizeSidebar, projectPreferences, useSidebarPreferences } from '@/lib/sidebarPreferences';
 
 interface Props extends PropsWithChildren {
     title?: string;
@@ -455,18 +457,67 @@ function DraggableSidebarGroup({
     );
 }
 
+// Collapsible group header of the project sidebar (Boards, Lists, Pinned, …)
+function SidebarGroupToggle({ label, open, onToggle }: { label: string; open: boolean; onToggle: (open: boolean) => void }) {
+    return (
+        <button
+            type="button"
+            onClick={() => onToggle(!open)}
+            aria-expanded={open}
+            className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
+        >
+            <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${open ? 'rotate-90' : ''}`} />
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">{label}</span>
+        </button>
+    );
+}
+
+// One project sidebar row (board, list, plan, …) with a pin button on hover (BRAI-106)
+function SidebarItemRow({
+    href,
+    icon,
+    name,
+    projectId,
+    pin,
+    trailing,
+    hoverOnlyPin = false,
+}: {
+    href: string;
+    icon: React.ReactNode;
+    name: string;
+    projectId: number;
+    pin?: SidebarPin;
+    trailing?: React.ReactNode;
+    hoverOnlyPin?: boolean;
+}) {
+    return (
+        <SidebarMenuItem className="group/pin flex min-w-0 items-center pl-5">
+            <Link
+                href={href}
+                className="flex min-w-0 flex-1 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+            >
+                {icon}
+                <span className="min-w-0 flex-1 truncate">{name}</span>
+                {trailing}
+            </Link>
+            {pin && <PinButton projectId={projectId} type={pin.type} id={pin.id} name={name} hoverOnly={hoverOnlyPin} className="ml-0.5" />}
+        </SidebarMenuItem>
+    );
+}
+
 function ProjectContent({
     project,
     workspace,
     onAddItem,
     currentPageUuid,
 }: {
-    project: Project & { boards: Board[]; task_lists?: TaskList[]; plans?: PlanSummary[]; pages?: PageType[]; helpdesks?: Helpdesk[] };
+    project: SidebarProject;
     workspace: Workspace;
     onAddItem: (projectId: number, parentId?: number) => void;
     currentPageUuid?: string | null;
 }) {
     const hasContent = (project.boards && project.boards.length > 0) || (project.task_lists && project.task_lists.length > 0) || (project.plans && project.plans.length > 0) || (project.pages && project.pages.length > 0) || (project.helpdesks && project.helpdesks.length > 0) || (project.lead_forms?.length ?? 0) > 0;
+    const [pinnedOpen, setPinnedOpen] = useExpandedState(`project-${project.id}-pinned`, true);
     const [boardsOpen, setBoardsOpen] = useExpandedState(`project-${project.id}-boards`, true);
     const [listsOpen, setListsOpen] = useExpandedState(`project-${project.id}-lists`, true);
     const [plansOpen, setPlansOpen] = useExpandedState(`project-${project.id}-plans`, true);
@@ -475,6 +526,13 @@ function ProjectContent({
     const [foldersOpen, setFoldersOpen] = useExpandedState(`project-${project.id}-folders`, true);
     const [helpdesksOpen, setHelpdesksOpen] = useExpandedState(`project-${project.id}-helpdesks`, true);
     const [leadFormsOpen, setLeadFormsOpen] = useExpandedState(`project-${project.id}-lead-forms`, true);
+
+    // Customisable sidebar (BRAI-106): pins first; with pins (or "pinned only") the groups collapse
+    const prefs = projectPreferences(useSidebarPreferences(), project.id);
+    const pinned = resolvePins(workspace.slug, project, prefs.pins);
+    const showPinned = pinned.length > 0 || prefs.pinned_only;
+    const shows = (group: SidebarGroupKey) => !showPinned && prefs.groups[group] !== false;
+    const somethingHidden = showPinned || SIDEBAR_GROUPS.some((group) => prefs.groups[group.key] === false);
 
     if (!hasContent) {
         return (
@@ -496,236 +554,153 @@ function ProjectContent({
     const rootDocs = project.pages?.filter((p) => p.type === 'page' && !p.is_whiteboard) || [];
     const rootWhiteboards = project.pages?.filter((p) => p.type === 'page' && p.is_whiteboard) || [];
     const rootFolders = project.pages?.filter((p) => p.type === 'folder') || [];
+    const params = [workspace.slug, project.slug];
+
+    const groups: { key: string; node: React.ReactNode }[] = [];
+    if (shows('boards') && project.boards?.length > 0) {
+        groups.push({
+            key: 'boards',
+            node: (
+                <>
+                    <SidebarGroupToggle label="Boards" open={boardsOpen} onToggle={setBoardsOpen} />
+                    {boardsOpen && project.boards.map((board) => (
+                        <SidebarItemRow key={board.id} href={route('boards.show', [...params, board.slug])} icon={<LayoutGrid className="size-4 shrink-0" />} name={board.name} projectId={project.id} pin={{ type: 'board', id: board.id }} />
+                    ))}
+                    {boardsOpen && <SidebarItemRow href={route('releases.index', params)} icon={<Rocket className="size-4 shrink-0" />} name="Releases" projectId={project.id} />}
+                    {boardsOpen && <SidebarItemRow href={route('projects.health', params)} icon={<HeartPulse className="size-4 shrink-0" />} name="Health" projectId={project.id} />}
+                    {boardsOpen && <SidebarItemRow href={route('workload.index', params)} icon={<Gauge className="size-4 shrink-0" />} name="Workload" projectId={project.id} />}
+                </>
+            ),
+        });
+    }
+    if (shows('lists') && (project.task_lists?.length ?? 0) > 0) {
+        groups.push({
+            key: 'lists',
+            node: (
+                <>
+                    <SidebarGroupToggle label="Lists" open={listsOpen} onToggle={setListsOpen} />
+                    {listsOpen && project.task_lists!.map((tl) => (
+                        <SidebarItemRow key={tl.id} href={route('task-lists.show', [...params, tl.slug])} icon={<List className="size-4 shrink-0" />} name={tl.name} projectId={project.id} pin={{ type: 'list', id: tl.id }} />
+                    ))}
+                </>
+            ),
+        });
+    }
+    if (shows('plans') && (project.plans?.length ?? 0) > 0) {
+        groups.push({
+            key: 'plans',
+            node: (
+                <>
+                    <SidebarGroupToggle label="Plans" open={plansOpen} onToggle={setPlansOpen} />
+                    {plansOpen && project.plans!.map((plan) => (
+                        <SidebarItemRow key={plan.id} href={route('plans.show', [...params, plan.slug])} icon={<GanttChart className="size-4 shrink-0" />} name={plan.name} projectId={project.id} pin={{ type: 'plan', id: plan.id }} />
+                    ))}
+                </>
+            ),
+        });
+    }
+    if (shows('helpdesks') && (project.helpdesks?.length ?? 0) > 0) {
+        groups.push({
+            key: 'helpdesks',
+            node: (
+                <>
+                    <SidebarGroupToggle label="Helpdesk" open={helpdesksOpen} onToggle={setHelpdesksOpen} />
+                    {helpdesksOpen && project.helpdesks!.map((helpdesk) => (
+                        <SidebarItemRow key={helpdesk.id} href={route('helpdesks.show', [...params, helpdesk.slug])} icon={<LifeBuoy className="size-4 shrink-0" />} name={helpdesk.name} projectId={project.id} pin={{ type: 'helpdesk', id: helpdesk.id }} />
+                    ))}
+                </>
+            ),
+        });
+    }
+    // Lead forms (BRAI-93)
+    if (shows('lead_forms') && (project.lead_forms?.length ?? 0) > 0) {
+        groups.push({
+            key: 'lead_forms',
+            node: (
+                <>
+                    <SidebarGroupToggle label="Lead forms" open={leadFormsOpen} onToggle={setLeadFormsOpen} />
+                    {leadFormsOpen && project.lead_forms!.map((leadForm) => (
+                        <SidebarItemRow
+                            key={leadForm.id}
+                            href={route('lead-forms.show', [...params, leadForm.slug])}
+                            icon={<Magnet className="size-4 shrink-0" />}
+                            name={leadForm.name}
+                            projectId={project.id}
+                            pin={{ type: 'lead_form', id: leadForm.id }}
+                            trailing={leadForm.status === 'published' ? <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" title="Live" /> : undefined}
+                        />
+                    ))}
+                </>
+            ),
+        });
+    }
+    const pageGroups: [SidebarGroupKey, string, PageType[], boolean, (open: boolean) => void][] = [
+        ['pages', 'Pages', rootDocs, pagesOpen, setPagesOpen],
+        ['whiteboards', 'Whiteboards', rootWhiteboards, whiteboardsOpen, setWhiteboardsOpen],
+        ['folders', 'Folders', rootFolders, foldersOpen, setFoldersOpen],
+    ];
+    for (const [key, label, items, open, setOpen] of pageGroups) {
+        if (!shows(key) || items.length === 0) continue;
+        groups.push({
+            key,
+            node: (
+                <>
+                    <SidebarGroupToggle label={label} open={open} onToggle={setOpen} />
+                    {open && (
+                        <DraggableSidebarGroup
+                            items={items}
+                            workspace={workspace}
+                            project={project}
+                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
+                            currentPageUuid={currentPageUuid}
+                        />
+                    )}
+                </>
+            ),
+        });
+    }
 
     return (
         <SidebarMenu className="space-y-0.5">
-            {/* Boards */}
-            {project.boards?.length > 0 && (
-                <>
-                    <button
-                        onClick={() => setBoardsOpen(!boardsOpen)}
-                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
-                    >
-                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${boardsOpen ? 'rotate-90' : ''}`} />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Boards</span>
-                    </button>
-                    {boardsOpen && project.boards.map((board) => (
-                        <SidebarMenuItem key={board.id} className="pl-5">
-                            <Link
-                                href={route('boards.show', [workspace.slug, project.slug, board.slug])}
-                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                            >
-                                <LayoutGrid className="size-4 shrink-0" />
-                                <span className="min-w-0 truncate">{board.name}</span>
-                            </Link>
-                        </SidebarMenuItem>
-                    ))}
-                    {boardsOpen && (
-                        <SidebarMenuItem className="pl-5">
-                            <Link
-                                href={route('releases.index', [workspace.slug, project.slug])}
-                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                            >
-                                <Rocket className="size-4 shrink-0" />
-                                <span className="min-w-0 truncate">Releases</span>
-                            </Link>
-                        </SidebarMenuItem>
-                    )}
-                    {boardsOpen && (
-                        <SidebarMenuItem className="pl-5">
-                            <Link
-                                href={route('projects.health', [workspace.slug, project.slug])}
-                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                            >
-                                <HeartPulse className="size-4 shrink-0" />
-                                <span className="min-w-0 truncate">Health</span>
-                            </Link>
-                        </SidebarMenuItem>
-                    )}
-                    {boardsOpen && (
-                        <SidebarMenuItem className="pl-5">
-                            <Link
-                                href={route('workload.index', [workspace.slug, project.slug])}
-                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                            >
-                                <Gauge className="size-4 shrink-0" />
-                                <span className="min-w-0 truncate">Workload</span>
-                            </Link>
-                        </SidebarMenuItem>
-                    )}
-                </>
-            )}
-
-            {/* Lists */}
-            {project.task_lists && project.task_lists.length > 0 && (
-                <>
-                    {(project.boards?.length ?? 0) > 0 && <div className="border-t border-border/50 my-1.5" />}
-                    <button
-                        onClick={() => setListsOpen(!listsOpen)}
-                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
-                    >
-                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${listsOpen ? 'rotate-90' : ''}`} />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Lists</span>
-                    </button>
-                    {listsOpen && project.task_lists.map((tl) => (
-                        <SidebarMenuItem key={tl.id} className="pl-5">
-                            <Link
-                                href={route('task-lists.show', [workspace.slug, project.slug, tl.slug])}
-                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                            >
-                                <List className="size-4 shrink-0" />
-                                <span className="min-w-0 truncate">{tl.name}</span>
-                            </Link>
-                        </SidebarMenuItem>
-                    ))}
-                </>
-            )}
-
-            {/* Plans */}
-            {project.plans && project.plans.length > 0 && (
-                <>
-                    {((project.boards?.length ?? 0) > 0 || (project.task_lists?.length ?? 0) > 0) && <div className="border-t border-border/50 my-1.5" />}
-                    <button
-                        onClick={() => setPlansOpen(!plansOpen)}
-                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
-                    >
-                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${plansOpen ? 'rotate-90' : ''}`} />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Plans</span>
-                    </button>
-                    {plansOpen && project.plans.map((plan) => (
-                        <SidebarMenuItem key={plan.id} className="pl-5">
-                            <Link
-                                href={route('plans.show', [workspace.slug, project.slug, plan.slug])}
-                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                            >
-                                <GanttChart className="size-4 shrink-0" />
-                                <span className="min-w-0 truncate">{plan.name}</span>
-                            </Link>
-                        </SidebarMenuItem>
-                    ))}
-                </>
-            )}
-
-            {/* Helpdesk */}
-            {project.helpdesks && project.helpdesks.length > 0 && (
-                <>
-                    {((project.boards?.length ?? 0) > 0 || (project.task_lists?.length ?? 0) > 0 || (project.plans?.length ?? 0) > 0) && <div className="border-t border-border/50 my-1.5" />}
-                    <button
-                        onClick={() => setHelpdesksOpen(!helpdesksOpen)}
-                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
-                    >
-                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${helpdesksOpen ? 'rotate-90' : ''}`} />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Helpdesk</span>
-                    </button>
-                    {helpdesksOpen && project.helpdesks.map((helpdesk) => (
-                        <SidebarMenuItem key={helpdesk.id} className="pl-5">
-                            <Link
-                                href={route('helpdesks.show', [workspace.slug, project.slug, helpdesk.slug])}
-                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                            >
-                                <LifeBuoy className="size-4 shrink-0" />
-                                <span className="min-w-0 truncate">{helpdesk.name}</span>
-                            </Link>
-                        </SidebarMenuItem>
-                    ))}
-                </>
-            )}
-
-            {/* Lead forms (BRAI-93) */}
-            {(project.lead_forms?.length ?? 0) > 0 && (
-                <>
-                    {((project.boards?.length ?? 0) > 0 || (project.task_lists?.length ?? 0) > 0 || (project.plans?.length ?? 0) > 0 || (project.helpdesks?.length ?? 0) > 0) && <div className="border-t border-border/50 my-1.5" />}
-                    <button
-                        onClick={() => setLeadFormsOpen(!leadFormsOpen)}
-                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
-                    >
-                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${leadFormsOpen ? 'rotate-90' : ''}`} />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Lead forms</span>
-                    </button>
-                    {leadFormsOpen && project.lead_forms!.map((leadForm) => (
-                        <SidebarMenuItem key={leadForm.id} className="pl-5">
-                            <Link
-                                href={route('lead-forms.show', [workspace.slug, project.slug, leadForm.slug])}
-                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                            >
-                                <Magnet className="size-4 shrink-0" />
-                                <span className="min-w-0 flex-1 truncate">{leadForm.name}</span>
-                                {leadForm.status === 'published' && <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" title="Live" />}
-                            </Link>
-                        </SidebarMenuItem>
-                    ))}
-                </>
-            )}
-
-            {/* Pages */}
-            {rootDocs.length > 0 && (
-                <>
-                    {((project.boards?.length ?? 0) > 0 || (project.helpdesks?.length ?? 0) > 0 || (project.lead_forms?.length ?? 0) > 0) && <div className="border-t border-border/50 my-1.5" />}
-                    <button
-                        onClick={() => setPagesOpen(!pagesOpen)}
-                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
-                    >
-                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${pagesOpen ? 'rotate-90' : ''}`} />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Pages</span>
-                    </button>
-                    {pagesOpen && (
-                        <DraggableSidebarGroup
-                            items={rootDocs}
-                            workspace={workspace}
-                            project={project}
-                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
-                            currentPageUuid={currentPageUuid}
+            {/* Pinned (BRAI-106) */}
+            {showPinned && (
+                <div role="group" aria-label="Pinned">
+                    <SidebarGroupToggle label="Pinned" open={pinnedOpen} onToggle={setPinnedOpen} />
+                    {pinnedOpen && pinned.map((entry) => (
+                        <SidebarItemRow
+                            key={`${entry.pin.type}-${entry.pin.id}`}
+                            href={entry.href}
+                            icon={<PinIcon entry={entry} />}
+                            name={entry.name}
+                            projectId={project.id}
+                            pin={entry.pin}
+                            hoverOnlyPin
                         />
+                    ))}
+                    {pinnedOpen && pinned.length === 0 && (
+                        <p className="pl-7 pr-2 py-1.5 text-xs text-muted-foreground">Nothing pinned yet</p>
                     )}
-                </>
+                </div>
             )}
 
-            {/* Whiteboards */}
-            {rootWhiteboards.length > 0 && (
-                <>
-                    {(project.boards?.length > 0 || rootDocs.length > 0) && <div className="border-t border-border/50 my-1.5" />}
-                    <button
-                        onClick={() => setWhiteboardsOpen(!whiteboardsOpen)}
-                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
-                    >
-                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${whiteboardsOpen ? 'rotate-90' : ''}`} />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Whiteboards</span>
-                    </button>
-                    {whiteboardsOpen && (
-                        <DraggableSidebarGroup
-                            items={rootWhiteboards}
-                            workspace={workspace}
-                            project={project}
-                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
-                            currentPageUuid={currentPageUuid}
-                        />
-                    )}
-                </>
-            )}
+            {groups.map((group, index) => (
+                <React.Fragment key={group.key}>
+                    {index > 0 && <div className="border-t border-border/50 my-1.5" />}
+                    {group.node}
+                </React.Fragment>
+            ))}
 
-            {/* Folders */}
-            {rootFolders.length > 0 && (
-                <>
-                    {(project.boards?.length > 0 || rootDocs.length > 0 || rootWhiteboards.length > 0) && (
-                        <div className="border-t border-border/50 my-1.5" />
-                    )}
-                    <button
-                        onClick={() => setFoldersOpen(!foldersOpen)}
-                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
+            {somethingHidden && (
+                <SidebarMenuItem>
+                    <Link
+                        href={route('projects.show', params)}
+                        className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 mt-1 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
                     >
-                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${foldersOpen ? 'rotate-90' : ''}`} />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Folders</span>
-                    </button>
-                    {foldersOpen && (
-                        <DraggableSidebarGroup
-                            items={rootFolders}
-                            workspace={workspace}
-                            project={project}
-                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
-                            currentPageUuid={currentPageUuid}
-                        />
-                    )}
-                </>
+                        <LayoutGrid className="size-4 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate">Show all in project</span>
+                        <ArrowRight className="size-3.5 shrink-0" />
+                    </Link>
+                </SidebarMenuItem>
             )}
 
             {/* Add content button */}
@@ -1228,7 +1203,7 @@ function PageTreeItem({
     if (page.type === 'folder') {
         return (
             <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="flex min-w-0 items-center group">
+                <div className="group/pin flex min-w-0 items-center group">
                     <CollapsibleTrigger asChild>
                         <button
                             className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-left text-sm"
@@ -1242,10 +1217,12 @@ function PageTreeItem({
                             <span className="min-w-0 truncate text-muted-foreground group-hover:text-foreground">{page.name}</span>
                         </button>
                     </CollapsibleTrigger>
+                    <PinButton projectId={project.id} type="page" id={page.id} name={page.name} />
                     <Button
                         variant="ghost"
                         size="icon"
                         className="size-6 shrink-0 opacity-0 group-hover:opacity-100 mr-1"
+                        aria-label={`Add to ${page.name}`}
                         onClick={(e) => {
                             e.stopPropagation();
                             onAddItem(page.id);
@@ -1310,7 +1287,7 @@ function PageTreeItem({
         const childFolders = children.filter((p) => p.type === 'folder');
         return (
             <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="flex min-w-0 items-center group">
+                <div className="group/pin flex min-w-0 items-center group">
                     <CollapsibleTrigger asChild>
                         <button
                             className="shrink-0 p-1 hover:bg-accent rounded transition-colors text-muted-foreground"
@@ -1332,10 +1309,12 @@ function PageTreeItem({
                             )}
                         <span className="min-w-0 truncate">{page.name}</span>
                     </Link>
+                    <PinButton projectId={project.id} type="page" id={page.id} name={page.name} />
                     <Button
                         variant="ghost"
                         size="icon"
                         className="size-6 shrink-0 opacity-0 group-hover:opacity-100 mr-1"
+                        aria-label={`Add to ${page.name}`}
                         onClick={(e) => {
                             e.stopPropagation();
                             onAddItem(page.id);
@@ -1383,226 +1362,23 @@ function PageTreeItem({
     }
 
     return (
-        <Link
-            href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
-            className="flex min-w-0 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-            style={{ paddingLeft: `${level * 12 + 24}px` }}
-        >
-            {page.is_whiteboard ? (
-                <PencilRuler className="size-4 shrink-0 text-brand-slate" />
-            ) : (page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
-                ? <img src={page.icon} className="size-4 rounded object-cover shrink-0" alt="" />
-                : (
-                    <span className="shrink-0 text-base">{page.icon || '📄'}</span>
-                )}
-            <span className="min-w-0 truncate">{page.name}</span>
-        </Link>
-    );
-}
-
-// Collapsible group headers inside ProjectItem inline expanded view
-function InlineProjectGroups({
-    project,
-    workspace,
-    rootDocs,
-    rootWhiteboards,
-    rootFolders,
-    onAddItem,
-    currentPageUuid,
-}: {
-    project: Project & { boards: Board[]; pages?: PageType[]; helpdesks?: Helpdesk[] };
-    workspace: Workspace;
-    rootDocs: PageType[];
-    rootWhiteboards: PageType[];
-    rootFolders: PageType[];
-    onAddItem: (projectId: number, parentId?: number) => void;
-    currentPageUuid?: string | null;
-}) {
-    const [pagesOpen, setPagesOpen] = useExpandedState(`inline-project-${project.id}-pages`, true);
-    const [whiteboardsOpen, setWhiteboardsOpen] = useExpandedState(`inline-project-${project.id}-whiteboards`, true);
-    const [foldersOpen, setFoldersOpen] = useExpandedState(`inline-project-${project.id}-folders`, true);
-    const hasBoardsOrHelpdesksBefore = (project.boards?.length ?? 0) > 0 || (project.helpdesks?.length ?? 0) > 0;
-
-    return (
-        <>
-            {hasBoardsOrHelpdesksBefore && <div className="border-t border-border/50 my-1.5" />}
-            {rootDocs.length > 0 && (
-                <>
-                    <button
-                        onClick={() => setPagesOpen(!pagesOpen)}
-                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
-                    >
-                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${pagesOpen ? 'rotate-90' : ''}`} />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Pages</span>
-                    </button>
-                    {pagesOpen && (
-                        <DraggableSidebarGroup
-                            items={rootDocs}
-                            workspace={workspace}
-                            project={project}
-                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
-                            currentPageUuid={currentPageUuid}
-                        />
+        <div className="group/pin flex min-w-0 items-center">
+            <Link
+                href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
+                className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                style={{ paddingLeft: `${level * 12 + 24}px` }}
+            >
+                {page.is_whiteboard ? (
+                    <PencilRuler className="size-4 shrink-0 text-brand-slate" />
+                ) : (page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
+                    ? <img src={page.icon} className="size-4 rounded object-cover shrink-0" alt="" />
+                    : (
+                        <span className="shrink-0 text-base">{page.icon || '📄'}</span>
                     )}
-                </>
-            )}
-            {rootWhiteboards.length > 0 && (
-                <>
-                    {rootDocs.length > 0 && <div className="border-t border-border/50 my-1.5" />}
-                    <button
-                        onClick={() => setWhiteboardsOpen(!whiteboardsOpen)}
-                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
-                    >
-                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${whiteboardsOpen ? 'rotate-90' : ''}`} />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Whiteboards</span>
-                    </button>
-                    {whiteboardsOpen && (
-                        <DraggableSidebarGroup
-                            items={rootWhiteboards}
-                            workspace={workspace}
-                            project={project}
-                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
-                            currentPageUuid={currentPageUuid}
-                        />
-                    )}
-                </>
-            )}
-            {rootFolders.length > 0 && (
-                <>
-                    {(rootDocs.length > 0 || rootWhiteboards.length > 0) && <div className="border-t border-border/50 my-1.5" />}
-                    <button
-                        onClick={() => setFoldersOpen(!foldersOpen)}
-                        className="flex items-center gap-1.5 px-2 py-1 w-full hover:bg-accent/50 rounded-md transition-colors"
-                    >
-                        <ChevronRight className={`size-3 shrink-0 text-muted-foreground/60 transition-transform ${foldersOpen ? 'rotate-90' : ''}`} />
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex-1 text-left">Folders</span>
-                    </button>
-                    {foldersOpen && (
-                        <DraggableSidebarGroup
-                            items={rootFolders}
-                            workspace={workspace}
-                            project={project}
-                            onAddItem={(parentId) => onAddItem(project.id, parentId)}
-                            currentPageUuid={currentPageUuid}
-                        />
-                    )}
-                </>
-            )}
-        </>
-    );
-}
-
-// Project Item with boards and pages
-function ProjectItem({
-    project,
-    workspace,
-    isActive,
-    onAddItem,
-    currentPageUuid,
-}: {
-    project: Project & { boards: Board[]; pages?: PageType[]; helpdesks?: Helpdesk[] };
-    workspace: Workspace;
-    isActive: boolean;
-    onAddItem: (projectId: number, parentId?: number) => void;
-    currentPageUuid?: string | null;
-}) {
-    const isProjectActive = !!currentPageUuid && projectContainsPageUuid(project, currentPageUuid);
-    const [isOpen, setIsOpen] = useExpandedState(`project-${project.id}`, isActive || isProjectActive);
-
-    useEffect(() => {
-        if (isProjectActive) setIsOpen(true);
-    }, [isProjectActive]);
-
-    const hasContent = (project.boards && project.boards.length > 0) || (project.pages && project.pages.length > 0) || (project.helpdesks && project.helpdesks.length > 0) || (project.lead_forms?.length ?? 0) > 0;
-
-    return (
-        <Collapsible open={isOpen} onOpenChange={setIsOpen} className="group/collapsible">
-            <SidebarMenuItem className="min-w-0">
-                <div className="flex min-w-0 items-center group">
-                    <CollapsibleTrigger asChild>
-                        <button className="flex min-w-0 flex-1 items-center gap-3 px-2 py-2 hover:bg-accent rounded-lg transition-colors text-left">
-                            <ProjectIcon project={project} size="sm" />
-                            <span className="min-w-0 flex-1 truncate text-sm font-medium">{project.name}</span>
-                            {hasContent && (
-                                <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" />
-                            )}
-                        </button>
-                    </CollapsibleTrigger>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 shrink-0 opacity-0 group-hover:opacity-100 mr-1"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onAddItem(project.id);
-                        }}
-                    >
-                        <Plus className="size-4" />
-                    </Button>
-                </div>
-                {hasContent && (
-                    <CollapsibleContent>
-                        <div className="ml-4 pl-5 border-l border-border space-y-0.5 py-1">
-                            {/* Boards */}
-                            {project.boards?.map((board) => (
-                                <Link
-                                    key={board.id}
-                                    href={route('boards.show', [workspace.slug, project.slug, board.slug])}
-                                    className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                                >
-                                    <LayoutGrid className="size-4 shrink-0" />
-                                    <span className="min-w-0 truncate">{board.name}</span>
-                                </Link>
-                            ))}
-
-                            {/* Helpdesks */}
-                            {project.helpdesks?.map((helpdesk) => (
-                                <Link
-                                    key={helpdesk.id}
-                                    href={route('helpdesks.show', [workspace.slug, project.slug, helpdesk.slug])}
-                                    className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                                >
-                                    <LifeBuoy className="size-4 shrink-0" />
-                                    <span className="min-w-0 truncate">{helpdesk.name}</span>
-                                </Link>
-                            ))}
-
-                            {/* Lead forms */}
-                            {project.lead_forms?.map((leadForm) => (
-                                <Link
-                                    key={leadForm.id}
-                                    href={route('lead-forms.show', [workspace.slug, project.slug, leadForm.slug])}
-                                    className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                                >
-                                    <Magnet className="size-4 shrink-0" />
-                                    <span className="min-w-0 truncate">{leadForm.name}</span>
-                                </Link>
-                            ))}
-
-                            {/* Pages, Whiteboards, Folders - collapsible with drag */}
-                            {project.pages && project.pages.length > 0 && (() => {
-                                const rootDocs = project.pages.filter((p) => p.type === 'page' && !p.is_whiteboard);
-                                const rootWhiteboards = project.pages.filter((p) => p.type === 'page' && p.is_whiteboard);
-                                const rootFolders = project.pages.filter((p) => p.type === 'folder');
-                                const hasAny = rootDocs.length > 0 || rootWhiteboards.length > 0 || rootFolders.length > 0;
-                                if (!hasAny) return null;
-                                return (
-                                    <InlineProjectGroups
-                                        project={project}
-                                        workspace={workspace}
-                                        rootDocs={rootDocs}
-                                        rootWhiteboards={rootWhiteboards}
-                                        rootFolders={rootFolders}
-                                        onAddItem={onAddItem}
-                                        currentPageUuid={currentPageUuid}
-                                    />
-                                );
-                            })()}
-                        </div>
-                    </CollapsibleContent>
-                )}
-            </SidebarMenuItem>
-        </Collapsible>
+                <span className="min-w-0 truncate">{page.name}</span>
+            </Link>
+            <PinButton projectId={project.id} type="page" id={page.id} name={page.name} className="mr-1" />
+        </div>
     );
 }
 
@@ -1619,7 +1395,14 @@ function AppSidebar({
     onOpenSearch?: () => void;
     onOpenHelp?: () => void;
 }) {
-    const { auth, currentPageUuid, canManageWorkspace = false, captureInboxCount = 0 } = usePage<PageProps>().props;
+    const { auth, currentPageUuid, canManageWorkspace = false } = usePage<PageProps>().props;
+    const navItems = useSidebarNavItems();
+    const hiddenNav = useSidebarPreferences().hidden_nav;
+    const { isMobile, setOpenMobile } = useSidebar();
+    const customize = () => {
+        if (isMobile) setOpenMobile(false);
+        openCustomizeSidebar();
+    };
     const isInstanceAdmin = !!auth.isInstanceAdmin;
     const user = auth.user;
     const projects = currentWorkspace?.projects || [];
@@ -1707,147 +1490,30 @@ function AppSidebar({
                     </Link>
                 </SidebarHeader>
 
-                {/* Main Navigation */}
-                <div className="px-3 pb-2 flex-shrink-0">
+                {/* Main Navigation: entries come from useSidebarNavItems (BRAI-106); hidden ones stay in ⌘K */}
+                <nav aria-label="Main" className="px-3 pb-2 flex-shrink-0">
                     <SidebarMenu className="space-y-0.5">
-                        <SidebarMenuItem>
-                            <Link
-                                href={currentWorkspace ? route('workspaces.show', currentWorkspace.slug) : route('workspaces.index')}
-                                className={cn(
-                                    'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-                                    route().current() === 'workspaces.show' || route().current() === 'workspaces.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                                )}
-                            >
-                                <Home className="size-4" />
-                                <span>Home</span>
-                            </Link>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                            <Link
-                                href={route('my-work.index')}
-                                className={cn(
-                                    'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-                                    route().current() === 'my-work.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                                )}
-                            >
-                                <ListTodo className="size-4" />
-                                <span>My Work</span>
-                            </Link>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                            <Link
-                                href={route('captures.index')}
-                                className={cn(
-                                    'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-                                    route().current() === 'captures.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                                )}
-                            >
-                                <Lightbulb className="size-4" />
-                                <span>Captures</span>
-                                {captureInboxCount > 0 && (
-                                    <span className="ml-auto rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground" aria-label={`${captureInboxCount} in your capture inbox`}>
-                                        {captureInboxCount}
-                                    </span>
-                                )}
-                            </Link>
-                        </SidebarMenuItem>
-                        {/* Time tracking & billing (v1.38.0); the timesheet route comes with BRAI-99 */}
-                        {currentWorkspace && route().has('timesheet.index') && (
-                            <SidebarMenuItem>
+                        {navItems.filter((item) => !item.hideable || !hiddenNav.includes(item.key as SidebarNavKey)).map((item) => (
+                            <SidebarMenuItem key={item.key}>
                                 <Link
-                                    href={route('timesheet.index', currentWorkspace.slug)}
+                                    href={item.href}
                                     className={cn(
                                         'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-                                        route().current() === 'timesheet.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                        item.active ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
                                     )}
                                 >
-                                    <Clock className="size-4" />
-                                    <span>Timesheet</span>
-                                </Link>
-                            </SidebarMenuItem>
-                        )}
-                        {currentWorkspace && canManageWorkspace && (
-                            <SidebarMenuItem>
-                                <Link
-                                    href={route('billing.index', currentWorkspace.slug)}
-                                    className={cn(
-                                        'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-                                        route().current()?.startsWith('billing.') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+                                    <item.icon className="size-4" />
+                                    <span>{item.label}</span>
+                                    {item.badge && (
+                                        <span className="ml-auto rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-muted-foreground" aria-label={item.badge.label}>
+                                            {item.badge.count}
+                                        </span>
                                     )}
-                                >
-                                    <ReceiptText className="size-4" />
-                                    <span>Billing</span>
                                 </Link>
                             </SidebarMenuItem>
-                        )}
-                        {currentWorkspace && canManageWorkspace && route().has('insights.index') && (
-                            <SidebarMenuItem>
-                                <Link
-                                    href={route('insights.index', currentWorkspace.slug)}
-                                    className={cn(
-                                        'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-                                        route().current()?.startsWith('insights.') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                                    )}
-                                >
-                                    <ChartColumn className="size-4" />
-                                    <span>Insights</span>
-                                </Link>
-                            </SidebarMenuItem>
-                        )}
-                        <SidebarMenuItem>
-                            <Link
-                                href={route('calendar.index')}
-                                className={cn(
-                                    'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-                                    route().current() === 'calendar.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                                )}
-                            >
-                                <CalendarDays className="size-4" />
-                                <span>Calendar</span>
-                            </Link>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem>
-                            <Link
-                                href={route('notifications.page')}
-                                className={cn(
-                                    'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-                                    route().current() === 'notifications.page' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                                )}
-                            >
-                                <Bell className="size-4" />
-                                <span>Inbox</span>
-                            </Link>
-                        </SidebarMenuItem>
-                        {currentWorkspace && (
-                            <SidebarMenuItem>
-                                <Link
-                                    href={route('bookmarks.index', currentWorkspace.slug)}
-                                    className={cn(
-                                        'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-                                        route().current() === 'bookmarks.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                                    )}
-                                >
-                                    <BookmarkIcon className="size-4" />
-                                    <span>Bookmarks</span>
-                                </Link>
-                            </SidebarMenuItem>
-                        )}
-                        {currentWorkspace && (
-                            <SidebarMenuItem>
-                                <Link
-                                    href={route('snippets.index', currentWorkspace.slug)}
-                                    className={cn(
-                                        'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-[13px] font-medium transition-colors',
-                                        route().current() === 'snippets.index' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-                                    )}
-                                >
-                                    <Code2 className="size-4" />
-                                    <span>Snippets</span>
-                                </Link>
-                            </SidebarMenuItem>
-                        )}
+                        ))}
                     </SidebarMenu>
-                </div>
+                </nav>
 
                 <Separator className="mx-3" />
 
@@ -1894,7 +1560,18 @@ function AppSidebar({
                 </SidebarContent>
 
                 <SidebarFooter className="p-3 pt-0">
-                    <Separator className="mb-3" />
+                    <div className="mb-2 flex items-center gap-2">
+                        <Separator className="flex-1 w-auto" />
+                        <button
+                            type="button"
+                            onClick={customize}
+                            aria-label="Customize sidebar"
+                            title="Customize sidebar"
+                            className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                            <Pencil className="size-3.5" />
+                        </button>
+                    </div>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <button className="flex items-center gap-3 w-full px-2 py-2 hover:bg-accent rounded-lg transition-colors text-left">
@@ -1967,6 +1644,10 @@ function AppSidebar({
                                     <span className="text-sm">Profile settings</span>
                                 </Link>
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={customize} className="flex items-center gap-3 p-2 cursor-pointer">
+                                <PanelLeft className="size-4" />
+                                <span className="text-sm">Customize sidebar</span>
+                            </DropdownMenuItem>
                             {currentWorkspace && canManageWorkspace && (
                                 <DropdownMenuItem asChild className="cursor-pointer">
                                     <Link href={route('workspaces.edit', currentWorkspace.slug)} className="flex items-center gap-3 p-2">
@@ -2000,6 +1681,9 @@ function AppSidebar({
                     </DropdownMenu>
                 </SidebarFooter>
             </Sidebar>
+
+            {/* Customize sidebar (BRAI-106); outside <Sidebar> so it works while the mobile sheet is closed */}
+            <CustomizeSidebarSheet workspaceSlug={currentWorkspace?.slug} project={activeProject} />
 
             {/* Create Item Modal */}
             {selectedProject && currentWorkspace && (
@@ -2105,6 +1789,7 @@ export default function AppLayout({ children, title }: Props) {
     const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
     const [paletteQuery, setPaletteQuery] = useState('');
     const { resolvedTheme, toggleTheme } = useTheme();
+    const navItems = useSidebarNavItems();
     useRecentTracking();
     useTimezoneSync();
     const [quickCreateSnippetOpen, setQuickCreateSnippetOpen] = useState(false);
@@ -2174,44 +1859,18 @@ export default function AppLayout({ children, title }: Props) {
 
     const commandPaletteCommands: PaletteCommand[] = [
         // ── Navigation ──────────────────────────────────────────────────────
-        ...(currentWorkspace ? [
-            {
-                id: 'nav-workspace',
-                label: `Go to ${currentWorkspace.name}`,
-                description: 'Projects of this workspace',
-                keywords: 'home workspace projects',
-                icon: <CmdIcon><Home className="size-4" /></CmdIcon>,
+        // From the sidebar's nav config (BRAI-106), so entries hidden in the sidebar stay reachable here
+        ...navItems
+            .filter((item) => item.key !== 'home' || currentWorkspace)
+            .map((item): PaletteCommand => ({
+                id: item.palette.id,
+                label: item.palette.label,
+                description: item.palette.description,
+                keywords: item.palette.keywords,
+                icon: <CmdIcon color={item.palette.color}><item.icon className="size-4" /></CmdIcon>,
                 group: 'Go to',
-                action: () => router.visit(route('workspaces.show', currentWorkspace.slug)),
-            },
-        ] as PaletteCommand[] : []),
-        {
-            id: 'nav-my-work',
-            label: 'Go to My Work',
-            description: 'Issues assigned to you',
-            keywords: 'assigned tasks todo',
-            icon: <CmdIcon><FolderKanban className="size-4" /></CmdIcon>,
-            group: 'Go to',
-            action: () => router.visit(route('my-work.index')),
-        },
-        {
-            id: 'nav-calendar',
-            label: 'Go to Calendar',
-            description: 'Due dates and connected calendars',
-            keywords: 'schedule events google',
-            icon: <CmdIcon><CalendarDays className="size-4" /></CmdIcon>,
-            group: 'Go to',
-            action: () => router.visit(route('calendar.index')),
-        },
-        {
-            id: 'nav-inbox',
-            label: 'Go to Inbox',
-            description: 'All notifications',
-            keywords: 'notifications mentions',
-            icon: <CmdIcon><Bell className="size-4" /></CmdIcon>,
-            group: 'Go to',
-            action: () => router.visit(route('notifications.page')),
-        },
+                action: () => router.visit(item.href),
+            })),
         {
             id: 'nav-workspaces',
             label: 'Switch workspace',
@@ -2221,24 +1880,6 @@ export default function AppLayout({ children, title }: Props) {
             group: 'Go to',
             action: () => router.visit(route('workspaces.index')),
         },
-        ...(currentWorkspace ? [
-            {
-                id: 'nav-bookmarks',
-                label: 'Go to Bookmarks',
-                description: 'Open your bookmark collections',
-                icon: <CmdIcon color="#0969da"><BookmarkIcon className="size-4" /></CmdIcon>,
-                group: 'Go to',
-                action: () => router.visit(route('bookmarks.index', currentWorkspace.slug)),
-            },
-            {
-                id: 'nav-snippets',
-                label: 'Go to Snippets',
-                description: 'Open your code snippet collections',
-                icon: <CmdIcon color="#1a7f37"><Code2 className="size-4" /></CmdIcon>,
-                group: 'Go to',
-                action: () => router.visit(route('snippets.index', currentWorkspace.slug)),
-            },
-        ] as PaletteCommand[] : []),
 
         // ── Create ──────────────────────────────────────────────────────────
         {
@@ -2329,6 +1970,15 @@ export default function AppLayout({ children, title }: Props) {
             group: 'Actions',
             action: () =>
                 window.dispatchEvent(new CustomEvent('page-sticky-note:create')),
+        },
+        {
+            id: 'customize-sidebar',
+            label: 'Customize sidebar',
+            description: 'Show or hide sidebar entries and project groups, manage pins',
+            keywords: 'sidebar hide show pin navigation layout',
+            icon: <CmdIcon><PanelLeft className="size-4" /></CmdIcon>,
+            group: 'Actions',
+            action: () => openCustomizeSidebar(),
         },
         {
             id: 'toggle-theme',
