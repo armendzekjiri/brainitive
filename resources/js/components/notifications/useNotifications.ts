@@ -1,0 +1,213 @@
+import type { AppNotification, NotificationFeed, NotificationFilter, PageProps } from '@/types';
+import { usePage } from '@inertiajs/react';
+import axios from 'axios';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+/**
+ * Client side of the inbox (BRAI-102): the feed (filters, cursor pages, optimistic actions) and the
+ * unread count shared by the bell, the inbox page and the tab title.
+ */
+
+const UNREAD_EVENT = 'brainitive:notifications-unread';
+const POLL_MS = 30_000;
+
+/** Tell every listener (the bell badge, the tab title) the new unread count. */
+export function announceUnread(count: number) {
+    window.dispatchEvent(new CustomEvent<number>(UNREAD_EVENT, { detail: count }));
+}
+
+const TITLE_BADGE = /^\(\d+\+?\) /;
+
+/** "(3) Board - Brainitive": keeps the badge on the tab title across Inertia title changes. */
+function useTitleBadge(count: number, enabled: boolean) {
+    useEffect(() => {
+        if (!enabled) return;
+        const apply = () => {
+            const base = document.title.replace(TITLE_BADGE, '');
+            const wanted = count > 0 ? `(${count > 99 ? '99+' : count}) ${base}` : base;
+            if (document.title !== wanted) document.title = wanted;
+        };
+        apply();
+        // Inertia's <Head> rewrites the title on every visit: re-apply after it
+        const observer = new MutationObserver(apply);
+        observer.observe(document.head, { childList: true, subtree: true, characterData: true });
+        return () => {
+            observer.disconnect();
+            document.title = document.title.replace(TITLE_BADGE, '');
+        };
+    }, [count, enabled]);
+}
+
+/**
+ * The unread count: starts from the shared prop, polls every 30 s, refreshes when the window gets
+ * focus, and follows actions taken anywhere in the app. Set `manageTitle` in exactly one place.
+ */
+export function useUnreadCount({ manageTitle = false, poll = true }: { manageTitle?: boolean; poll?: boolean } = {}) {
+    const initial = usePage<PageProps>().props.unreadNotificationsCount ?? 0;
+    const [count, setCount] = useState(initial);
+
+    useEffect(() => setCount(initial), [initial]);
+
+    const refresh = useCallback(async () => {
+        try {
+            const res = await axios.get<{ count: number }>(route('notifications.unread-count'));
+            setCount(res.data.count);
+        } catch {
+            // offline or signed out: keep the last count
+        }
+    }, []);
+
+    useEffect(() => {
+        const onAnnounce = (e: Event) => setCount((e as CustomEvent<number>).detail);
+        window.addEventListener(UNREAD_EVENT, onAnnounce);
+        if (!poll) return () => window.removeEventListener(UNREAD_EVENT, onAnnounce);
+
+        const interval = window.setInterval(() => {
+            if (document.visibilityState === 'visible') refresh();
+        }, POLL_MS);
+        const onFocus = () => refresh();
+        const onVisible = () => document.visibilityState === 'visible' && refresh();
+        window.addEventListener('focus', onFocus);
+        document.addEventListener('visibilitychange', onVisible);
+        return () => {
+            window.removeEventListener(UNREAD_EVENT, onAnnounce);
+            window.clearInterval(interval);
+            window.removeEventListener('focus', onFocus);
+            document.removeEventListener('visibilitychange', onVisible);
+        };
+    }, [refresh, poll]);
+
+    // only one owner may rewrite the title (two would undo each other forever)
+    useTitleBadge(count, manageTitle);
+
+    return { count, refresh };
+}
+
+export type NotificationAction = 'read' | 'unread' | 'archive' | 'unarchive';
+
+interface FeedOptions {
+    filter: NotificationFilter;
+    archived: boolean;
+    /** First page from the server (inbox page props); otherwise fetched on `reload()`. */
+    initial?: NotificationFeed;
+    /** Fetch as soon as the options change (default true). */
+    enabled?: boolean;
+}
+
+export function useNotificationFeed({ filter, archived, initial, enabled = true }: FeedOptions) {
+    const [items, setItems] = useState<AppNotification[]>(initial?.data ?? []);
+    const [cursor, setCursor] = useState<string | null>(initial?.next_cursor ?? null);
+    const [loading, setLoading] = useState(!initial && enabled);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [error, setError] = useState(false);
+    const request = useRef(0);
+    const skipFirst = useRef(!!initial);
+
+    const fetchPage = useCallback(
+        async (next: string | null) => {
+            const res = await axios.get<NotificationFeed>(route('notifications.index'), {
+                params: { filter, archived: archived ? 1 : 0, ...(next ? { cursor: next } : {}) },
+            });
+            announceUnread(res.data.unread_count);
+            return res.data;
+        },
+        [filter, archived],
+    );
+
+    const reload = useCallback(async () => {
+        const id = ++request.current;
+        setLoading(true);
+        setError(false);
+        try {
+            const feed = await fetchPage(null);
+            if (id !== request.current) return;
+            setItems(feed.data);
+            setCursor(feed.next_cursor);
+        } catch {
+            if (id === request.current) setError(true);
+        } finally {
+            if (id === request.current) setLoading(false);
+        }
+    }, [fetchPage]);
+
+    useEffect(() => {
+        if (!enabled) return;
+        if (skipFirst.current) {
+            skipFirst.current = false;
+            return;
+        }
+        reload();
+    }, [enabled, reload]);
+
+    const loadMore = useCallback(async () => {
+        if (!cursor || loadingMore) return;
+        const id = request.current;
+        setLoadingMore(true);
+        try {
+            const feed = await fetchPage(cursor);
+            if (id !== request.current) return;
+            setItems((prev) => {
+                const seen = new Set(prev.map((n) => n.id));
+                return [...prev, ...feed.data.filter((n) => !seen.has(n.id))];
+            });
+            setCursor(feed.next_cursor);
+        } catch {
+            setError(true);
+        } finally {
+            setLoadingMore(false);
+        }
+    }, [cursor, loadingMore, fetchPage]);
+
+    /**
+     * Optimistic: rows change at once and roll back if the server refuses. Archived rows leave the
+     * inbox (and un-archived ones leave the archive); read rows stay in "Unread" until the next load,
+     * so nothing jumps away under the pointer.
+     */
+    const act = useCallback(
+        async (ids: string[], action: NotificationAction) => {
+            if (ids.length === 0) return;
+            const now = new Date().toISOString();
+            const before = items;
+            const leaves = (action === 'archive' && !archived) || (action === 'unarchive' && archived) || (action === 'unread' && archived);
+            setItems((prev) =>
+                leaves
+                    ? prev.filter((n) => !ids.includes(n.id))
+                    : prev.map((n) =>
+                          !ids.includes(n.id)
+                              ? n
+                              : action === 'read'
+                                ? { ...n, read_at: n.read_at ?? now }
+                                : action === 'unread'
+                                  ? { ...n, read_at: null, archived_at: null }
+                                  : n,
+                      ),
+            );
+            try {
+                const res =
+                    ids.length === 1
+                        ? await axios.post<{ unread_count: number }>(route(`notifications.${action}`, ids[0]))
+                        : await axios.post<{ unread_count: number }>(route('notifications.bulk'), { ids, action });
+                announceUnread(res.data.unread_count);
+            } catch {
+                setItems(before);
+                throw new Error('notification action failed');
+            }
+        },
+        [items, archived],
+    );
+
+    const markAllRead = useCallback(async () => {
+        const before = items;
+        const now = new Date().toISOString();
+        setItems((prev) => prev.map((n) => ({ ...n, read_at: n.read_at ?? now })));
+        try {
+            await axios.post(route('notifications.read-all'));
+            announceUnread(0);
+        } catch {
+            setItems(before);
+            throw new Error('mark all read failed');
+        }
+    }, [items]);
+
+    return { items, loading, loadingMore, error, hasMore: !!cursor, reload, loadMore, act, markAllRead };
+}

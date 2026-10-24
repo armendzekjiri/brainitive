@@ -482,10 +482,27 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
     `UniqueConstraintViolationException` and querying on.
   - **Sequences don't restart between tests** (rollback keeps them), so never hard-code ids
     like `=== 4`. Keep the created model's id.
-- **Notification payloads are rendered in one place.** `components/NotificationMessage.tsx`
-  maps every `data.type` to a sentence. The bell and the page used to fall back to
-  "{actor} moved {item_key}", so ticket notifications (`ticket_*`, with no `item_*` keys)
-  showed as "moved". Add a case for each new type.
+- **Notification payloads are rendered in one place.** `describeNotification()` in
+  `components/NotificationMessage.tsx` turns a payload into a row. The bell and the page used to fall
+  back to "{actor} moved {item_key}", so ticket notifications (`ticket_*`, with no `item_*` keys)
+  showed as "moved". Since BRAI-102, unknown types render from the payload contract keys (`title`,
+  `body`, `url`, `actor_*`, `project_name`, `subject_key`): give new types those keys instead of a
+  frontend case. Old rows keep their old keys forever (they are only pruned after 180 days).
+- **Notifications inbox invariants (BRAI-102).** An archived notification is always read (archive
+  sets `read_at`; "mark unread" clears `archived_at` too), so the shared `unreadNotificationsCount`
+  and `unreadNotifications()` never need an `archived_at` filter. Filtering by category reads
+  `data->type` from the `text` column (`data::jsonb ->> 'type'` on Postgres, `json_extract` on
+  SQLite — `NotificationController::whereDataType`). `NotificationCatalog::category()` throws on
+  unknown types; listing code uses `TYPES[$type] ?? null` instead. Only the bell owns the tab-title
+  badge (`useUnreadCount({ manageTitle: true })`): two owners rewrite each other's title forever
+  through the MutationObserver and crash the tab.
+- **Tailwind only scans `.tsx` files** (`tailwind.config.js` content). Class names that live in a
+  `.ts` file (a style map, a constants file) are never generated — that's why
+  `components/notifications/categories.tsx` is a `.tsx`.
+- **New files under `resources/js/components/` on macOS:** git's index has both `Components/` (old
+  Breeze files) and `components/`. A plain `git add` may record a new file under `Components/`,
+  which breaks the `@/components` import on Linux (CI). Add with
+  `git -c core.ignorecase=false add resources/js/components/...` and check `git ls-files`.
 - **Project data hangs off `project_id`; only `projects` stores `workspace_id`.** Moving a
   project is a single update (see `ProjectTransfer`). Keep it that way: a new project-level
   table must not copy `workspace_id`, or moves (and access checks) drift. Workspace-level

@@ -1,7 +1,7 @@
 # Notifications redesign: inbox UI/UX + per-category preferences (BRAI-102)
 
 **Branch:** feat/notifications-ui (into release/v1.39.0)
-**Status:** in-progress
+**Status:** done
 **Started:** 2026-10-24
 **Board card:** BRAI-102 · contract: [`release-v1.39.0.md`](./release-v1.39.0.md) ticket 1
 
