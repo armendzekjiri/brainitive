@@ -151,6 +151,8 @@ class BoardController extends Controller
             // Admins get a shortcut to field settings; values follow ItemPolicy::update (= board update).
             'canManageFields' => $request->user()->can('update', $project),
             'canEditItems' => $request->user()->can('update', $board),
+            // List view bulk delete (BRAI-108): may delete issues created by someone else (ItemPolicy::delete)
+            'canDeleteAnyItem' => $user->can('delete', (new Item(['created_by' => 0]))->setRelation('board', $board)),
             'activeSprint' => $activeSprint?->only(['id', 'name', 'goal', 'start_date', 'end_date']),
             'canManageSprints' => $request->user()->can('update', $board),
             // can_edit = BoardViewPolicy::update, without re-checking the board per view (authorized above)

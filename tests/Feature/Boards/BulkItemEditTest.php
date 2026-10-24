@@ -13,6 +13,7 @@ use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
 /**
@@ -283,5 +284,17 @@ class BulkItemEditTest extends TestCase
             ->assertForbidden();
 
         $this->assertNotSoftDeleted($own);
+    }
+
+    public function test_the_board_tells_the_list_who_may_delete_any_issue(): void
+    {
+        $url = route('boards.show', [$this->workspace->slug, $this->project->slug, $this->board->slug]);
+
+        $this->actingAs($this->projectMember('admin'))->get($url)
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('canDeleteAnyItem', true)->where('canEditItems', true));
+        $this->actingAs($this->editor)->get($url)
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('canDeleteAnyItem', false)->where('canEditItems', true));
+        $this->actingAs($this->viewer)->get($url)
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('canDeleteAnyItem', false)->where('canEditItems', false));
     }
 }

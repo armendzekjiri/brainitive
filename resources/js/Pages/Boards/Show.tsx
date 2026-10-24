@@ -128,6 +128,7 @@ import {
 } from '@/lib/customFields';
 import { ActiveSprintBar, type SprintSummary } from '@/components/board/ActiveSprintBar';
 import SavedViewsMenu from '@/components/board/SavedViewsMenu';
+import { BulkEditBar } from '@/components/board/BulkEditBar';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -155,6 +156,8 @@ interface Props extends PageProps {
     appliedViewParams?: Record<string, string> | null;
     defaultViewId?: number | null;
     canShareViews?: boolean;
+    /** May delete issues created by others (ItemPolicy::delete) — the list's bulk delete. */
+    canDeleteAnyItem?: boolean;
 }
 
 // Item Card Component — redesigned (utility-first dense kanban)
@@ -1292,6 +1295,20 @@ function FieldCell({ field, item }: { field: ItemField; item: Item }) {
     return <span className={cn('text-sm', field.type === 'number' && 'tabular-nums', field.type === 'text' && 'block max-w-[220px] truncate')} title={text}>{text}</span>;
 }
 
+const LIST_CHECKBOX_CLASS = 'size-4 rounded border-input accent-primary cursor-pointer align-middle';
+
+/** What the list view needs for multi-select + bulk edit (BRAI-108). */
+interface ListBulkOptions {
+    users: User[];
+    priorities: ItemPriority[];
+    itemTypes: ItemType[];
+    labels: LabelType[];
+    /** Scrum boards: the running + planned sprints; null on Kanban boards. */
+    sprints: { id: number; name: string }[] | null;
+    canDeleteAnyItem: boolean;
+    currentUserId: number;
+}
+
 function ListView({
     columns,
     workspace,
@@ -1303,6 +1320,7 @@ function ListView({
     setSort,
     hiddenFieldIds,
     setHiddenFieldIds,
+    bulk,
 }: {
     columns: (BoardColumn & { items: Item[] })[];
     workspace: Workspace;
@@ -1315,8 +1333,10 @@ function ListView({
     setSort: React.Dispatch<React.SetStateAction<ListSort | null>>;
     hiddenFieldIds: number[];
     setHiddenFieldIds: React.Dispatch<React.SetStateAction<number[]>>;
+    /** Multi-select + bulk edit (BRAI-108); null = read-only list (no checkboxes). */
+    bulk: ListBulkOptions | null;
 }) {
-    const allItems = columns.flatMap(col => col.items.map(item => ({ ...item, columnName: col.name })));
+    const allItems = useMemo(() => columns.flatMap(col => col.items.map(item => ({ ...item, columnName: col.name }))), [columns]);
 
     // Hidden custom field columns, per board and person (new fields show up by default)
     const toggleFieldColumn = (id: number) => setHiddenFieldIds((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
@@ -1352,11 +1372,70 @@ function ListView({
         return [...allItems].sort((a, b) => compare(a, b) || keyNumber(a) - keyNumber(b));
     }, [allItems, sort, sortHidden, customFields, columnRank]);
 
-    const columnCount = 8 + fieldColumns.length;
+    const selectable = bulk !== null;
+    const columnCount = 8 + fieldColumns.length + (selectable ? 1 : 0);
+
+    // ── Selection (BRAI-108): row checkboxes, shift-click ranges, header = all visible rows ──
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
+    const anchorId = useRef<number | null>(null);
+    const visibleIds = useMemo(() => sortedItems.map((item) => item.id), [sortedItems]);
+    // Filters, sorting and reloads (a bulk delete) change the rows: only visible rows stay selected
+    useEffect(() => {
+        setSelectedIds((current) => {
+            const visible = new Set(visibleIds);
+            const kept = [...current].filter((id) => visible.has(id));
+            return kept.length === current.size ? current : new Set(kept);
+        });
+    }, [visibleIds]);
+    const selectedItems = useMemo(() => sortedItems.filter((item) => selectedIds.has(item.id)), [sortedItems, selectedIds]);
+    const allSelected = visibleIds.length > 0 && selectedItems.length === visibleIds.length;
+    const someSelected = selectedItems.length > 0 && !allSelected;
+    const headerCheckbox = useRef<HTMLInputElement>(null);
+    useEffect(() => { if (headerCheckbox.current) headerCheckbox.current.indeterminate = someSelected; }, [someSelected]);
+
+    const clearSelection = useCallback(() => { setSelectedIds(new Set()); anchorId.current = null; }, []);
+    const toggleRow = (id: number, range: boolean) => {
+        setSelectedIds((current) => {
+            const next = new Set(current);
+            const select = !current.has(id);
+            const from = anchorId.current === null ? -1 : visibleIds.indexOf(anchorId.current);
+            const to = visibleIds.indexOf(id);
+            if (range && from !== -1 && to !== -1) {
+                // Shift-click: the whole range takes the clicked row's new state
+                for (const rowId of visibleIds.slice(Math.min(from, to), Math.max(from, to) + 1)) {
+                    if (select) next.add(rowId); else next.delete(rowId);
+                }
+            } else if (select) next.add(id); else next.delete(id);
+            return next;
+        });
+        anchorId.current = id;
+    };
+    const toggleAll = () => {
+        setSelectedIds(allSelected ? new Set() : new Set(visibleIds));
+        anchorId.current = null;
+    };
+
+    // Esc clears the selection — unless it closes a menu or dialog first
+    const hasSelection = selectedIds.size > 0;
+    useEffect(() => {
+        if (!hasSelection) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape' || e.defaultPrevented) return;
+            if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [data-radix-popper-content-wrapper]')) return;
+            clearSelection();
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [hasSelection, clearSelection]);
+
+    const deletableIds = useMemo(
+        () => new Set(selectedItems.filter((item) => bulk?.canDeleteAnyItem || item.created_by === bulk?.currentUserId).map((item) => item.id)),
+        [selectedItems, bulk?.canDeleteAnyItem, bulk?.currentUserId],
+    );
 
     return (
         <div className="flex-1 overflow-auto bg-background">
-            <div className="p-6">
+            <div className={cn('p-6', selectedItems.length > 0 && 'max-sm:pb-24')}>
                 {customFields.length > 0 && (
                     <div className="mb-3 flex justify-end">
                         <Popover>
@@ -1392,7 +1471,20 @@ function ListView({
                 <table className="w-full">
                     <thead>
                         <tr className="border-b text-left text-sm text-muted-foreground">
-                            <SortHeader label="Key" sortKey="key" sort={sort} onSort={onSort} className="pl-4" />
+                            {selectable && (
+                                <th className="w-10 pb-3 pl-4">
+                                    <input
+                                        ref={headerCheckbox}
+                                        type="checkbox"
+                                        aria-label={allSelected ? 'Clear selection' : 'Select all issues'}
+                                        className={LIST_CHECKBOX_CLASS}
+                                        checked={allSelected}
+                                        disabled={visibleIds.length === 0}
+                                        onChange={toggleAll}
+                                    />
+                                </th>
+                            )}
+                            <SortHeader label="Key" sortKey="key" sort={sort} onSort={onSort} className={selectable ? '' : 'pl-4'} />
                             <SortHeader label="Title" sortKey="title" sort={sort} onSort={onSort} />
                             <th className="pb-3 font-medium">Parent</th>
                             <SortHeader label="Status" sortKey="status" sort={sort} onSort={onSort} />
@@ -1409,10 +1501,22 @@ function ListView({
                         {sortedItems.map((item) => (
                             <tr
                                 key={item.id}
-                                className="border-b hover:bg-muted/50 cursor-pointer transition-colors"
+                                className={cn('border-b hover:bg-muted/50 cursor-pointer transition-colors', selectedIds.has(item.id) && 'bg-primary/5 hover:bg-primary/10')}
                                 onClick={() => onEditItem(item)}
                             >
-                                <td className="py-3 pl-4">
+                                {selectable && (
+                                    // The whole cell toggles (a bigger target), never opens the issue
+                                    <td className="w-10 py-3 pl-4" onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) toggleRow(item.id, e.shiftKey); }}>
+                                        <input
+                                            type="checkbox"
+                                            aria-label={`Select ${item.key}`}
+                                            className={LIST_CHECKBOX_CLASS}
+                                            checked={selectedIds.has(item.id)}
+                                            onChange={(e) => toggleRow(item.id, (e.nativeEvent as MouseEvent).shiftKey === true)}
+                                        />
+                                    </td>
+                                )}
+                                <td className={cn('py-3', !selectable && 'pl-4')}>
                                     <div className="flex items-center gap-2">
                                         <ItemTypeIcon type={item.item_type} className="size-4" />
                                         <span className="font-mono text-sm text-primary font-medium">{item.key}</span>
@@ -1492,6 +1596,23 @@ function ListView({
                         )}
                     </tbody>
                 </table>
+                {bulk && selectedItems.length > 0 && (
+                    <BulkEditBar
+                        workspace={workspace}
+                        project={project}
+                        board={board}
+                        items={selectedItems}
+                        columns={columns}
+                        users={bulk.users}
+                        priorities={bulk.priorities}
+                        itemTypes={bulk.itemTypes}
+                        labels={bulk.labels}
+                        sprints={bulk.sprints}
+                        deletableIds={deletableIds}
+                        onClear={clearSelection}
+                        onDeleted={clearSelection}
+                    />
+                )}
             </div>
         </div>
     );
@@ -2248,6 +2369,7 @@ export default function BoardsShow({
     appliedViewParams = null,
     defaultViewId = null,
     canShareViews = false,
+    canDeleteAnyItem = false,
 }: Props) {
     // The default view applied by the server: into the URL before any URL-backed state below reads
     // it — then into Inertia's page too (a client-side visit, no request), or Inertia's first page
@@ -3096,6 +3218,15 @@ export default function BoardsShow({
                         setSort={setListSort}
                         hiddenFieldIds={hiddenFieldIds}
                         setHiddenFieldIds={setHiddenFieldIds}
+                        bulk={canEditItems ? {
+                            users: projectUsers,
+                            priorities,
+                            itemTypes,
+                            labels: projectLabels,
+                            sprints: board.type === 'scrum' ? [...(activeSprint ? [activeSprint] : []), ...plannedSprints] : null,
+                            canDeleteAnyItem,
+                            currentUserId: auth.user.id,
+                        } : null}
                     />
                 )}
 
