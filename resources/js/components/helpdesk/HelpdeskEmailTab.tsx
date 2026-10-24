@@ -1,5 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import ForwardingAddressSection from '@/components/helpdesk/email/ForwardingAddressSection';
+import ImapMailboxSection from '@/components/helpdesk/email/ImapMailboxSection';
 import type { Helpdesk, Project, Workspace } from '@/types';
 
 /**
@@ -16,6 +17,7 @@ export default function HelpdeskEmailTab({ workspace, project, helpdesk }: { wor
                 <CardDescription>Receive support email as tickets in “{helpdesk.name}” and answer in the same thread.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-8">
+                <ImapMailboxSection workspace={workspace} project={project} helpdesk={helpdesk} />
                 <ForwardingAddressSection workspace={workspace} project={project} helpdesk={helpdesk} />
             </CardContent>
         </Card>

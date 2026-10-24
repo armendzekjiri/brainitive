@@ -22,6 +22,7 @@ use App\Rules\ProjectMember;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Helpdesks\HelpdeskForm;
+use App\Support\Helpdesks\Mail\TicketMailer;
 use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -332,8 +333,9 @@ class TicketController extends Controller
             'is_internal_note' => $validated['is_internal_note'] ?? false,
         ]);
 
-        // Notify contact if reply is not internal
-        if (! $reply->is_internal_note && $ticket->contact) {
+        // Notify contact if reply is not internal. A helpdesk with a connected mailbox emails the
+        // reply itself, threaded (BRAI-79) — then the notification would be a second mail.
+        if (! $reply->is_internal_note && $ticket->contact && ! TicketMailer::queueReply($ticket, $reply)) {
             $ticket->contact->notify(new TicketReplyNotification($ticket, $reply, $request->user()));
         }
 

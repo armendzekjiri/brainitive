@@ -94,6 +94,7 @@ import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { safeHtmlProp } from '@/lib/sanitize';
 import NewTicketDialog from '@/components/helpdesk/NewTicketDialog';
 import ResolveTicketDialog from '@/components/helpdesk/ResolveTicketDialog';
+import ReplyEmailStatus from '@/components/helpdesk/email/ReplyEmailStatus';
 import SlaBadge, { SlaDetails } from '@/components/helpdesk/SlaBadge';
 import { matchesSlaFilter, SLA_FILTERS, slaSortKey, slaState, useMinuteClock, type SlaFilter } from '@/lib/sla';
 import RelatedContent from '@/components/references/RelatedContent';
@@ -997,6 +998,7 @@ function TicketEditModal({
                                                         <span className="text-xs text-muted-foreground">
                                                             {new Date(reply.created_at).toLocaleDateString()} at {new Date(reply.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                         </span>
+                                                        <ReplyEmailStatus reply={reply} routeParams={[workspace.slug, project.slug, helpdesk.slug, ticket.id]} />
                                                         {reply.is_internal_note && (
                                                             <Badge variant="outline" className="text-xs">Internal Note</Badge>
                                                         )}

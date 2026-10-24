@@ -81,6 +81,8 @@ export function appEnv(): Record<string, string> {
         INBOUND_MAIL_DOMAIN: INBOUND_MAIL.domain,
         INBOUND_MAIL_PROVIDER: 'postmark',
         INBOUND_MAIL_POSTMARK_TOKEN: INBOUND_MAIL.postmarkToken,
+        // helpdesk-email.spec.ts: a fake IMAP / SMTP connection (no network); honoured only with APP_ENV=e2e
+        HELPDESK_MAIL_FAKE: 'true',
         PHP_CLI_SERVER_WORKERS: process.env.E2E_SERVER_WORKERS ?? '4',
     };
 }

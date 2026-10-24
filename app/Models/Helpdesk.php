@@ -112,6 +112,12 @@ class Helpdesk extends Model
         return $this->hasMany(HelpdeskField::class)->orderBy('position');
     }
 
+    /** The connected IMAP mailbox (v1.40.0, BRAI-79). */
+    public function mailbox(): HasOne
+    {
+        return $this->hasOne(HelpdeskMailbox::class);
+    }
+
     /**
      * Get tickets grouped by column.
      */
