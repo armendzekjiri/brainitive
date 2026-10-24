@@ -72,6 +72,7 @@ import {
     MessageSquareText,
     Undo2,
     RefreshCw,
+    ListChecks,
 } from 'lucide-react';
 import TurndownService from 'turndown';
 import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallback, useMemo, Suspense, lazy } from 'react';
@@ -104,6 +105,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import ShareButton from '@/components/share/ShareButton';
+import ExtractActionItemsDialog from '@/components/meetingNotes/ExtractActionItemsDialog';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -679,6 +681,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
     const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
     const [changeNoteDialogOpen, setChangeNoteDialogOpen] = useState(false);
     // ?history=1 comes from the whiteboard editor's History button
+    const [actionItemsOpen, setActionItemsOpen] = useState(false);
     const [historyOpen, setHistoryOpen] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('history') === '1');
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
@@ -1237,7 +1240,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
 
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="size-8">
+                                        <Button variant="ghost" size="icon" className="size-8" aria-label="More actions">
                                             <MoreHorizontal className="size-4" />
                                         </Button>
                                     </DropdownMenuTrigger>
@@ -1282,6 +1285,12 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                                                     </DropdownMenuItem>
                                                 )}
                                             </>
+                                        )}
+                                        {page.type === 'page' && !isExcalidrawPage(page.content) && (
+                                            <DropdownMenuItem onClick={() => setActionItemsOpen(true)}>
+                                                <ListChecks className="size-4 mr-2" />
+                                                Extract action items
+                                            </DropdownMenuItem>
                                         )}
                                         {can.create && (
                                             <DropdownMenuItem onClick={triggerDuplicate}>
@@ -1699,6 +1708,10 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                     isWhiteboard={isExcalidrawPage(page.content)}
                     hasUnpublishedChanges={hasDraft}
                 />
+            )}
+
+            {page.type === 'page' && !isExcalidrawPage(page.content) && (
+                <ExtractActionItemsDialog open={actionItemsOpen} onOpenChange={setActionItemsOpen} workspace={workspace} project={project} pageUuid={page.uuid} />
             )}
         </AppLayout>
     );

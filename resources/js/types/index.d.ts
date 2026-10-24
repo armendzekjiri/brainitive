@@ -618,6 +618,89 @@ export interface MyWorkProject {
     items: MyWorkItem[];
 }
 
+/** Workload planning (BRAI-75) — amounts are minutes; weeks are Mondays (Y-m-d). */
+export type WorkloadCellState = 'unset' | 'unavailable' | 'ok' | 'over';
+export type WorkloadFlag = 'done' | 'estimate_changed' | 'assignee_changed' | 'not_member';
+
+export interface WorkloadWeek {
+    start: string;
+    end: string;
+    week: number;
+    year: number;
+    label: string;
+    is_current: boolean;
+    is_past: boolean;
+}
+
+export interface WorkloadItemSummary {
+    id: number;
+    key: string;
+    title: string;
+    url: string | null;
+    estimate_minutes: number | null;
+    logged_minutes: number;
+    remaining_minutes: number | null;
+    completed: boolean;
+}
+
+export interface WorkloadCellAllocation {
+    id: number;
+    minutes: number;
+    counts: boolean;
+    flags: WorkloadFlag[];
+    item: WorkloadItemSummary;
+}
+
+export interface WorkloadCell {
+    week: string;
+    capacity_minutes: number | null;
+    capacity_source: 'default' | 'override' | null;
+    override_note: string | null;
+    allocated_minutes: number;
+    unestimated_minutes: number;
+    over_minutes: number;
+    free_minutes: number | null;
+    load_percent: number | null;
+    state: WorkloadCellState;
+    allocations: WorkloadCellAllocation[];
+}
+
+export interface WorkloadMember {
+    id: number;
+    name: string;
+    avatar_display: string | null;
+    capacity_minutes: number | null;
+    work: { estimated_items: number; remaining_minutes: number; unplanned_minutes: number; unestimated_items: number };
+    cells: WorkloadCell[];
+}
+
+export interface WorkloadTeamWeek {
+    week: string;
+    capacity_minutes: number;
+    allocated_minutes: number;
+    unset: number;
+    over: number;
+}
+
+export interface WorkloadReviewEntry {
+    kind: 'over_remaining' | WorkloadFlag;
+    message: string;
+    item: WorkloadItemSummary;
+    allocation: { id: number; user_id: number; user_name: string; week: string; minutes: number } | null;
+}
+
+export interface WorkloadCandidate {
+    id: number;
+    key: string;
+    title: string;
+    is_subtask: boolean;
+    assignee: { id: number; name: string } | null;
+    estimate_minutes: number | null;
+    logged_minutes: number;
+    remaining_minutes: number | null;
+    open_planned_minutes: number;
+}
+
 export interface SnippetCollection {
     id: number;
     uuid: string;
@@ -993,4 +1076,168 @@ export interface ContentReferenceList {
 /** A picker search result. */
 export interface ContentReferenceCandidate extends ContentReferenceSummary {
     linked: boolean;
+}
+
+/** Meeting notes → issues (BRAI-62): what the dialog needs (`meeting-notes.options`). */
+export interface MeetingNotesOptions {
+    ai_configured: boolean;
+    can_configure_ai: boolean;
+    settings_url: string;
+    /** Boards of the project the user can add issues to. */
+    boards: { id: number; name: string }[];
+    /** People who can open the project — the only possible assignees. */
+    members: { id: number; name: string }[];
+    timezone: string;
+    source: MeetingNotesSourceInfo | null;
+    limits: { max_chars: number; max_proposals: number };
+}
+
+export interface MeetingNotesSourceInfo {
+    uuid: string;
+    title: string | null;
+    /** Editors read their unpublished changes; everyone else the live doc. */
+    uses_draft: boolean;
+    length?: number;
+    too_long?: boolean;
+}
+
+export interface MeetingNotesAssignee {
+    /** The name as written in the notes. */
+    mention: string;
+    status: 'matched' | 'ambiguous' | 'unknown';
+    user_id: number | null;
+    /** Members the name could mean (ambiguous only). */
+    candidates: { id: number; name: string }[];
+}
+
+/** One proposed action item — nothing exists until the user clicks Create. */
+export interface MeetingNotesProposal {
+    temp_id: string;
+    title: string;
+    description: string;
+    /** The sentence in the notes this comes from (checked against the notes). */
+    excerpt: string;
+    assignee: MeetingNotesAssignee | null;
+    due: { text: string; date: string | null; status: 'set' | 'needs_meeting_date' | 'unclear' } | null;
+    /** temp_id of an earlier proposal with the same title / quote */
+    duplicate_of: string | null;
+    /** An open issue on the destination board with the same title */
+    existing: { id: number; key: string; title: string; url: string } | null;
+    selected: boolean;
+}
+
+export interface MeetingNotesExtraction {
+    proposals: MeetingNotesProposal[];
+    /** Suggestions whose quote wasn't found in the notes (dropped, never shown as tasks). */
+    dropped: number;
+    truncated: boolean;
+    board: { id: number; name: string };
+    source: MeetingNotesSourceInfo | null;
+}
+
+export interface MeetingNotesCreateResult {
+    count: number;
+    items: { id: number; key: string; title: string; url: string }[];
+    board_url: string;
+    /** A retry of a Create that already went through: nothing new was created. */
+    replayed: boolean;
+}
+
+/** Project health (BRAI-64): metric keys (`metric:<key>` in sources). */
+export type HealthMetricKey =
+    | 'open' | 'completed' | 'completed_in_period' | 'created_in_period' | 'overdue' | 'due_soon'
+    | 'no_due_date' | 'unassigned' | 'blocked' | 'milestones_upcoming' | 'milestones_missed'
+    | 'plan_rows_open' | 'plan_rows_late';
+
+/** An issue in a health list (live, for the viewer). */
+export interface HealthItemRef {
+    /** `item:<id>` */
+    ref: string;
+    id: number;
+    key: string;
+    title: string;
+    due_date: string | null;
+    assignee: string | null;
+    url: string;
+    /** Blockers only: the blocker lives in another project */
+    external?: boolean;
+}
+
+export interface HealthMilestone {
+    /** `plan:<id>` */
+    ref: string;
+    plan_id: number;
+    plan: string;
+    bar: string;
+    name: string;
+    date: string;
+    state: 'upcoming' | 'missed';
+    item_ref: string | null;
+    url: string;
+}
+
+/** HealthMetrics::compute() — `null` values are Unknown (reason in `unknown`). */
+export interface ProjectHealthData {
+    as_of: string;
+    timezone: string;
+    today: string;
+    period: { from: string; to: string };
+    values: Record<HealthMetricKey, number | null>;
+    unknown: Partial<Record<HealthMetricKey, string>>;
+    lists: {
+        overdue: HealthItemRef[];
+        due_soon: HealthItemRef[];
+        unassigned: HealthItemRef[];
+        completed: HealthItemRef[];
+        blocked: { item: HealthItemRef; blockers: HealthItemRef[] }[];
+        milestones: HealthMilestone[];
+    };
+}
+
+export type HealthStatus = 'on_track' | 'at_risk' | 'off_track';
+
+export type HealthSection = 'progress' | 'risks' | 'next_steps';
+
+export interface HealthClaim {
+    text: string;
+    /** `item:<id>`, `plan:<id>`, `metric:<key>` */
+    sources: string[];
+}
+
+/** A source ref resolved for the reader; unavailable ones carry no title or link. */
+export interface HealthSource {
+    ref: string;
+    available: boolean;
+    type: 'item' | 'plan' | 'metric';
+    label: string;
+    url: string | null;
+}
+
+export interface HealthReportSummary {
+    id: number;
+    status: HealthStatus;
+    summary: string | null;
+    author: string | null;
+    as_of: string | null;
+    created_at: string | null;
+    ai_assisted: boolean;
+}
+
+/** ReportSources::present() */
+export interface HealthReportDetail extends HealthReportSummary {
+    sections: Record<HealthSection, HealthClaim[]>;
+    values: Partial<Record<HealthMetricKey, number | null>>;
+    unknown: Partial<Record<HealthMetricKey, string>>;
+    lists: {
+        overdue?: string[];
+        due_soon?: string[];
+        unassigned?: string[];
+        completed?: string[];
+        blocked?: { item: string; blockers: string[] }[];
+        milestones?: { plan: string; date: string; state: 'upcoming' | 'missed' }[];
+    };
+    sources: Record<string, HealthSource>;
+    period: { from: string | null; to: string | null };
+    timezone: string;
+    can_delete: boolean;
 }

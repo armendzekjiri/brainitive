@@ -1,0 +1,96 @@
+import type { Browser, Page } from '@playwright/test';
+import { expect, test } from '../fixtures';
+
+/*
+ * The public homepage (Pages/Welcome.tsx) shows what the latest releases shipped (BRAI-98).
+ * When a release adds feature cards to the homepage, add their titles here.
+ */
+const SPOTLIGHT = ['Workload planning', 'Quick capture'];
+const NEW_FEATURES = [
+    'Project templates',
+    'Saved board views',
+    'Custom fields',
+    'Releases & release notes',
+    'Quick capture',
+    'My Day & focus timer',
+    'Command palette',
+    'Related content & backlinks',
+    'Share links',
+    'Helpdesk templates',
+    'Lead forms',
+    'GitHub development',
+    'Project health',
+    'Workload planning',
+    'Meeting notes → issues',
+];
+const GROUPS = ['Plan & organize', 'Capture & focus', 'Create & write', 'Collaborate & share', 'Customers & leads', 'Insight & planning', 'Connect & automate'];
+
+/** A signed-out visitor, collecting uncaught page errors. */
+async function guestPage(browser: Browser, options: { colorScheme?: 'light' | 'dark'; viewport?: { width: number; height: number } } = {}) {
+    const context = await browser.newContext({
+        storageState: { cookies: [], origins: [] },
+        httpCredentials: process.env.E2E_HTTP_USER ? { username: process.env.E2E_HTTP_USER, password: process.env.E2E_HTTP_PASSWORD ?? '' } : undefined,
+        ...options,
+    });
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    return { context, page, errors };
+}
+
+async function expectNoHorizontalScroll(page: Page) {
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, 'horizontal scroll on the homepage').toBeLessThanOrEqual(0);
+}
+
+test.describe('homepage', () => {
+    test('a guest sees the features of the latest releases', async ({ browser }) => {
+        const { context, page, errors } = await guestPage(browser);
+        await page.goto('/');
+        await expect(page.getByRole('link', { name: 'Start for free' })).toBeVisible();
+
+        const features = page.locator('#features');
+        await features.scrollIntoViewIfNeeded();
+        await expect(features.getByRole('heading', { level: 2, name: 'Everything you need, in one place' })).toBeVisible();
+
+        const spotlight = features.getByRole('region', { name: 'New in recent releases' });
+        for (const title of SPOTLIGHT) {
+            await expect(spotlight.getByRole('heading', { level: 4, name: title, exact: true })).toBeVisible();
+        }
+        await expect(spotlight.locator('kbd', { hasText: 'C' })).toBeVisible();
+
+        for (const group of GROUPS) {
+            await expect(features.getByRole('heading', { level: 3, name: group, exact: true })).toBeVisible();
+        }
+        for (const title of NEW_FEATURES) {
+            // the card outside the spotlight, with its "New" pill
+            const card = features.locator('div.group\\/item').filter({ has: page.getByRole('heading', { level: 4, name: title, exact: true }) });
+            await expect(card).toHaveCount(1);
+            await expect(card).toBeVisible();
+            await expect(card.getByText('New', { exact: true })).toBeVisible();
+        }
+        // the MCP card names the connector's newer tools
+        await expect(features.getByText(/comments, sprints and Gantt plans/)).toBeVisible();
+
+        expect(errors, 'uncaught errors on the homepage').toEqual([]);
+        await context.close();
+    });
+
+    test('fits a 375 px phone in light and dark mode', async ({ browser }) => {
+        for (const colorScheme of ['light', 'dark'] as const) {
+            const { context, page, errors } = await guestPage(browser, { colorScheme, viewport: { width: 375, height: 812 } });
+            await page.goto('/');
+            await expect(page.locator('html')).toHaveClass(new RegExp(`\\b${colorScheme}\\b`));
+
+            const spotlight = page.getByRole('region', { name: 'New in recent releases' });
+            await spotlight.scrollIntoViewIfNeeded();
+            await expect(spotlight.getByRole('heading', { name: 'Quick capture', exact: true })).toBeVisible();
+            await page.getByRole('heading', { level: 3, name: 'Customers & leads', exact: true }).scrollIntoViewIfNeeded();
+            await expect(page.getByRole('heading', { level: 4, name: 'Lead forms', exact: true }).last()).toBeVisible();
+            await expectNoHorizontalScroll(page);
+
+            expect(errors, `uncaught errors on the homepage (${colorScheme})`).toEqual([]);
+            await context.close();
+        }
+    });
+});

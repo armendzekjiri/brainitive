@@ -11,10 +11,12 @@ use App\Models\Item;
 use App\Models\LeadForm;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\ProjectHealthReport;
 use App\Models\ProjectTemplate;
 use App\Models\Release;
 use App\Models\SnippetCollection;
 use App\Models\User;
+use App\Models\WorkloadAllocation;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Policies\BoardPolicy;
@@ -24,10 +26,12 @@ use App\Policies\CapturePolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\LeadFormPolicy;
 use App\Policies\PagePolicy;
+use App\Policies\ProjectHealthReportPolicy;
 use App\Policies\ProjectPolicy;
 use App\Policies\ProjectTemplatePolicy;
 use App\Policies\ReleasePolicy;
 use App\Policies\SnippetPolicy;
+use App\Policies\WorkloadPolicy;
 use App\Policies\WorkspacePolicy;
 use App\Support\Admin\InstanceMailConfig;
 use Illuminate\Auth\Events\Login;
@@ -115,6 +119,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(ProjectTemplate::class, ProjectTemplatePolicy::class);
         Gate::policy(LeadForm::class, LeadFormPolicy::class);
         Gate::policy(Capture::class, CapturePolicy::class);
+        Gate::policy(ProjectHealthReport::class, ProjectHealthReportPolicy::class);
+        Gate::policy(WorkloadAllocation::class, WorkloadPolicy::class);
 
         // Resolve page from project's allPages() so child pages (e.g. documents inside folders) are found
         // Explicit binders run BEFORE implicit binding, so {workspace} / {project} are still raw
