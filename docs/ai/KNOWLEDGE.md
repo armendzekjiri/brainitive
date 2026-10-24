@@ -82,7 +82,11 @@ App bugs it found (all fixed, each with a test). Patterns to keep:
 - **Access:** behind basic auth (`/etc/nginx/brainitive-dev.htpasswd`; the credentials are in
   `~/.brainitive-dev-basic-auth` on the maintainer's Mac) and noindex.
 - **Deploy guard:** the deploy refuses to run unless the folder, `APP_ENV=staging` and
-  `DB_DATABASE=brainitive_dev` all match. Keep that guard on anything destructive (the e2e reset).
+  `DB_DATABASE=brainitive_dev` all match. Keep that guard on anything destructive.
+- **E2E on dev:** after every deploy, all journeys run against dev.brainitive.app. Before that,
+  `e2e:prune` deletes all `@example.test` users and their data (database cascades), and
+  `E2eSeeder` reseeds them. Never invite a test user into a real workspace: prune refuses then,
+  to protect shared work.
 - **Production `.env`** was world-readable (664; every site's PHP runs as `www-data`). It has
   been 640 since 2026-10-23 (`www-data` reads it through `webdev`). An own FPM pool for production
   would isolate it fully.
