@@ -4,6 +4,8 @@ namespace App\Support\Boards;
 
 use App\Models\Board;
 use App\Models\Sprint;
+use App\Support\Events\DomainEvents;
+use App\Support\Events\EventPayloads;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
@@ -34,6 +36,7 @@ class SprintLifecycle
                 $sprint->name = $name;
             }
             $sprint->start($startDate, $endDate, $goal);
+            DomainEvents::emit(EventPayloads::projectWorkspaceId($board->project_id), 'sprint.started', fn () => EventPayloads::sprint($sprint, $board)); // webhooks (BRAI-104)
 
             return $sprint;
         });
@@ -55,7 +58,13 @@ class SprintLifecycle
                 throw new DomainException('Unfinished issues can only move to the backlog or a planned sprint of this board.');
             }
 
-            return $sprint->complete($moveOpenTo);
+            $moved = $sprint->complete($moveOpenTo);
+            DomainEvents::emit(EventPayloads::projectWorkspaceId($board->project_id), 'sprint.completed', fn () => EventPayloads::sprint($sprint, $board, [ // webhooks (BRAI-104)
+                'open_issues_moved' => $moved,
+                'open_issues_moved_to' => $moveOpenTo ? ['id' => $moveOpenTo->id, 'name' => $moveOpenTo->name] : 'backlog',
+            ]));
+
+            return $moved;
         });
     }
 }

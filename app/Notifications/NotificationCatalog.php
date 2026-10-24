@@ -51,6 +51,7 @@ final class NotificationCatalog
         'ticket_created' => 'helpdesk',
         'ticket_reply' => 'helpdesk',
         'lead_created' => 'leads',
+        'webhook_disabled' => 'workspace', // ticket 3 (BRAI-104): a webhook was auto-disabled
     ];
 
     public static function category(string $type): string

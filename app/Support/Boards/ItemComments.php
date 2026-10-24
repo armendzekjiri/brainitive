@@ -6,6 +6,8 @@ use App\Models\ActivityLog;
 use App\Models\Comment;
 use App\Models\Item;
 use App\Models\User;
+use App\Support\Events\DomainEvents;
+use App\Support\Events\EventPayloads;
 use Illuminate\Support\Str;
 
 /**
@@ -29,6 +31,8 @@ class ItemComments
         ]);
 
         ItemMentions::notify($html, $item, $author);
+
+        DomainEvents::emit(EventPayloads::itemWorkspaceId($item), 'item.commented', fn () => EventPayloads::comment($comment, $item), $author); // webhooks (BRAI-104)
 
         return $comment;
     }

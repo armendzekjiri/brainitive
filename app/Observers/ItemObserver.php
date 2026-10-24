@@ -11,6 +11,7 @@ use App\Models\ItemType;
 use App\Models\Release;
 use App\Models\Sprint;
 use App\Models\User;
+use App\Support\Events\ItemEvents;
 use Carbon\CarbonInterface;
 
 /**
@@ -47,10 +48,14 @@ class ItemObserver
     public function created(Item $item): void
     {
         ActivityLog::log($item, 'created', null, ['key' => $item->key]);
+
+        ItemEvents::created($item); // outgoing webhooks (BRAI-104)
     }
 
     public function updated(Item $item): void
     {
+        ItemEvents::updated($item); // outgoing webhooks (BRAI-104)
+
         $changes = [];
 
         foreach (self::TRACKED_FIELDS as $field => $model) {
@@ -78,6 +83,11 @@ class ItemObserver
         };
 
         ActivityLog::log($item, $action, $changes);
+    }
+
+    public function deleted(Item $item): void
+    {
+        ItemEvents::deleted($item); // outgoing webhooks (BRAI-104)
     }
 
     /**

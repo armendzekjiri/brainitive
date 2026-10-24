@@ -72,6 +72,8 @@ export function appEnv(): Record<string, string> {
         TELESCOPE_ENABLED: 'false',
         NIGHTWATCH_ENABLED: 'false',
         E2E_PASSWORD: PASSWORD,
+        // webhooks.spec.ts delivers to a receiver on 127.0.0.1; the app honours this only with APP_ENV=e2e
+        WEBHOOKS_ALLOW_PRIVATE_TARGETS: 'true',
         PHP_CLI_SERVER_WORKERS: process.env.E2E_SERVER_WORKERS ?? '4',
     };
 }

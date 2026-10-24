@@ -1571,3 +1571,38 @@ export interface TimeOverviewOptions {
     people: { id: number; name: string }[];
     activities: { id: number; name: string; pricing_type: 'hourly' | 'fixed'; archived: boolean }[];
 }
+
+/** Outgoing webhook of a workspace (v1.39.0, BRAI-104). The secret is never part of it. */
+export interface WorkspaceWebhook {
+    id: number;
+    name: string;
+    url: string;
+    /** DomainEvents names, or ["*"] for every event. */
+    events: string[];
+    active: boolean;
+    failure_count: number;
+    disabled_at: string | null;
+    last_delivery_at: string | null;
+    last_status: WebhookDeliveryStatus | null;
+    created_by: string | null;
+    created_at: string | null;
+}
+
+export type WebhookDeliveryStatus = 'pending' | 'success' | 'failed';
+
+export interface WebhookDelivery {
+    id: number;
+    uuid: string;
+    event: string;
+    event_id: string;
+    status: WebhookDeliveryStatus;
+    attempts: number;
+    response_code: number | null;
+    duration_ms: number | null;
+    error: string | null;
+    /** The envelope that was sent: {id, event, occurred_at, workspace, actor, data}. */
+    payload: Record<string, unknown>;
+    response_body: string | null;
+    created_at: string | null;
+    delivered_at: string | null;
+}

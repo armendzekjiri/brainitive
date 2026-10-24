@@ -18,6 +18,8 @@ use App\Notifications\TicketReplyNotification;
 use App\Notifications\TicketResolvedNotification;
 use App\Rules\NotExecutableUpload;
 use App\Rules\ProjectMember;
+use App\Support\Events\DomainEvents;
+use App\Support\Events\EventPayloads;
 use App\Support\Helpdesks\HelpdeskForm;
 use App\Support\Uploads;
 use Illuminate\Http\Request;
@@ -109,6 +111,8 @@ class TicketController extends Controller
             User::find($ticket->assigned_to)?->notify(new TicketAssignedNotification($ticket, $request->user()));
         }
 
+        DomainEvents::emit($workspace, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'agent']); // webhooks (BRAI-104)
+
         if ($request->boolean('notify_contact', true)) {
             $contact->notify(new TicketCreatedNotification($ticket));
         }
@@ -179,6 +183,8 @@ class TicketController extends Controller
         // with any email address).
         $accessToken = $ticket->publicAccessToken();
 
+        DomainEvents::emit($project->workspace_id, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'portal']); // webhooks (BRAI-104)
+
         // The public form must not become a mail cannon: a few confirmations per address and hour
         if (RateLimiter::attempt('ticket-confirmation:'.$helpdesk->id.':'.sha1(strtolower($contact->email)), 3, fn () => true, 3600)) {
             $contact->notify(new TicketCreatedNotification($ticket));
@@ -246,6 +252,8 @@ class TicketController extends Controller
             if ($request->boolean('notify_contact') && $ticket->contact) {
                 $ticket->contact->notify(new TicketResolvedNotification($ticket, $message ?: null));
             }
+
+            DomainEvents::emit($workspace, 'ticket.resolved', fn () => ['ticket' => EventPayloads::ticket($ticket), 'resolution' => $message !== '' ? $message : null]); // webhooks (BRAI-104)
         }
 
         return back();
@@ -326,6 +334,8 @@ class TicketController extends Controller
             $watcher->notify(new TicketReplyNotification($ticket, $reply, $request->user()));
         }
 
+        DomainEvents::emit($workspace, 'ticket.replied', fn () => EventPayloads::ticketReply($ticket, $reply)); // webhooks (BRAI-104)
+
         return back()->with('success', 'Reply added successfully.');
     }
 
@@ -393,6 +403,8 @@ class TicketController extends Controller
         foreach ($watchers as $watcher) {
             $watcher->notify(new TicketReplyNotification($ticket, $reply, $contact));
         }
+
+        DomainEvents::emit(EventPayloads::ticketWorkspaceId($ticket), 'ticket.replied', fn () => EventPayloads::ticketReply($ticket, $reply)); // webhooks (BRAI-104)
 
         return response()->json(['success' => true, 'message' => 'Reply submitted successfully.']);
     }
