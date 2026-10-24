@@ -161,6 +161,43 @@ schema public". Use `createdb -h /tmp -O <DB_USERNAME> brainitive_test_<name>` (
 - **e2e** turns forwarding on in `e2e/env.ts` (`INBOUND_MAIL_*`, Postmark). dev.brainitive.app has no
   inbound domain, so `helpdesk-forwarding.spec.ts` skips there.
 
+### Recurring issues: dates, catch-up and the actor (v1.40.0, BRAI-123)
+- **Dates are calendar maths, the zone only picks "today".** `RecurrenceSchedule` works on `Y-m-d`
+  dates (midnight UTC), so DST never moves an occurrence. An occurrence is due from **local midnight**
+  in the template's `timezone` (the creator's `localTimezone()` when it was saved) — Berlin's Monday
+  starts at 22:00 UTC in summer and 23:00 UTC in winter. The command runs every 15 minutes, so issues
+  appear shortly after local midnight. The scheduler query looks up to UTC today + 1 day (UTC+14).
+- **Every date comes from the rule, not from the previous date** (unlike list tasks'
+  `TaskListItem::nextDueDate()`, which chains `addMonthNoOverflow` and drifts Jan 31 → Feb 28 → Mar 28).
+  Monthly day 29–31 clamps to the month's last day, so 31 = "the last day"; yearly Feb 29 → Feb 28 in
+  common years and Feb 29 again in leap years. Monthly "the nth / last X" supports X = 0 (any weekday
+  Mon–Fri: first / last business day). Weekly intervals count weeks (Monday-based) from the start date's
+  week.
+- **Idempotent + no flood.** The runner locks the template row and only looks at dates after
+  `last_occurrence_date`; `recurring_issue_occurrences` is unique on (template, date) as a backstop.
+  After downtime only the **latest** missed date is created (`latestBetween`), the others are skipped.
+  `active_from` (the local day the template was created, its schedule changed or it was resumed) is the
+  floor: a start date in the past, an edited schedule or a pause never backfill old dates.
+- **Count** (`max_occurrences`) counts issues actually created (skipped dates don't count); `end_date` is
+  inclusive. When either is reached `next_occurrence_date` becomes null ("Ended").
+- **Actor = the template's creator.** The console has no user, and `Assignments::item()` stays silent
+  without one, so the runner signs the creator in for the create (`Auth::setUser`, then `forgetUser` /
+  the previous user back). The assignee gets the normal `item_assigned` from `ItemObserver` (silent when
+  the creator assigned themself), history / events / automations see the creator. If the creator can no
+  longer create issues on the board (or the board is gone / has no columns) the template **pauses** with
+  `last_error`; whoever resumes it becomes its creator. An assignee who left the project → unassigned
+  issue; a type / priority / label no longer in the project → the default / dropped. Description
+  mentions are not re-notified on every occurrence.
+- **e2e trigger:** `recurring-issues.e2e-run` is only registered when `APP_ENV=e2e` (and the action
+  aborts 404 otherwise); dev and production have no such route. The spec skips the "created on the
+  board" part with `REMOTE`. A POST to an unregistered URL answers 405 (the GET `Route::fallback`
+  matches), not 404.
+- **New subfolders under `resources/js/components/`:** even an explicit lowercase `git add
+  resources/js/components/recurring/X.tsx` was recorded as `Components/recurring/X.tsx` (the folder is
+  new to git and macOS reports the on-disk `Components`). Fix the index entry with `git rm --cached
+  <Components path>` + `git update-index --add --cacheinfo 100644,$(git hash-object -w <file>),<lowercase
+  path>`, then check `git ls-files -s | grep -i <name>`.
+
 ### Quick capture: conversion is idempotent by row lock, not by request id (BRAI-70)
 `CaptureConversion::convert` locks the capture (`lockForUpdate`) inside one transaction; a capture
 that is already processed returns its target (`replayed`, HTTP 200) whatever the second request

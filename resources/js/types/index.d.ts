@@ -276,8 +276,67 @@ export interface Item {
     time_spent?: number;
     /** Custom field values — one row per field that has a value (BRAI-77). */
     field_values?: ItemFieldValue[];
+    /** Set when a recurring template created this issue (BRAI-123): the card's "Repeats weekly" badge. */
+    recurring_occurrence?: { recurring_issue?: { id: number; badge_label: string } | null } | null;
     created_at: string;
     updated_at: string;
+}
+
+// ── Recurring issues (v1.40.0, BRAI-123) ──────────────────────────────────────
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+/** The schedule fields (App\Support\RecurringIssues\RecurrenceSchedule). */
+export interface RecurrenceRule {
+    frequency: RecurrenceFrequency;
+    interval: number;
+    /** ISO weekdays, 1 = Monday … 7 = Sunday (weekly). */
+    weekdays: number[];
+    monthly_mode: 'day' | 'weekday' | null;
+    /** 1–31; 31 = the last day of shorter months. */
+    month_day: number | null;
+    /** 1–4, -1 = last. */
+    month_week: number | null;
+    /** 1–7, 0 = any weekday (Mon–Fri). */
+    month_weekday: number | null;
+    start_date: string;
+    end_date: string | null;
+    max_occurrences: number | null;
+}
+
+/** The issue a template creates. */
+export interface RecurringIssueFields {
+    title: string;
+    description: string | null;
+    item_type_id: number | null;
+    priority_id: number | null;
+    assigned_to: number | null;
+    label_ids: number[];
+    /** null = the board's first column. */
+    column_id: number | null;
+    /** Due date = occurrence + N days; null = none. */
+    due_in_days: number | null;
+}
+
+export interface RecurringIssueTemplate extends RecurrenceRule, RecurringIssueFields {
+    id: number;
+    timezone: string;
+    occurrences_count: number;
+    last_occurrence_date: string | null;
+    next_occurrence_date: string | null;
+    last_error: string | null;
+    paused: boolean;
+    finished: boolean;
+    summary: string;
+    badge_label: string;
+    creator: { id: number; name: string } | null;
+}
+
+export interface RecurringIssueOptions {
+    columns: { id: number; name: string }[];
+    types: { id: number; name: string; is_default: boolean }[];
+    priorities: { id: number; name: string; is_default: boolean }[];
+    members: { id: number; name: string }[];
+    labels: { id: number; name: string; color: string }[];
 }
 
 export type ItemFieldType = 'text' | 'number' | 'date' | 'checkbox' | 'select';

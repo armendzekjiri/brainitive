@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { router, Link } from '@inertiajs/react';
 import CompleteSubtasksDialog from '@/components/item/CompleteSubtasksDialog';
 import DuplicateItemDialog from '@/components/item/DuplicateItemDialog';
+import { RecurringIssuesDialog } from '@/components/recurring/RecurringIssuesDialog';
 import LogWorkPopover from '@/components/item/LogWorkPopover';
 import ShareButton from '@/components/share/ShareButton';
 import { itemTree, MAX_ITEM_DEPTH } from '@/lib/itemTree';
@@ -16,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import {
     CheckSquare, Link2, Plus, X, Paperclip, Upload, Eye, Download, Trash2, Copy,
     MessageSquare, Reply, Pencil, Check, File, FileImage, FileText, FileSpreadsheet,
-    FileArchive, FileCode, FileType, History, Clock, Loader2, ChevronDown, ListChecks,
+    FileArchive, FileCode, FileType, History, Clock, Loader2, ChevronDown, ListChecks, Repeat,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { DevelopmentPanel, type Development } from '@/components/item/DevelopmentPanel';
@@ -1347,6 +1348,7 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
             completePrompt, setCompletePrompt, moveToColumn, openDescendants,
     } = d;
     const [duplicating, setDuplicating] = useState(false);
+    const [makingRecurring, setMakingRecurring] = useState(false);
     const [detailsOpen, setDetailsOpen] = useState(true);
     if (!item) return null;
 
@@ -1725,8 +1727,30 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                     <Button variant="ghost" size="sm" className="h-8 gap-2 text-muted-foreground hover:text-foreground" onClick={() => setDuplicating(true)}>
                         <Copy className="size-3.5" /> Duplicate
                     </Button>
+                    {d.canEditItems && (
+                        <Button variant="ghost" size="sm" className="h-8 gap-2 text-muted-foreground hover:text-foreground" onClick={() => setMakingRecurring(true)}>
+                            <Repeat className="size-3.5" /> Make this recurring
+                        </Button>
+                    )}
                     <ShareButton type="item" id={String(item.id)} label={item.key} className="h-8 gap-2 text-muted-foreground hover:text-foreground" />
                 </div>
+                {d.canEditItems && (
+                    <RecurringIssuesDialog
+                        open={makingRecurring}
+                        onOpenChange={setMakingRecurring}
+                        workspace={workspace}
+                        project={project}
+                        board={board}
+                        prefill={{
+                            title: (live ?? item).title,
+                            description: (live ?? item).description ?? null,
+                            item_type_id: (live ?? item).item_type_id ?? null,
+                            priority_id: (live ?? item).priority_id ?? null,
+                            assigned_to: (live ?? item).assigned_to ?? null,
+                            label_ids: selectedLabels,
+                        }}
+                    />
+                )}
                 <DuplicateItemDialog
                     open={duplicating}
                     onOpenChange={setDuplicating}
