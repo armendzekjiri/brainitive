@@ -4,6 +4,7 @@ namespace App\Support\Boards;
 
 use App\Models\Board;
 use App\Models\Sprint;
+use App\Support\Notifications\SprintNotifications;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
@@ -34,6 +35,7 @@ class SprintLifecycle
                 $sprint->name = $name;
             }
             $sprint->start($startDate, $endDate, $goal);
+            SprintNotifications::started($sprint); // BRAI-103: assignees of its issues, after commit
 
             return $sprint;
         });
@@ -55,7 +57,11 @@ class SprintLifecycle
                 throw new DomainException('Unfinished issues can only move to the backlog or a planned sprint of this board.');
             }
 
-            return $sprint->complete($moveOpenTo);
+            $recipients = SprintNotifications::recipientIds($sprint); // BRAI-103: before open issues move out
+            $moved = $sprint->complete($moveOpenTo);
+            SprintNotifications::completed($sprint, $recipients, $moved);
+
+            return $moved;
         });
     }
 }

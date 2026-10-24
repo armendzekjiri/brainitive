@@ -85,6 +85,9 @@ class MyWorkController extends Controller
                 'id' => $item->board->id,
                 'name' => $item->board->name,
                 'slug' => $item->board->slug,
+                // the circle in My Work / My Day completes (→ first done column) or reopens (→ first open column)
+                'done_column_id' => $item->board->columns->where('is_done_column', true)->sortBy('position')->first()?->id,
+                'open_column_id' => $item->board->columns->where('is_done_column', false)->sortBy('position')->first()?->id,
             ],
             'column' => $item->column ? [
                 'id' => $item->column->id,
@@ -153,6 +156,7 @@ class MyWorkController extends Controller
             ->whereNull('parent_id')
             ->with([
                 'board:id,project_id,name,slug',
+                'board.columns:id,board_id,position,is_done_column',
                 'board.project:id,workspace_id,name,slug,key,icon,color',
                 'board.project.workspace:id,name,slug',
                 'column:id,name,is_done_column',
@@ -268,6 +272,7 @@ class MyWorkController extends Controller
         $planDate = MyDayPlan::today($user);
         $plan = MyDayPlan::forDate($user, $planDate, [
             'board:id,project_id,name,slug',
+            'board.columns:id,board_id,position,is_done_column',
             'board.project:id,workspace_id,name,slug,key,color',
             'board.project.workspace:id,name,slug',
             'column:id,name,is_done_column',

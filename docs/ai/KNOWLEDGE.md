@@ -137,7 +137,9 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
 - **Dates:** a deadline is used only if its phrase is in the notes. With a meeting date + timezone
   the model may resolve "by Friday" (accepted from meeting − 31 days to + 2 years); without them a
   date is kept only when the phrase holds the year and the day (a full calendar date). Otherwise the
-  text is shown with a hint and the date stays empty.
+  text is shown with a hint and the date stays empty. The dialog's meeting date **defaults to today**
+  in the user's zone (`options.today`, v1.39.0): with it empty, every "by Friday" stayed without a
+  due date (BRAI-62 feedback). Clearing it keeps the strict full-date rule.
 - **Assignees** match only people who can open the project (project members + workspace admins —
   the set `ProjectMember` accepts): one match is suggested, several are `ambiguous` (Create stays
   disabled until the user picks someone or "Unassigned"), none stays unassigned. No emails are sent
@@ -504,10 +506,39 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   maps every `data.type` to a sentence. The bell and the page used to fall back to
   "{actor} moved {item_key}", so ticket notifications (`ticket_*`, with no `item_*` keys)
   showed as "moved". Add a case for each new type.
+- **Notification coverage (BRAI-103, v1.39.0): who is told, and never twice.**
+  - **Assignments fire from the observers, nowhere else.** `ItemObserver::created/updated` (on an
+    `assigned_to` change) → `Support\Notifications\Assignments::item()` sends `ItemAssignedNotification`;
+    `TaskListItemObserver` → `Assignments::task()` sends `task_assigned`. So the board UI, bulk edit,
+    MCP create/update, meeting-note action items, plan import, whiteboard cards and duplicates all
+    notify exactly once. `BoardController::storeItem/updateItem` no longer send it: don't add a
+    controller-side send back. Leads: `LeadController::update` → `Assignments::lead()`.
+  - **The actor is `auth()->user()`.** Without one (seeders, `E2eSeeder`, console) assignment
+    notifications stay silent; assigning yourself is silent; assignees without project access are
+    skipped. Sent with `DB::afterCommit`, so a rolled-back import tells nobody.
+  - **Mentions are diffed.** `ItemMentions::notify($html, $item, $actor, $previousHtml)` only tells
+    people new compared with the previous description (re-saving re-notified everyone before).
+    Page mentions are sent **on save** by `Page::saveDraft()` → `PageMentions` (diff of the content
+    before the save), no longer at insert time from the editor (`MentionsPlugin` doesn't POST
+    `notify-mention` any more; that endpoint is unused).
+  - **Comments:** `ItemComments::add()` → `ItemCommentNotifications`: watchers + assignee + reporter,
+    minus the author, minus everyone @mentioned in that comment (they get the mention instead).
+  - **Due dates:** `app:send-item-reminders` sends `item_due` "due tomorrow" from 08:00 the day before
+    and "overdue" once the due time (or the end of the due day) passed, both in the assignee's
+    `localTimezone()`. Dedup key `item_due:{id}:{kind}:{due_date}` in `sent_item_reminders`, so a
+    new due date is reminded again. Overdue only within 2 days, so old issues never flood anyone.
+  - **Sprints:** recipients are the sprint's assignees, read **before** `Sprint::complete()` moves
+    open issues out.
+  - New types extend `CatalogNotification` and store the payload contract
+    (`type, title, body, url, actor_name, actor_avatar, project_name, subject_key`); e2e asserts on
+    `/api/notifications` (`e2e/helpers/notifications.ts`), not on the bell's wording.
 - **Project data hangs off `project_id`; only `projects` stores `workspace_id`.** Moving a
   project is a single update (see `ProjectTransfer`). Keep it that way: a new project-level
   table must not copy `workspace_id`, or moves (and access checks) drift. Workspace-level
   things (bookmarks, snippets, invitations) are not project data and stay behind.
+  Exception: `time_entries` carry `workspace_id` (billing is per workspace). On a move,
+  `ProjectTransfer` moves the **unbilled** entries and maps their activity by name in the target
+  (none → null); entries on a finalized report stay with the old workspace (v1.39.0, BRAI-107).
 - **`projects` unique keys `(workspace_id, slug)` and `(workspace_id, key)` include
   soft-deleted rows.** Check with `withTrashed()` before reusing a slug or key in a workspace.
 - **Error pages are Inertia (`Pages/Error.tsx`), wired in `bootstrap/app.php`
@@ -637,7 +668,9 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
     are never backfilled twice.
   - The activity is **required once the workspace has an active activity** and optional before,
     so workspaces that don't bill aren't blocked. Archived activities can't be picked, but an
-    entry keeps the one it has. `billable` follows the activity unless the form sends it.
+    entry keeps the one it has. `billable` follows the activity; only **workspace admins**
+    (`manageBilling`) can override it — a member's `billable` input is ignored, and on update their
+    entry keeps its flag unless the activity changes (v1.39.0, BRAI-107).
   - **Members never get a rate:** activity options for log forms come from `timesheet.activities`
     (`TimeLogActivities::option()`: name, colour, pricing type label, billable) — never a shared
     Inertia prop, never `rate_cents`. Tests assert it on the JSON and the page.
