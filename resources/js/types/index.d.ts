@@ -1571,3 +1571,105 @@ export interface TimeOverviewOptions {
     people: { id: number; name: string }[];
     activities: { id: number; name: string; pricing_type: 'hourly' | 'fixed'; archived: boolean }[];
 }
+
+// ── Admin insights (BRAI-105) — app/Support/Insights/* ─────────────────────────
+export type InsightsPeriod = 'this_month' | 'last_month' | 'last_30' | 'last_90' | 'custom';
+export type InsightsTab = 'overview' | 'team' | 'projects' | 'helpdesk' | 'usage';
+
+/** InsightsFilters::toArray() */
+export interface InsightsFilters {
+    period: InsightsPeriod;
+    from: string;
+    to: string;
+    project: number | null;
+    timezone: string;
+}
+
+/** Props every Insights page receives (InsightsController::tab). */
+export interface InsightsPageProps<T> {
+    workspace: { id: number; name: string; slug: string };
+    filters: InsightsFilters;
+    presets: Record<Exclude<InsightsPeriod, 'custom'>, { from: string; to: string }>;
+    projectOptions: { id: number; name: string }[];
+    /** Query string that reproduces the filters (CSV links). */
+    exportQuery: Record<string, string | number>;
+    insights: T;
+}
+
+export interface InsightsOverview {
+    kpis: {
+        created: number;
+        completed: number;
+        completion_rate: number | null;
+        median_cycle_days: number | null;
+        open: number;
+        overdue: number;
+        hours: number;
+    };
+    weeks: { week: string; created: number; completed: number }[];
+    projects: { id: number; name: string; slug: string; color: string | null; open: number; overdue: number }[];
+    types: { name: string | null; created: number; completed: number }[];
+}
+
+export interface InsightsTeamMember {
+    id: number;
+    name: string;
+    avatar: string | null;
+    role: string;
+    completed: number;
+    open: number;
+    overdue: number;
+    hours: number;
+    comments: number;
+    last_login_at: string | null;
+    last_activity_at: string | null;
+    last_active_at: string | null;
+    profile_url: string;
+}
+
+export interface InsightsProjectRow {
+    id: number;
+    name: string;
+    key: string | null;
+    color: string | null;
+    health: 'on_track' | 'at_risk' | 'off_track' | null;
+    health_at: string | null;
+    issues: number;
+    open: number;
+    overdue: number;
+    done_in_range: number;
+    hours: number;
+    last_activity_at: string | null;
+    url: string;
+    health_url: string;
+}
+
+export interface InsightsHelpdesk {
+    tickets: { created: number; resolved: number; open: number; median_resolution_hours: number | null };
+    helpdesks: { id: number; name: string; project: string; created: number; resolved: number; open: number; url: string }[];
+    leads: { total: number; views: number; starts: number; submits: number };
+    forms: {
+        id: number;
+        name: string;
+        project: string;
+        status: string;
+        leads: number;
+        closed: number;
+        views: number;
+        starts: number;
+        submits: number;
+        conversion: number | null;
+        url: string;
+    }[];
+}
+
+export interface InsightsUsage {
+    members: number;
+    roles: Record<string, number>;
+    pending_invites: number;
+    projects: number;
+    storage: { id: number; name: string; color: string | null; files: number; issue_bytes: number; ticket_bytes: number; bytes: number }[];
+    storage_bytes: number;
+    /** null until the webhooks table exists. */
+    webhooks: number | null;
+}
