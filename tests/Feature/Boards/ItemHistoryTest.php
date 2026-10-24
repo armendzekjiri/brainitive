@@ -150,7 +150,8 @@ class ItemHistoryTest extends TestCase
         $this->assertSame(90 + 480, $item->fresh()->time_spent);
         $entry = collect($this->history($item))->last();
         $this->assertSame('work_logged', $entry['action']);
-        $this->assertSame(['minutes' => 480, 'total_minutes' => 570, 'note' => null], $entry['metadata']);
+        $this->assertSame(['minutes' => 480, 'total_minutes' => 570, 'note' => null], array_diff_key($entry['metadata'], ['time_entry_id' => 1]));
+        $this->assertIsInt($entry['metadata']['time_entry_id']); // written with its ledger entry (v1.38.0)
     }
 
     public function test_invalid_work_logs_are_rejected(): void

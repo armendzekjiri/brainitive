@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Billing\BillingActivityController;
 use App\Http\Controllers\Billing\BillingDocumentController;
+use App\Http\Controllers\Billing\TimesheetController;
+use App\Http\Middleware\ReadOnlySession;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -38,6 +40,14 @@ Route::controller(BillingActivityController::class)->group(function () {
 });
 
 // ── BRAI-99 Time log: log time, timer, my timesheet (agent: log-time) ─────────────────────────
+// My timesheet (every workspace member, own entries; admins may change others' unlocked entries)
+// and the member-facing activity options of every log form (Log work, timer, timesheet): never a rate.
+Route::get('timesheet', [TimesheetController::class, 'index'])->name('timesheet.index');
+Route::get('timesheet/activities', [TimesheetController::class, 'activities'])->middleware(ReadOnlySession::class)->name('timesheet.activities');
+Route::get('timesheet/items', [TimesheetController::class, 'items'])->middleware(ReadOnlySession::class)->name('timesheet.items');
+Route::post('timesheet/entries', [TimesheetController::class, 'store'])->middleware('throttle:120,1,timesheet.entries.store')->name('timesheet.entries.store');
+Route::put('timesheet/entries/{timeEntry}', [TimesheetController::class, 'update'])->whereNumber('timeEntry')->middleware('throttle:120,1,timesheet.entries.update')->name('timesheet.entries.update');
+Route::delete('timesheet/entries/{timeEntry}', [TimesheetController::class, 'destroy'])->whereNumber('timeEntry')->name('timesheet.entries.destroy');
 
 // ── BRAI-100 Clients + team time overview + Excel export (agent: overview) ─────────────────────
 

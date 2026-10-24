@@ -37,10 +37,11 @@ class TimeEntry extends Model
 
     protected static function booted(): void
     {
-        // legacy rows are backfilled from minutes that are already in time_spent
+        // legacy rows are backfilled from minutes that are already in time_spent; withTrashed: an
+        // issue in the trash keeps a right total for when it is restored
         static::created(function (TimeEntry $entry) {
             if ($entry->item_id && $entry->source !== self::SOURCE_LEGACY) {
-                Item::whereKey($entry->item_id)->increment('time_spent', $entry->minutes);
+                Item::withTrashed()->whereKey($entry->item_id)->increment('time_spent', $entry->minutes);
             }
         });
 
@@ -51,16 +52,16 @@ class TimeEntry extends Model
             $oldItem = $entry->getOriginal('item_id');
             $oldMinutes = (int) $entry->getOriginal('minutes');
             if ($oldItem) {
-                Item::whereKey($oldItem)->where('time_spent', '>=', $oldMinutes)->decrement('time_spent', $oldMinutes);
+                Item::withTrashed()->whereKey($oldItem)->where('time_spent', '>=', $oldMinutes)->decrement('time_spent', $oldMinutes);
             }
             if ($entry->item_id) {
-                Item::whereKey($entry->item_id)->increment('time_spent', $entry->minutes);
+                Item::withTrashed()->whereKey($entry->item_id)->increment('time_spent', $entry->minutes);
             }
         });
 
         static::deleted(function (TimeEntry $entry) {
             if ($entry->item_id && $entry->source !== self::SOURCE_LEGACY) {
-                Item::whereKey($entry->item_id)->where('time_spent', '>=', $entry->minutes)->decrement('time_spent', $entry->minutes);
+                Item::withTrashed()->whereKey($entry->item_id)->where('time_spent', '>=', $entry->minutes)->decrement('time_spent', $entry->minutes);
             }
         });
     }
