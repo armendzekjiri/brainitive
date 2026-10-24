@@ -28,3 +28,7 @@ Scheduled: `app:run-due-date-automations` (every 5 min) raises `item.due` once p
 4. `AutomationController` + routes + Inertia pages (`Pages/Automations/Index|Edit`), links from
    project Tools + settings.
 5. PHPUnit (`tests/Feature/Automation/*`), e2e `automations.spec.ts`, docs.
+
+## Status
+Done (2026-10-24): feature, PHPUnit (`tests/Feature/Automation/*`), e2e `automations.spec.ts`, docs
+(ARCHITECTURE "Workflow automation", KNOWLEDGE "Workflow automation"). Merged `release/v1.40.0`.

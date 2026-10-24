@@ -5,6 +5,7 @@ import { AlertTriangle, ArrowLeft, History, Plus, Workflow } from 'lucide-react'
 import AppLayout from '@/Layouts/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useFlashToast } from '@/components/automations/useFlashToast';
 import RunLog, { RunStatusBadge } from '@/components/automations/RunLog';
 import { cn } from '@/lib/utils';
 import type { AutomationRule, AutomationRun } from '@/types';
@@ -47,6 +48,7 @@ function RuleSwitch({ rule, url }: { rule: AutomationRule; url: string }) {
 }
 
 export default function AutomationsIndex({ workspace, project, rules, runs, maxRules }: Props) {
+    useFlashToast();
     const params = [workspace.slug, project.slug];
 
     return (

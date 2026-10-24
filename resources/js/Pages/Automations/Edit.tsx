@@ -17,6 +17,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useFlashToast } from '@/components/automations/useFlashToast';
 import RunLog from '@/components/automations/RunLog';
 import TestRulePanel from '@/components/automations/TestRulePanel';
 import ValueField, { selectClass } from '@/components/automations/ValueField';
@@ -65,6 +66,7 @@ function FieldError({ message }: { message?: string }) {
 }
 
 export default function AutomationsEdit({ workspace, project, rule, runs, catalog, options }: Props) {
+    useFlashToast();
     const params = [workspace.slug, project.slug];
     const form = useForm<FormData>({
         name: rule?.name ?? '',
