@@ -26,9 +26,11 @@ test.describe('team time overview', () => {
         await logWork(memberPage, web.slug, web.itemId, '45m');
         await logWork(memberPage, app.slug, app.itemId, '1h');
 
-        // Billing in the sidebar opens the Time tab
+        // Billing in the sidebar opens the first billing tab (Reports); then the Time tab
         await page.goto(urls.workspace());
         await page.getByRole('link', { name: 'Billing', exact: true }).click();
+        await expect(page).toHaveURL(new RegExp(`${billingUrl('reports')}$`));
+        await page.getByRole('navigation', { name: 'Billing' }).getByRole('link', { name: 'Time', exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`${billingUrl('time')}`));
         await expect(page.getByRole('link', { name: 'Time', exact: true })).toHaveAttribute('aria-current', 'page');
         await expect(page.getByRole('button', { name: 'Last month' })).toHaveAttribute('aria-pressed', 'true');

@@ -5,7 +5,7 @@ import { newIssue, request } from './workload';
 
 /** Helpers for the team time overview + clients journeys (tests/time-overview.spec.ts, BRAI-100). */
 
-export const billingUrl = (tab: 'time' | 'clients') => `/workspaces/${SEED.workspace}/billing/${tab}`;
+export const billingUrl = (tab: 'time' | 'clients' | 'reports') => `/workspaces/${SEED.workspace}/billing/${tab}`;
 const projectPath = (project: string) => `/workspaces/${SEED.workspace}/projects/${project}`;
 
 /** A new project of the seeded workspace with one issue on its main board. */
