@@ -42,6 +42,7 @@ use App\Http\Controllers\SprintController;
 use App\Http\Controllers\TaskListController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\WhiteboardController;
+use App\Http\Controllers\WorkloadController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkTimerController;
 use App\Http\Middleware\ReadOnlySession;
@@ -376,6 +377,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('releases/{release}/notes', [ReleaseController::class, 'saveNotes'])->whereNumber('release')->name('releases.notes.save');
             Route::post('releases/{release}/publish', [ReleaseController::class, 'publish'])->whereNumber('release')->name('releases.publish');
             Route::delete('releases/{release}/publish', [ReleaseController::class, 'unpublish'])->whereNumber('release')->name('releases.unpublish');
+            // Workload planning: capacity, explicit allocations, overload (BRAI-75)
+            Route::get('workload', [WorkloadController::class, 'index'])->name('workload.index');
+            Route::get('workload/items', [WorkloadController::class, 'items'])->middleware(ReadOnlySession::class)->name('workload.items');
+            Route::put('workload/capacity', [WorkloadController::class, 'updateCapacity'])->middleware('throttle:120,1,workload.capacity.update')->name('workload.capacity.update');
+            Route::put('workload/overrides', [WorkloadController::class, 'updateOverride'])->middleware('throttle:120,1,workload.overrides.update')->name('workload.overrides.update');
+            Route::put('workload/allocations', [WorkloadController::class, 'updateAllocation'])->middleware('throttle:240,1,workload.allocations.update')->name('workload.allocations.update');
+            // {allocation} is a plain id (not model-bound), so {project} stays scoped to {workspace}; the controller looks it up inside the project
+            Route::delete('workload/allocations/{allocation}', [WorkloadController::class, 'destroyAllocation'])->whereNumber('allocation')->name('workload.allocations.destroy');
             Route::get('plans/{plan:slug}', [PlanController::class, 'show'])->name('plans.show');
             Route::patch('plans/{plan:slug}', [PlanController::class, 'update'])->name('plans.update');
             Route::delete('plans/{plan:slug}', [PlanController::class, 'destroy'])->name('plans.destroy');

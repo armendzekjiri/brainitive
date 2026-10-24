@@ -618,6 +618,89 @@ export interface MyWorkProject {
     items: MyWorkItem[];
 }
 
+/** Workload planning (BRAI-75) — amounts are minutes; weeks are Mondays (Y-m-d). */
+export type WorkloadCellState = 'unset' | 'unavailable' | 'ok' | 'over';
+export type WorkloadFlag = 'done' | 'estimate_changed' | 'assignee_changed' | 'not_member';
+
+export interface WorkloadWeek {
+    start: string;
+    end: string;
+    week: number;
+    year: number;
+    label: string;
+    is_current: boolean;
+    is_past: boolean;
+}
+
+export interface WorkloadItemSummary {
+    id: number;
+    key: string;
+    title: string;
+    url: string | null;
+    estimate_minutes: number | null;
+    logged_minutes: number;
+    remaining_minutes: number | null;
+    completed: boolean;
+}
+
+export interface WorkloadCellAllocation {
+    id: number;
+    minutes: number;
+    counts: boolean;
+    flags: WorkloadFlag[];
+    item: WorkloadItemSummary;
+}
+
+export interface WorkloadCell {
+    week: string;
+    capacity_minutes: number | null;
+    capacity_source: 'default' | 'override' | null;
+    override_note: string | null;
+    allocated_minutes: number;
+    unestimated_minutes: number;
+    over_minutes: number;
+    free_minutes: number | null;
+    load_percent: number | null;
+    state: WorkloadCellState;
+    allocations: WorkloadCellAllocation[];
+}
+
+export interface WorkloadMember {
+    id: number;
+    name: string;
+    avatar_display: string | null;
+    capacity_minutes: number | null;
+    work: { estimated_items: number; remaining_minutes: number; unplanned_minutes: number; unestimated_items: number };
+    cells: WorkloadCell[];
+}
+
+export interface WorkloadTeamWeek {
+    week: string;
+    capacity_minutes: number;
+    allocated_minutes: number;
+    unset: number;
+    over: number;
+}
+
+export interface WorkloadReviewEntry {
+    kind: 'over_remaining' | WorkloadFlag;
+    message: string;
+    item: WorkloadItemSummary;
+    allocation: { id: number; user_id: number; user_name: string; week: string; minutes: number } | null;
+}
+
+export interface WorkloadCandidate {
+    id: number;
+    key: string;
+    title: string;
+    is_subtask: boolean;
+    assignee: { id: number; name: string } | null;
+    estimate_minutes: number | null;
+    logged_minutes: number;
+    remaining_minutes: number | null;
+    open_planned_minutes: number;
+}
+
 export interface SnippetCollection {
     id: number;
     uuid: string;

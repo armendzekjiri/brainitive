@@ -545,6 +545,31 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   deletes keep references (hidden, back on restore); hard deletes and cross-project issue moves
   prune them (`pruneMissing`). Whiteboard vs doc labels come from a `content like
   '{"type":"excalidraw"%'` check so lists don't load whole scenes.
+- **Workload planning (BRAI-75) never changes an allocation by itself.** Allocations are
+  explicit minutes per issue + person + week; estimate, assignee, status, deletion or membership
+  changes only show up as "Needs review" flags (`WorkloadGrid::review`, open weeks only). Keep it
+  that way: no observer on `Item` rewrites `workload_allocations`. Rules worth knowing:
+  - "Capacity not set" (no row) and 0h (leave) are different states; 0h capacity with planned time
+    is `over` with no percentage. Load is computed from integer minutes; only display rounds.
+  - Logged time lowers the remaining estimate once; it is compared with *open* allocations (this
+    week and later) only — never subtract `time_spent` from allocations as well.
+  - An issue and its ancestors / descendants can't both have allocations from the current (or
+    target) week on (`WorkloadPlanner::guardSubtree`, checked inside the transaction after locking
+    the tree's root issue); older weeks are history, so a parent planned last month can be split
+    into subtasks. In a person's open work a parent with estimated open subtasks is a container.
+    Logged time counts on the issue it was logged on (`time_spent` doesn't roll up).
+  - Done issues count up to their completion week (viewer's zone); trashed issues / boards are
+    ignored (restore brings them back). Rows of an issue moved to another project are inert; the
+    first plan for it in the new project deletes them (`allocate()`), and every read and lookup is
+    scoped to `project_id`, so the old project's minutes never show or collide.
+  - Override notes ("parental leave") and former members' names in the review reach planners only.
+  - Weeks are Monday `date`s; build them with `WorkloadWeeks` (UTC calendar math), never by adding
+    seconds to a timestamp — DST weekends would shift them. Week labels use the ISO year (`o`):
+    2026-12-28 is W53 2026, 2024-12-30 is W1 2025.
+  - Writes from the UI send `expected_minutes` (what the planner saw); a mismatch is a 422 on
+    `minutes`, not a silent overwrite. `createOrFirst` keeps parallel inserts to one row.
+  - The page is labelled "This project only": capacity is declared per project, so it is *not* a
+    person's company-wide availability. Don't sum it across projects without a new design.
 - **Share links expose only a whitelist.** `ShareLinkController::show` builds the payload
   field by field (title, content / description, status, type, priority, dates) and never
   serializes the model, so new columns can't leak into public pages. Docs share the live
