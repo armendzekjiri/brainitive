@@ -13,6 +13,7 @@ use App\Http\Controllers\CommandPaletteController;
 use App\Http\Controllers\ContentReferenceController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\HelpdeskController;
+use App\Http\Controllers\HelpdeskForwardingController;
 use App\Http\Controllers\HelpdeskMailboxController;
 use App\Http\Controllers\HelpdeskWidgetController;
 use App\Http\Controllers\InvitationController;
@@ -478,6 +479,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('helpdesks/{helpdesk:slug}/fields/{field}', [HelpdeskController::class, 'destroyField'])->name('helpdesks.fields.destroy');
             Route::post('helpdesks/{helpdesk:slug}/tickets/reorder', [HelpdeskController::class, 'reorderTickets'])->name('helpdesks.tickets.reorder');
             Route::get('helpdesks/{helpdesk:slug}/tickets/root', [HelpdeskController::class, 'rootTicketsJson'])->name('helpdesks.tickets.root');
+            // Settings → Email → forwarding address (BRAI-124)
+            Route::get('helpdesks/{helpdesk:slug}/email/forwarding', [HelpdeskForwardingController::class, 'show'])->middleware(ReadOnlySession::class)->name('helpdesks.forwarding.show');
+            Route::post('helpdesks/{helpdesk:slug}/email/forwarding/regenerate', [HelpdeskForwardingController::class, 'regenerate'])->middleware('throttle:10,1,helpdesks.forwarding.regenerate')->name('helpdesks.forwarding.regenerate');
 
             // Tickets (nested under helpdesks)
             Route::post('helpdesks/{helpdesk:slug}/tickets', [TicketController::class, 'store'])->name('tickets.store');
