@@ -98,6 +98,12 @@ class Helpdesk extends Model
         return $this->hasMany(Ticket::class);
     }
 
+    /** Service levels (BRAI-125); no row = no SLA. */
+    public function slaPolicy(): HasOne
+    {
+        return $this->hasOne(HelpdeskSlaPolicy::class);
+    }
+
     /**
      * Get all custom fields for this helpdesk.
      */

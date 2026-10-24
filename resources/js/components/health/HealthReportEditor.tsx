@@ -9,7 +9,7 @@ import type { HealthClaim, HealthMetricKey, HealthSection, HealthSource, HealthS
 import { router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { Loader2, Plus, Quote, Sparkles, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { METRIC_LABELS, STATUSES, STATUS_META, SourceChip } from './HealthBits';
 
@@ -31,6 +31,31 @@ const draftClaim = (claim: HealthClaim = { text: '', sources: [] }): DraftClaim 
 
 const emptySections = (): Sections => ({ progress: [], risks: [], next_steps: [] });
 
+/** What is kept in the browser until the update is saved (BRAI-64: a refresh used to lose everything). */
+type StoredDraft = { status: HealthStatus | null; summary: string; sections: Record<HealthSection, HealthClaim[]>; aiSources: Record<string, HealthSource>; aiAssisted: boolean };
+
+const draftKey = (projectId: number) => `brainitive:health-draft:${projectId}`;
+
+function readDraft(projectId: number): StoredDraft | null {
+    try {
+        const raw = window.localStorage.getItem(draftKey(projectId));
+        return raw ? (JSON.parse(raw) as StoredDraft) : null;
+    } catch {
+        return null;
+    }
+}
+
+function writeDraft(projectId: number, draft: StoredDraft | null): void {
+    try {
+        if (draft === null) window.localStorage.removeItem(draftKey(projectId));
+        else window.localStorage.setItem(draftKey(projectId), JSON.stringify(draft));
+    } catch {
+        // private mode / storage full: the editor still works, it just isn't kept
+    }
+}
+
+const isEmptyDraft = (d: StoredDraft) => d.status === null && d.summary.trim() === '' && Object.values(d.sections).every((points) => points.length === 0);
+
 interface Props {
     workspace: Workspace;
     project: Project;
@@ -41,11 +66,18 @@ interface Props {
 /** Write (optionally AI-drafted) a status update: pick a status, review points + sources, save. */
 export function HealthReportEditor({ workspace, project, health, aiConfigured }: Props) {
     const errors = usePage().props.errors as Record<string, string>;
-    const [status, setStatus] = useState<HealthStatus | null>(null);
-    const [summary, setSummary] = useState('');
-    const [sections, setSections] = useState<Sections>(emptySections);
-    const [aiSources, setAiSources] = useState<Record<string, HealthSource>>({});
-    const [aiAssisted, setAiAssisted] = useState(false);
+    // a draft kept in this browser comes back after a refresh until it is saved or discarded
+    const [restored] = useState(() => readDraft(project.id));
+    const [status, setStatus] = useState<HealthStatus | null>(restored?.status ?? null);
+    const [summary, setSummary] = useState(restored?.summary ?? '');
+    const [sections, setSections] = useState<Sections>(() => restored
+        ? { progress: (restored.sections.progress ?? []).map((c) => draftClaim(c)), risks: (restored.sections.risks ?? []).map((c) => draftClaim(c)), next_steps: (restored.sections.next_steps ?? []).map((c) => draftClaim(c)) }
+        : emptySections());
+    const [aiSources, setAiSources] = useState<Record<string, HealthSource>>(restored?.aiSources ?? {});
+    const [aiAssisted, setAiAssisted] = useState(restored?.aiAssisted ?? false);
+    const [showRestored, setShowRestored] = useState(!!restored && !isEmptyDraft(restored));
+    const [statusMissing, setStatusMissing] = useState(false);
+    const statusGroupRef = useRef<HTMLDivElement>(null);
     const [drafting, setDrafting] = useState(false);
     const [aiError, setAiError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
@@ -70,6 +102,25 @@ export function HealthReportEditor({ workspace, project, health, aiConfigured }:
         [...options.metrics, ...options.issues, ...options.plans].forEach((s) => { map[s.ref] = s; });
         return map;
     }, [aiSources, options]);
+
+    useEffect(() => {
+        const current: StoredDraft = {
+            status, summary, aiSources, aiAssisted,
+            sections: { progress: sections.progress.map(({ text, sources }) => ({ text, sources })), risks: sections.risks.map(({ text, sources }) => ({ text, sources })), next_steps: sections.next_steps.map(({ text, sources }) => ({ text, sources })) },
+        };
+        writeDraft(project.id, isEmptyDraft(current) ? null : current);
+    }, [project.id, status, summary, sections, aiSources, aiAssisted]);
+
+    const reset = () => {
+        setStatus(null);
+        setSummary('');
+        setSections(emptySections());
+        setAiSources({});
+        setAiAssisted(false);
+        setShowRestored(false);
+        setStatusMissing(false);
+        writeDraft(project.id, null);
+    };
 
     const update = (section: HealthSection, index: number, claim: DraftClaim | null) => setSections((current) => ({
         ...current,
@@ -103,6 +154,13 @@ export function HealthReportEditor({ workspace, project, health, aiConfigured }:
     };
 
     const save = () => {
+        if (status === null) {
+            // the server would refuse it too, but its message sat far above the button
+            setStatusMissing(true);
+            statusGroupRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            (statusGroupRef.current?.querySelector('[role="radio"]') as HTMLElement | null)?.focus({ preventScroll: true });
+            return;
+        }
         setSaving(true);
         router.post(route('projects.health.reports.store', [workspace.slug, project.slug]), {
             status: status ?? '',
@@ -118,18 +176,18 @@ export function HealthReportEditor({ workspace, project, health, aiConfigured }:
         }, {
             preserveScroll: true,
             onSuccess: () => {
-                toast.success('Status update saved.');
-                setStatus(null);
-                setSummary('');
-                setSections(emptySections());
-                setAiSources({});
-                setAiAssisted(false);
+                toast.success('Status update saved — it’s listed under Status updates.');
+                reset();
             },
+            onError: (errs) => toast.error(Object.values(errs)[0] ?? 'The status update could not be saved.'),
             onFinish: () => setSaving(false),
         });
     };
 
     const sectionErrors = Object.entries(errors).filter(([key]) => key.startsWith('sections'));
+    // everything else the server may refuse (period, time zone, summary) is shown next to the button too
+    const otherErrors = Object.entries(errors).filter(([key]) => ['summary', 'tz', 'from', 'to', 'ai_assisted'].includes(key));
+    const statusError = statusMissing && status === null ? 'Pick a health status — On track, At risk or Off track — before saving.' : errors.status;
 
     return (
         <Card>
@@ -151,11 +209,17 @@ export function HealthReportEditor({ workspace, project, health, aiConfigured }:
                 )}
             </CardHeader>
             <CardContent className="space-y-5">
+                {showRestored && (
+                    <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                        <span>Your unsaved draft is back. Save it when you’re ready.</span>
+                        <Button type="button" variant="ghost" size="sm" className="h-7" onClick={reset}>Discard draft</Button>
+                    </div>
+                )}
                 {aiError && <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">{aiError}</p>}
 
                 <div>
                     <Label id="health-status-label">Health status</Label>
-                    <div role="radiogroup" aria-labelledby="health-status-label" className="mt-2 flex flex-wrap gap-2">
+                    <div ref={statusGroupRef} role="radiogroup" aria-labelledby="health-status-label" aria-invalid={!!statusError} aria-describedby={statusError ? 'health-status-error' : undefined} className={cn('mt-2 flex flex-wrap gap-2 rounded-lg', statusError && 'ring-2 ring-destructive/40 ring-offset-2 ring-offset-background')}>
                         {STATUSES.map((value, i) => (
                             <button
                                 key={value}
@@ -164,7 +228,7 @@ export function HealthReportEditor({ workspace, project, health, aiConfigured }:
                                 aria-checked={status === value}
                                 // one tab stop; arrow keys move between the options (radio group pattern)
                                 tabIndex={status === value || (status === null && i === 0) ? 0 : -1}
-                                onClick={() => setStatus(value)}
+                                onClick={() => { setStatus(value); setStatusMissing(false); }}
                                 onKeyDown={(e) => {
                                     const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
                                     if (step === 0) return;
@@ -183,7 +247,7 @@ export function HealthReportEditor({ workspace, project, health, aiConfigured }:
                             </button>
                         ))}
                     </div>
-                    {errors.status && <p className="mt-1 text-sm text-destructive">{errors.status}</p>}
+                    {statusError && <p id="health-status-error" className="mt-1 text-sm text-destructive">{statusError}</p>}
                 </div>
 
                 <div>
@@ -238,8 +302,12 @@ export function HealthReportEditor({ workspace, project, health, aiConfigured }:
                     ))}
                 </div>
 
-                {sectionErrors.length > 0 && (
-                    <div role="alert" className="text-sm text-destructive">{sectionErrors.map(([k, v]) => <p key={k}>{v}</p>)}</div>
+                {(statusError || sectionErrors.length > 0 || otherErrors.length > 0) && (
+                    <div role="alert" data-testid="health-save-errors" className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-sm text-destructive">
+                        <p className="font-medium">Not saved yet:</p>
+                        {statusError && <p>{statusError}</p>}
+                        {[...sectionErrors, ...otherErrors].map(([k, v]) => <p key={k}>{v}</p>)}
+                    </div>
                 )}
 
                 <div className="flex flex-wrap items-center justify-end gap-3">

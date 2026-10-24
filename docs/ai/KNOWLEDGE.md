@@ -161,6 +161,43 @@ schema public". Use `createdb -h /tmp -O <DB_USERNAME> brainitive_test_<name>` (
 - **e2e** turns forwarding on in `e2e/env.ts` (`INBOUND_MAIL_*`, Postmark). dev.brainitive.app has no
   inbound domain, so `helpdesk-forwarding.spec.ts` skips there.
 
+### Recurring issues: dates, catch-up and the actor (v1.40.0, BRAI-123)
+- **Dates are calendar maths, the zone only picks "today".** `RecurrenceSchedule` works on `Y-m-d`
+  dates (midnight UTC), so DST never moves an occurrence. An occurrence is due from **local midnight**
+  in the template's `timezone` (the creator's `localTimezone()` when it was saved) — Berlin's Monday
+  starts at 22:00 UTC in summer and 23:00 UTC in winter. The command runs every 15 minutes, so issues
+  appear shortly after local midnight. The scheduler query looks up to UTC today + 1 day (UTC+14).
+- **Every date comes from the rule, not from the previous date** (unlike list tasks'
+  `TaskListItem::nextDueDate()`, which chains `addMonthNoOverflow` and drifts Jan 31 → Feb 28 → Mar 28).
+  Monthly day 29–31 clamps to the month's last day, so 31 = "the last day"; yearly Feb 29 → Feb 28 in
+  common years and Feb 29 again in leap years. Monthly "the nth / last X" supports X = 0 (any weekday
+  Mon–Fri: first / last business day). Weekly intervals count weeks (Monday-based) from the start date's
+  week.
+- **Idempotent + no flood.** The runner locks the template row and only looks at dates after
+  `last_occurrence_date`; `recurring_issue_occurrences` is unique on (template, date) as a backstop.
+  After downtime only the **latest** missed date is created (`latestBetween`), the others are skipped.
+  `active_from` (the local day the template was created, its schedule changed or it was resumed) is the
+  floor: a start date in the past, an edited schedule or a pause never backfill old dates.
+- **Count** (`max_occurrences`) counts issues actually created (skipped dates don't count); `end_date` is
+  inclusive. When either is reached `next_occurrence_date` becomes null ("Ended").
+- **Actor = the template's creator.** The console has no user, and `Assignments::item()` stays silent
+  without one, so the runner signs the creator in for the create (`Auth::setUser`, then `forgetUser` /
+  the previous user back). The assignee gets the normal `item_assigned` from `ItemObserver` (silent when
+  the creator assigned themself), history / events / automations see the creator. If the creator can no
+  longer create issues on the board (or the board is gone / has no columns) the template **pauses** with
+  `last_error`; whoever resumes it becomes its creator. An assignee who left the project → unassigned
+  issue; a type / priority / label no longer in the project → the default / dropped. Description
+  mentions are not re-notified on every occurrence.
+- **e2e trigger:** `recurring-issues.e2e-run` is only registered when `APP_ENV=e2e` (and the action
+  aborts 404 otherwise); dev and production have no such route. The spec skips the "created on the
+  board" part with `REMOTE`. A POST to an unregistered URL answers 405 (the GET `Route::fallback`
+  matches), not 404.
+- **New subfolders under `resources/js/components/`:** even an explicit lowercase `git add
+  resources/js/components/recurring/X.tsx` was recorded as `Components/recurring/X.tsx` (the folder is
+  new to git and macOS reports the on-disk `Components`). Fix the index entry with `git rm --cached
+  <Components path>` + `git update-index --add --cacheinfo 100644,$(git hash-object -w <file>),<lowercase
+  path>`, then check `git ls-files -s | grep -i <name>`.
+
 ### Quick capture: conversion is idempotent by row lock, not by request id (BRAI-70)
 `CaptureConversion::convert` locks the capture (`lockForUpdate`) inside one transaction; a capture
 that is already processed returns its target (`replayed`, HTTP 200) whatever the second request
@@ -373,6 +410,29 @@ php artisan tinker --execute="\App\Models\User::where('email','...')->update(['e
 ```
 
 ---
+
+### Helpdesk SLA: derived dates, business-time maths, recompute points (v1.40.0, BRAI-125)
+- **Never write the `sla_*` ticket columns by hand.** `TicketSla::apply()` derives all of them from the
+  ticket, its helpdesk's policy and "now"; the `Ticket` `saving` hook runs it on create and when priority,
+  column, `completed_at` or `first_responded_at` change. Bulk writes through the query builder skip it — call
+  `TicketSla::recompute()` for those. Policy saves recompute the **open** tickets only; resolved tickets keep
+  their historical result.
+- **First response = first public reply with a `user_id`** (`TicketReply` `created` hook), so every agent
+  path counts: the reply box, the resolve dialog's closing message, emailed replies (ticket 3). Internal
+  notes and contact replies don't. Resolving a ticket before its first-response due time also meets it.
+- **Business time is built from local wall-clock windows per date** (`BusinessCalendar`), then turned into
+  instants: a DST day's window is an hour shorter / longer, opening times never shift. `to < from` = an
+  overnight shift that belongs to the day it opens. A "day" target = one business day (`to − from`), 24 h
+  when 24/7.
+- **Pauses only stop the resolution clock** (pause columns, e.g. "Waiting on customer"). Paused business
+  minutes are added to the resolution target when the ticket leaves the column; a ticket paused past its due
+  time counts as breached from the moment the pause began.
+- **`warn_at` doubles as "when the checker looks"** (= due when warnings are off), so the checker's query is
+  two indexed comparisons. Notifications are once per (ticket, warning|breached, target, person) via
+  `sent_item_reminders` keys `ticket_sla:<id>:<kind>:<target>`; reassigning sends the new assignee their own.
+- **The badge also computes "breached" in the browser** (`lib/sla.ts`), because dev.brainitive.app runs no
+  scheduler. Keep `lib/sla.ts` and `TicketSla` in sync. e2e triggers the checker through
+  `helpdesks.sla.e2e-check`, which only exists with `APP_ENV=e2e`, so that journey is skipped on dev.
 
 ## Architectural decisions
 

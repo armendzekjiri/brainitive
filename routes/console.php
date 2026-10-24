@@ -39,6 +39,10 @@ Schedule::command('model:prune', ['--model' => [InboxNotification::class]])->dai
 // Ticket 1 (automation): scheduled triggers such as "due date passed".
 
 // Ticket 2 (recurring issues): create the issues that are due.
+// Occurrences are due from local midnight in each template's time zone; idempotent, catch-up = latest only.
+Schedule::command('app:create-recurring-issues')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping();
 
 // Ticket 3 (email → helpdesk, IMAP): poll connected mailboxes; forget inbound dedupe rows after 180 days.
 Schedule::command('app:poll-helpdesk-mailboxes')
@@ -47,3 +51,6 @@ Schedule::command('app:poll-helpdesk-mailboxes')
 Schedule::command('model:prune', ['--model' => [HelpdeskInboundEmail::class]])->dailyAt('03:45');
 
 // Ticket 5 (helpdesk SLA): warn before and on breaches.
+Schedule::command('app:check-helpdesk-sla')
+    ->everyMinute()
+    ->withoutOverlapping();

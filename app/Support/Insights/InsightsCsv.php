@@ -86,9 +86,11 @@ final class InsightsCsv
                     ['Tickets resolved', $data['tickets']['resolved']],
                     ['Open tickets now', $data['tickets']['open']],
                     ['Median resolution time (hours)', $data['tickets']['median_resolution_hours']],
+                    ['SLA breaches', $data['sla']['breaches']],
+                    ['SLA met (%)', $data['sla']['met_percent']],
                     ['Leads received', $data['leads']['total']],
                 ],
-                [['Helpdesk', 'Project', 'Created', 'Resolved', 'Open now'], ...array_map(fn ($h) => [$h['name'], $h['project'], $h['created'], $h['resolved'], $h['open']], $data['helpdesks'])],
+                [['Helpdesk', 'Project', 'Created', 'Resolved', 'Open now', 'SLA breaches', 'SLA met (%)'], ...array_map(fn ($h) => [$h['name'], $h['project'], $h['created'], $h['resolved'], $h['open'], $h['sla_breaches'], $h['sla_met_percent']], $data['helpdesks'])],
                 [['Lead form', 'Project', 'Status', 'Leads', 'Closed', 'Views', 'Starts', 'Submits', 'Conversion (%)'], ...array_map(fn ($f) => [$f['name'], $f['project'], $f['status'], $f['leads'], $f['closed'], $f['views'], $f['starts'], $f['submits'], $f['conversion']], $data['forms'])],
             ],
             'usage' => [
