@@ -1,7 +1,7 @@
 # Billing reports: builder, finalize / lock, status (BRAI-101, part 2 of 2)
 
 **Branch:** feat/billing-reports (from release/v1.38.0)
-**Status:** in-progress
+**Status:** done
 **Started:** 2026-10-24
 **Board card:** BRAI-101
 **Contract:** [release-v1.38.0-billing.md](./release-v1.38.0-billing.md) (snapshot v1, money rules,
@@ -82,6 +82,18 @@ PDF / Excel / sending are the documents part (other agent); this part links to t
 ## Docs to update
 ARCHITECTURE (billing reports module), KNOWLEDGE (finalize locking / fixed charges / numbering).
 
+## Decisions made while building
+- `entries[].person` / `.note` follow `show_people` / `show_notes` (the Excel detail sheet goes to the
+  client); the admin page gets its own rows with person + note always.
+- `issuer.payment_terms_days` falls back to 14 when the setting is empty (as in the contract example).
+- `total_minutes` on the report = billed (rounded) minutes; group `net_cents` = Σ line amounts in the
+  workspace's price mode (gross amounts when prices include VAT).
+- A draft's period can be changed in the options panel; a report covers at most one year.
+- Finalize takes the reviewed `entry_ids` from the page (see KNOWLEDGE) instead of re-reading the
+  unbilled entries, so what the admin saw is exactly what gets locked.
+
 ## Open questions
 - Invoice number format (`prefix + 3 digits`) lives in `InvoiceNumber::format()`; the settings page
   (documents agent) should preview it with the same helper.
+- The documents agent's `BuildsReportData` file must match `app/Contracts/Billing/BuildsReportData.php`
+  (bound to `ReportBuilder` in `AppServiceProvider`).
