@@ -104,6 +104,12 @@ symlink. Check with `(new ReflectionClass(SomeController::class))->getFileName()
 into the worktree. (BRAI-70 worked around it with an `auto_prepend_file` that sets
 `APP_BASE_PATH`; the copy is simpler.)
 
+**Per-worktree test DB: create it owned by the app's DB user.** `createdb -h /tmp
+brainitive_test_<name>` makes *your OS user* the owner; on Postgres 15+ the app's `DB_USERNAME`
+then can't create tables in `public` and every PHPUnit test fails with "permission denied for
+schema public". Use `createdb -h /tmp -O <DB_USERNAME> brainitive_test_<name>` (or `ALTER DATABASE
+… OWNER TO …` + `ALTER SCHEMA public OWNER TO …` on an existing one).
+
 ### Quick capture: conversion is idempotent by row lock, not by request id (BRAI-70)
 `CaptureConversion::convert` locks the capture (`lockForUpdate`) inside one transaction; a capture
 that is already processed returns its target (`replayed`, HTTP 200) whatever the second request

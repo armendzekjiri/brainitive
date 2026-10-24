@@ -35,6 +35,10 @@ We work in releases, not single PRs:
 4. Open one PR `release/vX.Y.Z` → `pre-release`. Its checks run, then the merge → dev deploy →
    live e2e on dev → the automatic release PR to `main`.
 
+**Every release also updates the homepage** (`Pages/Welcome.tsx`): a card per new feature in the
+matching `featureGroups` group (`isNew: true`, drop it from older ones), a `SPOTLIGHT` card for the
+big one, and the title list in `e2e/tests/homepage.spec.ts` — see "Homepage + Welcome tab" below.
+
 **Every feature or change ships with e2e tests:** journeys in `e2e/tests/` for what a user can now
 do, or what was broken, next to PHPUnit. See `e2e/README.md`; use `npm run e2e:ui` to watch them.
 Parallel checkouts (worktrees) use their own databases: `TEST_DB_SUFFIX=<name>` for PHPUnit
