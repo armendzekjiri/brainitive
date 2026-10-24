@@ -311,6 +311,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('fields/{itemField}', [ItemFieldController::class, 'destroy'])->whereNumber('itemField')->name('projects.fields.destroy');
         });
 
+        // Automation, recurring issues, helpdesk SLA (v1.40.0)
+        Route::prefix('projects/{project:slug}')->scopeBindings()->group(function () {
+            require __DIR__.'/automation.php';
+        });
+
         // Project members (assign workspace users to project with role)
         Route::prefix('projects/{project:slug}')->scopeBindings()->group(function () {
             Route::get('members/search', [ProjectController::class, 'searchMembers'])->name('projects.members.search');

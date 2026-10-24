@@ -33,3 +33,12 @@ Schedule::command('model:prune', ['--model' => [McpRequest::class, GithubDeliver
 
 // Inbox (BRAI-102): archived notifications after 90 days, every notification after 180 days.
 Schedule::command('model:prune', ['--model' => [InboxNotification::class]])->dailyAt('03:30');
+
+// ── v1.40.0: one block per ticket (docs/ai/tasks/release-v1.40.0.md) ─────────
+// Ticket 1 (automation): scheduled triggers such as "due date passed".
+
+// Ticket 2 (recurring issues): create the issues that are due.
+
+// Ticket 3 (email → helpdesk, IMAP): poll connected mailboxes.
+
+// Ticket 5 (helpdesk SLA): warn before and on breaches.
