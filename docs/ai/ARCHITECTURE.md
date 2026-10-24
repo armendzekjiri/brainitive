@@ -26,6 +26,7 @@ Browser extension ──OAuth2.1 (capture scope)──▶ routes/api.php /api/ex
 External site ──▶ routes/web.php (cors, no CSRF) ──▶ Helpdesk widget/portal
 Visitor / iframe ──▶ routes/web.php /f/{slug} (no CSRF) ──▶ PublicLeadFormController
 Other tools ──Bearer inbound token──▶ routes/api.php /api/lead-forms/{uuid}/inbound
+Postmark / Mailgun ──token / HMAC──▶ routes/api.php /api/inbound-mail/{postmark|mailgun} ──▶ InboundMail::receive()
 ```
 
 - **No API layer for the app itself.** Inertia passes controller props straight to React.
@@ -123,6 +124,7 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Agents create tickets** in `components/helpdesk/NewTicketDialog.tsx` → `TicketController::store`: customer email required, and the public form's required rules (`settings.default_field_*`, required `HelpdeskField`s) apply.
 - **Resolving** = moving into an `is_done_column` column: the board asks for a closing message (`components/helpdesk/ResolveTicketDialog.tsx`); `TicketController::move` saves it as a reply and sends `TicketResolvedNotification` to the contact.
 - **Ticket links** (`tickets.show`) render `Helpdesks/Show` with `openTicketId`; there is no separate ticket page.
+- **Forwarding address (BRAI-124, v1.40.0):** `helpdesks.forwarding_local_part` (unique, `$hidden`) + `config('services.inbound_mail.domain')` = `<slug>-<10 random>@domain`, managed by `app/Support/Helpdesks/Inbound/ForwardingAddress` (`for()` creates on first use, `regenerate()`, `resolve($recipient)` ignores `+tag`, `providerEnabled()`). Webhooks `InboundMailController` (`inbound-mail.postmark` basic-auth/`?token=`, `inbound-mail.mailgun` HMAC + replay cache; 404 until configured) → `InboundPayloads::postmark|mailgun` (payload → `InboundMessage`, attachments via `AttachmentWriter` into `InboundTempFiles` = `storage/app/inbound-mail/<uuid>/`) → queued `App\Jobs\ProcessInboundMail` → `InboundMail::receive()`, then deletes the temp folder. Settings JSON `HelpdeskForwardingController` (`helpdesks.forwarding.show|regenerate`, `update` policy) for `components/helpdesk/email/ForwardingAddressSection.tsx` in the Email tab. Fixtures `tests/Fixtures/inbound/`; tests `InboundMailWebhookTest`, `HelpdeskForwardingAddressTest`, e2e `helpdesk-forwarding.spec.ts`. Self-hosting setup: `docs/self-hosting.md` → "Email to helpdesk".
 - **Support page:** `/support/{public_slug}` (`HelpdeskWidgetController::supportPage`) renders the embed form full-page with branding; the address is set under Helpdesk settings → Embed.
 - **Notifications UI:** `describeNotification()` in `components/NotificationMessage.tsx` turns every payload into a row (bell + `/notifications`). Older types have their own case; any other type renders from the payload contract keys (`title`, `body`, `url`, `actor_name`, `actor_avatar`, `project_name`, `subject_key`), so a new type that follows the contract needs no frontend change. The icon comes from the type's catalog category.
 

@@ -4,6 +4,7 @@ use App\Http\Controllers\CliController;
 use App\Http\Controllers\Extension\CaptureController;
 use App\Http\Controllers\Extension\ExtensionController;
 use App\Http\Controllers\GithubWebhookController;
+use App\Http\Controllers\InboundMailController;
 use App\Http\Controllers\LeadFormInboundController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\RejectCaptureTokens;
@@ -68,3 +69,10 @@ Route::post('/webhooks/github/{uuid}', GithubWebhookController::class)
 // Lead forms: other tools push leads (Bearer = the form's inbound token)
 Route::post('/lead-forms/{uuid}/inbound', [LeadFormInboundController::class, 'store'])
     ->whereUuid('uuid')->middleware('throttle:60,1,lead-forms.inbound')->name('lead-forms.inbound');
+
+// Email → helpdesk through a forwarding address (BRAI-124): the provider posts each received mail.
+// Postmark: basic auth / ?token=; Mailgun: HMAC signature + replay window. 404 until configured.
+Route::post('/inbound-mail/postmark', [InboundMailController::class, 'postmark'])
+    ->middleware('throttle:240,1,inbound-mail.postmark')->name('inbound-mail.postmark');
+Route::post('/inbound-mail/mailgun', [InboundMailController::class, 'mailgun'])
+    ->middleware('throttle:240,1,inbound-mail.mailgun')->name('inbound-mail.mailgun');
