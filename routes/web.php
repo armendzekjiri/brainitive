@@ -538,7 +538,6 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::post('/api/notifications/bulk', [NotificationController::class, 'bulk'])->name('notifications.bulk');
     Route::patch('/api/notifications/preferences', [NotificationController::class, 'updatePreferences'])->name('notifications.preferences');
-    Route::post('/api/notifications/notify-mention', [NotificationController::class, 'notifyMention'])->middleware('throttle:60,1,notifications.notify-mention')->name('notifications.notify-mention');
     Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markRead'])->whereUuid('id')->name('notifications.read');
     Route::post('/api/notifications/{id}/unread', [NotificationController::class, 'markUnread'])->whereUuid('id')->name('notifications.unread');
     Route::post('/api/notifications/{id}/archive', [NotificationController::class, 'archive'])->whereUuid('id')->name('notifications.archive');

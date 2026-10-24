@@ -185,8 +185,9 @@ Policies give workspace *editors* edit rights only in projects they can open
 (`hasProjectAccess`) — workspace *admins* everywhere. A workspace editor outside a project must
 not create items, tasks, plans, releases or tickets there (CLI and extension included).
 User ids from requests (assignees, watchers) use `App\Rules\ProjectMember`, never just
-`exists:users,id` (that lets anyone look up any account). Notification links are app paths only
-(`NotificationController::appPath`, `safeAppHref` in `NotificationMessage.tsx`, `public/sw.js`).
+`exists:users,id` (that lets anyone look up any account). Notification links are built server-side with `route()` and
+the UI opens app paths only (`safeAppHref` in `NotificationMessage.tsx`, `public/sw.js`); the
+old client-called `notify-mention` endpoint is gone (mentions are sent when content is saved).
 `Workspace::$hidden = ['settings']` (AI endpoint + encrypted key) — read AI config server-side.
 
 ### Uploads keep only allowlisted extensions
