@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin;
 use App\Http\Controllers\AiController;
+use App\Http\Controllers\BoardBulkItemController;
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BoardViewController;
 use App\Http\Controllers\BookmarkController;
@@ -347,6 +348,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('boards/{board:slug}/swimlanes', [BoardController::class, 'updateSwimlanes'])->name('boards.swimlanes.update');
             Route::post('boards/{board:slug}/columns/reorder', [BoardController::class, 'reorderColumns'])->name('boards.columns.reorder');
             Route::post('boards/{board:slug}/items/reorder', [BoardController::class, 'reorderItems'])->name('boards.items.reorder');
+            // Bulk edit of the list view (BRAI-108); before items/{item} so "bulk" is never an item id
+            Route::patch('boards/{board:slug}/items/bulk', [BoardBulkItemController::class, 'update'])->name('boards.items.bulk.update');
+            Route::delete('boards/{board:slug}/items/bulk', [BoardBulkItemController::class, 'destroy'])->name('boards.items.bulk.destroy');
             Route::put('boards/{board:slug}/columns/{column}', [BoardController::class, 'updateColumn'])->name('boards.columns.update');
             Route::delete('boards/{board:slug}/columns/{column}', [BoardController::class, 'destroyColumn'])->name('boards.columns.destroy');
             Route::post('boards/{board:slug}/items', [BoardController::class, 'storeItem'])->name('boards.items.store');

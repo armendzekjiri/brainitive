@@ -60,6 +60,7 @@ import {
     Eye,
     EyeOff,
     Sparkles,
+    Webhook as WebhookIcon,
 } from 'lucide-react';
 import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { Link } from '@inertiajs/react';
@@ -644,6 +645,10 @@ export default function WorkspacesEdit({
                                     <TabsTrigger value="ai" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
                                         <Bot className="size-4" />AI
                                     </TabsTrigger>
+                                    {/* Webhooks has its own page (v1.39.0, BRAI-104) */}
+                                    <Link href={route('webhooks.index', workspace.slug)} className="inline-flex h-9 w-full shrink-0 items-center justify-start gap-2 whitespace-nowrap rounded-sm px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
+                                        <WebhookIcon className="size-4" />Webhooks
+                                    </Link>
                                     <TabsTrigger value="danger" className="w-full justify-start gap-2 px-3 h-9 text-destructive data-[state=active]:bg-destructive/10 data-[state=active]:text-destructive data-[state=active]:shadow-none">
                                         <Shield className="size-4" />Danger zone
                                     </TabsTrigger>
