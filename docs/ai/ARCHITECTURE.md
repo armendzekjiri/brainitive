@@ -237,6 +237,15 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **UI:** `Pages/Workload/Index.tsx` (grid, team totals, review, "How it's calculated"), `components/workload/` (`WorkloadWeekSheet` = one person's week: availability override, planned work, plan work with the remaining-estimate suggestion; `CapacityDialog`; `WorkloadReview`; `workloadActions`), helpers `lib/workload.ts`, types `Workload*` in `types/index.d.ts`. Entry: project sidebar → Boards → "Workload" (after Releases).
 - **Tests:** `tests/Feature/Workload/WorkloadTest.php`, e2e `e2e/tests/workload.spec.ts` (+ `e2e/helpers/workload.ts`). Rules: [`tasks/feat-workload-planning.md`](./tasks/feat-workload-planning.md), traps in KNOWLEDGE.
 
+### Billing settings + documents (v1.38.0, BRAI-101)
+Contract (snapshot v1, money rules): [`tasks/release-v1.38.0-billing.md`](./tasks/release-v1.38.0-billing.md); plan: [`tasks/feat-billing-documents.md`](./tasks/feat-billing-documents.md). Workspace admins only (`Gate::authorize('manageBilling', $workspace)`), routes in the documents section of `routes/billing.php`.
+- **Settings:** `Billing\BillingSettingsController` — `billing.settings.edit|update` (one `BillingSetting` row, `forWorkspace()`), `billing.settings.logo` (GET, admin-only preview), `billing.settings.logo.store|destroy`. Page `Pages/Billing/Settings.tsx` inside `BillingLayout`.
+- **Logo:** `App\Support\Billing\BillingLogo` — re-encodes png / jpg / webp to PNG with GD, stores on the private `local` disk as `billing-logos/<workspace>/<uuid>.png`, `dataUri()` for documents, keeps a replaced logo while a finalized snapshot still prints it.
+- **Documents:** `App\Support\Billing\BillingDocument` renders the snapshot array — `pdf()` (dompdf, `resources/views/billing/document.blade.php`), `xlsx()` (openspout: "Summary" + "Entries"), `filename()`; it formats, never recomputes. Data source: `ReportData::for($report)` = `snapshot` once finalized, else `App\Contracts\Billing\BuildsReportData` (bound in `BillingServiceProvider` to `LiveReportData` → the reports ticket's `ReportBuilder`, only when that class exists; else drafts answer 409).
+- **Controller:** `Billing\BillingDocumentController` — `billing.reports.pdf|xlsx` (download) and `billing.reports.send` (finalized / sent / paid only; queued `App\Mail\BillingReportMail` with the PDF, reply-to the admin, views `emails/billing-report*.blade.php`; finalized → sent).
+- **Components for the report page:** `components/billing/ReportDocumentButtons.tsx` (PDF, Excel, "Send to client") and `components/billing/SendReportDialog.tsx`.
+- **Tests:** `tests/Feature/Billing/BillingSettingsTest.php`, `BillingDocumentTest.php`, shared fixture `tests/Fixtures/billing-snapshot-v1.php`; e2e `e2e/tests/billing-settings.spec.ts`.
+
 ### Billing → Activities (v1.38.0, BRAI-99)
 Part of time tracking & client billing; the shared contract is [`tasks/release-v1.38.0-billing.md`](./tasks/release-v1.38.0-billing.md).
 - **Models:** `BillingActivity` (`hourly` | `fixed`, `rate_cents`, `billable`, `color`, `position`, `archived_at`; name unique per workspace), `BillingActivityDefault` (workspace + item type → activity).
