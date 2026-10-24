@@ -91,6 +91,8 @@ import {
     GanttChart,
     ShieldCheck,
     Rocket,
+    HeartPulse,
+    Gauge,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { ThemeMenu } from '@/components/ThemeMenu';
@@ -523,6 +525,28 @@ function ProjectContent({
                             >
                                 <Rocket className="size-4 shrink-0" />
                                 <span className="min-w-0 truncate">Releases</span>
+                            </Link>
+                        </SidebarMenuItem>
+                    )}
+                    {boardsOpen && (
+                        <SidebarMenuItem className="pl-5">
+                            <Link
+                                href={route('projects.health', [workspace.slug, project.slug])}
+                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                            >
+                                <HeartPulse className="size-4 shrink-0" />
+                                <span className="min-w-0 truncate">Health</span>
+                            </Link>
+                        </SidebarMenuItem>
+                    )}
+                    {boardsOpen && (
+                        <SidebarMenuItem className="pl-5">
+                            <Link
+                                href={route('workload.index', [workspace.slug, project.slug])}
+                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                            >
+                                <Gauge className="size-4 shrink-0" />
+                                <span className="min-w-0 truncate">Workload</span>
                             </Link>
                         </SidebarMenuItem>
                     )}

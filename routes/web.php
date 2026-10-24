@@ -17,6 +17,7 @@ use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\ItemFieldController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LeadFormController;
+use App\Http\Controllers\MeetingNotesController;
 use App\Http\Controllers\MyDayController;
 use App\Http\Controllers\MyWorkController;
 use App\Http\Controllers\NotificationController;
@@ -29,6 +30,7 @@ use App\Http\Controllers\PollVoteController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectGithubController;
+use App\Http\Controllers\ProjectHealthController;
 use App\Http\Controllers\ProjectTemplateController;
 use App\Http\Controllers\PublicLeadFormController;
 use App\Http\Controllers\PublicPlanController;
@@ -42,6 +44,7 @@ use App\Http\Controllers\SprintController;
 use App\Http\Controllers\TaskListController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\WhiteboardController;
+use App\Http\Controllers\WorkloadController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkTimerController;
 use App\Http\Middleware\ReadOnlySession;
@@ -354,6 +357,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('boards/{board:slug}/items/{item}/attachments', [BoardController::class, 'storeAttachment'])->name('boards.items.attachments.store');
             Route::delete('boards/{board:slug}/items/{item}/attachments/{attachment}', [BoardController::class, 'destroyAttachment'])->name('boards.items.attachments.destroy');
 
+            // Meeting notes → issues (BRAI-62): AI proposals, reviewed, then created once
+            Route::get('meeting-notes/options', [MeetingNotesController::class, 'options'])->middleware(ReadOnlySession::class)->name('meeting-notes.options');
+            Route::post('meeting-notes/extract', [MeetingNotesController::class, 'extract'])->middleware('throttle:10,1,meeting-notes.extract')->name('meeting-notes.extract');
+            Route::post('meeting-notes/create', [MeetingNotesController::class, 'store'])->middleware('throttle:30,1,meeting-notes.store')->name('meeting-notes.store');
+
             // Linked content and backlinks between issues, docs, tickets and plans (BRAI-71)
             Route::get('references', [ContentReferenceController::class, 'index'])->middleware(ReadOnlySession::class)->name('references.index');
             Route::get('references/candidates', [ContentReferenceController::class, 'candidates'])->middleware(ReadOnlySession::class)->name('references.candidates');
@@ -376,6 +384,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('releases/{release}/notes', [ReleaseController::class, 'saveNotes'])->whereNumber('release')->name('releases.notes.save');
             Route::post('releases/{release}/publish', [ReleaseController::class, 'publish'])->whereNumber('release')->name('releases.publish');
             Route::delete('releases/{release}/publish', [ReleaseController::class, 'unpublish'])->whereNumber('release')->name('releases.unpublish');
+            // Project health: live metrics + saved status updates (BRAI-64)
+            Route::get('health', [ProjectHealthController::class, 'show'])->name('projects.health');
+            Route::post('health/narrative', [ProjectHealthController::class, 'narrative'])->middleware('throttle:10,1,projects.health.narrative')->name('projects.health.narrative');
+            Route::post('health/reports', [ProjectHealthController::class, 'store'])->middleware('throttle:30,1,projects.health.reports.store')->name('projects.health.reports.store');
+            Route::delete('health/reports/{healthReport}', [ProjectHealthController::class, 'destroy'])->whereNumber('healthReport')->name('projects.health.reports.destroy');
+            // Workload planning: capacity, explicit allocations, overload (BRAI-75)
+            Route::get('workload', [WorkloadController::class, 'index'])->name('workload.index');
+            Route::get('workload/items', [WorkloadController::class, 'items'])->middleware(ReadOnlySession::class)->name('workload.items');
+            Route::put('workload/capacity', [WorkloadController::class, 'updateCapacity'])->middleware('throttle:120,1,workload.capacity.update')->name('workload.capacity.update');
+            Route::put('workload/overrides', [WorkloadController::class, 'updateOverride'])->middleware('throttle:120,1,workload.overrides.update')->name('workload.overrides.update');
+            Route::put('workload/allocations', [WorkloadController::class, 'updateAllocation'])->middleware('throttle:240,1,workload.allocations.update')->name('workload.allocations.update');
+            // {allocation} is a plain id (not model-bound), so {project} stays scoped to {workspace}; the controller looks it up inside the project
+            Route::delete('workload/allocations/{allocation}', [WorkloadController::class, 'destroyAllocation'])->whereNumber('allocation')->name('workload.allocations.destroy');
             Route::get('plans/{plan:slug}', [PlanController::class, 'show'])->name('plans.show');
             Route::patch('plans/{plan:slug}', [PlanController::class, 'update'])->name('plans.update');
             Route::delete('plans/{plan:slug}', [PlanController::class, 'destroy'])->name('plans.destroy');

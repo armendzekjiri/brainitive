@@ -177,6 +177,10 @@ class ProjectController extends Controller
             'canUpdate' => $request->user()->can('update', $project),
             'canCreatePages' => $request->user()->can('create', [Page::class, $project]),
             'aiConfigured' => ! empty($ai['ai_endpoint']) && ! empty($ai['ai_api_key']) && ! empty($ai['ai_model']),
+            // Meeting notes → issues (BRAI-62) needs a board the user can add issues to
+            // (createItems depends only on the project role, so one board answers for all; clones keep the props unchanged)
+            'canCreateIssues' => ($board = $project->boards->first()) !== null
+                && $request->user()->can('createItems', (clone $board)->setRelation('project', (clone $project)->setRelation('workspace', $workspace))),
         ]);
     }
 
