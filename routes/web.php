@@ -39,6 +39,7 @@ use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\ReleaseController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ShareLinkController;
+use App\Http\Controllers\SidebarPreferencesController;
 use App\Http\Controllers\SnippetController;
 use App\Http\Controllers\SprintController;
 use App\Http\Controllers\TaskListController;
@@ -511,6 +512,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::patch('/profile/preferences', [ProfileController::class, 'updatePreferences'])->name('profile.preferences');
+    // Customisable sidebar (BRAI-106): hidden entries, project groups, pins
+    Route::patch('/sidebar/preferences', [SidebarPreferencesController::class, 'update'])->name('sidebar.preferences');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::delete('/profile/connected-apps/{clientId}', [ProfileController::class, 'disconnectApp'])->name('profile.connected-apps.destroy');
 
