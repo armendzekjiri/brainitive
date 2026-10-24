@@ -1940,3 +1940,100 @@ export interface RecentContentEntry {
     is_whiteboard?: boolean;
     icon?: string | null;
 }
+
+// ── Workflow automation (v1.40.0, BRAI-63; AutomationController) ────────────
+export type AutomationSubject = 'item' | 'ticket';
+export type AutomationValue = number | string | null;
+
+export interface AutomationCondition {
+    type: string;
+    value: AutomationValue;
+}
+
+export interface AutomationAction {
+    type: string;
+    value: AutomationValue;
+    text?: string | null;
+}
+
+export interface AutomationRule {
+    id: number;
+    name: string;
+    enabled: boolean;
+    version: number;
+    trigger: string;
+    trigger_config: { column_id?: number | null };
+    conditions: AutomationCondition[];
+    actions: AutomationAction[];
+    /** The rule in words ("Issue created" / "Board is Main Board" / "Assign to Max Member"). */
+    summary: { when: string; if: string[]; then: string[] };
+    /** The person the rule runs as (whoever saved it last). */
+    actor: { id: number; name: string } | null;
+    actor_problem: string | null;
+    last_run_at: string | null;
+    last_run_status: AutomationRunStatus | null;
+}
+
+export type AutomationRunStatus = 'queued' | 'running' | 'success' | 'skipped' | 'error';
+
+export interface AutomationRunResult {
+    action: string;
+    label: string;
+    status: 'ok' | 'skipped' | 'error';
+    message: string;
+}
+
+export interface AutomationRun {
+    id: number;
+    rule: { id: number; name: string } | null;
+    rule_version: number;
+    trigger: string;
+    subject: string | null;
+    status: AutomationRunStatus;
+    message: string | null;
+    results: AutomationRunResult[];
+    created_at: string | null;
+    finished_at: string | null;
+}
+
+/** Value kinds: board, helpdesk, column, item_type, priority, label, member, assignee, recipient, days, text. */
+export interface AutomationCatalogEntry {
+    key: string;
+    label: string;
+    value?: string | null;
+    text?: 'optional' | 'required' | null;
+    subjects?: AutomationSubject[];
+    subject?: AutomationSubject;
+    help?: string;
+}
+
+export interface AutomationCatalog {
+    triggers: AutomationCatalogEntry[];
+    conditions: AutomationCatalogEntry[];
+    actions: AutomationCatalogEntry[];
+    maxConditions: number;
+    maxActions: number;
+}
+
+export interface AutomationContainerOption {
+    id: number;
+    name: string;
+    columns: { id: number; name: string }[];
+}
+
+export interface AutomationOptions {
+    boards: AutomationContainerOption[];
+    helpdesks: AutomationContainerOption[];
+    itemTypes: { id: number; name: string }[];
+    priorities: { id: number; name: string }[];
+    labels: { id: number; name: string; color?: string | null }[];
+    members: { id: number; name: string }[];
+}
+
+/** "Test on an issue" (automations.preview). */
+export interface AutomationPreview {
+    subject: string;
+    matches: boolean;
+    conditions: { type: string; label: string; passed: boolean }[];
+    actions: { label: string; status: 'ok' | 'skipped' | 'error'; message: string }[];
+}

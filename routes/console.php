@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AutomationRun;
 use App\Models\GithubDelivery;
 use App\Models\InboxNotification;
 use App\Models\LeadFormEvent;
@@ -36,6 +37,13 @@ Schedule::command('model:prune', ['--model' => [InboxNotification::class]])->dai
 
 // ── v1.40.0: one block per ticket (docs/ai/tasks/release-v1.40.0.md) ─────────
 // Ticket 1 (automation): scheduled triggers such as "due date passed".
+Schedule::command('app:run-due-date-automations')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+// The automation run log keeps 30 days.
+Schedule::command('model:prune', ['--model' => [AutomationRun::class]])
+    ->dailyAt('03:40')
+    ->withoutOverlapping();
 
 // Ticket 2 (recurring issues): create the issues that are due.
 // Occurrences are due from local midnight in each template's time zone; idempotent, catch-up = latest only.

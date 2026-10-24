@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
     Plus, Settings, Kanban, FileText, Folder, PencilRuler, Headphones, Key, List, GanttChart, Magnet, ListChecks,
-    Pin, History, Briefcase, BookOpen, Users2, Wrench, HeartPulse, Gauge, Rocket, FolderPlus,
+    Pin, History, Briefcase, BookOpen, Users2, Wrench, HeartPulse, Gauge, Rocket, FolderPlus, Workflow,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import LeadFormTemplatePicker from '@/components/leadForms/LeadFormTemplatePicker';
@@ -477,10 +477,26 @@ function ProjectOverview({ workspace, project, members = [], recentlyUpdated = [
                     </div>
                 </Section>
 
-                {/* Tools: AI assistant, meeting notes → issues */}
+                {/* Tools: AI assistant, automations, meeting notes → issues */}
                 <Section title="Tools" icon={<Wrench className="size-4" />}>
                     <div className="space-y-3">
                         <ProjectAiAssistant workspace={workspace} project={project} aiConfigured={aiConfigured} canUpdate={canUpdate} canCreatePages={canCreatePages} />
+                        {canUpdate && (
+                            <Card>
+                                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+                                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                                        <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10"><Workflow className="size-4 text-primary" /></div>
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium">Automations</p>
+                                            <p className="text-xs text-muted-foreground">When an issue or ticket arrives, moves or is assigned: assign it, move it, set fields, comment or notify — automatically.</p>
+                                        </div>
+                                    </div>
+                                    <Button variant="outline" size="sm" className="shrink-0 gap-1.5" asChild>
+                                        <Link href={route('automations.index', params)}><Workflow className="size-3.5" /> Open automations</Link>
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        )}
                         {canCreateIssues && (
                             <Card>
                                 <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">

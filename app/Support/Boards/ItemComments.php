@@ -35,7 +35,7 @@ class ItemComments
         $mentioned = ItemMentions::notify($html, $item, $author);
         ItemCommentNotifications::notify($item, $comment, $author, $mentioned);
 
-        DomainEvents::emit(EventPayloads::itemWorkspaceId($item), 'item.commented', fn () => EventPayloads::comment($comment, $item), $author); // webhooks (BRAI-104)
+        DomainEvents::emit(EventPayloads::itemWorkspaceId($item), 'item.commented', fn () => EventPayloads::comment($comment, $item), $author, subject: $item, context: ['comment_id' => $comment->id]); // webhooks (BRAI-104) + automation rules (BRAI-63)
 
         return $comment;
     }

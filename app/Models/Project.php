@@ -190,6 +190,12 @@ class Project extends Model
         return $this->hasMany(ContentReference::class);
     }
 
+    /** WHEN / IF / THEN rules (v1.40.0, BRAI-63); also the scoped binding of `{automationRule}`. */
+    public function automationRules(): HasMany
+    {
+        return $this->hasMany(AutomationRule::class);
+    }
+
     /**
      * Get all pages including nested ones.
      */
