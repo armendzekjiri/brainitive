@@ -19,6 +19,8 @@ use App\Notifications\NotificationCatalog;
 use App\Notifications\SprintCompletedNotification;
 use App\Notifications\SprintStartedNotification;
 use App\Notifications\TaskAssignedNotification;
+use App\Notifications\TicketSlaBreachedNotification;
+use App\Notifications\TicketSlaWarningNotification;
 use App\Notifications\TicketStatusChangedNotification;
 use App\Notifications\WebhookDisabledNotification;
 use App\Notifications\WorkspaceRoleChangedNotification;
@@ -75,6 +77,8 @@ class CatalogNotificationContractTest extends TestCase
             new WorkspaceRoleChangedNotification($this->workspace, $this->editor, 'member', 'admin'),
             new TicketStatusChangedNotification($ticket, $this->editor, 'New', 'Done'),
             new WebhookDisabledNotification($webhook, 'HTTP 500'), // BRAI-104
+            new TicketSlaWarningNotification($ticket, 'first_response', now()->addHour()), // BRAI-125
+            new TicketSlaBreachedNotification($ticket, 'resolution', now()->subHour()),
         ];
     }
 

@@ -63,6 +63,9 @@ final class NotificationCatalog
         'workspace_role_changed' => 'workspace',
         'ticket_status_changed' => 'helpdesk',
         'webhook_disabled' => 'workspace', // BRAI-104: a webhook was auto-disabled
+        // BRAI-125 (helpdesk SLA): app:check-helpdesk-sla, to the assignee or the project admins
+        'sla_warning' => 'helpdesk',
+        'sla_breached' => 'helpdesk',
     ];
 
     public static function category(string $type): string
