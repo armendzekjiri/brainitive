@@ -606,6 +606,30 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
     `minutes`, not a silent overwrite. `createOrFirst` keeps parallel inserts to one row.
   - The page is labelled "This project only": capacity is declared per project, so it is *not* a
     person's company-wide availability. Don't sum it across projects without a new design.
+- **Time ledger (v1.38.0, BRAI-99): every piece of logged work is a `TimeEntry`, written only
+  through `Item::logWork()` (issues) or `TimesheetController` (project time without an issue).**
+  Rules worth knowing:
+  - Never touch `items.time_spent` directly any more: the entry's model events add / move / take
+    off the minutes. Saving with the query builder skips them (only the legacy backfill does that,
+    on purpose). Totals from before the ledger stay, so `time_spent` ≥ Σ non-legacy entries.
+  - `legacy` entries (backfilled from old `work_logged` logs) never change `time_spent`: their
+    minutes and issue are read-only and they can't be deleted (mark them not billable instead);
+    date, activity and note can change. The backfill is idempotent through `legacy_log_id` (unique)
+    and skips logs that carry `metadata.time_entry_id` (written with a ledger entry) — so new logs
+    are never backfilled twice.
+  - The activity is **required once the workspace has an active activity** and optional before,
+    so workspaces that don't bill aren't blocked. Archived activities can't be picked, but an
+    entry keeps the one it has. `billable` follows the activity unless the form sends it.
+  - **Members never get a rate:** activity options for log forms come from `timesheet.activities`
+    (`TimeLogActivities::option()`: name, colour, pricing type label, billable) — never a shared
+    Inertia prop, never `rate_cents`. Tests assert it on the JSON and the page.
+  - Locked entries (`billing_report_id`) answer 422 on `entry` for update / delete, also for admins.
+  - The timer's stop validates the activity inside its transaction: a bad activity rolls back,
+    so the timer keeps running and the user fixes the form.
+  - `spent_on` is a calendar day in the user's zone; forms send the browser's date, the server
+    allows up to one day ahead for zone slack.
+  - E2E: `E2eSeeder` gives `e2e-workspace` two activities, so any e2e that logs work there must
+    send `activity_id` (`e2e/helpers/workload.ts` `newIssue` fetches the default).
 - **Share links expose only a whitelist.** `ShareLinkController::show` builds the payload
   field by field (title, content / description, status, type, priority, dates) and never
   serializes the model, so new columns can't leak into public pages. Docs share the live

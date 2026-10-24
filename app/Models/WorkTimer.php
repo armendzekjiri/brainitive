@@ -53,6 +53,7 @@ class WorkTimer extends Model
                 'id' => $item->id,
                 'key' => $item->key,
                 'title' => $item->title,
+                'workspace' => $item->workspace_slug, // for the activity picker of the stop dialog (v1.38.0)
                 'url' => route('boards.items.show', [$item->workspace_slug, $item->project_slug, $item->board_slug, $item->id]),
             ] : null,
         ];

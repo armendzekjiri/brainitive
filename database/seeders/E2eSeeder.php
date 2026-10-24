@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\BillingActivity;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
@@ -54,6 +55,16 @@ class E2eSeeder extends Seeder
         $this->issue($project, $board->id, $columns[0], 'Homepage hero', $owner);
         $this->issue($project, $board->id, $columns[0], 'Pricing page copy', $owner, $member);
         $this->issue($project, $board->id, $columns[1], 'Checkout bug', $owner, $owner);
+
+        // ── v1.38.0 billing fixtures ──────────────────────────────────────────────────────────
+        // Two hourly activities, so logging time in e2e-workspace needs one (time-log journeys).
+        // Idempotent: the billing tickets of v1.38.0 may seed the same pair.
+        foreach ([['Programming', 12000, '#0E83DC', 1], ['Testing', 4500, '#69A748', 2]] as [$name, $rate, $color, $position]) {
+            BillingActivity::firstOrCreate(
+                ['workspace_id' => $workspace->id, 'name' => $name],
+                ['pricing_type' => BillingActivity::HOURLY, 'rate_cents' => $rate, 'billable' => true, 'color' => $color, 'position' => $position],
+            );
+        }
     }
 
     private function user(string $name, string $email): User
