@@ -198,6 +198,37 @@ schema public". Use `createdb -h /tmp -O <DB_USERNAME> brainitive_test_<name>` (
   <Components path>` + `git update-index --add --cacheinfo 100644,$(git hash-object -w <file>),<lowercase
   path>`, then check `git ls-files -s | grep -i <name>`.
 
+### Workflow automation: when rules run, as whom, and why they never loop (v1.40.0, BRAI-63)
+- **Only events with a subject reach the engine.** `DomainEvents::emit(..., subject: $item|$ticket)`. A new
+  path that creates tickets (e.g. `InboundMail::receive()`) must pass `subject: $ticket` on its `ticket.created`
+  emit, or rules never see those tickets. Without an enabled rule for the project + trigger it costs one
+  indexed `exists` query (`AutomationEngineTest::test_without_an_enabled_rule_the_hook_costs_one_query`).
+- **When:** after commit (a rolled-back change starts nothing), and inside an HTTP request only after the
+  controller returned (global `DeferAutomations` middleware) — the board's create form syncs labels *after*
+  the insert, so an inline run would miss them. Console / queue / plain tests start the run right after the
+  commit, which can be inside the observer of the creating save. On the sync queue (dev, e2e) the run
+  executes before the response, so the redirect already shows the result.
+- **No loops:** while a run executes `AutomationRunner::running()` is true and `seen()` ignores every event,
+  so automation changes never start rules (webhooks still fire for them). Recurring issues and other
+  scheduled creators are *not* automation-made: their issues start rules like any user's.
+- **Idempotency:** unique (rule, version, event id). Event ids are deterministic where the event happens
+  once (`item.created:<id>`, `ticket.created:<id>`, `item.commented:<comment id>`, `item.due:<id>:<date>`)
+  and fresh uuids for repeatable events (moves, assignments). Conditions are pre-checked before a run is
+  created (a non-matching event leaves no row) and checked again when it starts.
+- **As whom:** the rule's `actor_id` (whoever saved it last). The runner `Auth::setUser($actor)` for the run
+  and restores the previous user, so history and "X assigned you" name the actor (assigning yourself stays
+  silent, as everywhere). Missing / suspended / no-longer-member actor → run `skipped`; a policy denial per
+  action → that action `error`. A switched-off rule or a newer version skips queued runs.
+- **Retries:** each action runs in its own transaction together with saving its result; a retried run
+  skips actions already `ok` / `skipped`. A cache lock (180 s) keeps two workers off one run (the job
+  releases itself when busy); `RunAutomation::failed()` marks the run `error`.
+- **Due date passed** uses the actor's time zone, only due dates of the last 2 days (no flood when a rule
+  is switched on), at most 200 new events per rule and run.
+- **e2e:** rules on the shared seeded project affect every parallel spec that creates issues there; scope a
+  rule with a unique "Title contains" word and delete it at the end (`automations.spec.ts`).
+- **There is no global flash toast.** Pages show `flash.success` themselves (the automation pages use
+  `components/automations/useFlashToast.ts`).
+
 ### Quick capture: conversion is idempotent by row lock, not by request id (BRAI-70)
 `CaptureConversion::convert` locks the capture (`lockForUpdate`) inside one transaction; a capture
 that is already processed returns its target (`replayed`, HTTP 200) whatever the second request

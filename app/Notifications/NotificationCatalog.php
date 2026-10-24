@@ -66,6 +66,7 @@ final class NotificationCatalog
         // BRAI-125 (helpdesk SLA): app:check-helpdesk-sla, to the assignee or the project admins
         'sla_warning' => 'helpdesk',
         'sla_breached' => 'helpdesk',
+        'automation_notice' => 'status', // BRAI-63: the "Notify" action of an automation rule
     ];
 
     public static function category(string $type): string

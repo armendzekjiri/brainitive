@@ -5,8 +5,10 @@ namespace App\Support\Events;
 use App\Models\User;
 use App\Models\Webhook;
 use App\Models\Workspace;
+use App\Support\Automation\AutomationEvents;
 use App\Support\Webhooks\WebhookDispatcher;
 use Closure;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -14,7 +16,8 @@ use Throwable;
 
 /**
  * One call per thing that happened in a workspace (v1.39.0). Outgoing webhooks (BRAI-104) subscribe
- * to these names; nothing else may depend on the dispatch being synchronous.
+ * to these names, and automation rules (BRAI-63) see the events that carry a subject model; nothing
+ * else may depend on the dispatch being synchronous.
  *
  *     DomainEvents::dispatch($workspace, 'item.created', ['item' => [...]], $actor);
  *     DomainEvents::emit($workspaceOrId, 'item.created', fn () => ['item' => EventPayloads::item($item)]);
@@ -79,13 +82,22 @@ final class DomainEvents
      * dispatch(), but the payload is only built (and the workspace only loaded) when an active
      * webhook of that workspace listens to $event — hook points stay one cheap query otherwise.
      *
+     * With a $subject (the issue / ticket the event is about), automation rules see the event too
+     * (BRAI-63, AutomationEvents::seen: one "any enabled rule for this project + trigger?" query,
+     * independent of webhooks). $context carries trigger details such as the target column of a move.
+     *
      * @param  Closure(): array<string, mixed>  $data
+     * @param  array<string, mixed>  $context
      */
-    public static function emit(Workspace|int|null $workspace, string $event, Closure $data, ?User $actor = null): void
+    public static function emit(Workspace|int|null $workspace, string $event, Closure $data, ?User $actor = null, ?Model $subject = null, array $context = []): void
     {
         self::assertKnown($event);
 
-        $run = function () use ($workspace, $event, $data, $actor) {
+        if ($subject !== null) {
+            self::guarded(fn () => AutomationEvents::seen($event, $subject, $context));
+        }
+
+        self::guarded(function () use ($workspace, $event, $data, $actor) {
             $workspaceId = $workspace instanceof Workspace ? $workspace->id : $workspace;
             if (! $workspaceId || ! Webhook::listeningTo($workspaceId, $event)->exists()) {
                 return;
@@ -94,10 +106,13 @@ final class DomainEvents
             if ($workspace) {
                 self::dispatch($workspace, $event, $data(), $actor);
             }
-        };
+        });
+    }
 
+    /** Run a hook; inside the caller's transaction as a savepoint, so a failing query can't abort it (Postgres). */
+    private static function guarded(Closure $run): void
+    {
         try {
-            // inside the caller's transaction: a savepoint, so a failing payload query can't abort it (Postgres)
             DB::transactionLevel() > 0 ? DB::transaction($run) : $run();
         } catch (Throwable $e) {
             self::failed($e);
