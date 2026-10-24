@@ -137,7 +137,9 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
 - **Dates:** a deadline is used only if its phrase is in the notes. With a meeting date + timezone
   the model may resolve "by Friday" (accepted from meeting − 31 days to + 2 years); without them a
   date is kept only when the phrase holds the year and the day (a full calendar date). Otherwise the
-  text is shown with a hint and the date stays empty.
+  text is shown with a hint and the date stays empty. The dialog's meeting date **defaults to today**
+  in the user's zone (`options.today`, v1.39.0): with it empty, every "by Friday" stayed without a
+  due date (BRAI-62 feedback). Clearing it keeps the strict full-date rule.
 - **Assignees** match only people who can open the project (project members + workspace admins —
   the set `ProjectMember` accepts): one match is suggested, several are `ambiguous` (Create stays
   disabled until the user picks someone or "Unassigned"), none stays unassigned. No emails are sent
