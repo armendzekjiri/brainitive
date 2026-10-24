@@ -12,6 +12,7 @@ use App\Notifications\NotificationCatalog;
 use App\Notifications\WebhookDisabledNotification;
 use App\Support\Events\DomainEvents;
 use App\Support\Webhooks\WebhookDispatcher;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Bus;
@@ -214,8 +215,10 @@ class WebhookDeliveryTest extends TestCase
         Notification::assertSentTo($this->admin(), WebhookDisabledNotification::class, function (WebhookDisabledNotification $n) {
             $data = $n->toDatabase($this->admin());
 
-            return $n->via($this->admin()) === ['database']
+            return $n instanceof ShouldQueue
+                && $n->via($this->admin()) === ['database']
                 && $data['type'] === 'webhook_disabled'
+                && str_contains((string) $data['body'], 'Last error: HTTP 500')
                 && str_contains($data['title'], 'Receiver')
                 && $data['url'] === route('webhooks.index', $this->workspace->slug);
         });

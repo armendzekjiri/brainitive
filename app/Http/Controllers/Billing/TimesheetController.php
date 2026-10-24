@@ -130,7 +130,8 @@ class TimesheetController extends Controller
         $item = $this->loggableItem((int) $data['project_id'], $data['item_id'] ?? null);
         $minutes = Item::parseDuration($data['time']);
         $note = $this->note($data['note'] ?? null);
-        $billable = isset($data['billable']) ? (bool) $data['billable'] : null;
+        // only workspace admins choose billable; everyone else gets the activity's default (v1.39.0)
+        $billable = isset($data['billable']) && Gate::allows('manageBilling', $workspace) ? (bool) $data['billable'] : null;
 
         if ($item) {
             $item->logWork($minutes, $note, $activity, $data['spent_on'], TimeEntry::SOURCE_MANUAL, $billable);
@@ -176,7 +177,7 @@ class TimesheetController extends Controller
         }
 
         $billable = match (true) {
-            isset($data['billable']) => (bool) $data['billable'],
+            isset($data['billable']) && Gate::allows('manageBilling', $workspace) => (bool) $data['billable'],
             $activity?->id !== $timeEntry->billing_activity_id => $activity ? (bool) $activity->billable : true,
             default => $timeEntry->billable,
         };

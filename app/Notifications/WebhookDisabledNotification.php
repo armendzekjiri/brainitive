@@ -3,41 +3,34 @@
 namespace App\Notifications;
 
 use App\Models\Webhook;
-use App\Notifications\Concerns\RespectsPreferences;
-use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Notification;
 use Illuminate\Support\Str;
 
 /**
  * To the workspace admins when a webhook was disabled after Webhook::MAX_CONSECUTIVE_FAILURES
- * failed deliveries in a row (v1.39.0, BRAI-104). Catalog type `webhook_disabled` (workspace).
- * Payload follows the v1.39.0 notification contract (type, title, body, url, …).
+ * failed deliveries in a row (v1.39.0, BRAI-104; category: workspace). Names only the host of the
+ * URL, never its path or query (they may carry a token).
  */
-class WebhookDisabledNotification extends Notification
+class WebhookDisabledNotification extends CatalogNotification
 {
-    use Queueable, RespectsPreferences;
-
     public const TYPE = 'webhook_disabled';
 
     public function __construct(public readonly Webhook $webhook, public readonly ?string $lastError = null) {}
 
-    public function via(object $notifiable): array
+    public function catalogType(): string
     {
-        return $this->channelsFor($notifiable, self::TYPE);
+        return self::TYPE;
     }
 
-    public function toDatabase(object $notifiable): array
+    protected function message(object $notifiable): array
     {
         $workspace = $this->webhook->workspace;
-        $host = parse_url($this->webhook->url, PHP_URL_HOST) ?: $this->webhook->url;
+        $host = parse_url($this->webhook->url, PHP_URL_HOST) ?: 'its URL';
 
         return [
-            'type' => self::TYPE,
             'title' => 'Webhook “'.Str::limit($this->webhook->name, 60).'” was disabled after '.Webhook::MAX_CONSECUTIVE_FAILURES.' failed deliveries',
-            'body' => Str::limit($host.($this->lastError ? ' · Last error: '.$this->lastError : ''), 200),
+            'body' => $host.($this->lastError ? ' · Last error: '.$this->lastError : ''),
             'url' => $workspace ? route('webhooks.index', $workspace->slug) : url('/'),
-            'actor_name' => null,
-            'actor_avatar' => null,
+            'actor' => null,
             'project_name' => $workspace?->name,
             'subject_key' => null,
         ];

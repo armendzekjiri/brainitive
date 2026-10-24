@@ -2,6 +2,8 @@ import { expect, test, uid, urls } from '../fixtures';
 import { SEED } from '../env';
 import { closeIssue, createCard, openCard, openIssueId } from '../helpers/boards';
 import { request } from '../helpers/workload';
+import { logWork, projectWithIssue } from '../helpers/time-overview';
+import { createWorkspace, openSettingsTab } from '../helpers/workspaces-projects';
 import type { Locator, Page } from '@playwright/test';
 
 /**
@@ -120,6 +122,9 @@ test.describe('time log', () => {
         await form.getByLabel('Time', { exact: true }).fill('45m');
         await pickActivity(page, 'Programming');
         await form.getByLabel('Note (optional)').fill(note);
+        // members don't choose billable: it follows the activity (v1.39.0)
+        await expect(form.getByLabel('Billable')).toHaveCount(0);
+        await expect(form.getByTestId('entry-billable-hint')).toContainText('set by the activity');
         await form.getByRole('button', { name: 'Log time' }).click();
         await expect(form).toBeHidden();
 
@@ -151,6 +156,35 @@ test.describe('time log', () => {
         await expect(page.getByTestId('timesheet-week')).not.toHaveText(week);
         await page.getByRole('button', { name: 'This week' }).click();
         await expect(page.getByTestId('timesheet-week')).toHaveText(week);
+    });
+
+    test('the workspace admin chooses billable in the timesheet dialog', async ({ page }) => {
+        await page.goto(timesheetUrl);
+        await page.getByRole('button', { name: 'Log time', exact: true }).click();
+        const form = page.getByRole('dialog', { name: 'Log time' });
+        await expect(form.getByLabel('Billable')).toBeVisible();
+        await expect(form.getByTestId('entry-billable-hint')).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(form).toBeHidden();
+    });
+
+    test('moving a project takes its unbilled time along', async ({ page }) => {
+        test.slow(); // a project, a workspace, a work log and the move
+        const project = await projectWithIssue(page, uid('Move me'));
+        await logWork(page, project.slug, project.itemId, '1h 30m');
+        const target = await createWorkspace(page, uid('Agency'));
+
+        await page.goto(`${urls.project(project.slug)}/edit`);
+        await openSettingsTab(page, 'Danger zone');
+        await page.getByRole('tabpanel').getByRole('combobox').click();
+        await page.getByRole('option', { name: target.name }).click();
+        const time = page.getByTestId('move-time');
+        await expect(time).toContainText('1h 30m of unbilled time moves with the project');
+        await expect(time).toContainText(`“${target.name}” has no activity called`); // the new workspace has no activities yet
+
+        await page.getByLabel(`Type ${project.name} to confirm`).fill(project.name);
+        await page.getByRole('button', { name: `Move to ${target.name}` }).click();
+        await expect(page).toHaveURL(new RegExp(`/workspaces/${target.slug}/projects/`));
     });
 
     test('My timesheet fits a phone screen', async ({ memberPage: page }) => {

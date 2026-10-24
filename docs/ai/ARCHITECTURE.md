@@ -153,7 +153,8 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Console:** `SendCalendarReminders.php` + `CalendarReminderNotification` (Google events/tasks, push-only);
   `SendItemReminders.php` + `ItemReminderNotification` (bell **+** push: board / task-list items
   reaching their `start_time`, and task-list items whose `reminder_minutes` before the due time
-  is reached; times in the recipient's `User::localTimezone()`; dedup via `sent_item_reminders`).
+  is reached; times in the recipient's `User::localTimezone()`; dedup via `sent_item_reminders`),
+  plus `ItemDueNotification` (`item_due`: assigned board issues due tomorrow / overdue, BRAI-103).
   Both scheduled every 5 min in `routes/console.php`. Task-list digest: see Task Lists.
 - **Routes:** `calendar/connections/...` controller group in `web.php`
 - **Pages:** `Pages/Calendar/`
@@ -172,7 +173,11 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
     `plan_date` + position), `MyDayController` (`my-day.*`: add / remove / reorder /
     carry-over), `Support/MyDay/MyDayPlan` (today in the user's zone, resolves entries to
     work the user can still open, carry-over candidates). UI: `components/MyDaySection.tsx`
-    on top of My Work + ☀ toggle on every row. Never changes the task itself.
+    on top of My Work + ☀ toggle on every row. Adding / ordering never changes the task itself.
+    The circle (`components/WorkDoneToggle.tsx`, My Day + My Work rows) completes / reopens it:
+    board issues go through `boards.items.move` to the board's first done / open column
+    (`board.done_column_id` / `open_column_id` in the My Work payload), list tasks through
+    `task-lists.items.update` `status`. Done tasks sink to the bottom of My Day (v1.39.0).
   - **Focus timer:** `WorkTimer` (`work_timers`, unique `user_id` = one running timer),
     `WorkTimerController` (`work-timer.start/stop/discard`), shared prop `activeTimer` →
     `components/WorkTimerPill.tsx` in the top bar. Stop logs through `Item::logWork()` (also
@@ -189,7 +194,12 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Read-only rich text:** use the `rich-html` class (app.css) — the Tailwind typography plugin isn't installed, so `prose` alone styles nothing.
 - **Issue deep links:** `…/boards/{board}#item-{id}` opens the issue popup on the board (or `boards.items.show` if it isn't on the board).
 - **Command palette (BRAI-83):** `components/CommandPalette.tsx` is the only launcher — ⌘K/Ctrl+K, Ctrl+. opens command mode (`>`); commands are defined in `AppLayout`. Recent destinations live in localStorage as `{type,id}` per user and are resolved/permission-filtered by `CommandPaletteController@recent` (`POST /command-palette/recent`).
-- **Notifications:** `NotificationController` (DB-backed list + unread count + mark read) → `Pages/Notifications/`; delivery = `database` + optional `WebPushChannel`. Push subscriptions via `PushSubscriptionController`. See the [add-notification skill](./skills/add-notification.md). **Web push requires `VAPID_*` keys in `.env`** — without them the frontend can't subscribe and nothing is ever delivered (see [`KNOWLEDGE.md`](./KNOWLEDGE.md)).
+- **Notifications:** `NotificationController` (DB-backed list + unread count + mark read) → `Pages/Notifications/`; delivery = `database` + optional `WebPushChannel`. Push subscriptions via `PushSubscriptionController`. See the [add-notification skill](./skills/add-notification.md).
+  **Who gets what (BRAI-103):** catalog of types → categories in `NotificationCatalog`; new types extend
+  `CatalogNotification` (payload contract). Senders: `Support/Notifications/` (`Assignments` — called by
+  `ItemObserver` / `TaskListItemObserver`, `ItemCommentNotifications`, `PageMentions` — called by
+  `Page::saveDraft`, `SprintNotifications` — called by `SprintLifecycle`, `WorkspaceNotifications`),
+  `Support/Boards/ItemMentions` (diffed), `TicketController::move` (`ticket_status_changed`). **Web push requires `VAPID_*` keys in `.env`** — without them the frontend can't subscribe and nothing is ever delivered (see [`KNOWLEDGE.md`](./KNOWLEDGE.md)).
 - **Files:** `FileController` — `/upload/image`, `/upload/document` (public disk, UUID names)
 
 ### AI integrations — MCP server & in-app AI
@@ -313,7 +323,7 @@ Contract (envelope, event list): [`tasks/release-v1.39.0.md`](./tasks/release-v1
 | An Inertia page | `resources/js/Pages/<Module>/` + type in `types/index.d.ts` — [add-inertia-page skill](./skills/add-inertia-page.md) |
 | An MCP tool | `app/Mcp/Tools/` + `BrainitiveServer::$tools` — [add-mcp-tool skill](./skills/add-mcp-tool.md) |
 | A browser-extension capture | `Support/Captures/ContentCapture` (rules, policy, create — also used by the capture inbox) + `Extension/CaptureController` + `ext.*` route, then `browser-extension/lib/api.ts` + a form in `components/forms.tsx` |
-| A notification | `app/Notifications/` (+ `SendsWebPush` for push) — [add-notification skill](./skills/add-notification.md) |
+| A notification | `app/Notifications/` — new types extend `CatalogNotification` + a `NotificationCatalog::TYPES` entry; senders in `app/Support/Notifications/` — [add-notification skill](./skills/add-notification.md) |
 | A queued job | `app/Jobs/` |
 | An artisan command | `app/Console/Commands/` |
 | A file upload | `App\Support\Uploads` for the stored name (never the client's). Old risky files: `php artisan uploads:audit` |

@@ -16,6 +16,7 @@ use App\Notifications\TicketAssignedNotification;
 use App\Notifications\TicketCreatedNotification;
 use App\Notifications\TicketReplyNotification;
 use App\Notifications\TicketResolvedNotification;
+use App\Notifications\TicketStatusChangedNotification;
 use App\Rules\NotExecutableUpload;
 use App\Rules\ProjectMember;
 use App\Support\Events\DomainEvents;
@@ -234,9 +235,17 @@ class TicketController extends Controller
         ]);
 
         $wasDone = (bool) $ticket->column?->is_done_column;
+        $oldColumn = $ticket->column;
         $newColumn = HelpdeskColumn::findOrFail($validated['column_id']);
 
         $ticket->moveToColumn($newColumn, $validated['position']);
+
+        // BRAI-103: watchers (except whoever moved it) hear about a status change
+        if ($oldColumn?->id !== $newColumn->id) {
+            foreach ($ticket->watchers()->where('users.id', '!=', $request->user()->id)->get() as $watcher) {
+                $watcher->notify(new TicketStatusChangedNotification($ticket, $request->user(), $oldColumn?->name, $newColumn->name));
+            }
+        }
 
         if ($newColumn->is_done_column && ! $wasDone) {
             $message = trim((string) ($validated['resolution_message'] ?? ''));

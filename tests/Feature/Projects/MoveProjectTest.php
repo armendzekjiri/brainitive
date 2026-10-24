@@ -2,12 +2,15 @@
 
 namespace Tests\Feature\Projects;
 
+use App\Models\BillingActivity;
+use App\Models\BillingReport;
 use App\Models\Board;
 use App\Models\Helpdesk;
 use App\Models\Item;
 use App\Models\ItemLink;
 use App\Models\Page;
 use App\Models\Project;
+use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -109,5 +112,35 @@ class MoveProjectTest extends TestCase
         $clash->update(['key' => 'OTHR', 'slug' => $this->project->slug]);
         $this->move()->assertRedirect();
         $this->assertSame($this->project->slug.'-2', $this->project->fresh()->slug);
+    }
+
+    public function test_unbilled_time_moves_with_the_project_and_billed_time_stays(): void
+    {
+        $programming = BillingActivity::create(['workspace_id' => $this->workspace->id, 'name' => 'Programming', 'pricing_type' => 'hourly', 'rate_cents' => 12000]);
+        $workshop = BillingActivity::create(['workspace_id' => $this->workspace->id, 'name' => 'Workshop', 'pricing_type' => 'fixed', 'rate_cents' => 50000]);
+        $targetProgramming = BillingActivity::create(['workspace_id' => $this->target->id, 'name' => 'Programming', 'pricing_type' => 'hourly', 'rate_cents' => 9000]);
+        $report = BillingReport::create(['workspace_id' => $this->workspace->id, 'kind' => 'report', 'period_from' => '2026-09-01', 'period_to' => '2026-09-30', 'status' => 'finalized']);
+        $item = $this->item();
+        $entry = fn (array $a) => TimeEntry::create($a + [
+            'workspace_id' => $this->workspace->id, 'project_id' => $this->project->id, 'item_id' => $item->id, 'user_id' => $this->editor->id,
+            'billing_activity_id' => $programming->id, 'spent_on' => '2026-10-01', 'minutes' => 60, 'billable' => true, 'source' => TimeEntry::SOURCE_MANUAL,
+        ]);
+        $open = $entry([]);
+        $openWorkshop = $entry(['billing_activity_id' => $workshop->id, 'minutes' => 30]);
+        $billed = $entry(['minutes' => 45]);
+        $billed->forceFill(['billing_report_id' => $report->id])->saveQuietly(); // finalized (not fillable on purpose)
+        $timeSpent = $item->fresh()->time_spent;
+
+        $preview = $this->actingAs($this->admin)
+            ->getJson(route('projects.move.preview', [$this->workspace->slug, $this->project->slug]).'?target_workspace_id='.$this->target->id)
+            ->assertOk()->json('time');
+        $this->assertSame(['moving_minutes' => 90, 'billed_minutes' => 45, 'unmatched_activities' => ['Workshop']], $preview);
+
+        $this->move()->assertRedirect();
+
+        $this->assertSame([$this->target->id, $targetProgramming->id], [$open->fresh()->workspace_id, $open->fresh()->billing_activity_id]);
+        $this->assertSame([$this->target->id, null], [$openWorkshop->fresh()->workspace_id, $openWorkshop->fresh()->billing_activity_id]);
+        $this->assertSame([$this->workspace->id, $programming->id, $report->id], [$billed->fresh()->workspace_id, $billed->fresh()->billing_activity_id, $billed->fresh()->billing_report_id]);
+        $this->assertSame($timeSpent, $item->fresh()->time_spent);
     }
 }

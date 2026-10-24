@@ -51,7 +51,17 @@ final class NotificationCatalog
         'ticket_created' => 'helpdesk',
         'ticket_reply' => 'helpdesk',
         'lead_created' => 'leads',
-        'webhook_disabled' => 'workspace', // ticket 3 (BRAI-104): a webhook was auto-disabled
+        // BRAI-103 (notification coverage): CatalogNotification subclasses, payload contract keys
+        'item_commented' => 'comments',
+        'item_due' => 'reminders',
+        'task_assigned' => 'assignments',
+        'lead_assigned' => 'assignments',
+        'sprint_started' => 'sprints',
+        'sprint_completed' => 'sprints',
+        'invitation_accepted' => 'workspace',
+        'workspace_role_changed' => 'workspace',
+        'ticket_status_changed' => 'helpdesk',
+        'webhook_disabled' => 'workspace', // BRAI-104: a webhook was auto-disabled
     ];
 
     public static function category(string $type): string

@@ -12,6 +12,7 @@ use App\Models\Release;
 use App\Models\Sprint;
 use App\Models\User;
 use App\Support\Events\ItemEvents;
+use App\Support\Notifications\Assignments;
 use Carbon\CarbonInterface;
 
 /**
@@ -50,11 +51,17 @@ class ItemObserver
         ActivityLog::log($item, 'created', null, ['key' => $item->key]);
 
         ItemEvents::created($item); // outgoing webhooks (BRAI-104)
+        // BRAI-103: the ONE place "assigned you" is sent for issues (every create path)
+        Assignments::item($item);
     }
 
     public function updated(Item $item): void
     {
         ItemEvents::updated($item); // outgoing webhooks (BRAI-104)
+        // BRAI-103: the ONE place "assigned you" is sent for issues (every update path, bulk edit too)
+        if ($item->wasChanged('assigned_to')) {
+            Assignments::item($item);
+        }
 
         $changes = [];
 
