@@ -1,61 +1,34 @@
-import { Bell, ExternalLink, LifeBuoy } from 'lucide-react';
+import type { NotificationData } from '@/types';
 import type { ReactNode } from 'react';
 
-/**
- * The database payload of every notification type the app sends (see app/Notifications).
- * Rendered by the bell dropdown and the notifications page — add new types here only.
- */
-export interface NotificationData {
-    type:
-        | 'mentioned'
-        | 'page_updated'
-        | 'item_assigned'
-        | 'item_status_changed'
-        | 'item_reminder'
-        | 'ticket_created'
-        | 'ticket_reply'
-        | 'ticket_assigned'
-        | 'lead_created'
-        | string;
-    item_key?: string;
-    item_title?: string;
-    item_url?: string;
-    old_column?: string;
-    new_column?: string;
-    when_label?: string;
-    // task_digest
-    due_today?: number;
-    overdue?: number;
-    titles?: string[];
-    url?: string;
-    context_type?: string;
-    context_title?: string;
-    context_url?: string;
-    page_name?: string;
-    page_url?: string;
-    ticket_key?: string;
-    ticket_subject?: string;
-    ticket_url?: string;
-    reply_preview?: string;
-    contact_name?: string;
-    contact_email?: string;
-    actor_name?: string;
-    actor_avatar?: string;
-    // lead_created (BRAI-93)
-    form_name?: string;
-    lead_number?: number;
-    lead_name?: string;
-    lead_url?: string;
-}
+export type { NotificationData };
 
-/** Who did it: a user, or the customer for helpdesk tickets. */
-export function notificationActor(d: NotificationData): string {
-    return d.actor_name || d.contact_name || d.contact_email || '';
+/**
+ * Turns any notification payload into what a row shows. The ONE place that knows payload keys
+ * (bell, inbox page). Older types keep their own keys and wording; every other type — including
+ * ones added later — renders from the payload contract: title, body, url, actor_name,
+ * actor_avatar, project_name, subject_key (docs/ai/tasks/release-v1.39.0.md).
+ */
+export interface NotificationView {
+    /** The worded line, with the actor and subject emphasised. */
+    headline: ReactNode;
+    /** The same line as plain text (labels, tooltips). */
+    text: string;
+    /** Optional preview / detail line. */
+    body?: string;
+    /** Issue / ticket key, shown as a chip. */
+    subjectKey?: string;
+    /** Context line: project, board, form … */
+    context?: string;
+    /** Safe in-app path to open, if any. */
+    url?: string;
+    actorName?: string;
+    actorAvatar?: string;
 }
 
 /** Only links into this app: a relative path or an absolute URL on this origin. */
-export function safeAppHref(url: string | undefined): string | undefined {
-    if (!url) return undefined;
+export function safeAppHref(url: unknown): string | undefined {
+    if (typeof url !== 'string' || !url) return undefined;
     try {
         // always parse (browsers strip tabs / newlines, so "/\t/evil.com" means //evil.com)
         const parsed = new URL(url, window.location.origin);
@@ -66,118 +39,133 @@ export function safeAppHref(url: string | undefined): string | undefined {
     }
 }
 
-export function notificationUrl(d: NotificationData): string | undefined {
-    return safeAppHref(d.ticket_url ?? d.lead_url ?? d.item_url ?? d.context_url ?? d.page_url);
+const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() !== '' ? v : undefined);
+
+/** Who did it: a user, or the customer for helpdesk tickets. */
+export function notificationActor(d: NotificationData): string | undefined {
+    return str(d.actor_name) ?? str(d.contact_name) ?? str(d.contact_email);
 }
 
-/** Second line under the sentence. */
-export function notificationDetail(d: NotificationData): string | undefined {
-    if (d.type === 'task_digest') return d.titles?.join(', ');
-    if (d.type === 'ticket_reply') return d.reply_preview || d.ticket_subject;
-    if (d.type === 'lead_created') return d.form_name;
-    return d.ticket_subject ?? d.item_title ?? d.page_name;
+type Part = string | { b: string } | undefined | null | false;
+
+/** Builds a headline from parts: strings stay plain, {b} parts are emphasised. */
+function line(...parts: Part[]): { headline: ReactNode; text: string } {
+    const kept = parts.filter((p): p is string | { b: string } => !!p && (typeof p === 'string' || !!p.b));
+    return {
+        headline: (
+            <>
+                {kept.map((p, i) =>
+                    typeof p === 'string' ? (
+                        <span key={i}>{p}</span>
+                    ) : (
+                        <strong key={i} className="font-semibold text-foreground">
+                            {p.b}
+                        </strong>
+                    ),
+                )}
+            </>
+        ),
+        text: kept.map((p) => (typeof p === 'string' ? p : p.b)).join(''),
+    };
 }
 
-export function NotificationAvatar({ data: d }: { data: NotificationData }) {
-    if (d.type === 'item_reminder' || d.type === 'task_digest') return <Bell className="size-4 text-muted-foreground" />;
-    if (d.actor_avatar) return <img src={d.actor_avatar} alt={d.actor_name} className="size-full object-cover" />;
+export function describeNotification(d: NotificationData): NotificationView {
     const actor = notificationActor(d);
-    if (actor) return <>{actor.charAt(0)}</>;
-    return d.type.startsWith('ticket_') ? <LifeBuoy className="size-4 text-muted-foreground" /> : <>?</>;
-}
-
-/** "Alice assigned you to WEB-12", "customer@x.com opened ticket SUP-3", … */
-export function NotificationMessage({
-    data: d,
-    onOpen,
-    linkClassName = 'font-medium text-primary hover:underline inline-flex items-center gap-0.5',
-    iconClassName = 'size-2.5',
-    newTab = false,
-}: {
-    data: NotificationData;
-    onOpen?: () => void;
-    linkClassName?: string;
-    iconClassName?: string;
-    newTab?: boolean;
-}) {
-    const link = (href: string | undefined, label: ReactNode) => (
-        <a href={safeAppHref(href)} className={linkClassName} onClick={onOpen} {...(newTab ? { target: '_blank', rel: 'noreferrer' } : {})}>
-            {label}
-            <ExternalLink className={iconClassName} />
-        </a>
-    );
-    const actor = <span className="font-medium">{notificationActor(d) || 'Someone'}</span>;
+    const who = { b: actor ?? 'Someone' };
+    const base = { actorName: actor, actorAvatar: str(d.actor_avatar) };
 
     switch (d.type) {
-        case 'task_digest':
-            return (
-                <>
-                    Your tasks:{' '}
-                    {link(d.url, [d.due_today ? `${d.due_today} due today` : null, d.overdue ? `${d.overdue} overdue` : null].filter(Boolean).join(' · '))}
-                </>
-            );
+        case 'task_digest': {
+            const summary = [d.due_today ? `${d.due_today} due today` : null, d.overdue ? `${d.overdue} overdue` : null].filter(Boolean).join(' · ');
+            return { ...base, ...line('Your tasks: ', { b: summary || 'nothing due' }), body: d.titles?.join(', '), url: safeAppHref(d.url) };
+        }
         case 'item_reminder':
-            return (
-                <>
-                    {link(d.item_url, d.item_key)} {d.when_label}
-                </>
-            );
+            return {
+                ...base,
+                ...line({ b: d.item_key ?? 'An item' }, d.when_label ? ` ${d.when_label}` : ''),
+                body: str(d.item_title),
+                subjectKey: str(d.item_key),
+                url: safeAppHref(d.item_url),
+            };
         case 'mentioned':
-            return (
-                <>
-                    {actor} mentioned you {d.context_type === 'page' ? 'on page ' : 'in '}
-                    {link(d.context_url, d.context_title)}
-                </>
-            );
+            return {
+                ...base,
+                ...line(who, d.context_type === 'page' ? ' mentioned you on page ' : ' mentioned you in ', { b: d.context_title ?? '' }),
+                url: safeAppHref(d.context_url),
+            };
         case 'page_updated':
-            return (
-                <>
-                    {actor} updated page {link(d.page_url, d.page_name)}
-                </>
-            );
+            return { ...base, ...line(who, ' updated page ', { b: d.page_name ?? '' }), url: safeAppHref(d.page_url) };
         case 'item_assigned':
-            return (
-                <>
-                    {actor} assigned you to {link(d.item_url, d.item_key)}
-                </>
-            );
+            return {
+                ...base,
+                ...line(who, ' assigned you to ', { b: d.item_key ?? '' }),
+                body: str(d.item_title),
+                subjectKey: str(d.item_key),
+                url: safeAppHref(d.item_url),
+            };
         case 'item_status_changed':
-            return (
-                <>
-                    {actor} moved {link(d.item_url, d.item_key)} from <span className="text-muted-foreground">{d.old_column}</span>
-                    <span className="mx-1 text-muted-foreground">→</span>
-                    <span className="font-medium">{d.new_column}</span>
-                </>
-            );
+            return {
+                ...base,
+                ...line(who, ' moved ', { b: d.item_key ?? '' }, ` from ${d.old_column ?? '?'} → `, { b: d.new_column ?? '?' }),
+                body: str(d.item_title),
+                subjectKey: str(d.item_key),
+                url: safeAppHref(d.item_url),
+            };
         case 'ticket_created':
-            return (
-                <>
-                    {actor} opened ticket {link(d.ticket_url, d.ticket_key)}
-                </>
-            );
-        case 'lead_created':
-            return (
-                <>
-                    New lead {link(d.lead_url, `#${d.lead_number ?? ''}`)} <span className="font-medium">{d.lead_name}</span>
-                </>
-            );
+            return {
+                ...base,
+                ...line(who, ' opened ticket ', { b: d.ticket_key ?? '' }),
+                body: str(d.ticket_subject),
+                subjectKey: str(d.ticket_key),
+                url: safeAppHref(d.ticket_url),
+            };
         case 'ticket_reply':
-            return (
-                <>
-                    {actor} replied to ticket {link(d.ticket_url, d.ticket_key)}
-                </>
-            );
+            return {
+                ...base,
+                ...line(who, ' replied to ticket ', { b: d.ticket_key ?? '' }),
+                body: str(d.reply_preview) ?? str(d.ticket_subject),
+                subjectKey: str(d.ticket_key),
+                url: safeAppHref(d.ticket_url),
+            };
         case 'ticket_assigned':
-            return (
-                <>
-                    {actor} assigned you to ticket {link(d.ticket_url, d.ticket_key)}
-                </>
-            );
+            return {
+                ...base,
+                ...line(who, ' assigned you to ticket ', { b: d.ticket_key ?? '' }),
+                body: str(d.ticket_subject),
+                subjectKey: str(d.ticket_key),
+                url: safeAppHref(d.ticket_url),
+            };
+        case 'lead_created':
+            return {
+                ...base,
+                ...line('New lead ', { b: `#${d.lead_number ?? ''}` }, d.lead_name ? ' from ' : '', d.lead_name ? { b: d.lead_name } : null),
+                context: str(d.form_name),
+                url: safeAppHref(d.lead_url),
+            };
         default:
-            return (
-                <>
-                    {actor} updated {link(notificationUrl(d), d.ticket_key ?? d.item_key ?? d.page_name ?? 'this')}
-                </>
-            );
+            return {
+                ...base,
+                ...genericLine(d, actor),
+                body: str(d.body),
+                subjectKey: str(d.subject_key),
+                context: str(d.project_name),
+                url: safeAppHref(d.url),
+            };
     }
+}
+
+/** Contract types: the server words the title; the actor's name at its start is emphasised. */
+function genericLine(d: NotificationData, actor: string | undefined) {
+    const title = str(d.title);
+    if (!title) {
+        const subject = str(d.subject_key) ?? str(d.item_key) ?? str(d.ticket_key) ?? str(d.page_name);
+        return line({ b: actor ?? 'Someone' }, subject ? ' updated ' : ' sent you a notification', subject ? { b: subject } : null);
+    }
+    if (actor && title.startsWith(actor)) return line({ b: actor }, title.slice(actor.length));
+    return line(title);
+}
+
+/** The headline alone (for callers that only need the sentence). */
+export function NotificationMessage({ data }: { data: NotificationData }) {
+    return <>{describeNotification(data).headline}</>;
 }

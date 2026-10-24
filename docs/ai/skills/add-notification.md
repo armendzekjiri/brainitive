@@ -95,3 +95,15 @@ Rules every sender follows (KNOWLEDGE → "Notification coverage"):
 - e2e: assert on the bell's feed with `e2e/helpers/notifications.ts`
   (`expectNotification(page, n => n.type === 'widget_ready' && …)`), see
   `e2e/tests/notifications-coverage.spec.ts`.
+
+## 5. How the inbox shows it (BRAI-102)
+- `describeNotification()` in `components/NotificationMessage.tsx` renders contract types from
+  `title` (the actor's name in bold when the title starts with `actor_name`), `body` (preview
+  line), `subject_key` (chip), `project_name` (context) and `url` (opened in the same tab, app
+  URLs only). Older types have their own case there.
+- The icon is the **category's** (`components/notifications/categories.tsx`): the feed sends
+  `category` per row, computed from `NotificationCatalog::TYPES` (`null` → neutral bell).
+- The Mentions / Assigned tabs filter on the `mentions` / `assignments` categories, so a new
+  type in those categories shows up there automatically.
+- A class that must stay on one channel intersects `channelsFor()` (see
+  `CalendarReminderNotification`, push only).

@@ -537,14 +537,18 @@ Route::middleware('auth')->group(function () {
     Route::patch('/api/page-sticky-notes/{note}', [PageStickyNoteController::class, 'update'])->name('page-sticky-notes.update');
     Route::delete('/api/page-sticky-notes/{note}', [PageStickyNoteController::class, 'destroy'])->name('page-sticky-notes.destroy');
 
-    // Notifications
+    // Notifications (BRAI-102): inbox page + one JSON feed for the bell and the page
     Route::get('/notifications', [NotificationController::class, 'page'])->name('notifications.page');
+    // fetched when the bell opens / polled every 30 s: read-only sessions (would race form submits)
     Route::get('/api/notifications', [NotificationController::class, 'index'])->middleware(ReadOnlySession::class)->name('notifications.index');
-    // polled every 30 s / fetched when the bell opens: read-only sessions (would race form submits)
     Route::get('/api/notifications/unread-count', [NotificationController::class, 'unreadCount'])->middleware(ReadOnlySession::class)->name('notifications.unread-count');
-    Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('/api/notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
-    Route::post('/api/notifications/notify-mention', [NotificationController::class, 'notifyMention'])->middleware('throttle:60,1,notifications.notify-mention')->name('notifications.notify-mention');
+    Route::post('/api/notifications/bulk', [NotificationController::class, 'bulk'])->name('notifications.bulk');
+    Route::patch('/api/notifications/preferences', [NotificationController::class, 'updatePreferences'])->name('notifications.preferences');
+    Route::post('/api/notifications/{id}/read', [NotificationController::class, 'markRead'])->whereUuid('id')->name('notifications.read');
+    Route::post('/api/notifications/{id}/unread', [NotificationController::class, 'markUnread'])->whereUuid('id')->name('notifications.unread');
+    Route::post('/api/notifications/{id}/archive', [NotificationController::class, 'archive'])->whereUuid('id')->name('notifications.archive');
+    Route::post('/api/notifications/{id}/unarchive', [NotificationController::class, 'unarchive'])->whereUuid('id')->name('notifications.unarchive');
 
     // Browser push subscriptions
     Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');

@@ -85,7 +85,8 @@ test.describe('documents', () => {
 
         await memberPage.goto('/notifications');
         await expect(memberPage.getByRole('heading', { name: 'Notifications', level: 1 })).toBeVisible();
-        await expect(memberPage.getByRole('main').getByRole('link', { name, exact: true })).toBeVisible();
+        // the inbox row: "Erin Owner updated page <name>" (BRAI-102: the whole line is the link)
+        await expect(memberPage.getByRole('main').getByRole('link', { name: `Erin Owner updated page ${name}` })).toBeVisible();
     });
 });
 

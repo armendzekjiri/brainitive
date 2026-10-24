@@ -65,7 +65,6 @@ test.describe('homepage', () => {
         for (const title of SPOTLIGHT) {
             await expect(spotlight.getByRole('heading', { level: 4, name: title, exact: true })).toBeVisible();
         }
-        await expect(spotlight.locator('kbd', { hasText: 'C' })).toBeVisible();
 
         for (const group of GROUPS) {
             await expect(features.getByRole('heading', { level: 3, name: group, exact: true })).toBeVisible();
@@ -113,7 +112,7 @@ test.describe('homepage', () => {
 
             const spotlight = page.getByRole('region', { name: 'New in recent releases' });
             await spotlight.scrollIntoViewIfNeeded();
-            await expect(spotlight.getByRole('heading', { name: 'Quick capture', exact: true })).toBeVisible();
+            await expect(spotlight.getByRole('heading', { name: SPOTLIGHT[0], exact: true })).toBeVisible();
             await page.getByRole('heading', { level: 3, name: 'Customers, leads & billing', exact: true }).scrollIntoViewIfNeeded();
             await expect(page.getByRole('heading', { level: 4, name: 'Lead forms', exact: true }).last()).toBeVisible();
             await expectNoHorizontalScroll(page);

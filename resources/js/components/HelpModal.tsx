@@ -83,6 +83,26 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.39.0',
+        title: 'Notifications, insights, webhooks and your own sidebar',
+        tag: 'Feature',
+        date: '2026-10-24',
+        items: [
+            'A new notification inbox: the bell opens a panel with All · Unread · Mentions · Assigned, grouped by day. Mark items unread or archive them, and open them right where you are. The inbox page adds bulk actions and keyboard shortcuts (j / k / Enter / e).',
+            'Choose how you hear about things: Profile → Notifications has In-app, Push and Email per category (mentions, assignments, comments, due dates, sprints, helpdesk, leads…).',
+            'Notifications for what was missing: comments on issues you watch, issues due tomorrow or overdue, sprints started or completed, tasks and leads assigned to you, accepted invitations, role changes and ticket status changes. Assignments now notify however they were made (MCP, meeting notes, plan import). Re-saving a description no longer repeats @mentions.',
+            'Insights for workspace admins (sidebar → Insights): throughput, cycle time, the team, project health, helpdesk and leads, and usage, across every project and for any period.',
+            'Outgoing webhooks (Workspace settings → Webhooks): send signed events (issues, pages, sprints, tickets, leads, time and invoices) to your own systems, with a delivery log, redeliver and “Send test”.',
+            'Customize your sidebar: hide entries you don’t use, choose which groups each project shows, and pin the boards, lists and docs you open every day. Hidden entries stay in ⌘K.',
+            'The project page is easier to scan: members and quick links on top, then Pinned, Recently updated, Work, Docs and Customer-facing sections. Empty sections take one line.',
+            'Bulk edit on boards: in the List view, select issues (shift-click for a range) and change status, assignee, priority, type, sprint, due date or labels in one go, or delete them.',
+            'My Day: click the circle to mark a task done (and again to reopen it); done tasks move to the bottom. The circle works in My Work too.',
+            'Meeting notes → issues: the meeting date now defaults to today, so deadlines like “by Friday” become due dates.',
+            'Billing: moving a project to another workspace takes its unbilled hours along, and only workspace admins can change whether an entry is billable.',
+            'Links to brainitive.app now show a proper preview card when you share them.',
+        ]
+    },
+    {
         version: 'v1.38.0',
         title: 'Time tracking & client billing',
         tag: 'Feature',
