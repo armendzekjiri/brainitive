@@ -1663,6 +1663,7 @@ export interface NotificationCategoryPreference {
     label: string;
     description: string;
     channels: NotificationChannels;
+}
 
 /** Outgoing webhook of a workspace (v1.39.0, BRAI-104). The secret is never part of it. */
 export interface WorkspaceWebhook {
