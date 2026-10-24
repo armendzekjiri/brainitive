@@ -6,15 +6,20 @@ use App\Models\Item;
 use App\Models\Project;
 use App\Models\TaskListItem;
 use App\Models\User;
+use App\Notifications\ItemDueNotification;
 use App\Notifications\ItemReminderNotification;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
+use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Pushes reminders for the app's own scheduled work, to the in-app bell AND the browser:
  * - "Starts in N minutes" for board / task-list items with a start date + time;
- * - "Due …" for task-list items with a reminder (`reminder_minutes` before the due time).
+ * - "Due …" for task-list items with a reminder (`reminder_minutes` before the due time);
+ * - item_due for assigned board issues with a due date (BRAI-103): "due tomorrow" (from 08:00 local
+ *   the day before) and "overdue" (once the due time, or the end of the due day, has passed; only
+ *   for the last OVERDUE_DAYS days, so old issues don't flood anyone). Once per issue, kind and due date.
  *
  * Dates and times are wall-clock values in the recipient's time zone
  * (`User::localTimezone()`); the app itself runs in UTC. Dedup is via the shared
@@ -30,6 +35,12 @@ class SendItemReminders extends Command
     /** Due reminders that were missed by more than this (scheduler down) are skipped. */
     private const DUE_GRACE_MINUTES = 30;
 
+    /** item_due "due tomorrow" goes out from this local hour on the day before. */
+    private const DUE_TOMORROW_HOUR = 8;
+
+    /** item_due "overdue" is only sent for issues that became overdue in the last N days. */
+    private const OVERDUE_DAYS = 2;
+
     public function handle(): int
     {
         $lead = max(1, (int) $this->option('lead'));
@@ -37,7 +48,8 @@ class SendItemReminders extends Command
 
         $sent = $this->remindBoardItems($now, $lead)
             + $this->remindTaskListStarts($now, $lead)
-            + $this->remindTaskListDue($now);
+            + $this->remindTaskListDue($now)
+            + $this->remindBoardItemsDue($now);
 
         $this->info("Queued {$sent} item reminder(s).");
 
@@ -84,6 +96,48 @@ class SendItemReminders extends Command
                 'Starts '.$this->inLabel($now, $start),
                 route('boards.items.show', [$workspace->slug, $project->slug, $board->slug, $item->id]),
             ));
+        }
+
+        return $sent;
+    }
+
+    /** item_due: "due tomorrow" and "overdue" for assigned, open board issues (BRAI-103). */
+    private function remindBoardItemsDue(Carbon $now): int
+    {
+        $items = Item::query()
+            ->whereNotNull('assigned_to')
+            ->whereNotNull('due_date')
+            ->whereNull('completed_at')
+            ->whereBetween('due_date', [$now->copy()->subDays(self::OVERDUE_DAYS + 1)->toDateString(), $now->copy()->addDays(2)->toDateString()])
+            ->whereHas('column', fn ($q) => $q->where('is_done_column', false))
+            ->with(['board.project.workspace', 'assignee'])
+            ->get();
+
+        $sent = 0;
+        foreach ($items as $item) {
+            $user = $item->assignee;
+            $project = $item->board?->project;
+            if (! $user || ! $project?->workspace || ! $this->canOpen($user, $project)) {
+                continue;
+            }
+
+            $zone = $user->localTimezone();
+            $localNow = $now->copy()->setTimezone($zone);
+            $dueDay = Carbon::parse($item->due_date->toDateString(), $zone)->startOfDay();
+            $time = $item->due_time ? substr((string) $item->due_time, 0, 5) : null;
+            $dueAt = $time ? Carbon::parse($dueDay->toDateString().' '.$time, $zone) : $dueDay->copy()->addDay();
+            $dateKey = $dueDay->toDateString();
+
+            if ($now->gte($dueAt)) {
+                if ($dueAt->lt($now->copy()->subDays(self::OVERDUE_DAYS))) {
+                    continue;
+                }
+                $label = 'Was due '.($time ? $dueDay->format('D, M j').' at '.$time : $dueDay->format('D, M j'));
+                $sent += $this->send($user, "item_due:{$item->id}:overdue:{$dateKey}", new ItemDueNotification($item, ItemDueNotification::OVERDUE, $label));
+            } elseif ($localNow->copy()->addDay()->isSameDay($dueDay) && $localNow->hour >= self::DUE_TOMORROW_HOUR) {
+                $label = $time ? "Due tomorrow at {$time}" : 'Due tomorrow';
+                $sent += $this->send($user, "item_due:{$item->id}:due_tomorrow:{$dateKey}", new ItemDueNotification($item, ItemDueNotification::DUE_TOMORROW, $label));
+            }
         }
 
         return $sent;
@@ -170,7 +224,7 @@ class SendItemReminders extends Command
         return $this->access["{$user->id}:{$project->id}"] ??= $user->hasProjectAccess($project);
     }
 
-    private function send(User $user, string $key, ItemReminderNotification $notification): int
+    private function send(User $user, string $key, Notification $notification): int
     {
         if ($this->alreadySent($user->id, $key)) {
             return 0;
