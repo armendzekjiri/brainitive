@@ -1,0 +1,83 @@
+{
+    "FromName": "Cleo Customer",
+    "MessageStream": "inbound",
+    "From": "cleo@customer.example",
+    "FromFull": {
+        "Email": "Cleo@Customer.example",
+        "Name": "Cleo Customer",
+        "MailboxHash": ""
+    },
+    "To": "\"Support\" <{{TO}}>",
+    "ToFull": [
+        {
+            "Email": "{{TO}}",
+            "Name": "Support",
+            "MailboxHash": ""
+        }
+    ],
+    "Cc": "\"Doe, Jo\" <jo@customer.example>",
+    "CcFull": [
+        {
+            "Email": "jo@customer.example",
+            "Name": "Doe, Jo",
+            "MailboxHash": ""
+        }
+    ],
+    "Bcc": "",
+    "BccFull": [],
+    "OriginalRecipient": "{{TO}}",
+    "Subject": "Printer on fire",
+    "MessageID": "73e6d360-66eb-11e1-8e72-a8904824019b",
+    "ReplyTo": "",
+    "MailboxHash": "",
+    "Date": "Fri, 24 Oct 2026 21:29:31 +0200",
+    "TextBody": "Hello,\n\nthe printer is on fire again.\n\nCleo",
+    "HtmlBody": "<p>Hello,</p><p>the printer is <b>on fire</b> again.</p><p>Cleo</p>",
+    "StrippedTextReply": "",
+    "Tag": "",
+    "Headers": [
+        {
+            "Name": "X-Spam-Status",
+            "Value": "No"
+        },
+        {
+            "Name": "Message-ID",
+            "Value": "<CAB2wZ1Pz9Xyz@mail.customer.example>"
+        },
+        {
+            "Name": "In-Reply-To",
+            "Value": "<ticket-42.abc@brainitive.example>"
+        },
+        {
+            "Name": "References",
+            "Value": "<first.1@brainitive.example> <ticket-42.abc@brainitive.example>"
+        },
+        {
+            "Name": "Auto-Submitted",
+            "Value": "no"
+        },
+        {
+            "Name": "Received",
+            "Value": "by mx1 with SMTP"
+        },
+        {
+            "Name": "Received",
+            "Value": "by mx2 with SMTP"
+        }
+    ],
+    "Attachments": [
+        {
+            "Name": "screenshot.png",
+            "Content": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+            "ContentType": "image/png",
+            "ContentLength": 70,
+            "ContentID": ""
+        },
+        {
+            "Name": "../../notes.txt",
+            "Content": "c21va2UgZXZlcnl3aGVyZQo=",
+            "ContentType": "text/plain; charset=utf-8",
+            "ContentLength": 17
+        }
+    ]
+}

@@ -140,6 +140,27 @@ schema public". Use `createdb -h /tmp -O <DB_USERNAME> brainitive_test_<name>` (
   same workspace in parallel. The crawler (`e2e:crawl`) fills URL fields with `https://example.com/`,
   so a crawl run can create a webhook that posts to example.com.
 
+### Inbound email webhooks: provider answers, replay cache, hidden address (v1.40.0, BRAI-124)
+- **Status codes are for the provider's retry logic.** Postmark stops retrying on 403, Mailgun on 406;
+  everything else (401, 5xx) is retried for hours. So permanent refusals (unknown recipient, no sender,
+  stale / replayed Mailgun signature, too large) answer 403 / 406, a wrong token or signature 401 (a
+  misconfigured secret loses nothing once fixed), and a pipeline failure on a sync queue 500.
+- **Mailgun replay:** HMAC-SHA256 of `timestamp.token` with the signing key, timestamp within
+  `INBOUND_MAIL_REPLAY_WINDOW` (900 s), and each token once (`Cache::add` for 2× the window). The
+  token is released again when processing fails, so the provider's retry gets through. Duplicates of
+  a *message* are `InboundMail::receive()`'s job (dedupe on Message-ID; a message without one gets a
+  stable `postmark-<id>@inbound.invalid` / `noid-<sha256>` id).
+- **Recipient = envelope first** (`OriginalRecipient` / `recipient`): a Gmail auto-forward keeps the
+  customer's `To: support@their-company`, only the envelope carries our address. `+tag` is ignored
+  for the lookup and kept in `InboundMessage::$to` (routing tokens).
+- **The address is a capability.** Anyone who knows it can open tickets, and `Helpdesk` is passed whole
+  as an Inertia prop on several pages, so `forwarding_local_part` is `$hidden` and only the Email tab's
+  JSON endpoint (helpdesk `update`) reveals it. Regenerate = a new random part; the old one stops at once.
+- **Attachments go to `storage/app/inbound-mail/<uuid>/`, not `sys_get_temp_dir()`:** the queued job may
+  run in another process. Random file names; the client's name is only metadata (`InboundPayloads::filename`).
+- **e2e** turns forwarding on in `e2e/env.ts` (`INBOUND_MAIL_*`, Postmark). dev.brainitive.app has no
+  inbound domain, so `helpdesk-forwarding.spec.ts` skips there.
+
 ### Quick capture: conversion is idempotent by row lock, not by request id (BRAI-70)
 `CaptureConversion::convert` locks the capture (`lockForUpdate`) inside one transaction; a capture
 that is already processed returns its target (`replayed`, HTTP 200) whatever the second request
@@ -604,6 +625,9 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   (`git add resources/js/components/x/New.tsx`) and check `git ls-files`. Never combine
   `core.ignorecase=false` with `add -A` / `add .`: git then sees the whole on-disk `Components/` folder
   as new files and stages ~160 duplicates (happened once, v1.40.0 foundation).
+  A file in a **new sub-folder** (e.g. `components/helpdesk/email/`) can still land as `Components/…`
+  even with the lowercase path (BRAI-124). Then: `git rm --cached <Components path>`, and
+  `git update-index --add --cacheinfo 100644,$(git hash-object -w <file>),resources/js/components/…`.
 - **Notification coverage (BRAI-103, v1.39.0): who is told, and never twice.**
   - **Assignments fire from the observers, nowhere else.** `ItemObserver::created/updated` (on an
     `assigned_to` change) → `Support\Notifications\Assignments::item()` sends `ItemAssignedNotification`;
