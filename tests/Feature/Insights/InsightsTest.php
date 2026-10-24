@@ -373,7 +373,7 @@ class InsightsTest extends TestCase
 
         // many more projects, members, issues, comments, time and health reports
         foreach (range(1, 6) as $p) {
-            $project = Project::factory()->create(['workspace_id' => $this->workspace->id, 'created_by' => $this->admin->id]);
+            $project = Project::factory()->create(['workspace_id' => $this->workspace->id, 'created_by' => $this->admin->id, 'name' => "Load {$p}", 'key' => "LD{$p}"]);
             $board = Board::factory()->create(['project_id' => $project->id, 'created_by' => $this->admin->id]);
             ProjectHealthReport::factory()->create(['project_id' => $project->id, 'created_by' => $this->admin->id]);
             Helpdesk::create(['project_id' => $project->id, 'name' => "Desk {$p}", 'slug' => "desk-{$p}", 'created_by' => $this->admin->id]);
