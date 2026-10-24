@@ -61,6 +61,9 @@ import {
     ChartColumn,
     Webhook,
     PanelLeft,
+    Workflow,
+    Repeat,
+    MailOpen,
     Clock,
     FileSpreadsheet,
     ReceiptText,
@@ -392,6 +395,34 @@ const SPOTLIGHT: {
     shortcut?: string;
 }[] = [
     {
+        key: 'automation',
+        version: 'v1.40',
+        icon: Workflow,
+        color: '#0E83DC',
+        title: 'Automations that do the busywork',
+        description:
+            'When an issue is created, moved or overdue, let Brainitive assign it, set the priority, comment or notify — rules you build in a minute.',
+        points: [
+            'When → if → then, no code',
+            'Test a rule on a real issue before switching it on',
+            'A run log for every rule',
+        ],
+    },
+    {
+        key: 'email-helpdesk',
+        version: 'v1.40',
+        icon: MailOpen,
+        color: '#69A748',
+        title: 'Email into your helpdesk',
+        description:
+            'Customers just write to support@ — every email becomes a ticket, your answers go back in the same thread, with SLAs that warn before a deadline slips.',
+        points: [
+            'Connect your mailbox or use a forwarding address',
+            'Replies stay in one email thread',
+            'Response and resolution targets per priority',
+        ],
+    },
+    {
         key: 'notifications',
         version: 'v1.39',
         icon: Bell,
@@ -403,34 +434,6 @@ const SPOTLIGHT: {
             'All, Unread, Mentions and Assigned in one click',
             'In-app, push or email — per category',
             'Mark unread, archive, open right where you are',
-        ],
-    },
-    {
-        key: 'insights',
-        version: 'v1.39',
-        icon: ChartColumn,
-        color: '#69A748',
-        title: 'Insights for admins',
-        description:
-            'One place to see how the whole workspace is doing: throughput, cycle time, the team, project health, helpdesk and usage.',
-        points: [
-            'Created vs completed, week by week',
-            'Per person: done, overdue and hours logged',
-            'Every project’s health side by side',
-        ],
-    },
-    {
-        key: 'billing',
-        version: 'v1.38',
-        icon: ReceiptText,
-        color: '#0E83DC',
-        title: 'Time tracking & client billing',
-        description:
-            'Your team logs time on tickets; at month end you send each client a clean report or invoice — your own rates, your VAT.',
-        points: [
-            'Activities you price yourself: per hour or fixed',
-            'PDF and Excel, sent to the client from Brainitive',
-            'Finalized hours are locked — nothing billed twice',
         ],
     },
 ];
@@ -769,6 +772,13 @@ export default function Welcome({
                     isNew: true,
                 },
                 {
+                    icon: Repeat,
+                    title: 'Recurring issues',
+                    description:
+                        'Weekly reviews, monthly reports, yearly renewals — issues that create themselves on schedule, with assignee and due date.',
+                    isNew: true,
+                },
+                {
                     icon: GanttChart,
                     title: 'Gantt timelines',
                     description:
@@ -940,6 +950,20 @@ export default function Welcome({
                     isNew: true,
                 },
                 {
+                    icon: MailOpen,
+                    title: 'Email to helpdesk',
+                    description:
+                        'Connect your support mailbox or forward to Brainitive: emails become tickets and replies stay in the same thread.',
+                    isNew: true,
+                },
+                {
+                    icon: Timer,
+                    title: 'Helpdesk SLAs',
+                    description:
+                        'First-response and resolution targets per priority, business hours, warnings before a breach and breach reports.',
+                    isNew: true,
+                },
+                {
                     icon: Magnet,
                     title: 'Lead forms',
                     description:
@@ -1042,6 +1066,13 @@ export default function Welcome({
                     title: 'Outgoing webhooks',
                     description:
                         'Send signed events — issues, pages, sprints, tickets, leads, time and invoices — to your own systems, with a delivery log.',
+                    isNew: true,
+                },
+                {
+                    icon: Workflow,
+                    title: 'Workflow automation',
+                    description:
+                        'Rules per project: when something happens and it matches, assign, move, set fields, comment or notify — with a run log.',
                     isNew: true,
                 },
                 {

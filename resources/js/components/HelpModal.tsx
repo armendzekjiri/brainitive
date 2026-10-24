@@ -83,6 +83,22 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.40.0',
+        title: 'Automations, email to helpdesk, SLAs and recurring issues',
+        tag: 'Feature',
+        date: '2026-10-24',
+        items: [
+            'Workflow automation (project page → Tools → Automations, for project admins): when an issue is created, moved, assigned, commented or past its due date, or a ticket arrives — and it matches your conditions — assign it, move it, set priority, type, due date or a label, comment, notify someone, or create an issue from a ticket. Test a rule on a real issue before switching it on; every run is logged.',
+            'Recurring issues (board menu → Recurring issues): daily, weekly on chosen days, every N weeks, monthly (a day or e.g. the last weekday) or yearly — with assignee, priority, labels and a due date. Or open an issue and choose “Make this recurring”.',
+            'Email to helpdesk (helpdesk settings → Email): connect your support mailbox over IMAP, and every email becomes a ticket. Replies from the ticket go back by email in the same thread; customer answers land on the ticket. Auto-replies, mailing lists and strangers replying into a ticket are kept out.',
+            'Or use a forwarding address: forward your support mail to the helpdesk’s own address (needs an inbound mail provider; see the self-hosting guide).',
+            'Helpdesk SLAs (helpdesk settings → SLA): first-response and resolution targets per priority, business hours, and a pause while you wait on the customer. Tickets show “Respond in 2h” or “Breached”, you can filter and sort by SLA, and you’re warned before a breach. Insights → Helpdesk shows breaches and the share of SLAs met.',
+            'Project health: saving a status update without a health status now tells you right at the button, and an unsaved update survives a page refresh.',
+            'AI in descriptions: “Replace” now works for every AI answer, including long prompts from “Generate prompt”.',
+            'Checklists in documents no longer overlap their text.',
+        ]
+    },
+    {
         version: 'v1.39.0',
         title: 'Notifications, insights, webhooks and your own sidebar',
         tag: 'Feature',
