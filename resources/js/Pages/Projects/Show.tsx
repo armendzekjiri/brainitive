@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
     LayoutGrid, Plus, Settings, ArrowRight, Kanban, FileText, Folder,
-    ChevronRight, PencilRuler, Headphones, Calendar, Key, Users, List, GanttChart, Magnet,
+    ChevronRight, PencilRuler, Headphones, Calendar, Key, Users, List, GanttChart, Magnet, ListChecks,
 } from 'lucide-react';
 import LeadFormTemplatePicker from '@/components/leadForms/LeadFormTemplatePicker';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -20,6 +20,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { safeHtmlProp } from '@/lib/sanitize';
 import ProjectAiAssistant from '@/components/projects/ProjectAiAssistant';
+import ExtractActionItemsDialog from '@/components/meetingNotes/ExtractActionItemsDialog';
 
 type PageWithChildren = PageType & { children?: PageWithChildren[] };
 
@@ -37,9 +38,11 @@ interface Props extends PageProps {
     canUpdate?: boolean;
     canCreatePages?: boolean;
     aiConfigured?: boolean;
+    canCreateIssues?: boolean;
 }
 
-export default function ProjectsShow({ workspace, project, canUpdate = false, canCreatePages = false, aiConfigured = false }: Props) {
+export default function ProjectsShow({ workspace, project, canUpdate = false, canCreatePages = false, aiConfigured = false, canCreateIssues = false }: Props) {
+    const [meetingNotesOpen, setMeetingNotesOpen] = useState(false);
     const [createBoardDialogOpen, setCreateBoardDialogOpen] = useState(false);
     const [createHelpdeskDialogOpen, setCreateHelpdeskDialogOpen] = useState(false);
     const [createLeadFormOpen, setCreateLeadFormOpen] = useState(false);
@@ -167,6 +170,24 @@ export default function ProjectsShow({ workspace, project, canUpdate = false, ca
                     )}
 
                     <ProjectAiAssistant workspace={workspace} project={project} aiConfigured={aiConfigured} canUpdate={canUpdate} canCreatePages={canCreatePages} />
+
+                    {canCreateIssues && (
+                        <Card>
+                            <CardContent className="p-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                                <div className="flex items-start gap-3 min-w-0 flex-1">
+                                    <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10"><ListChecks className="size-4 text-primary" /></div>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium">Meeting notes → issues</p>
+                                        <p className="text-xs text-muted-foreground">Paste notes from a meeting. AI suggests the action items, you review them, then create the ones you want.</p>
+                                    </div>
+                                </div>
+                                <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => setMeetingNotesOpen(true)}>
+                                    <ListChecks className="size-3.5" /> Extract action items
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    )}
+                    <ExtractActionItemsDialog open={meetingNotesOpen} onOpenChange={setMeetingNotesOpen} workspace={workspace} project={project} />
 
                     {/* Boards */}
                     <section>

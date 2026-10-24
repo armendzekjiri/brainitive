@@ -120,6 +120,36 @@ through `ContentCapture::authorize`. The UI calls the feature **Captures** becau
 "Inbox" is notifications. The **C** shortcut goes through `isCaptureShortcut()` (`lib/captures.ts`):
 no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open dialogs or menus.
 
+### Meeting notes → issues: the model proposes, the server verifies, a person creates (BRAI-62)
+- **Extraction never writes.** Only `meeting-notes.store` creates anything, after the user's review,
+  and it re-authorizes board (`createItems`), source doc (`view`) and assignees (`ProjectMember`) on
+  every call — also on a retry with a known idempotency key, so a key never outlives a permission.
+- **Idempotency reuses `mcp_requests`** through `IdempotentRequest::run` (tool `meeting-notes.create`,
+  key = a UUID the dialog makes per review). Same key + same payload replays (200, `replayed`); same
+  key + different payload is a 409. No migration was needed; rows are pruned after 7 days.
+- **Notes are data.** They go to the provider between a random per-request boundary
+  (`<notes-{hex}>`), and the system prompt says to ignore instructions inside them. The real guard is
+  `ProposalReview`: a proposal whose excerpt isn't found in the notes (case, whitespace, Markdown
+  emphasis and typographic quotes ignored) is dropped and counted (`dropped`, shown in the UI). A
+  quote must be at least 3 words / 12 characters or a whole line of the notes ("Fix CI"), so a
+  common word can't pass as evidence. A suggested owner must also be named in the notes; otherwise
+  the proposal has no assignee.
+- **Dates:** a deadline is used only if its phrase is in the notes. With a meeting date + timezone
+  the model may resolve "by Friday" (accepted from meeting − 31 days to + 2 years); without them a
+  date is kept only when the phrase holds the year and the day (a full calendar date). Otherwise the
+  text is shown with a hint and the date stays empty.
+- **Assignees** match only people who can open the project (project members + workspace admins —
+  the set `ProjectMember` accepts): one match is suggested, several are `ambiguous` (Create stays
+  disabled until the user picks someone or "Unassigned"), none stays unassigned. No emails are sent
+  to the browser.
+- **Docs:** editors (who see the draft in the editor) extract from `draft_content`, everyone else from
+  the live `content`, like `PageController::show`. Whiteboards and folders are refused.
+- **E2E fakes the AI in the browser.** There is no provider in e2e or on dev, and no stub route on
+  the server: `meeting-notes.spec.ts` patches `ai_configured` on the options response and answers
+  `…/extract` with `page.route`; Create is real. `page.route` doesn't see requests of a page that a
+  service worker controls (`public/sw.js` has a fetch handler), so specs that intercept app requests
+  need `test.use({ serviceWorkers: 'block' })`.
+
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
 means adding its param to `BoardViewConfig::PARAM_KEYS` + `normalize()` (allowlist) and, if it
