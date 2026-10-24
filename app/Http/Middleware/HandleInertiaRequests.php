@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkTimer;
 use App\Support\Plans\PlanTemplates;
+use App\Support\Sidebar\SidebarPreferences;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -255,6 +256,8 @@ class HandleInertiaRequests extends Middleware
             'unreadNotificationsCount' => fn () => $user ? $user->unreadNotifications()->count() : 0,
             // Quick capture (BRAI-70): open ideas in the user's private capture inbox (sidebar badge)
             'captureInboxCount' => fn () => $user ? Capture::ownedBy($user)->inState('inbox')->count() : 0,
+            // Customisable sidebar (BRAI-106): hidden entries, project groups, pins (normalised)
+            'sidebarPreferences' => fn () => $user ? SidebarPreferences::forFrontend($user) : null,
             'push' => [
                 'vapidPublicKey' => config('webpush.vapid.public_key'),
                 'subscribed' => fn () => $user ? $user->pushSubscriptions()->exists() : false,

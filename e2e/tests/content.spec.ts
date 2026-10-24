@@ -32,7 +32,7 @@ test.describe('documents', () => {
         await publish(page);
         await expect(docReader(page)).toContainText(text);
 
-        await page.getByRole('button', { name: 'Share' }).click();
+        await page.getByRole('button', { name: 'Share', exact: true }).click();
         const dialog = page.getByRole('dialog', { name: `Share ${name}` });
         await expect(dialog.getByText('Not shared yet.')).toBeVisible();
         await dialog.getByRole('button', { name: 'Create link' }).click();

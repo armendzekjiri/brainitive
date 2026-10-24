@@ -182,6 +182,30 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
   service worker controls (`public/sw.js` has a fetch handler), so specs that intercept app requests
   need `test.use({ serviceWorkers: 'block' })`.
 
+### Customisable sidebar: defaults stay invisible, writes are serialised (BRAI-106)
+- **Null means default.** `users.sidebar_preferences` is null until someone changes something, and
+  `SidebarPreferences::apply` stores null again when everything is back to default. Every entry and
+  group is visible by default, so e2e tests and docs that click `link 'Billing' | 'Timesheet' |
+  'Workload' | 'Inbox'` keep working. Hiding is opt-in, and Home + Inbox can't be hidden.
+- **Lost updates.** Two saves of the same user (two tabs, or parallel e2e workers signed in as the
+  owner) used to read-modify-write the JSON and drop each other's change. `apply` now re-reads the
+  column under `lockForUpdate()` inside a transaction, and the frontend store queues its PATCHes.
+- **Pins are filtered twice:** on save (`visiblePins`: right project, exists, page visible to the
+  user) and on render (resolved against the permission-filtered sidebar payload). A pin to content
+  the user lost access to stays stored but never shows.
+- **e2e isolation:** per-user settings (`hidden_nav`) are global for that user. Journeys that change
+  them run as the member and reset in `finally`; per-project settings and pins use a fresh project
+  (`createBlankProject`), so other specs keep the seeded project's default sidebar.
+- **Accessible names on the project page:** the header quick links are named "Project health /
+  workload / releases" (not "Health"), otherwise `link 'Workload', exact` would match twice. Pinned
+  and Recently updated rows use no h3, so `helpdesk.spec.ts`'s card locator (link with an h3) stays
+  unique. Every sidebar row now has a `Pin <name>` button, so a non-exact
+  `getByRole('button', { name: 'Share' })` also matches "Pin Shared doc…": use `exact: true` for
+  generic button names (content.spec's Share button was the one case).
+- **Store hydration is silent.** `useSidebarPreferences()` assigns the new server value during render
+  (no listener notification) to avoid "update a component while rendering another"; while a write is
+  in flight the optimistic state wins over the incoming prop.
+
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
 means adding its param to `BoardViewConfig::PARAM_KEYS` + `normalize()` (allowlist) and, if it

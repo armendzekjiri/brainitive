@@ -85,7 +85,7 @@ final class DomainEvents
     {
         self::assertKnown($event);
 
-        try {
+        $run = function () use ($workspace, $event, $data, $actor) {
             $workspaceId = $workspace instanceof Workspace ? $workspace->id : $workspace;
             if (! $workspaceId || ! Webhook::listeningTo($workspaceId, $event)->exists()) {
                 return;
@@ -94,6 +94,11 @@ final class DomainEvents
             if ($workspace) {
                 self::dispatch($workspace, $event, $data(), $actor);
             }
+        };
+
+        try {
+            // inside the caller's transaction: a savepoint, so a failing payload query can't abort it (Postgres)
+            DB::transactionLevel() > 0 ? DB::transaction($run) : $run();
         } catch (Throwable $e) {
             self::failed($e);
         }
