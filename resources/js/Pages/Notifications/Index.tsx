@@ -278,7 +278,7 @@ export default function NotificationsIndex({ feed: initialFeed, filter: initialF
                                 hasMore={feed.hasMore}
                                 loadingMore={feed.loadingMore}
                                 onLoadMore={feed.loadMore}
-                                onRetry={feed.reload}
+                                onRetry={() => feed.reload()}
                                 empty={emptyStateFor(filter, archived)}
                                 headerClassName="bg-card/95"
                                 className={cn(feed.loading && items.length > 0 && 'opacity-60 transition-opacity')}

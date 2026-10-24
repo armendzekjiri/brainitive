@@ -98,10 +98,14 @@ test.describe('notifications inbox', () => {
         await memberPage.reload();
         await expect(rowB.getByRole('button', { name: 'Mark as read' })).toBeAttached();
 
-        // j focuses the newest row (the second mention); u marks it read, e archives it
+        // j moves down the list (parallel tests may add newer rows above ours) to the second mention;
+        // u marks it read, e archives it
         await main.getByRole('heading', { name: 'Notifications', level: 1 }).click();
-        await memberPage.keyboard.press('j');
-        await expect(rowB.getByRole('link')).toBeFocused();
+        const linkB = rowB.getByRole('link');
+        for (let i = 0; i < 40 && !(await linkB.evaluate((el) => el === document.activeElement)); i++) {
+            await memberPage.keyboard.press('j');
+        }
+        await expect(linkB).toBeFocused();
         const read = memberPage.waitForResponse((r) => /\/api\/notifications\/[0-9a-f-]+\/read$/.test(r.url()));
         await memberPage.keyboard.press('u');
         expect((await read).status()).toBeLessThan(400);
@@ -122,7 +126,9 @@ test.describe('notifications inbox', () => {
 
         // both are under "Show archived" after archiving the second
         await rowA.getByRole('checkbox').check();
+        const archivedA = memberPage.waitForResponse((r) => /\/api\/notifications\/(bulk|[0-9a-f-]+\/archive)$/.test(r.url()));
         await main.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Archive' }).click();
+        expect((await archivedA).status()).toBeLessThan(400);
         await expect(rowA).toHaveCount(0);
         await main.getByRole('button', { name: /show archived/i }).click();
         await expect(notificationRow(main, first)).toBeVisible();

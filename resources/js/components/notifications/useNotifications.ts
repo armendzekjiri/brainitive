@@ -101,6 +101,7 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState(false);
     const request = useRef(0);
+    const loadingRef = useRef(false);
     const skipFirst = useRef(!!initial);
 
     const fetchPage = useCallback(
@@ -114,8 +115,17 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
         [filter, archived],
     );
 
-    const reload = useCallback(async () => {
+    useEffect(() => {
+        loadingRef.current = loading;
+    }, [loading]);
+
+    const reload = useCallback(async (fresh = false) => {
         const id = ++request.current;
+        // another view: never show (and act on) the previous view's rows while the new ones load
+        if (fresh) {
+            setItems([]);
+            setCursor(null);
+        }
         setLoading(true);
         setError(false);
         try {
@@ -136,7 +146,7 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
             skipFirst.current = false;
             return;
         }
-        reload();
+        reload(true);
     }, [enabled, reload]);
 
     const loadMore = useCallback(async () => {
@@ -188,12 +198,14 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
                         ? await axios.post<{ unread_count: number }>(route(`notifications.${action}`, ids[0]))
                         : await axios.post<{ unread_count: number }>(route('notifications.bulk'), { ids, action });
                 announceUnread(res.data.unread_count);
+                // a page fetched before this change would bring the old state back: fetch again
+                if (loadingRef.current) reload();
             } catch {
                 setItems(before);
                 throw new Error('notification action failed');
             }
         },
-        [items, archived],
+        [items, archived, reload],
     );
 
     const markAllRead = useCallback(async () => {

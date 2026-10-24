@@ -155,7 +155,7 @@ function NotificationPanel({ unreadCount, onClose, title, className }: { unreadC
                     hasMore={feed.hasMore}
                     loadingMore={feed.loadingMore}
                     onLoadMore={feed.loadMore}
-                    onRetry={feed.reload}
+                    onRetry={() => feed.reload()}
                     empty={emptyStateFor(filter)}
                     renderRow={(n) => <NotificationRow key={n.id} notification={n} onOpen={openRow} onAction={act} />}
                 />
