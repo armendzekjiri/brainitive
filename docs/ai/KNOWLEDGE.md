@@ -174,6 +174,30 @@ board access (every policy check starts with BoardPolicy::view).
 - Compare views on normalized params: the server stores `quick` in its fixed order, so the client
   serializes it in the same order (`QUICK_FILTERS`), not click order.
 
+### Bulk edit in the board list view goes through the model, once per issue (BRAI-108)
+`PATCH|DELETE boards/{board}/items/bulk` (`BoardBulkItemController` → `Support/Boards/BulkItemEdit`)
+changes up to 200 issues of **this** board (one query loads them; a missing, deleted or foreign
+id fails `item_ids`, no per-id `exists` rule). Queries grow by a small constant per issue
+(asserted in `BulkItemEditTest`): eager-load and resolve shared lookups once, never per issue.
+- **One `save()` per issue**, all fields at once, so `ItemObserver` writes one history entry per
+  issue (`moved` / `assigned` / `updated`) and any observer hook (notifications, webhooks) fires
+  once per issue, never once per field. Labels are a pivot: one `labels_changed` entry per issue; a
+  sprint move is a second save (`moveToSprint`), so it adds its own entry.
+- **Authorization:** `ItemPolicy::update` depends only on the project, so one check covers all issues;
+  `delete` is checked per issue (creators may delete their own) unless the user may delete any issue.
+  One forbidden issue = 403 for the whole request, nothing changes. The page gets `canDeleteAnyItem` (policy probe with an unsaved
+  item) so the bar disables Delete instead of hitting that 403 (Inertia would show an error modal).
+- **Status** follows `Item::moveToColumn` (`completed_at` set on entering a done column, cleared on
+  leaving) but an issue that is already done keeps its date. Moved cards go to the bottom of the
+  column. Subtasks aren't completed with their parent (no prompt in bulk).
+- **Sprint** uses `moveToSprint()` (subtree travels along); selected subtasks are skipped and
+  counted in the flash ("follow their parent's sprint"). Kanban boards refuse `sprint_id`.
+- **Notifications:** "assigned you" comes from `ItemObserver` → `Support/Notifications/Assignments`
+  (after commit, never for yourself), like every other path; the bulk code sends none itself.
+  `ItemStatusChangedNotification` goes to watchers (≠ actor) after the commit, the same rule as
+  `BoardController::moveItem` (`BulkItemEdit::notifyStatusChange()`).
+- `bulk` routes are registered **before** `items/{item}`; otherwise `bulk` would bind as an item id.
+
 ### Explicit route binders run before implicit ones
 In `Route::bind('page' | 'bookmark', …)` the `{workspace}` / `{project}` parameters are still raw
 slugs — an `instanceof Project` check there is always false. `AppServiceProvider::routeProject()` /
