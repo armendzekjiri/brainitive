@@ -13,6 +13,7 @@ const member = USERS.member.name;
 
 test.describe('team time overview', () => {
     test('the admin filters two projects, groups by person and downloads the Excel', async ({ page, memberPage }) => {
+        test.slow(); // two projects, four work logs, several reloads and a download
         const web = await projectWithIssue(page, uid('Checkout bug'));
         const app = await projectWithIssue(page, uid('Login screen'));
         const maxId = await memberId(page);
@@ -83,6 +84,7 @@ test.describe('team time overview', () => {
     });
 
     test('a client gets both projects assigned and the overview filters by it', async ({ page }) => {
+        test.slow(); // two projects, a client, settings and the overview
         const web = await projectWithIssue(page, uid('Newsletter'));
         const app = await projectWithIssue(page, uid('Push'));
         await logWork(page, web.slug, web.itemId, '1h');
