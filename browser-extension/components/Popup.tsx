@@ -4,10 +4,10 @@ import { send } from '@/lib/messages';
 import { isRestrictedUrl, readSelection } from '@/lib/page';
 import { getLastMode, setLastMode, takePendingCapture } from '@/lib/storage';
 import type { Created, Mode } from '@/lib/types';
-import { Bookmark, CheckCircle2, Code2, ExternalLink, FileText, ListTodo, Loader2, LogOut, PanelRight, RefreshCw, SquareKanban } from 'lucide-react';
+import { Bookmark, CheckCircle2, Code2, ExternalLink, FileText, Inbox, ListTodo, Loader2, LogOut, PanelRight, RefreshCw, SquareKanban } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
-import { BookmarkForm, DocForm, IssueForm, type PageContext, SnippetForm, TaskForm } from './forms';
+import { BookmarkForm, DocForm, InboxForm, IssueForm, type PageContext, SnippetForm, TaskForm } from './forms';
 import SignIn from './SignIn';
 
 const MODES: { mode: Mode; label: string; icon: typeof SquareKanban }[] = [
@@ -16,6 +16,7 @@ const MODES: { mode: Mode; label: string; icon: typeof SquareKanban }[] = [
     { mode: 'doc', label: 'Doc', icon: FileText },
     { mode: 'task', label: 'Task', icon: ListTodo },
     { mode: 'snippet', label: 'Snippet', icon: Code2 },
+    { mode: 'inbox', label: 'Inbox', icon: Inbox },
 ];
 
 /** Popup: the toolbar button, a context-menu hand-off, or the same page in a small window. */
@@ -147,13 +148,14 @@ function Capture({ server }: { server: string }) {
                         </button>
                     </div>
                 </div>
-            ) : !page || !mode || !destinations ? (
+            ) : !page || !mode || (!destinations && mode !== 'inbox') ? (
                 <div className="center">
                     {error ? <div className="banner">{error}</div> : <Loader2 className="spin muted" size={20} />}
                 </div>
             ) : (
                 (() => {
-                    const props = { page, destinations, onCreated: (c: Created, label: string) => setCreated({ created: c, label }) };
+                    // the inbox needs no destination: it still works when the list couldn't load
+                    const props = { page, destinations: destinations ?? { workspaces: [] }, onCreated: (c: Created, label: string) => setCreated({ created: c, label }) };
                     switch (mode) {
                         case 'issue':
                             return <IssueForm key="issue" {...props} />;
@@ -165,6 +167,8 @@ function Capture({ server }: { server: string }) {
                             return <TaskForm key="task" {...props} />;
                         case 'snippet':
                             return <SnippetForm key="snippet" {...props} />;
+                        case 'inbox':
+                            return <InboxForm key="inbox" {...props} />;
                     }
                 })()
             )}

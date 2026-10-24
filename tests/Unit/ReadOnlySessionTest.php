@@ -37,8 +37,11 @@ class ReadOnlySessionTest extends TestCase
         $this->assertSame(['errors' => 'from the form submit'], unserialize($handler->read($session->getId())));
     }
 
-    public function test_the_sticky_notes_fetch_uses_it(): void
+    public function test_the_background_fetches_use_it(): void
     {
-        $this->assertContains(ReadOnlySession::class, Route::getRoutes()->getByName('page-sticky-notes.index')->gatherMiddleware());
+        // fired on page load / polled: sticky notes, the bell's count and its list
+        foreach (['page-sticky-notes.index', 'notifications.unread-count', 'notifications.index'] as $name) {
+            $this->assertContains(ReadOnlySession::class, Route::getRoutes()->getByName($name)->gatherMiddleware(), $name);
+        }
     }
 }

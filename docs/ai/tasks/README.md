@@ -43,6 +43,8 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Quick capture: private inbox + convert to content (BRAI-70)](./feat-quick-capture.md) | done |
+| [Linked content and backlinks (BRAI-71)](./feat-backlinks.md) | done |
 | [Helpdesk templates (BRAI-92)](./feat-helpdesk-templates.md) | done |
 | [Lead Generation forms (BRAI-93)](./feat-lead-forms.md) | done |
 | [Security hardening, batch 1](./fix-security-hotfix-1.md) | done |
@@ -52,6 +54,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 | [Saved board views (BRAI-78)](./feat-saved-board-views.md) | done |
 | [CI test gate + pre-release flow (BRAI-95)](./ci-test-gate.md) | in progress |
 | [Playwright e2e suite (BRAI-96)](./test-e2e-playwright.md) | done |
+| [Small fixes from the e2e suite (BRAI-97)](./fix-e2e-findings.md) | done |
 | [Template gallery + more project templates (BRAI-91)](./feat-template-gallery.md) | done |
 | [Project templates (BRAI-72)](./feat-project-templates.md) | done |
 | [Board custom fields (BRAI-77)](./feat-board-custom-fields.md) | done |

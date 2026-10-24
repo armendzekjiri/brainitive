@@ -1,12 +1,13 @@
 # Brainitive browser extension
 
 Save the page you're on to Brainitive: an **issue** (with a screenshot), a **bookmark**, a
-clipped **doc** or a **task**. Works in Chrome, Edge and Firefox, with Brainitive Cloud and
+clipped **doc**, a **task** or a **snippet** — or just **save it to your inbox** and organize it later
+in the app (Captures). Works in Chrome, Edge and Firefox, with Brainitive Cloud and
 self-hosted servers.
 
 | Feature | How |
 |---|---|
-| Popup | Toolbar button or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>: Issue / Bookmark / Doc / Task, prefilled from the page and your selection |
+| Popup | Toolbar button or <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>: Issue / Bookmark / Doc / Task / Snippet / Inbox, prefilled from the page and your selection |
 | Screenshots | "Visible area", or "Select area" / <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> to drag a rectangle; attached to the new issue |
 | Doc clipping | Mozilla Readability + Turndown → Markdown (article, selection or just the link), draft or published |
 | Right-click menu | Save link, create issue from selection / page, clip selection / page, screenshot an area |

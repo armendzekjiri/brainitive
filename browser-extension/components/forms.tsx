@@ -531,3 +531,41 @@ export function SnippetForm({ page, destinations, onCreated }: FormProps) {
         </Form>
     );
 }
+
+// ---------------------------------------------------------------------------------------
+// Inbox (BRAI-70): save now, organize later in Brainitive → Captures
+
+export function InboxForm({ page, onCreated }: FormProps) {
+    const [text, setText] = useState(() => {
+        const selected = page.selectionText.trim();
+        return selected ? `${page.title}\n\n${quote(selected)}`.trim() : page.title;
+    });
+    const [url, setUrl] = useState(page.linkUrl ?? page.url);
+    const { busy, error, run } = useSubmit();
+
+    const submit = () =>
+        run(async () => {
+            const link = url.trim();
+            const created = await api.saveToInbox({
+                text: text.trim(),
+                url: /^https?:\/\//i.test(link) ? link : undefined,
+                source: page.title.trim().slice(0, 255) || undefined,
+            });
+            onCreated(created, 'Saved to your inbox');
+        });
+
+    return (
+        <Form onSubmit={submit} error={error}>
+            <p className="hint" style={{ margin: 0 }}>Private to you. Organize it later in Brainitive under Captures.</p>
+            <label className="field">
+                <span>Idea</span>
+                <textarea value={text} onChange={(e) => setText(e.target.value)} rows={5} maxLength={20000} required autoFocus />
+            </label>
+            <label className="field">
+                <span>Link</span>
+                <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://" />
+            </label>
+            <Submit busy={busy} label="Save to inbox" disabled={!text.trim()} />
+        </Form>
+    );
+}

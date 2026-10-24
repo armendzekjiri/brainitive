@@ -94,6 +94,7 @@ import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { safeHtmlProp } from '@/lib/sanitize';
 import NewTicketDialog from '@/components/helpdesk/NewTicketDialog';
 import ResolveTicketDialog from '@/components/helpdesk/ResolveTicketDialog';
+import RelatedContent from '@/components/references/RelatedContent';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -835,6 +836,9 @@ function TicketEditModal({
                                 </dl>
                             </section>
                             )}
+
+                            {/* Related content + backlinks (BRAI-71) */}
+                            {ticket && <RelatedContent workspaceSlug={workspace.slug} projectSlug={project.slug} type="ticket" id={ticket.id} />}
 
                             {/* Attachments (only when Attachments section is enabled in helpdesk settings) */}
                             {!((helpdesk.settings as Record<string, unknown>)?.['default_field_attachments'] as { hidden?: boolean } | undefined)?.hidden && (
