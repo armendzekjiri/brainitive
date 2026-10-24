@@ -1,7 +1,7 @@
 # Notification coverage (BRAI-103)
 
 **Branch:** feat/notification-coverage (from release/v1.39.0)
-**Status:** in-progress
+**Status:** done
 **Started:** 2026-10-24
 **Board card:** BRAI-103 · contract: [`release-v1.39.0.md`](release-v1.39.0.md) ticket 2
 
