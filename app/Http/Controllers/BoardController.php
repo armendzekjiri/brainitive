@@ -17,7 +17,6 @@ use App\Models\Release;
 use App\Models\Sprint;
 use App\Models\User;
 use App\Models\Workspace;
-use App\Notifications\ItemAssignedNotification;
 use App\Notifications\ItemStatusChangedNotification;
 use App\Rules\ProjectMember;
 use App\Support\Billing\TimeLog;
@@ -456,14 +455,7 @@ class BoardController extends Controller
             $item->labels()->sync($validLabels);
         }
 
-        // Notify assignee if assigned to someone else
-        $newAssigneeId = $item->assigned_to;
-        if ($newAssigneeId && $newAssigneeId !== $request->user()->id) {
-            $assignee = User::find($newAssigneeId);
-            if ($assignee) {
-                $assignee->notify(new ItemAssignedNotification($item, $request->user()));
-            }
-        }
+        // The assignee hears about it from ItemObserver (Support\Notifications\Assignments), like every path.
 
         // Process mentions inside description on item creation
         if (! empty($validated['description'])) {
@@ -798,26 +790,14 @@ class BoardController extends Controller
                 : Item::parseDuration($validated['original_estimate']);
         }
 
-        $oldAssigneeId = $item->assigned_to;
+        $previousDescription = $item->description;
 
+        // A new assignee hears about it from ItemObserver (Support\Notifications\Assignments).
         $item->update($validated);
 
-        // Notify new assignee if changed
-        $newAssigneeId = $item->assigned_to;
-        if (
-            $newAssigneeId
-            && $newAssigneeId !== $oldAssigneeId
-            && $newAssigneeId !== $request->user()->id
-        ) {
-            $assignee = User::find($newAssigneeId);
-            if ($assignee) {
-                $assignee->notify(new ItemAssignedNotification($item, $request->user()));
-            }
-        }
-
-        // Process mentions in description
+        // Mentions: only people who weren't mentioned in the description before this save
         if (isset($validated['description'])) {
-            ItemMentions::notify($validated['description'], $item, $request->user());
+            ItemMentions::notify($validated['description'], $item, $request->user(), $previousDescription);
         }
 
         return back()->with('success', 'Item updated successfully.');

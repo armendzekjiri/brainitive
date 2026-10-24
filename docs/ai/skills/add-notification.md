@@ -1,74 +1,97 @@
-# Skill: Add a notification (in-app + browser push)
+# Skill: Add a notification (in-app + browser push + email)
 
-Notifications are stored in the DB (in-app bell) and optionally delivered as a browser web
-push. Template: `app/Notifications/ItemAssignedNotification.php`.
+Notifications are stored in the DB (in-app bell), and optionally delivered as a browser web push
+and/or an email. **Which channels** a user gets is their choice per *category* (Profile →
+Notifications), from `app/Notifications/NotificationCatalog.php` (v1.39.0). Template for a new
+type: any subclass of `app/Notifications/CatalogNotification.php`, e.g.
+`ItemCommentedNotification.php`.
 
-## 1. Create the notification — `app/Notifications/WidgetReadyNotification.php`
+## 1. Register the type in the catalog
+`NotificationCatalog::TYPES` maps every stored `type` to one of the `CATEGORIES` (mentions,
+assignments, comments, status, reminders, pages, sprints, helpdesk, leads, workspace).
+**Every database notification type must be listed:** `NotificationCatalog::category()` throws on
+an unknown type, and `CatalogNotificationContractTest` checks the new ones.
+
+```php
+'widget_ready' => 'status',
+```
+
+## 2. Create the class: extend `CatalogNotification`
 ```php
 namespace App\Notifications;
 
 use App\Models\User;
 use App\Models\Widget;
-use App\Notifications\Concerns\SendsWebPush;
-use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Notification;
 
-class WidgetReadyNotification extends Notification
+/** A widget you own is ready (category: status). */
+class WidgetReadyNotification extends CatalogNotification
 {
-    use Queueable, SendsWebPush;
-
     public function __construct(
         public readonly Widget $widget,
         public readonly User $actor,
     ) {}
 
-    public function via(object $notifiable): array
+    public function catalogType(): string
     {
-        // 'database' = in-app bell; SendsWebPush adds browser push only for User notifiables
-        return $this->withWebPush($notifiable, ['database']);
+        return 'widget_ready';
     }
 
-    public function toDatabase(object $notifiable): array
+    protected function message(object $notifiable): array
     {
         return [
-            'type'         => 'widget_ready',
-            'widget_name'  => $this->widget->name,
-            'widget_url'   => route('widgets.show', [...]),
-            'actor_name'   => $this->actor->name,
-            'actor_avatar' => $this->actor->avatar_display,
+            'title' => "{$this->actor->name} finished {$this->widget->name}", // one worded line
+            'body' => $this->widget->summary,          // optional; HTML is stripped, ≤ 200 chars
+            'url' => route('widgets.show', [...]),     // absolute app URL
+            'actor' => $this->actor,                   // optional → actor_name / actor_avatar
+            'project_name' => 'Website · Main Board',  // optional context line
+            'subject_key' => 'WEB-12',                 // optional chip
         ];
-    }
-
-    public function toWebPush(object $notifiable, $notification)
-    {
-        return $this->webPush(
-            "{$this->actor->name} finished a widget",
-            $this->widget->name,
-            route('widgets.show', [...]),
-        );
     }
 }
 ```
 
-## 2. Conventions
-- **Always queue** (`use Queueable`) so requests stay fast.
-- **Browser push:** use the `App\Notifications\Concerns\SendsWebPush` trait. `withWebPush(
-  $notifiable, ['database'])` appends `WebPushChannel` **only when the notifiable is a
-  `User`** — never for `TicketContact` (external customers have no push subscriptions). Build
-  the message with `$this->webPush($title, $body, $url)` (sets app icon/badge + click URL).
-- **In-app payload** (`toDatabase`): include a `type` discriminator, display fields, a `*_url`
-  to click through, and `actor_avatar` (use the model's `avatar_display` append). The frontend
-  bell renders by `type`.
-- Read notifications via `NotificationController` (`/api/notifications`, unread-count,
-  mark-read). Push subscriptions are managed by `PushSubscriptionController`.
+The base class gives you, for free:
+- `ShouldQueue` + `Queueable` (staging/e2e run the sync queue);
+- `via()` = `RespectsPreferences::channelsFor($notifiable, type)`: the user's choice for the
+  category (`database`, `WebPushChannel`, `mail`); non-User notifiables get mail only;
+- `toDatabase()` = **the payload contract**, exactly these keys:
+  `type, title, body, url, actor_name, actor_avatar, project_name, subject_key`. The bell renders
+  any type generically from them, so a new type needs no frontend change;
+- `toWebPush()` (title, body or context, url) and a generic `toMail()` (Markdown-safe: user text
+  goes through `plain()`).
 
-## 3. Send it
-```php
-$user->notify(new WidgetReadyNotification($widget, $request->user()));
-```
-Email-only notifiables (e.g. ticket contacts) just won't get the push channel.
+Older types (`item_assigned`, `mentioned`, `ticket_*`, `lead_created`, …) keep their own keys:
+rows in the DB must keep rendering. Don't change their payloads; new types use the contract.
 
-## 4. Verify
-Run the queue (`composer run dev` includes `queue:listen`), trigger the event, confirm the
-bell shows the entry and (if push is enabled in the browser) a notification appears. Add a
-test asserting the notification is sent with the right channels.
+## 3. Send it from ONE place
+Put the dispatch where every path passes, not in each controller:
+
+| What | Where it's sent |
+|---|---|
+| Issue assigned (`item_assigned`) | `ItemObserver` → `Support\Notifications\Assignments::item()` |
+| Task assigned (`task_assigned`) | `TaskListItemObserver` → `Assignments::task()` |
+| Lead assigned (`lead_assigned`) | `LeadController::update` → `Assignments::lead()` |
+| Comment (`item_commented`) + comment mentions | `Support\Boards\ItemComments::add()` → `ItemCommentNotifications` |
+| Issue description mentions (`mentioned`) | `BoardController` → `ItemMentions::notify($html, $item, $actor, $previousHtml)` |
+| Page mentions (`mentioned`) | `Page::saveDraft()` → `Support\Notifications\PageMentions` |
+| Due tomorrow / overdue (`item_due`) | `app:send-item-reminders` (`sent_item_reminders` dedup) |
+| Sprints (`sprint_started/completed`) | `SprintLifecycle` → `SprintNotifications` |
+| Workspace (`invitation_accepted`, `workspace_role_changed`) | `WorkspaceNotifications` (both invite-accept paths, `updateMemberRole`) |
+| Ticket status (`ticket_status_changed`) | `TicketController::move` |
+
+Rules every sender follows (KNOWLEDGE → "Notification coverage"):
+- **Never notify the actor**, and never someone who can't open the project (`hasProjectAccess`).
+- **Never twice for one event:** a mentioned person gets the mention, not also "commented on";
+  a re-save only notifies people who are new in the content.
+- **The actor is the signed-in user.** No actor (seeders, console) → assignment notifications stay
+  silent.
+- Inside a transaction, send with `DB::afterCommit(...)` so a rollback tells nobody.
+
+## 4. Test it
+- PHPUnit with `Notification::fake()` (real web push needs GMP/BCMath): recipients, no
+  self-notify, dedupe, and `via()` following preferences
+  (`$user->update(['notification_preferences' => ['status' => ['in_app' => true, 'push' => false, 'email' => false]]])`).
+  Add the class to `CatalogNotificationContractTest::notifications()`.
+- e2e: assert on the bell's feed with `e2e/helpers/notifications.ts`
+  (`expectNotification(page, n => n.type === 'widget_ready' && …)`), see
+  `e2e/tests/notifications-coverage.spec.ts`.

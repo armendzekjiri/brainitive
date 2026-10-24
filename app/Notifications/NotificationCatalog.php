@@ -51,6 +51,16 @@ final class NotificationCatalog
         'ticket_created' => 'helpdesk',
         'ticket_reply' => 'helpdesk',
         'lead_created' => 'leads',
+        // BRAI-103 (notification coverage): CatalogNotification subclasses, payload contract keys
+        'item_commented' => 'comments',
+        'item_due' => 'reminders',
+        'task_assigned' => 'assignments',
+        'lead_assigned' => 'assignments',
+        'sprint_started' => 'sprints',
+        'sprint_completed' => 'sprints',
+        'invitation_accepted' => 'workspace',
+        'workspace_role_changed' => 'workspace',
+        'ticket_status_changed' => 'helpdesk',
     ];
 
     public static function category(string $type): string

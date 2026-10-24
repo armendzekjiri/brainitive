@@ -488,6 +488,32 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   maps every `data.type` to a sentence. The bell and the page used to fall back to
   "{actor} moved {item_key}", so ticket notifications (`ticket_*`, with no `item_*` keys)
   showed as "moved". Add a case for each new type.
+- **Notification coverage (BRAI-103, v1.39.0): who is told, and never twice.**
+  - **Assignments fire from the observers, nowhere else.** `ItemObserver::created/updated` (on an
+    `assigned_to` change) → `Support\Notifications\Assignments::item()` sends `ItemAssignedNotification`;
+    `TaskListItemObserver` → `Assignments::task()` sends `task_assigned`. So the board UI, bulk edit,
+    MCP create/update, meeting-note action items, plan import, whiteboard cards and duplicates all
+    notify exactly once. `BoardController::storeItem/updateItem` no longer send it: don't add a
+    controller-side send back. Leads: `LeadController::update` → `Assignments::lead()`.
+  - **The actor is `auth()->user()`.** Without one (seeders, `E2eSeeder`, console) assignment
+    notifications stay silent; assigning yourself is silent; assignees without project access are
+    skipped. Sent with `DB::afterCommit`, so a rolled-back import tells nobody.
+  - **Mentions are diffed.** `ItemMentions::notify($html, $item, $actor, $previousHtml)` only tells
+    people new compared with the previous description (re-saving re-notified everyone before).
+    Page mentions are sent **on save** by `Page::saveDraft()` → `PageMentions` (diff of the content
+    before the save), no longer at insert time from the editor (`MentionsPlugin` doesn't POST
+    `notify-mention` any more; that endpoint is unused).
+  - **Comments:** `ItemComments::add()` → `ItemCommentNotifications`: watchers + assignee + reporter,
+    minus the author, minus everyone @mentioned in that comment (they get the mention instead).
+  - **Due dates:** `app:send-item-reminders` sends `item_due` "due tomorrow" from 08:00 the day before
+    and "overdue" once the due time (or the end of the due day) passed, both in the assignee's
+    `localTimezone()`. Dedup key `item_due:{id}:{kind}:{due_date}` in `sent_item_reminders`, so a
+    new due date is reminded again. Overdue only within 2 days, so old issues never flood anyone.
+  - **Sprints:** recipients are the sprint's assignees, read **before** `Sprint::complete()` moves
+    open issues out.
+  - New types extend `CatalogNotification` and store the payload contract
+    (`type, title, body, url, actor_name, actor_avatar, project_name, subject_key`); e2e asserts on
+    `/api/notifications` (`e2e/helpers/notifications.ts`), not on the bell's wording.
 - **Project data hangs off `project_id`; only `projects` stores `workspace_id`.** Moving a
   project is a single update (see `ProjectTransfer`). Keep it that way: a new project-level
   table must not copy `workspace_id`, or moves (and access checks) drift. Workspace-level
