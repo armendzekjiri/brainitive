@@ -13,6 +13,18 @@ use App\Support\Helpdesks\Mail\TicketMailer;
  */
 final class InboundFilters
 {
+    /** Senders of "confirm this forwarding address" mails (Gmail); never filtered, never acknowledged. */
+    public const FORWARDING_CONFIRMATIONS = ['forwarding-noreply@google.com'];
+
+    /** No acknowledgment to addresses nobody reads (and no answer loops with their bounces). */
+    public static function isNoReply(string $email): bool
+    {
+        $local = strtolower((string) strstr($email, '@', true));
+
+        return in_array(strtolower($email), self::FORWARDING_CONFIRMATIONS, true)
+            || (bool) preg_match('/^(no-?reply|do-?not-?reply|donotreply|noreply-.*|.*-noreply)$/', $local);
+    }
+
     /** Why the message is ignored, or null. */
     public static function ignoreReason(Helpdesk $helpdesk, InboundMessage $message): ?string
     {
@@ -21,6 +33,12 @@ final class InboundFilters
 
         if (! filter_var($from, FILTER_VALIDATE_EMAIL)) {
             return 'invalid_sender';
+        }
+
+        // Setting up forwarding (BRAI-124): the provider's confirmation code must arrive as a ticket,
+        // even if it is marked as machine-generated.
+        if (in_array($from, self::FORWARDING_CONFIRMATIONS, true)) {
+            return null;
         }
 
         // RFC 3834: anything but "no" is machine-generated (auto-replied, auto-generated, auto-notified)

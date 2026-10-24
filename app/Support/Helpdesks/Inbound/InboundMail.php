@@ -193,7 +193,7 @@ final class InboundMail
 
         // The customer's confirmation: a threaded auto-reply from the helpdesk address, or the usual
         // notification. A few per address and hour, like the public form (no mail cannon).
-        if (RateLimiter::attempt('ticket-confirmation:'.$helpdesk->id.':'.sha1($from), 3, fn () => true, 3600)) {
+        if (! InboundFilters::isNoReply($from) && RateLimiter::attempt('ticket-confirmation:'.$helpdesk->id.':'.sha1($from), 3, fn () => true, 3600)) {
             if (! TicketMailer::queueAcknowledgment($ticket)) {
                 $contact->notify(new TicketCreatedNotification($ticket));
             }

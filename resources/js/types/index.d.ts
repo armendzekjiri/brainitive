@@ -912,8 +912,54 @@ export interface TicketReply {
     user?: User;
     contact?: TicketContact;
     attachments?: TicketAttachment[];
+    /** Sent / received by email (BRAI-79): Message-ID and, for agent replies, the delivery state. */
+    email_message_id?: string | null;
+    email_status?: 'sending' | 'sent' | 'failed' | null;
+    email_error?: string | null;
     created_at: string;
     updated_at: string;
+}
+
+/** Helpdesk settings → Email → Connected mailbox (BRAI-79). Passwords are write-only. */
+export interface HelpdeskMailboxSettings {
+    enabled: boolean;
+    email_address: string;
+    from_name: string | null;
+    imap_host: string;
+    imap_port: number;
+    imap_encryption: 'ssl' | 'starttls' | 'none';
+    imap_username: string;
+    has_imap_password: boolean;
+    imap_folder: string;
+    processed_folder: string | null;
+    smtp_mode: 'app' | 'smtp';
+    smtp_host: string | null;
+    smtp_port: number | null;
+    smtp_encryption: 'ssl' | 'starttls' | 'none' | null;
+    smtp_username: string | null;
+    has_smtp_password: boolean;
+    last_checked_at: string | null;
+    last_success_at: string | null;
+    last_error: string | null;
+}
+
+/** One received email in the mailbox log (any transport). */
+export interface HelpdeskInboundEmailRow {
+    id: number;
+    transport: 'imap' | 'forwarding';
+    from_email: string | null;
+    subject: string | null;
+    status: 'ticket_created' | 'reply_added' | 'duplicate' | 'ignored' | 'rejected' | 'failed';
+    reason: string | null;
+    ticket_key: string | null;
+    created_at: string | null;
+}
+
+/** GET helpdesks.mailbox.show */
+export interface HelpdeskMailboxPayload {
+    mailbox: HelpdeskMailboxSettings | null;
+    recent: HelpdeskInboundEmailRow[];
+    options: { imap_ports: number[]; smtp_ports: number[]; allow_unencrypted: boolean; app_from_address: string };
 }
 
 export interface TicketAttachment {
