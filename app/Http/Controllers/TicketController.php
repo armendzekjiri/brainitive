@@ -22,6 +22,7 @@ use App\Rules\ProjectMember;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Helpdesks\HelpdeskForm;
+use App\Support\Helpdesks\Mail\TicketMailer;
 use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -112,7 +113,7 @@ class TicketController extends Controller
             User::find($ticket->assigned_to)?->notify(new TicketAssignedNotification($ticket, $request->user()));
         }
 
-        DomainEvents::emit($workspace, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'agent']); // webhooks (BRAI-104)
+        DomainEvents::emit($workspace, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'agent'], subject: $ticket); // webhooks (BRAI-104) + automation rules (BRAI-63)
 
         if ($request->boolean('notify_contact', true)) {
             $contact->notify(new TicketCreatedNotification($ticket));
@@ -184,7 +185,7 @@ class TicketController extends Controller
         // with any email address).
         $accessToken = $ticket->publicAccessToken();
 
-        DomainEvents::emit($project->workspace_id, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'portal']); // webhooks (BRAI-104)
+        DomainEvents::emit($project->workspace_id, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'portal'], subject: $ticket); // webhooks (BRAI-104) + automation rules (BRAI-63)
 
         // The public form must not become a mail cannon: a few confirmations per address and hour
         if (RateLimiter::attempt('ticket-confirmation:'.$helpdesk->id.':'.sha1(strtolower($contact->email)), 3, fn () => true, 3600)) {
@@ -332,8 +333,9 @@ class TicketController extends Controller
             'is_internal_note' => $validated['is_internal_note'] ?? false,
         ]);
 
-        // Notify contact if reply is not internal
-        if (! $reply->is_internal_note && $ticket->contact) {
+        // Notify contact if reply is not internal. A helpdesk with a connected mailbox emails the
+        // reply itself, threaded (BRAI-79) — then the notification would be a second mail.
+        if (! $reply->is_internal_note && $ticket->contact && ! TicketMailer::queueReply($ticket, $reply)) {
             $ticket->contact->notify(new TicketReplyNotification($ticket, $reply, $request->user()));
         }
 

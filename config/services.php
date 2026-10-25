@@ -54,4 +54,23 @@ return [
         'allow_private_endpoints' => env('AI_ALLOW_PRIVATE_ENDPOINTS', false),
     ],
 
+    // Email → helpdesk through a forwarding address (BRAI-124, v1.40.0). Mail to
+    // <helpdesk>-<random>@INBOUND_MAIL_DOMAIN reaches a provider (Postmark or Mailgun), which posts
+    // it to /api/inbound-mail/{provider}. Off (404) until the domain and that provider's secret are
+    // set. Setup: docs/self-hosting.md → "Email to helpdesk".
+    'inbound_mail' => [
+        'domain' => env('INBOUND_MAIL_DOMAIN'),
+        // which provider the setup steps describe: postmark | mailgun
+        'provider' => env('INBOUND_MAIL_PROVIDER', 'postmark'),
+        // Postmark: the password of the webhook URL's basic auth, or ?token=… in the URL
+        'postmark_token' => env('INBOUND_MAIL_POSTMARK_TOKEN'),
+        // Mailgun: the HTTP webhook signing key (Sending → Webhooks)
+        'mailgun_signing_key' => env('INBOUND_MAIL_MAILGUN_SIGNING_KEY'),
+        // a Mailgun signature older (or newer) than this many seconds is refused
+        'replay_window' => (int) env('INBOUND_MAIL_REPLAY_WINDOW', 900),
+        'max_attachment_kb' => (int) env('INBOUND_MAIL_MAX_ATTACHMENT_KB', 10240),
+        'max_attachments' => (int) env('INBOUND_MAIL_MAX_ATTACHMENTS', 10),
+        'max_total_kb' => (int) env('INBOUND_MAIL_MAX_TOTAL_KB', 30720),
+    ],
+
 ];

@@ -276,8 +276,67 @@ export interface Item {
     time_spent?: number;
     /** Custom field values — one row per field that has a value (BRAI-77). */
     field_values?: ItemFieldValue[];
+    /** Set when a recurring template created this issue (BRAI-123): the card's "Repeats weekly" badge. */
+    recurring_occurrence?: { recurring_issue?: { id: number; badge_label: string } | null } | null;
     created_at: string;
     updated_at: string;
+}
+
+// ── Recurring issues (v1.40.0, BRAI-123) ──────────────────────────────────────
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+/** The schedule fields (App\Support\RecurringIssues\RecurrenceSchedule). */
+export interface RecurrenceRule {
+    frequency: RecurrenceFrequency;
+    interval: number;
+    /** ISO weekdays, 1 = Monday … 7 = Sunday (weekly). */
+    weekdays: number[];
+    monthly_mode: 'day' | 'weekday' | null;
+    /** 1–31; 31 = the last day of shorter months. */
+    month_day: number | null;
+    /** 1–4, -1 = last. */
+    month_week: number | null;
+    /** 1–7, 0 = any weekday (Mon–Fri). */
+    month_weekday: number | null;
+    start_date: string;
+    end_date: string | null;
+    max_occurrences: number | null;
+}
+
+/** The issue a template creates. */
+export interface RecurringIssueFields {
+    title: string;
+    description: string | null;
+    item_type_id: number | null;
+    priority_id: number | null;
+    assigned_to: number | null;
+    label_ids: number[];
+    /** null = the board's first column. */
+    column_id: number | null;
+    /** Due date = occurrence + N days; null = none. */
+    due_in_days: number | null;
+}
+
+export interface RecurringIssueTemplate extends RecurrenceRule, RecurringIssueFields {
+    id: number;
+    timezone: string;
+    occurrences_count: number;
+    last_occurrence_date: string | null;
+    next_occurrence_date: string | null;
+    last_error: string | null;
+    paused: boolean;
+    finished: boolean;
+    summary: string;
+    badge_label: string;
+    creator: { id: number; name: string } | null;
+}
+
+export interface RecurringIssueOptions {
+    columns: { id: number; name: string }[];
+    types: { id: number; name: string; is_default: boolean }[];
+    priorities: { id: number; name: string; is_default: boolean }[];
+    members: { id: number; name: string }[];
+    labels: { id: number; name: string; color: string }[];
 }
 
 export type ItemFieldType = 'text' | 'number' | 'date' | 'checkbox' | 'select';
@@ -885,6 +944,35 @@ export interface Ticket {
     attachments?: TicketAttachment[];
     created_at: string;
     updated_at: string;
+    /** SLA (BRAI-125): computed by TicketSla; null when the helpdesk has no target for the ticket. */
+    first_responded_at?: string | null;
+    sla_first_response_due_at?: string | null;
+    sla_first_response_warn_at?: string | null;
+    sla_resolution_due_at?: string | null;
+    sla_resolution_warn_at?: string | null;
+    sla_paused_at?: string | null;
+    sla_paused_minutes?: number;
+    sla_breached_at?: string | null;
+    sla_first_response_breached?: boolean;
+    sla_resolution_breached?: boolean;
+}
+
+/** Helpdesk SLA policy as the settings tab edits it (BRAI-125, HelpdeskSlaController). */
+export type SlaUnit = 'minutes' | 'hours' | 'days';
+export interface SlaTarget {
+    value: number | string | null;
+    unit: SlaUnit;
+}
+export interface SlaPolicy {
+    exists: boolean;
+    enabled: boolean;
+    /** key: priority id, or "none" for tickets without a priority */
+    targets: Record<string, { first_response: SlaTarget | null; resolution: SlaTarget | null }>;
+    /** null = 24/7; ISO weekdays (1 = Monday); `to` before `from` = overnight */
+    business_hours: { days: number[]; from: string; to: string } | null;
+    timezone: string;
+    pause_column_ids: number[];
+    warn_percent: number | null;
 }
 
 export interface TicketContact {
@@ -912,8 +1000,54 @@ export interface TicketReply {
     user?: User;
     contact?: TicketContact;
     attachments?: TicketAttachment[];
+    /** Sent / received by email (BRAI-79): Message-ID and, for agent replies, the delivery state. */
+    email_message_id?: string | null;
+    email_status?: 'sending' | 'sent' | 'failed' | null;
+    email_error?: string | null;
     created_at: string;
     updated_at: string;
+}
+
+/** Helpdesk settings → Email → Connected mailbox (BRAI-79). Passwords are write-only. */
+export interface HelpdeskMailboxSettings {
+    enabled: boolean;
+    email_address: string;
+    from_name: string | null;
+    imap_host: string;
+    imap_port: number;
+    imap_encryption: 'ssl' | 'starttls' | 'none';
+    imap_username: string;
+    has_imap_password: boolean;
+    imap_folder: string;
+    processed_folder: string | null;
+    smtp_mode: 'app' | 'smtp';
+    smtp_host: string | null;
+    smtp_port: number | null;
+    smtp_encryption: 'ssl' | 'starttls' | 'none' | null;
+    smtp_username: string | null;
+    has_smtp_password: boolean;
+    last_checked_at: string | null;
+    last_success_at: string | null;
+    last_error: string | null;
+}
+
+/** One received email in the mailbox log (any transport). */
+export interface HelpdeskInboundEmailRow {
+    id: number;
+    transport: 'imap' | 'forwarding';
+    from_email: string | null;
+    subject: string | null;
+    status: 'ticket_created' | 'reply_added' | 'duplicate' | 'ignored' | 'rejected' | 'failed';
+    reason: string | null;
+    ticket_key: string | null;
+    created_at: string | null;
+}
+
+/** GET helpdesks.mailbox.show */
+export interface HelpdeskMailboxPayload {
+    mailbox: HelpdeskMailboxSettings | null;
+    recent: HelpdeskInboundEmailRow[];
+    options: { imap_ports: number[]; smtp_ports: number[]; allow_unencrypted: boolean; app_from_address: string };
 }
 
 export interface TicketAttachment {
@@ -1651,7 +1785,21 @@ export interface InsightsProjectRow {
 
 export interface InsightsHelpdesk {
     tickets: { created: number; resolved: number; open: number; median_resolution_hours: number | null };
-    helpdesks: { id: number; name: string; project: string; created: number; resolved: number; open: number; url: string }[];
+    /** BRAI-125: breaches due in the range; met % of the tickets with an SLA resolved in the range */
+    sla: { breaches: number; resolved: number; met: number; met_percent: number | null };
+    helpdesks: {
+        id: number;
+        name: string;
+        project: string;
+        created: number;
+        resolved: number;
+        open: number;
+        sla_breaches: number;
+        sla_resolved: number;
+        sla_met: number;
+        sla_met_percent: number | null;
+        url: string;
+    }[];
     leads: { total: number; views: number; starts: number; submits: number };
     forms: {
         id: number;
@@ -1837,4 +1985,101 @@ export interface RecentContentEntry {
     updated_at: string;
     is_whiteboard?: boolean;
     icon?: string | null;
+}
+
+// ── Workflow automation (v1.40.0, BRAI-63; AutomationController) ────────────
+export type AutomationSubject = 'item' | 'ticket';
+export type AutomationValue = number | string | null;
+
+export interface AutomationCondition {
+    type: string;
+    value: AutomationValue;
+}
+
+export interface AutomationAction {
+    type: string;
+    value: AutomationValue;
+    text?: string | null;
+}
+
+export interface AutomationRule {
+    id: number;
+    name: string;
+    enabled: boolean;
+    version: number;
+    trigger: string;
+    trigger_config: { column_id?: number | null };
+    conditions: AutomationCondition[];
+    actions: AutomationAction[];
+    /** The rule in words ("Issue created" / "Board is Main Board" / "Assign to Max Member"). */
+    summary: { when: string; if: string[]; then: string[] };
+    /** The person the rule runs as (whoever saved it last). */
+    actor: { id: number; name: string } | null;
+    actor_problem: string | null;
+    last_run_at: string | null;
+    last_run_status: AutomationRunStatus | null;
+}
+
+export type AutomationRunStatus = 'queued' | 'running' | 'success' | 'skipped' | 'error';
+
+export interface AutomationRunResult {
+    action: string;
+    label: string;
+    status: 'ok' | 'skipped' | 'error';
+    message: string;
+}
+
+export interface AutomationRun {
+    id: number;
+    rule: { id: number; name: string } | null;
+    rule_version: number;
+    trigger: string;
+    subject: string | null;
+    status: AutomationRunStatus;
+    message: string | null;
+    results: AutomationRunResult[];
+    created_at: string | null;
+    finished_at: string | null;
+}
+
+/** Value kinds: board, helpdesk, column, item_type, priority, label, member, assignee, recipient, days, text. */
+export interface AutomationCatalogEntry {
+    key: string;
+    label: string;
+    value?: string | null;
+    text?: 'optional' | 'required' | null;
+    subjects?: AutomationSubject[];
+    subject?: AutomationSubject;
+    help?: string;
+}
+
+export interface AutomationCatalog {
+    triggers: AutomationCatalogEntry[];
+    conditions: AutomationCatalogEntry[];
+    actions: AutomationCatalogEntry[];
+    maxConditions: number;
+    maxActions: number;
+}
+
+export interface AutomationContainerOption {
+    id: number;
+    name: string;
+    columns: { id: number; name: string }[];
+}
+
+export interface AutomationOptions {
+    boards: AutomationContainerOption[];
+    helpdesks: AutomationContainerOption[];
+    itemTypes: { id: number; name: string }[];
+    priorities: { id: number; name: string }[];
+    labels: { id: number; name: string; color?: string | null }[];
+    members: { id: number; name: string }[];
+}
+
+/** "Test on an issue" (automations.preview). */
+export interface AutomationPreview {
+    subject: string;
+    matches: boolean;
+    conditions: { type: string; label: string; passed: boolean }[];
+    actions: { label: string; status: 'ok' | 'skipped' | 'error'; message: string }[];
 }

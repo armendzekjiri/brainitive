@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AddCorsHeaders;
+use App\Http\Middleware\DeferAutomations;
 use App\Http\Middleware\EnsureInstanceAdmin;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\FrameProtection;
@@ -30,6 +31,8 @@ return Application::configure(basePath: dirname(__DIR__))
         }
 
         $middleware->append(GuardOAuthFlows::class);
+        // automation rules triggered by a request start after its controller finished (BRAI-63)
+        $middleware->append(DeferAutomations::class);
 
         $middleware->web(append: [
             GuardOAuthFlows::class, // the /oauth/authorize check needs the session (StartSession runs in this group)

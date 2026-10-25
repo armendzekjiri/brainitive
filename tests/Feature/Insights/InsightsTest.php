@@ -326,6 +326,22 @@ class InsightsTest extends TestCase
         $this->assertSame([3, 1, 3, 2, 1, 33.3], [$form['leads'], $form['closed'], $form['views'], $form['starts'], $form['submits'], $form['conversion']]);
     }
 
+    public function test_helpdesk_sla_numbers(): void
+    {
+        $this->seedHelpdeskAndLeads();
+        // SUP-0: resolved in the range within its SLA; SUP-1: resolved in the range after a breach in the range;
+        // SUP-3: open, breached in the range; SUP-2: no SLA (BRAI-125)
+        $due = ['sla_first_response_due_at' => '2026-10-02 10:00:00', 'sla_resolution_due_at' => '2026-10-04 10:00:00'];
+        DB::table('tickets')->where('key', 'SUP-0')->update($due);
+        DB::table('tickets')->where('key', 'SUP-1')->update($due + ['sla_breached_at' => '2026-10-03 12:00:00', 'sla_first_response_breached' => true]);
+        DB::table('tickets')->where('key', 'SUP-3')->update($due + ['sla_breached_at' => '2026-10-11 10:00:00', 'sla_resolution_breached' => true]);
+
+        $data = $this->tab('helpdesk');
+
+        $this->assertEquals(['breaches' => 2, 'resolved' => 2, 'met' => 1, 'met_percent' => 50.0], $data['sla']);
+        $this->assertEquals([2, 50.0], [$data['helpdesks'][0]['sla_breaches'], $data['helpdesks'][0]['sla_met_percent']]);
+    }
+
     public function test_usage_numbers(): void
     {
         $issues = $this->seedScenario();
@@ -404,7 +420,7 @@ class InsightsTest extends TestCase
             'overview' => [['Issues created', '5'], ['Median cycle time (days)', '4'], ['Week starting', 'Created', 'Completed'], ['2026-09-28', '2', '1'], ['No type', '3', '1']],
             'team' => [['Member', 'Role', 'Completed'], [$this->editor->name, 'member', '3', '0', '0', '1.5', '2']],
             'projects' => [['Project', 'Key', 'Health'], ["'=HYPERLINK(\"http://evil\")", 'BRAI', 'at_risk', '5', '2', '1', '3', '1.5']],
-            'helpdesk' => [['Tickets resolved', '3'], ['Support', "'=HYPERLINK(\"http://evil\")", '3', '3', '1'], ['Contact us']],
+            'helpdesk' => [['Tickets resolved', '3'], ['SLA breaches', '0'], ['Support', "'=HYPERLINK(\"http://evil\")", '3', '3', '1', '0', ''], ['Contact us']],
             'usage' => [['Members', '3'], ['Pending invitations', '0']],
         ];
         foreach ($expect as $tab => $lines) {

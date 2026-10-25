@@ -11,6 +11,7 @@ use App\Models\User;
  * imports and bulk actions are all covered. One save can raise several events:
  * column/board change → item.moved; completed_at set → item.completed; a new assignee →
  * item.assigned; any other tracked field → item.updated (with the changed field names).
+ * created / moved / assigned pass the item as subject, so automation rules (BRAI-63) see them.
  */
 final class ItemEvents
 {
@@ -22,7 +23,7 @@ final class ItemEvents
 
     public static function created(Item $item): void
     {
-        DomainEvents::emit(EventPayloads::itemWorkspaceId($item), 'item.created', fn () => ['item' => EventPayloads::item($item)]);
+        DomainEvents::emit(EventPayloads::itemWorkspaceId($item), 'item.created', fn () => ['item' => EventPayloads::item($item)], subject: $item);
     }
 
     public static function updated(Item $item): void
@@ -43,7 +44,7 @@ final class ItemEvents
                 'item' => EventPayloads::item($item),
                 'from' => ['column' => $from ? BoardColumn::whereKey($from)->value('name') : null, 'board_id' => $item->getOriginal('board_id')],
                 'to' => ['column' => $item->column_id ? BoardColumn::whereKey($item->column_id)->value('name') : null, 'board_id' => $item->board_id],
-            ]);
+            ], subject: $item, context: ['from_column_id' => $from ? (int) $from : null, 'to_column_id' => $item->column_id ? (int) $item->column_id : null]);
         }
         if ($completed) {
             DomainEvents::emit($workspaceId, 'item.completed', fn () => ['item' => EventPayloads::item($item)]);
@@ -53,7 +54,7 @@ final class ItemEvents
             DomainEvents::emit($workspaceId, 'item.assigned', fn () => [
                 'item' => EventPayloads::item($item),
                 'previous_assignee' => $previous ? EventPayloads::person(User::find($previous)) : null,
-            ]);
+            ], subject: $item, context: ['assignee_id' => (int) $item->assigned_to]);
         }
         if ($fields !== []) {
             DomainEvents::emit($workspaceId, 'item.updated', fn () => ['item' => EventPayloads::item($item), 'changed' => $fields]);

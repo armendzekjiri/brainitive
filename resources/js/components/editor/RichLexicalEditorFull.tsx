@@ -40,6 +40,10 @@ import {
     COMMAND_PRIORITY_HIGH,
     KEY_DOWN_COMMAND,
     $isTextNode,
+    $isElementNode,
+    $isDecoratorNode,
+    type LexicalNode,
+    type ElementNode,
     createCommand,
     LexicalCommand,
     RangeSelection,
@@ -202,6 +206,7 @@ import TableActionMenuPlugin from './plugins/TableActionMenuPlugin';
 import TableCellResizerPlugin from './plugins/TableCellResizerPlugin';
 import MentionsPlugin from './plugins/MentionsPlugin';
 import { safeHtmlProp } from '@/lib/sanitize';
+import { normalizeAiHtml } from '@/lib/aiHtml';
 
 // Custom commands
 export const INSERT_IMAGE_COMMAND: LexicalCommand<{ src: string; altText: string }> = createCommand();
@@ -2135,6 +2140,28 @@ function EmptyBlockPlaceholderPlugin({ text }: { text: string }) {
     return null;
 }
 
+/**
+ * Append parsed nodes to the root. Only block nodes may sit there: loose text and inline nodes
+ * (links, mentions) are collected into paragraphs, or Lexical throws and the update is lost (BRAI-30).
+ */
+function appendBlocks(root: ElementNode, nodes: LexicalNode[]): void {
+    let paragraph: ElementNode | null = null;
+    for (const node of nodes) {
+        const isBlock = ($isElementNode(node) || $isDecoratorNode(node)) && !node.isInline();
+        if (isBlock) {
+            paragraph = null;
+            root.append(node);
+            continue;
+        }
+        if ($isTextNode(node) && node.getTextContent().trim() === '' && paragraph === null) continue; // whitespace between blocks
+        if (paragraph === null) {
+            paragraph = $createParagraphNode();
+            root.append(paragraph);
+        }
+        paragraph.append(node);
+    }
+}
+
 // Context so toolbar (e.g. AI Replace) can notify parent of content changes for save
 const RichLexicalOnChangeContext = createContext<((html: string) => void) | null>(null);
 
@@ -2242,7 +2269,8 @@ function ToolbarPlugin({
                 project_id: projectId || undefined,
             });
             if (res.data.success) {
-                setAiResult(res.data.content);
+                // prompts may come back as plain text / Markdown: make it HTML the editor can take
+                setAiResult(normalizeAiHtml(res.data.content));
             } else {
                 setAiError(res.data.message || 'AI generation failed.');
             }
@@ -2831,7 +2859,7 @@ function ToolbarPlugin({
                                                                 paragraph.append($createTextNode(newHtml));
                                                                 root.append(paragraph);
                                                             } else {
-                                                                nodes.forEach(node => root.append(node));
+                                                                appendBlocks(root, nodes);
                                                             }
                                                         }, { tag: 'ai-replace' });
                                                         // Ensure parent state is updated so Save persists (Lexical listener may not fire in time)

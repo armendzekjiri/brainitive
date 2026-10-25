@@ -9,6 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import HelpdeskEmailTab from '@/components/helpdesk/HelpdeskEmailTab';
+import HelpdeskSlaTab from '@/components/helpdesk/HelpdeskSlaTab';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import {
     Dialog,
@@ -47,6 +49,8 @@ import {
     Check,
     Copy,
     ExternalLink,
+    Mail,
+    Timer,
 } from 'lucide-react';
 import { useState, useEffect, FormEvent, DragEvent } from 'react';
 import axios from 'axios';
@@ -723,7 +727,7 @@ const defaultSettings = {
     button_position: 'bottom-right' as 'bottom-right' | 'bottom-left',
 };
 
-const SETTINGS_TABS = ['general', 'columns', 'fields', 'embed'];
+const SETTINGS_TABS = ['general', 'columns', 'fields', 'embed', 'email', 'sla'];
 
 function initialSettingsTab(): string {
     const tab = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('tab');
@@ -902,7 +906,7 @@ export default function HelpdesksEdit({ workspace, project, helpdesk, appUrl }: 
                 <div className="max-w-4xl mx-auto p-6">
                     {/* ?tab=columns etc. opens a tab directly (the board's column menu links here) */}
                     <Tabs defaultValue={initialSettingsTab()} className="space-y-6">
-                        <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+                        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 h-auto lg:w-auto lg:inline-grid">
                             <TabsTrigger value="general" className="gap-2">
                                 <Settings className="size-4" />
                                 General
@@ -918,6 +922,14 @@ export default function HelpdesksEdit({ workspace, project, helpdesk, appUrl }: 
                             <TabsTrigger value="embed" className="gap-2">
                                 <Code className="size-4" />
                                 Embed
+                            </TabsTrigger>
+                            <TabsTrigger value="email" className="gap-2">
+                                <Mail className="size-4" />
+                                Email
+                            </TabsTrigger>
+                            <TabsTrigger value="sla" className="gap-2">
+                                <Timer className="size-4" />
+                                SLA
                             </TabsTrigger>
                         </TabsList>
 
@@ -1446,6 +1458,15 @@ export default function HelpdesksEdit({ workspace, project, helpdesk, appUrl }: 
                                     </div>
                                 </CardContent>
                             </Card>
+                        </TabsContent>
+
+                        {/* v1.40.0: each tab is one component owned by one ticket (docs/ai/tasks/release-v1.40.0.md) */}
+                        <TabsContent value="email" className="space-y-6">
+                            <HelpdeskEmailTab workspace={workspace} project={project} helpdesk={helpdesk} />
+                        </TabsContent>
+
+                        <TabsContent value="sla" className="space-y-6">
+                            <HelpdeskSlaTab workspace={workspace} project={project} helpdesk={helpdesk} />
                         </TabsContent>
                     </Tabs>
 

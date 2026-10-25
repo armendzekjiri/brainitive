@@ -31,6 +31,9 @@ export const USERS = {
 } as const;
 export type Role = keyof typeof USERS;
 
+/** Email → helpdesk forwarding addresses in the local e2e app (BRAI-124); test-only values. */
+export const INBOUND_MAIL = { domain: 'inbound.e2e.test', postmarkToken: 'e2e-postmark-token' } as const;
+
 /** Seeded workspace / project / board (slugs). */
 export const SEED = { workspace: 'e2e-workspace', project: 'website', board: 'main-board', key: 'WEB' } as const;
 
@@ -74,6 +77,12 @@ export function appEnv(): Record<string, string> {
         E2E_PASSWORD: PASSWORD,
         // webhooks.spec.ts delivers to a receiver on 127.0.0.1; the app honours this only with APP_ENV=e2e
         WEBHOOKS_ALLOW_PRIVATE_TARGETS: 'true',
+        // helpdesk-forwarding.spec.ts: forwarding addresses on (Postmark endpoint, test token)
+        INBOUND_MAIL_DOMAIN: INBOUND_MAIL.domain,
+        INBOUND_MAIL_PROVIDER: 'postmark',
+        INBOUND_MAIL_POSTMARK_TOKEN: INBOUND_MAIL.postmarkToken,
+        // helpdesk-email.spec.ts: a fake IMAP / SMTP connection (no network); honoured only with APP_ENV=e2e
+        HELPDESK_MAIL_FAKE: 'true',
         PHP_CLI_SERVER_WORKERS: process.env.E2E_SERVER_WORKERS ?? '4',
     };
 }

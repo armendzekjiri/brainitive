@@ -1,6 +1,8 @@
 <?php
 
+use App\Models\AutomationRun;
 use App\Models\GithubDelivery;
+use App\Models\HelpdeskInboundEmail;
 use App\Models\InboxNotification;
 use App\Models\LeadFormEvent;
 use App\Models\McpRequest;
@@ -33,3 +35,30 @@ Schedule::command('model:prune', ['--model' => [McpRequest::class, GithubDeliver
 
 // Inbox (BRAI-102): archived notifications after 90 days, every notification after 180 days.
 Schedule::command('model:prune', ['--model' => [InboxNotification::class]])->dailyAt('03:30');
+
+// ── v1.40.0: one block per ticket (docs/ai/tasks/release-v1.40.0.md) ─────────
+// Ticket 1 (automation): scheduled triggers such as "due date passed".
+Schedule::command('app:run-due-date-automations')
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+// The automation run log keeps 30 days.
+Schedule::command('model:prune', ['--model' => [AutomationRun::class]])
+    ->dailyAt('03:40')
+    ->withoutOverlapping();
+
+// Ticket 2 (recurring issues): create the issues that are due.
+// Occurrences are due from local midnight in each template's time zone; idempotent, catch-up = latest only.
+Schedule::command('app:create-recurring-issues')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping();
+
+// Ticket 3 (email → helpdesk, IMAP): poll connected mailboxes; forget inbound dedupe rows after 180 days.
+Schedule::command('app:poll-helpdesk-mailboxes')
+    ->everyMinute()
+    ->withoutOverlapping();
+Schedule::command('model:prune', ['--model' => [HelpdeskInboundEmail::class]])->dailyAt('03:45');
+
+// Ticket 5 (helpdesk SLA): warn before and on breaches.
+Schedule::command('app:check-helpdesk-sla')
+    ->everyMinute()
+    ->withoutOverlapping();
