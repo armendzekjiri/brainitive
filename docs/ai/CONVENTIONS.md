@@ -21,7 +21,7 @@ The rules every agent follows when writing code. To *locate* code, use
 | Icons | Lucide React (only) |
 | Toasts | Sonner |
 | MCP | `laravel/mcp` |
-| DB | SQLite default (PostgreSQL/MySQL production-ready) |
+| DB | PostgreSQL (tests, CI, production, Docker); migrations aren't MySQL/MariaDB-safe |
 | Lint | Laravel Pint (PHP) |
 
 ## Roles

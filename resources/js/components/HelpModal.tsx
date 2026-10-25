@@ -86,7 +86,7 @@ const CHANGELOG = [
         version: 'v1.40.0',
         title: 'Automations, email to helpdesk, SLAs and recurring issues',
         tag: 'Feature',
-        date: '2026-10-24',
+        date: '2026-10-25',
         items: [
             'Workflow automation (project page → Tools → Automations, for project admins): when an issue is created, moved, assigned, commented or past its due date, or a ticket arrives — and it matches your conditions — assign it, move it, set priority, type, due date or a label, comment, notify someone, or create an issue from a ticket. Test a rule on a real issue before switching it on; every run is logged.',
             'Recurring issues (board menu → Recurring issues): daily, weekly on chosen days, every N weeks, monthly (a day or e.g. the last weekday) or yearly — with assignee, priority, labels and a due date. Or open an issue and choose “Make this recurring”.',
@@ -96,6 +96,25 @@ const CHANGELOG = [
             'Project health: saving a status update without a health status now tells you right at the button, and an unsaved update survives a page refresh.',
             'AI in descriptions: “Replace” now works for every AI answer, including long prompts from “Generate prompt”.',
             'Checklists in documents no longer overlap their text.',
+        ]
+    },
+    {
+        version: 'v1.39.2',
+        title: 'Docker: no app key to copy',
+        tag: 'Fix',
+        date: '2026-10-25',
+        items: [
+            'Self-hosting: the first start generates the app key itself, so cp .env.docker.example .env and docker compose up -d is all it takes. Before, a skipped copy-paste of the key left every container restarting. A .env from the old MariaDB setup now works too.',
+        ]
+    },
+    {
+        version: 'v1.39.1',
+        title: 'Self-hosting with Docker works again, every timezone',
+        tag: 'Fix',
+        date: '2026-10-25',
+        items: [
+            'Self-hosting: a fresh Docker install now starts. The database is PostgreSQL (what Brainitive is built and tested on) instead of MariaDB, where setup stopped during the first start. Sign-up works before mail is set up, and the queue and scheduler containers no longer show “unhealthy”. Older installs: git pull and docker compose up -d.',
+            'Workspace settings → Timezone lists every timezone in the world, with search and the current UTC offset. Before, the list ended after the first 100 (no Europe, Asia or Pacific).',
         ]
     },
     {

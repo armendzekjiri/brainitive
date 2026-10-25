@@ -54,6 +54,24 @@ test.describe('workspaces', () => {
         await page.reload();
         await expect(page.getByLabel('Description')).toHaveValue(description);
     });
+
+    test('workspace settings: any timezone in the world can be searched and saved', async ({ page }) => {
+        const workspace = await createWorkspace(page);
+        await page.goto(`${urls.workspace(workspace.slug)}/edit`);
+
+        // the picker used to stop after the first 100 zones (somewhere in the Americas)
+        await page.getByRole('combobox', { name: 'Timezone' }).click();
+        await page.getByPlaceholder('Search city or region…').fill('auckland');
+        await page.getByRole('option', { name: /Pacific\/Auckland/ }).click();
+        await expect(page.getByRole('combobox', { name: 'Timezone' })).toHaveText('Pacific/Auckland');
+
+        const saved = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/workspaces/${workspace.slug}`));
+        await page.getByRole('button', { name: 'Save Changes' }).first().click();
+        expect((await saved).ok()).toBe(true);
+
+        await page.reload();
+        await expect(page.getByRole('combobox', { name: 'Timezone' })).toHaveText('Pacific/Auckland');
+    });
 });
 
 test.describe('workspace members', () => {
