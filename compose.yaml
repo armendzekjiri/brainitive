@@ -53,7 +53,8 @@ services:
       POSTGRES_USER: ${DB_USERNAME:-brainitive}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     volumes:
-      - db:/var/lib/postgresql/data
+      # Not the old `db` volume: that one may still hold MariaDB files from older versions
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
@@ -69,7 +70,7 @@ services:
 
 volumes:
   storage:
-  db:
+  pgdata:
   redis:
   caddy_data:
   caddy_config:

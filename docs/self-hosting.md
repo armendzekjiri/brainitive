@@ -102,7 +102,7 @@ docker run --rm -v brainitive_storage:/storage -v "$PWD":/backup alpine tar czf 
 ```
 
 (The volume name is `<folder>_storage` — check with `docker volume ls`.) Restore the database
-into a fresh `db` volume with `docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"' < brainitive-….sql`.
+into a fresh `pgdata` volume with `docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"' < brainitive-….sql`.
 
 ## Optional features
 
@@ -160,10 +160,10 @@ on start).
 
 - **`APP_KEY is missing`** — step 1 of the quick start.
 - **`Database not reachable`** — `DB_PASSWORD` in `.env` must match what PostgreSQL was first
-  started with. Changing it later needs `ALTER USER` inside PostgreSQL, or a fresh `db` volume.
-- **Upgrading from the old compose file with MariaDB** — those installs never got past
-  the first migrations, so there is no data to keep: `docker compose down`, remove the old
-  database volume (`docker volume rm <folder>_db`), then `docker compose up -d`.
+  started with. Changing it later needs `ALTER USER` inside PostgreSQL, or a fresh `pgdata` volume.
+- **Upgrading from the old compose file with MariaDB** — those installs never got past the
+  first migrations, so there is no data to keep. PostgreSQL uses a new `pgdata` volume, so
+  `git pull && docker compose up -d` just works; the old one can go: `docker volume rm <folder>_db`.
 - **Sign-up or "forgot password" fails with a mail error** — `MAIL_*` points to a server that
   doesn't exist. Keep `MAIL_MAILER=log` until SMTP works (mails then appear in
   `docker compose logs app`).

@@ -331,7 +331,8 @@ empty in production while tests and Docker look fine.
 `2026_02_23_140000_move_bookmarks_to_workspace` (MariaDB error 1553: the unique index it drops
 backs a foreign key) — and MySQL DDL isn't transactional, so every container restart then failed
 on "Duplicate column". Tests, CI and production all run PostgreSQL, so Docker does too
-(`postgres:16-alpine`, like CI). Don't reintroduce MySQL in compose without running all
+(`postgres:16-alpine`, like CI) on a new `pgdata` volume — the old `db` volume may hold MariaDB
+files, and Postgres refuses a non-empty data directory ("initdb: directory exists but is not empty"). Don't reintroduce MySQL in compose without running all
 migrations against it.
 
 ### SQLite-incompatible migrations
