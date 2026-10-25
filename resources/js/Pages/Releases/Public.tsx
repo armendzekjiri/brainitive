@@ -1,4 +1,4 @@
-import ApplicationLogo from '@/Components/ApplicationLogo';
+import ApplicationLogo from '@/components/ApplicationLogo';
 import { safeHtmlProp } from '@/lib/sanitize';
 import { Head } from '@inertiajs/react';
 import { format, parseISO } from 'date-fns';

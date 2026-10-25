@@ -1,4 +1,4 @@
-import ApplicationLogo from '@/Components/ApplicationLogo';
+import ApplicationLogo from '@/components/ApplicationLogo';
 import { Button } from '@/components/ui/button';
 import type { PageProps } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
