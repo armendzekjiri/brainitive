@@ -28,6 +28,32 @@ class OutboundUrl
         }
 
         $port = $parts['port'] ?? ($scheme === 'https' ? 443 : 80);
+        $ip = self::publicAddress($host, $allowPrivate);
+
+        if ($ip === null) {
+            return null;
+        }
+
+        $pinned = str_contains($ip, ':') ? "[{$ip}]" : $ip;
+
+        return [
+            'allow_redirects' => false,
+            'curl' => [CURLOPT_RESOLVE => ["{$host}:{$port}:{$pinned}"]],
+        ];
+    }
+
+    /**
+     * The address to connect to for $host (a name or an IP literal), or null when it doesn't resolve
+     * or ANY of its addresses is private / loopback / link-local / reserved. Raw sockets to
+     * user-chosen hosts (helpdesk IMAP / SMTP, BRAI-79) connect to this address, pinned.
+     */
+    public static function publicAddress(string $host, bool $allowPrivate = false): ?string
+    {
+        $host = trim($host, '[]');
+        if ($host === '') {
+            return null;
+        }
+
         $ips = filter_var($host, FILTER_VALIDATE_IP) ? [$host] : self::resolve($host);
 
         if ($ips === []) {
@@ -40,12 +66,7 @@ class OutboundUrl
             }
         }
 
-        $pinned = str_contains($ips[0], ':') ? "[{$ips[0]}]" : $ips[0];
-
-        return [
-            'allow_redirects' => false,
-            'curl' => [CURLOPT_RESOLVE => ["{$host}:{$port}:{$pinned}"]],
-        ];
+        return $ips[0];
     }
 
     /** Private networks are allowed for AI endpoints only when the instance opts in. */

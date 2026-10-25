@@ -1,0 +1,18 @@
+{
+    "recipient": "{{TO}}",
+    "sender": "bounce+srs=abc@forwarder.example",
+    "from": "Cleo Customer <cleo@customer.example>",
+    "From": "Cleo Customer <cleo@customer.example>",
+    "To": "\"Support\" <support@customer-company.example>",
+    "Cc": "\"Doe, Jo\" <jo@customer.example>",
+    "subject": "Printer on fire",
+    "Subject": "Printer on fire",
+    "body-plain": "Hello,\n\nthe printer is on fire again.\n\nCleo",
+    "stripped-text": "Hello,\n\nthe printer is on fire again.",
+    "body-html": "<p>Hello,</p><p>the printer is <b>on fire</b> again.</p>",
+    "Message-Id": "<CAB2wZ1Pz9Xyz@mail.customer.example>",
+    "In-Reply-To": "<ticket-42.abc@brainitive.example>",
+    "References": "<first.1@brainitive.example> <ticket-42.abc@brainitive.example>",
+    "message-headers": "[[\"Received\", \"by mx1 with SMTP\"], [\"X-Forwarded-For\", \"support@customer-company.example {{TO}}\"], [\"Message-Id\", \"<CAB2wZ1Pz9Xyz@mail.customer.example>\"], [\"From\", \"Cleo Customer <cleo@customer.example>\"], [\"Subject\", \"Printer on fire\"], [\"Precedence\", \"bulk\"], [\"List-Id\", \"<news.customer.example>\"], [\"In-Reply-To\", \"<ticket-42.abc@brainitive.example>\"], [\"References\", \"<first.1@brainitive.example> <ticket-42.abc@brainitive.example>\"]]",
+    "attachment-count": "1"
+}

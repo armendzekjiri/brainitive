@@ -1,0 +1,11 @@
+Message-ID: <list.1@lists.example>
+Date: Sat, 24 Oct 2026 11:07:00 +0200
+From: Weekly News <news@lists.example>
+To: support@helpdesk.example
+Subject: This week in printers
+List-Id: Printer News <news.lists.example>
+Precedence: bulk
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+
+Ten printers you will love.

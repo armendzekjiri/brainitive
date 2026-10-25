@@ -140,6 +140,145 @@ schema public". Use `createdb -h /tmp -O <DB_USERNAME> brainitive_test_<name>` (
   same workspace in parallel. The crawler (`e2e:crawl`) fills URL fields with `https://example.com/`,
   so a crawl run can create a webhook that posts to example.com.
 
+### Inbound email webhooks: provider answers, replay cache, hidden address (v1.40.0, BRAI-124)
+- **Status codes are for the provider's retry logic.** Postmark stops retrying on 403, Mailgun on 406;
+  everything else (401, 5xx) is retried for hours. So permanent refusals (unknown recipient, no sender,
+  stale / replayed Mailgun signature, too large) answer 403 / 406, a wrong token or signature 401 (a
+  misconfigured secret loses nothing once fixed), and a pipeline failure on a sync queue 500.
+- **Mailgun replay:** HMAC-SHA256 of `timestamp.token` with the signing key, timestamp within
+  `INBOUND_MAIL_REPLAY_WINDOW` (900 s), and each token once (`Cache::add` for 2× the window). The
+  token is released again when processing fails, so the provider's retry gets through. Duplicates of
+  a *message* are `InboundMail::receive()`'s job (dedupe on Message-ID; a message without one gets a
+  stable `postmark-<id>@inbound.invalid` / `noid-<sha256>` id).
+- **Recipient = envelope first** (`OriginalRecipient` / `recipient`): a Gmail auto-forward keeps the
+  customer's `To: support@their-company`, only the envelope carries our address. `+tag` is ignored
+  for the lookup and kept in `InboundMessage::$to` (routing tokens).
+- **The address is a capability.** Anyone who knows it can open tickets, and `Helpdesk` is passed whole
+  as an Inertia prop on several pages, so `forwarding_local_part` is `$hidden` and only the Email tab's
+  JSON endpoint (helpdesk `update`) reveals it. Regenerate = a new random part; the old one stops at once.
+- **Attachments go to `storage/app/inbound-mail/<uuid>/`, not `sys_get_temp_dir()`:** the queued job may
+  run in another process. Random file names; the client's name is only metadata (`InboundPayloads::filename`).
+- **e2e** turns forwarding on in `e2e/env.ts` (`INBOUND_MAIL_*`, Postmark). dev.brainitive.app has no
+  inbound domain, so `helpdesk-forwarding.spec.ts` skips there.
+
+### Inbound email pipeline, threading and loops (v1.40.0, BRAI-79)
+- **Libraries:** ext-imap is gone from PHP 8.4, so IMAP is `webklex/php-imap` (MIT), used only for its
+  socket protocol (`ImapProtocol`: LOGIN, SELECT, UID SEARCH UNSEEN, RFC822.SIZE, `BODY.PEEK[]`, STORE,
+  MOVE with COPY+EXPUNGE fallback). Parsing is `zbateson/mail-mime-parser` (BSD-2): webklex's own
+  parser leaves RFC 2047 words (subjects, names, file names) undecoded without ext-imap. webklex's
+  `fetch()` matches single items by the requested name, so `BODY.PEEK[]` is fetched together with `UID`
+  (multi-item path) and read back as `BODY[]`.
+- **Dedupe in the same transaction.** `receive()` inserts the `helpdesk_inbound_emails` row (unique
+  helpdesk + sha256 of the Message-ID) inside the transaction that creates the ticket / reply: a crash
+  rolls both back, a concurrent delivery hits the unique index → DUPLICATE. Ignored / rejected mail is
+  recorded too (audit + dedupe). A row with status `failed` (unexpected error) is retried on the next
+  delivery. Notifications and DomainEvents run after the commit and never undo it.
+- **Poller crash safety:** `BODY.PEEK[]` doesn't set `\Seen`; `markProcessed()` runs after
+  `receive()`. A crash in between leaves the mail unread and the next run gets DUPLICATE and only marks
+  it. Mail without Message-ID is keyed `imap.<mailbox>.<uidvalidity>.<uid>@inbound`. Only UNSEEN mail
+  is imported: a mailbox someone reads in a client loses mail (documented: support-only mailbox).
+- **Threading:** In-Reply-To / References matched against `ticket_email_messages` (in + out, this
+  helpdesk, not trashed), then the subject tag `[KEY #token]` (token = first 10 hex of
+  HMAC(`ticket-mail|uuid`, APP_KEY); rotating APP_KEY breaks only the subject fallback). The subject
+  text alone never threads. No `+t<token>` sub-address: plus addressing isn't supported everywhere and
+  a bounced reply would be lost.
+- **Who may reply:** the ticket's contact or an address that was on Cc of the first message
+  (`tickets.metadata.email.participants`); anyone else → REJECTED `not_participant` (visible in the
+  mailbox log), and `Authentication-Results: dmarc=fail` → REJECTED `dmarc_fail`. Knowing a ticket key
+  or Message-ID is not enough. A forwarded thread answered by a colleague is rejected in v1.
+- **Loops:** ignored: `Auto-Submitted` ≠ no, `Precedence: bulk|junk|list|auto_reply`, `X-Autoreply`,
+  `X-Autorespond`, `List-Id` / `List-Post`, mailer-daemon / postmaster / `Return-Path: <>` /
+  `X-Failed-Recipients` / `multipart/report`, our `X-Brainitive-Loop` header, mail from the mailbox or
+  app address, and Message-IDs we sent. Plus at most 10 new tickets per sender, helpdesk and hour.
+  Our acknowledgment carries `Auto-Submitted: auto-replied`; agent replies don't (they are personal).
+  Exception: Gmail's forwarding confirmation (`forwarding-noreply@google.com`, BRAI-124 setup) is never
+  filtered and never acknowledged; no-reply senders get no acknowledgment.
+- **Outgoing:** a helpdesk with an enabled mailbox emails agent public replies itself (Message-ID fixed
+  before the job, stored on the reply; In-Reply-To / References from the thread; Cc participants) and
+  skips `TicketReplyNotification` for the contact — never both. Email tickets get the threaded
+  acknowledgment instead of `TicketCreatedNotification`. Internal notes never send.
+  `TicketResolvedNotification` is unchanged (link mail from the app address). App-mailer mode sends
+  *from the app address* with Reply-To the mailbox (sending as the customer's domain from our servers
+  fails SPF / DMARC); SMTP mode sends from the mailbox address. Without a mailbox (forwarding-only
+  helpdesks) the old notifications go out; `TicketMailer::replyAddress()` is where that could change.
+- **Sockets to user hosts:** `MailHost` = `OutboundUrl::publicAddress()` (all resolved IPs public) +
+  mail-port allowlist + TLS required; the socket connects to the checked IP and TLS verifies the host
+  name (`peer_name`). Private hosts / no TLS only in e2e, or `APP_ENV=local` +
+  `HELPDESK_MAIL_ALLOW_PRIVATE_HOSTS`. Login errors shown to admins have the password scrubbed.
+- **e2e:** `HELPDESK_MAIL_FAKE` (e2e only) binds `FakeMailboxConnector` and skips DNS; the password
+  `wrong-password` fails the login. `helpdesks.mailbox.e2e-receive` (registered only with
+  `APP_ENV=e2e`) feeds a fixture, optionally with `reply_to_ticket` (In-Reply-To = the ticket's last
+  outgoing Message-ID). A local GreenMail container (`greenmail/standalone`, IMAP on 143, SMTP on
+  2525, `APP_ENV=local` + the private-hosts flag) is handy for trying the real client by hand.
+
+### Recurring issues: dates, catch-up and the actor (v1.40.0, BRAI-123)
+- **Dates are calendar maths, the zone only picks "today".** `RecurrenceSchedule` works on `Y-m-d`
+  dates (midnight UTC), so DST never moves an occurrence. An occurrence is due from **local midnight**
+  in the template's `timezone` (the creator's `localTimezone()` when it was saved) — Berlin's Monday
+  starts at 22:00 UTC in summer and 23:00 UTC in winter. The command runs every 15 minutes, so issues
+  appear shortly after local midnight. The scheduler query looks up to UTC today + 1 day (UTC+14).
+- **Every date comes from the rule, not from the previous date** (unlike list tasks'
+  `TaskListItem::nextDueDate()`, which chains `addMonthNoOverflow` and drifts Jan 31 → Feb 28 → Mar 28).
+  Monthly day 29–31 clamps to the month's last day, so 31 = "the last day"; yearly Feb 29 → Feb 28 in
+  common years and Feb 29 again in leap years. Monthly "the nth / last X" supports X = 0 (any weekday
+  Mon–Fri: first / last business day). Weekly intervals count weeks (Monday-based) from the start date's
+  week.
+- **Idempotent + no flood.** The runner locks the template row and only looks at dates after
+  `last_occurrence_date`; `recurring_issue_occurrences` is unique on (template, date) as a backstop.
+  After downtime only the **latest** missed date is created (`latestBetween`), the others are skipped.
+  `active_from` (the local day the template was created, its schedule changed or it was resumed) is the
+  floor: a start date in the past, an edited schedule or a pause never backfill old dates.
+- **Count** (`max_occurrences`) counts issues actually created (skipped dates don't count); `end_date` is
+  inclusive. When either is reached `next_occurrence_date` becomes null ("Ended").
+- **Actor = the template's creator.** The console has no user, and `Assignments::item()` stays silent
+  without one, so the runner signs the creator in for the create (`Auth::setUser`, then `forgetUser` /
+  the previous user back). The assignee gets the normal `item_assigned` from `ItemObserver` (silent when
+  the creator assigned themself), history / events / automations see the creator. If the creator can no
+  longer create issues on the board (or the board is gone / has no columns) the template **pauses** with
+  `last_error`; whoever resumes it becomes its creator. An assignee who left the project → unassigned
+  issue; a type / priority / label no longer in the project → the default / dropped. Description
+  mentions are not re-notified on every occurrence.
+- **e2e trigger:** `recurring-issues.e2e-run` is only registered when `APP_ENV=e2e` (and the action
+  aborts 404 otherwise); dev and production have no such route. The spec skips the "created on the
+  board" part with `REMOTE`. A POST to an unregistered URL answers 405 (the GET `Route::fallback`
+  matches), not 404.
+- **New subfolders under `resources/js/components/`:** even an explicit lowercase `git add
+  resources/js/components/recurring/X.tsx` was recorded as `Components/recurring/X.tsx` (the folder is
+  new to git and macOS reports the on-disk `Components`). Fix the index entry with `git rm --cached
+  <Components path>` + `git update-index --add --cacheinfo 100644,$(git hash-object -w <file>),<lowercase
+  path>`, then check `git ls-files -s | grep -i <name>`.
+
+### Workflow automation: when rules run, as whom, and why they never loop (v1.40.0, BRAI-63)
+- **Only events with a subject reach the engine.** `DomainEvents::emit(..., subject: $item|$ticket)`. A new
+  path that creates tickets (e.g. `InboundMail::receive()`) must pass `subject: $ticket` on its `ticket.created`
+  emit, or rules never see those tickets. Without an enabled rule for the project + trigger it costs one
+  indexed `exists` query (`AutomationEngineTest::test_without_an_enabled_rule_the_hook_costs_one_query`).
+- **When:** after commit (a rolled-back change starts nothing), and inside an HTTP request only after the
+  controller returned (global `DeferAutomations` middleware) — the board's create form syncs labels *after*
+  the insert, so an inline run would miss them. Console / queue / plain tests start the run right after the
+  commit, which can be inside the observer of the creating save. On the sync queue (dev, e2e) the run
+  executes before the response, so the redirect already shows the result.
+- **No loops:** while a run executes `AutomationRunner::running()` is true and `seen()` ignores every event,
+  so automation changes never start rules (webhooks still fire for them). Recurring issues and other
+  scheduled creators are *not* automation-made: their issues start rules like any user's.
+- **Idempotency:** unique (rule, version, event id). Event ids are deterministic where the event happens
+  once (`item.created:<id>`, `ticket.created:<id>`, `item.commented:<comment id>`, `item.due:<id>:<date>`)
+  and fresh uuids for repeatable events (moves, assignments). Conditions are pre-checked before a run is
+  created (a non-matching event leaves no row) and checked again when it starts.
+- **As whom:** the rule's `actor_id` (whoever saved it last). The runner `Auth::setUser($actor)` for the run
+  and restores the previous user, so history and "X assigned you" name the actor (assigning yourself stays
+  silent, as everywhere). Missing / suspended / no-longer-member actor → run `skipped`; a policy denial per
+  action → that action `error`. A switched-off rule or a newer version skips queued runs.
+- **Retries:** each action runs in its own transaction together with saving its result; a retried run
+  skips actions already `ok` / `skipped`. A cache lock (180 s) keeps two workers off one run (the job
+  releases itself when busy); `RunAutomation::failed()` marks the run `error`.
+- **Due date passed** uses the actor's time zone, only due dates of the last 2 days (no flood when a rule
+  is switched on), at most 200 new events per rule and run.
+- **e2e:** rules on the shared seeded project affect every parallel spec that creates issues there; scope a
+  rule with a unique "Title contains" word and delete it at the end (`automations.spec.ts`).
+- **There is no global flash toast.** Pages show `flash.success` themselves (the automation pages use
+  `components/automations/useFlashToast.ts`).
+
 ### Quick capture: conversion is idempotent by row lock, not by request id (BRAI-70)
 `CaptureConversion::convert` locks the capture (`lockForUpdate`) inside one transaction; a capture
 that is already processed returns its target (`replayed`, HTTP 200) whatever the second request
@@ -361,6 +500,29 @@ php artisan tinker --execute="\App\Models\User::where('email','...')->update(['e
 ```
 
 ---
+
+### Helpdesk SLA: derived dates, business-time maths, recompute points (v1.40.0, BRAI-125)
+- **Never write the `sla_*` ticket columns by hand.** `TicketSla::apply()` derives all of them from the
+  ticket, its helpdesk's policy and "now"; the `Ticket` `saving` hook runs it on create and when priority,
+  column, `completed_at` or `first_responded_at` change. Bulk writes through the query builder skip it — call
+  `TicketSla::recompute()` for those. Policy saves recompute the **open** tickets only; resolved tickets keep
+  their historical result.
+- **First response = first public reply with a `user_id`** (`TicketReply` `created` hook), so every agent
+  path counts: the reply box, the resolve dialog's closing message, emailed replies (ticket 3). Internal
+  notes and contact replies don't. Resolving a ticket before its first-response due time also meets it.
+- **Business time is built from local wall-clock windows per date** (`BusinessCalendar`), then turned into
+  instants: a DST day's window is an hour shorter / longer, opening times never shift. `to < from` = an
+  overnight shift that belongs to the day it opens. A "day" target = one business day (`to − from`), 24 h
+  when 24/7.
+- **Pauses only stop the resolution clock** (pause columns, e.g. "Waiting on customer"). Paused business
+  minutes are added to the resolution target when the ticket leaves the column; a ticket paused past its due
+  time counts as breached from the moment the pause began.
+- **`warn_at` doubles as "when the checker looks"** (= due when warnings are off), so the checker's query is
+  two indexed comparisons. Notifications are once per (ticket, warning|breached, target, person) via
+  `sent_item_reminders` keys `ticket_sla:<id>:<kind>:<target>`; reassigning sends the new assignee their own.
+- **The badge also computes "breached" in the browser** (`lib/sla.ts`), because dev.brainitive.app runs no
+  scheduler. Keep `lib/sla.ts` and `TicketSla` in sync. e2e triggers the checker through
+  `helpdesks.sla.e2e-check`, which only exists with `APP_ENV=e2e`, so that journey is skipped on dev.
 
 ## Architectural decisions
 
@@ -609,8 +771,13 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `components/notifications/categories.tsx` is a `.tsx`.
 - **New files under `resources/js/components/` on macOS:** git's index has both `Components/` (old
   Breeze files) and `components/`. A plain `git add` may record a new file under `Components/`,
-  which breaks the `@/components` import on Linux (CI). Add with
-  `git -c core.ignorecase=false add resources/js/components/...` and check `git ls-files`.
+  which breaks the `@/components` import on Linux (CI). Add **one explicit lowercase path**
+  (`git add resources/js/components/x/New.tsx`) and check `git ls-files`. Never combine
+  `core.ignorecase=false` with `add -A` / `add .`: git then sees the whole on-disk `Components/` folder
+  as new files and stages ~160 duplicates (happened once, v1.40.0 foundation).
+  A file in a **new sub-folder** (e.g. `components/helpdesk/email/`) can still land as `Components/…`
+  even with the lowercase path (BRAI-124). Then: `git rm --cached <Components path>`, and
+  `git update-index --add --cacheinfo 100644,$(git hash-object -w <file>),resources/js/components/…`.
 - **Notification coverage (BRAI-103, v1.39.0): who is told, and never twice.**
   - **Assignments fire from the observers, nowhere else.** `ItemObserver::created/updated` (on an
     `assigned_to` change) → `Support\Notifications\Assignments::item()` sends `ItemAssignedNotification`;

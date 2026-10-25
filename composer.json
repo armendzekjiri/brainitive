@@ -19,7 +19,9 @@
         "openspout/openspout": "^5.12",
         "spatie/laravel-permission": "^6.24",
         "symfony/html-sanitizer": "^7.3",
-        "tightenco/ziggy": "^2.0"
+        "tightenco/ziggy": "^2.0",
+        "webklex/php-imap": "^6.2",
+        "zbateson/mail-mime-parser": "^4.0"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

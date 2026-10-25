@@ -111,9 +111,84 @@ into a fresh `pgdata` volume with `docker compose exec -T db sh -c 'psql -U "$PO
 | AI writing helpers | Workspace settings → AI (bring your own provider key) |
 | MCP (Claude, ChatGPT) | Add `https://<your-domain>/mcp` as a connector; users sign in with OAuth |
 | Browser extension | Nothing to set up: in the extension choose **Self-hosted** and enter your domain. It registers itself over OAuth and needs HTTPS (plain http only for `localhost`) |
+| Email to helpdesk (forwarding address) | A domain for incoming mail + Postmark or Mailgun, see [Email to helpdesk](#email-to-helpdesk-forwarding-addresses) |
 
 After changing `.env`: `docker compose up -d` (the app container rebuilds its config cache
 on start).
+
+## Email to helpdesk (forwarding addresses)
+
+Every helpdesk can get an address like `support-k3x9q2m7ab@inbound.example.com` (Helpdesk
+settings → **Email** → *Forwarding address*). Teams forward their support mailbox there (Gmail,
+Outlook, any alias), and every mail becomes a ticket. Brainitive doesn't run a mail server: an
+inbound-mail provider receives the mail and posts it to Brainitive. Until this is set up, the
+settings explain it and the webhook endpoints answer 404.
+
+1. **Pick a domain (or subdomain) only for this**, e.g. `inbound.example.com`, and point its MX
+   records at the provider:
+   - **Postmark:** `MX 10 inbound.postmarkapp.com`. In the server's *Inbound* stream →
+     Settings, set *Inbound domain forwarding* to your domain.
+   - **Mailgun:** add the domain under *Sending → Domains* (DNS records as shown there; MX
+     `mxa.mailgun.org` / `mxb.mailgun.org`, or `mxa.eu.mailgun.org` / `mxb.eu.mailgun.org` in the EU).
+2. **Send the mail to Brainitive:**
+   - **Postmark:** Inbound stream → Settings → *Webhook URL*:
+     `https://postmark:<token>@<your-domain>/api/inbound-mail/postmark` (basic auth) or
+     `https://<your-domain>/api/inbound-mail/postmark?token=<token>` (if a proxy in front of
+     Brainitive already uses basic auth). `<token>` = a long random string
+     (`openssl rand -hex 32`).
+   - **Mailgun:** *Receiving → Create route*: expression type *Match recipient*,
+     `.*@inbound.example.com`, action *Forward* to `https://<your-domain>/api/inbound-mail/mailgun`,
+     and *Stop*. Requests are verified with the *HTTP webhook signing key* (Sending → Webhooks).
+3. **`.env`:**
+
+   ```dotenv
+   INBOUND_MAIL_DOMAIN=inbound.example.com
+   INBOUND_MAIL_PROVIDER=postmark            # or mailgun: which setup the settings page shows
+   INBOUND_MAIL_POSTMARK_TOKEN=<token>        # Postmark
+   INBOUND_MAIL_MAILGUN_SIGNING_KEY=<key>     # Mailgun
+   ```
+
+   Optional limits: `INBOUND_MAIL_MAX_ATTACHMENT_KB` (10240), `INBOUND_MAIL_MAX_ATTACHMENTS` (10),
+   `INBOUND_MAIL_MAX_TOTAL_KB` (30720) — larger attachments are dropped, the mail still arrives;
+   `INBOUND_MAIL_REPLAY_WINDOW` (900 s) for Mailgun signatures. Your web server / PHP must accept
+   request bodies as large as the provider sends (Postmark: up to 35 MB per message, base64
+   inflates attachments by a third).
+
+Received mail is processed by the queue worker (the `queue` container), and the webhook answers
+at once. A regenerated address replaces the old one immediately. Refused mail (unknown address,
+stale or replayed signature) is answered so that the provider does not retry (Postmark 403,
+Mailgun 406); a wrong token or signature gets 401.
+
+Prefer your own mailbox over IMAP instead? Helpdesk settings → Email → *Connected mailbox* reads
+it directly, no provider needed.
+
+## Email to helpdesk (connected mailbox, IMAP)
+
+Helpdesk settings → **Email** → *Connected mailbox*: Brainitive logs in to a mailbox over IMAP every
+minute, turns new mail into tickets (or replies, when someone answers a ticket mail) and sends agent
+replies back by email in the same thread. Nothing to set up on the server besides the scheduler:
+
+- **The scheduler must run** (`php artisan schedule:run` every minute; the Docker setup's
+  `scheduler` container does it). It runs `app:poll-helpdesk-mailboxes`, which you can also run by
+  hand (`--helpdesk=<id>`, `--force` to skip the pause after errors).
+- **Use a mailbox only for support.** Only *unread* mail is imported; afterwards it is marked as
+  read, or moved to the folder you set. Mail somebody reads in a mail client first is skipped.
+- **Credentials:** many providers need an *app password* for IMAP (Gmail / Google Workspace and
+  Microsoft 365 with two-step sign-in; Microsoft 365 may need IMAP / SMTP AUTH enabled for the
+  mailbox). Passwords are stored encrypted with `APP_KEY` and never shown again.
+- **Replies** go out either through the app's mailer (`MAIL_*`, from your app address with the
+  helpdesk's name and `Reply-To` the support address — this needs no DNS changes) or through the
+  mailbox's own SMTP server (from the support address itself; its SPF / DKIM then apply).
+- **Servers must be on the public internet** and use the standard ports (IMAP 143 / 993, SMTP 25 /
+  465 / 587 / 2525) with SSL/TLS or STARTTLS. Local / private mail servers are refused (the server
+  connects to what users type in); for local development only, `APP_ENV=local` plus
+  `HELPDESK_MAIL_ALLOW_PRIVATE_HOSTS=true` allows them and unencrypted connections.
+- **Limits:** messages above `HELPDESK_MAIL_MAX_MESSAGE_MB` (25) are not downloaded (listed as
+  "too large" under *Recently received*); attachments follow the public upload rules (10 MB each,
+  10 per message, no programs or scripts).
+- **Loops:** auto-replies, bounces, mailing lists and Brainitive's own mail are ignored, and one
+  sender can open at most 10 tickets per hour and helpdesk. *Recently received* in the settings
+  shows what came in and why something was ignored or rejected.
 
 ## Security notes
 

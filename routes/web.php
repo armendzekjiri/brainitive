@@ -13,6 +13,8 @@ use App\Http\Controllers\CommandPaletteController;
 use App\Http\Controllers\ContentReferenceController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\HelpdeskController;
+use App\Http\Controllers\HelpdeskForwardingController;
+use App\Http\Controllers\HelpdeskMailboxController;
 use App\Http\Controllers\HelpdeskWidgetController;
 use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\ItemFieldController;
@@ -311,6 +313,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('fields/{itemField}', [ItemFieldController::class, 'destroy'])->whereNumber('itemField')->name('projects.fields.destroy');
         });
 
+        // Automation, recurring issues, helpdesk SLA (v1.40.0)
+        Route::prefix('projects/{project:slug}')->scopeBindings()->group(function () {
+            require __DIR__.'/automation.php';
+        });
+
         // Project members (assign workspace users to project with role)
         Route::prefix('projects/{project:slug}')->scopeBindings()->group(function () {
             Route::get('members/search', [ProjectController::class, 'searchMembers'])->name('projects.members.search');
@@ -472,6 +479,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('helpdesks/{helpdesk:slug}/fields/{field}', [HelpdeskController::class, 'destroyField'])->name('helpdesks.fields.destroy');
             Route::post('helpdesks/{helpdesk:slug}/tickets/reorder', [HelpdeskController::class, 'reorderTickets'])->name('helpdesks.tickets.reorder');
             Route::get('helpdesks/{helpdesk:slug}/tickets/root', [HelpdeskController::class, 'rootTicketsJson'])->name('helpdesks.tickets.root');
+            // Settings → Email → forwarding address (BRAI-124)
+            Route::get('helpdesks/{helpdesk:slug}/email/forwarding', [HelpdeskForwardingController::class, 'show'])->middleware(ReadOnlySession::class)->name('helpdesks.forwarding.show');
+            Route::post('helpdesks/{helpdesk:slug}/email/forwarding/regenerate', [HelpdeskForwardingController::class, 'regenerate'])->middleware('throttle:10,1,helpdesks.forwarding.regenerate')->name('helpdesks.forwarding.regenerate');
 
             // Tickets (nested under helpdesks)
             Route::post('helpdesks/{helpdesk:slug}/tickets', [TicketController::class, 'store'])->name('tickets.store');
@@ -484,6 +494,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('helpdesks/{helpdesk:slug}/tickets/{ticket}/attachments/{attachment}', [TicketController::class, 'destroyAttachment'])->name('tickets.attachments.destroy');
             Route::post('helpdesks/{helpdesk:slug}/tickets/{ticket}/watch', [TicketController::class, 'toggleWatch'])->name('tickets.watch');
             Route::patch('helpdesks/{helpdesk:slug}/tickets/{ticket}/fields', [TicketController::class, 'updateFieldValues'])->name('tickets.fields.update');
+
+            // Email → helpdesk: connected IMAP mailbox (v1.40.0, BRAI-79)
+            Route::get('helpdesks/{helpdesk:slug}/mailbox', [HelpdeskMailboxController::class, 'show'])->name('helpdesks.mailbox.show');
+            Route::put('helpdesks/{helpdesk:slug}/mailbox', [HelpdeskMailboxController::class, 'update'])->name('helpdesks.mailbox.update');
+            Route::delete('helpdesks/{helpdesk:slug}/mailbox', [HelpdeskMailboxController::class, 'destroy'])->name('helpdesks.mailbox.destroy');
+            Route::post('helpdesks/{helpdesk:slug}/mailbox/test', [HelpdeskMailboxController::class, 'test'])->middleware('throttle:10,1,helpdesks.mailbox.test')->name('helpdesks.mailbox.test');
+            Route::post('helpdesks/{helpdesk:slug}/tickets/{ticket}/replies/{reply}/resend-email', [HelpdeskMailboxController::class, 'resendReply'])->middleware('throttle:10,1,tickets.replies.resend-email')->name('tickets.replies.resend-email');
+            if (app()->environment('e2e')) {
+                Route::post('helpdesks/{helpdesk:slug}/mailbox/e2e-receive', [HelpdeskMailboxController::class, 'e2eReceive'])->name('helpdesks.mailbox.e2e-receive');
+            }
 
             // Pages (nested under projects)
             Route::post('pages', [PageController::class, 'store'])->name('pages.store');

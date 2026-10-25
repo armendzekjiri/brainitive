@@ -11,7 +11,7 @@ function formatDuration(hours: number | null): string {
 
 /** Insights → Helpdesk & leads (BRAI-105). Definitions: HelpdeskInsights (PHP). */
 export default function InsightsHelpdeskPage(props: InsightsPageProps<InsightsHelpdesk>) {
-    const { tickets, helpdesks, leads, forms } = props.insights;
+    const { tickets, sla, helpdesks, leads, forms } = props.insights;
     const funnel = [
         { label: 'Viewed', value: leads.views },
         { label: 'Started', value: leads.starts },
@@ -20,19 +20,27 @@ export default function InsightsHelpdeskPage(props: InsightsPageProps<InsightsHe
 
     return (
         <InsightsLayout tab="helpdesk" props={props}>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
                 <StatTile testId="kpi-tickets-created" label="Tickets created" value={tickets.created} hint="in the period" />
                 <StatTile testId="kpi-tickets-resolved" label="Tickets resolved" value={tickets.resolved} hint="in the period" />
                 <StatTile testId="kpi-resolution" label="Median resolution time" value={formatDuration(tickets.median_resolution_hours)} hint="of the resolved ones" />
                 <StatTile testId="kpi-tickets-open" label="Open tickets" value={tickets.open} hint="now" />
+                {/* SLA (BRAI-125) */}
+                <StatTile testId="kpi-sla-breaches" label="SLA breaches" value={sla.breaches} hint="targets missed in the period" />
+                <StatTile
+                    testId="kpi-sla-met"
+                    label="SLA met"
+                    value={sla.met_percent === null ? '—' : `${sla.met_percent}%`}
+                    hint={sla.resolved ? `of ${sla.resolved} resolved with an SLA` : 'no resolved tickets with an SLA'}
+                />
             </div>
 
-            <Section title="Helpdesks" description="Created and resolved in the period; open now.">
+            <Section title="Helpdesks" description="Created and resolved in the period; open now. SLA: breaches in the period, met = resolved within every target.">
                 {helpdesks.length === 0 ? (
                     <Empty>No helpdesks yet.</Empty>
                 ) : (
                     <div className="-mx-4 overflow-x-auto px-4">
-                        <table className="w-full min-w-[560px] text-sm" aria-label="Helpdesks">
+                        <table className="w-full min-w-[680px] text-sm" aria-label="Helpdesks">
                             <thead>
                                 <tr className="text-left text-xs text-muted-foreground">
                                     <th className="pb-2 font-medium">Helpdesk</th>
@@ -40,6 +48,8 @@ export default function InsightsHelpdeskPage(props: InsightsPageProps<InsightsHe
                                     <th className="pb-2 text-right font-medium">Created</th>
                                     <th className="pb-2 text-right font-medium">Resolved</th>
                                     <th className="pb-2 text-right font-medium">Open now</th>
+                                    <th className="pb-2 text-right font-medium">SLA breaches</th>
+                                    <th className="pb-2 text-right font-medium">SLA met</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -50,6 +60,8 @@ export default function InsightsHelpdeskPage(props: InsightsPageProps<InsightsHe
                                         <td className="py-2 text-right tabular-nums">{h.created}</td>
                                         <td className="py-2 text-right tabular-nums">{h.resolved}</td>
                                         <td className="py-2 text-right tabular-nums">{h.open}</td>
+                                        <td className="py-2 text-right tabular-nums">{h.sla_breaches}</td>
+                                        <td className="py-2 text-right tabular-nums">{h.sla_met_percent === null ? '—' : `${h.sla_met_percent}%`}</td>
                                     </tr>
                                 ))}
                             </tbody>

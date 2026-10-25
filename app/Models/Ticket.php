@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Helpdesks\Sla\TicketSla;
 use App\Support\References\ContentReferences;
 use App\Support\SafeHtml;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -49,6 +50,17 @@ class Ticket extends Model
         return [
             'metadata' => 'array',
             'completed_at' => 'datetime',
+            // SLA (BRAI-125): computed by TicketSla, never mass-assigned
+            'first_responded_at' => 'datetime',
+            'sla_first_response_due_at' => 'datetime',
+            'sla_first_response_warn_at' => 'datetime',
+            'sla_resolution_due_at' => 'datetime',
+            'sla_resolution_warn_at' => 'datetime',
+            'sla_paused_at' => 'datetime',
+            'sla_paused_minutes' => 'integer',
+            'sla_breached_at' => 'datetime',
+            'sla_first_response_breached' => 'boolean',
+            'sla_resolution_breached' => 'boolean',
         ];
     }
 
@@ -62,6 +74,13 @@ class Ticket extends Model
         static::creating(function (Ticket $ticket) {
             if (empty($ticket->uuid)) {
                 $ticket->uuid = (string) Str::uuid();
+            }
+        });
+
+        // SLA (BRAI-125): due dates follow priority, column (pause / done) and the first response
+        static::saving(function (Ticket $ticket) {
+            if (! $ticket->exists || $ticket->isDirty(['helpdesk_id', 'priority_id', 'column_id', 'completed_at', 'first_responded_at'])) {
+                TicketSla::apply($ticket, TicketSla::policyFor($ticket));
             }
         });
 

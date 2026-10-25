@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
@@ -24,6 +25,9 @@ class Helpdesk extends Model
         'created_by',
         'settings',
     ];
+
+    /** The forwarding address (BRAI-124) is a capability: only the Email tab's endpoint reveals it. */
+    protected $hidden = ['forwarding_local_part'];
 
     protected function casts(): array
     {
@@ -94,12 +98,24 @@ class Helpdesk extends Model
         return $this->hasMany(Ticket::class);
     }
 
+    /** Service levels (BRAI-125); no row = no SLA. */
+    public function slaPolicy(): HasOne
+    {
+        return $this->hasOne(HelpdeskSlaPolicy::class);
+    }
+
     /**
      * Get all custom fields for this helpdesk.
      */
     public function fields(): HasMany
     {
         return $this->hasMany(HelpdeskField::class)->orderBy('position');
+    }
+
+    /** The connected IMAP mailbox (v1.40.0, BRAI-79). */
+    public function mailbox(): HasOne
+    {
+        return $this->hasOne(HelpdeskMailbox::class);
     }
 
     /**

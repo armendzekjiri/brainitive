@@ -19,6 +19,34 @@ test.describe('documents', () => {
         await expect(docEditor(page)).toContainText(text);
     });
 
+    test('a checklist in a page keeps its text clear of the checkboxes', async ({ page }) => {
+        await addProjectContent(page, 'Page', uid('Checklist doc'));
+        const editor = docEditor(page);
+        await editor.click();
+        await page.keyboard.type('/checklist');
+        await page.keyboard.press('Enter');
+        await page.keyboard.type('First task');
+        await page.keyboard.press('Enter');
+        await page.keyboard.type('Second task');
+
+        const items = editor.locator('li.lexical-listitem-unchecked');
+        await expect(items).toHaveCount(2);
+        for (const item of await items.all()) {
+            // the checkbox (::before, 16px at the left edge) must end before the text starts
+            const gap = await item.evaluate((li) => {
+                const box = getComputedStyle(li, '::before');
+                const text = document.createRange();
+                text.selectNodeContents(li);
+                return text.getBoundingClientRect().left - (li.getBoundingClientRect().left + parseFloat(box.left) + parseFloat(box.width));
+            });
+            expect(gap, 'space between checkbox and text').toBeGreaterThanOrEqual(4);
+        }
+
+        // ticking the first one checks it
+        await items.first().click({ position: { x: 6, y: 10 } });
+        await expect(editor.locator('li.lexical-listitem-checked')).toHaveCount(1);
+    });
+
     test('a published page can be shared with a public link that works logged out', async ({ page, browser }) => {
         const name = uid('Shared doc');
         const text = `Public content ${uid('body')}`;

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Helpdesks\Sla\TicketSla;
 use App\Support\SafeHtml;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -19,6 +20,11 @@ class TicketReply extends Model
         'ticket_contact_id',
         'body',
         'is_internal_note',
+        // sent by email (BRAI-79): stable Message-ID + delivery state
+        'email_message_id',
+        'email_status',
+        'email_error',
+        'email_sent_at',
     ];
 
     /**
@@ -37,7 +43,14 @@ class TicketReply extends Model
     {
         return [
             'is_internal_note' => 'boolean',
+            'email_sent_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // SLA (BRAI-125): the first public agent reply is the ticket's first response, whatever the path
+        static::created(fn (TicketReply $reply) => TicketSla::recordReply($reply));
     }
 
     /**

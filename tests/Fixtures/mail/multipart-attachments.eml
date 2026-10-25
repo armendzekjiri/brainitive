@@ -1,0 +1,46 @@
+Message-ID: <multi.4711@mail.customer.example>
+Date: Sat, 24 Oct 2026 09:15:00 +0200
+From: "Dana Doe" <dana@customer.example>
+To: support@helpdesk.example
+Cc: Boss Person <boss@customer.example>, support@helpdesk.example
+Subject: Invoice question
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mixed-boundary"
+
+--mixed-boundary
+Content-Type: multipart/alternative; boundary="alt-boundary"
+
+--alt-boundary
+Content-Type: text/plain; charset="UTF-8"
+
+Please check the attached invoice.
+
+--alt-boundary
+Content-Type: text/html; charset="UTF-8"
+
+<html><body><p>Please check the <b>attached</b> invoice.</p><img src="x" onerror="alert(1)"><script>alert(2)</script><a href="javascript:alert(3)">click</a></body></html>
+
+--alt-boundary--
+
+--mixed-boundary
+Content-Type: application/pdf; name="invoice.pdf"
+Content-Disposition: attachment; filename="invoice.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJcOkw7zDtsOfCjIgMCBvYmoKPDwvTGVuZ3RoIDMgMCBSPj4Kc3RyZWFtCmVuZHN0cmVhbQplbmRvYmoKdHJhaWxlcgo8PC9Sb290IDEgMCBSPj4KJSVFT0YK
+
+--mixed-boundary
+Content-Type: application/octet-stream; name="update.exe"
+Content-Disposition: attachment; filename="update.exe"
+Content-Transfer-Encoding: base64
+
+TVqQAAMAAAAEAAAA//8AALgAAAAAAAAAQAAAAAAAAAA=
+
+--mixed-boundary
+Content-Type: text/html; name="page.html"
+Content-Disposition: attachment; filename="page.html"
+Content-Transfer-Encoding: base64
+
+PGh0bWw+PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0PjwvaHRtbD4=
+
+--mixed-boundary--
