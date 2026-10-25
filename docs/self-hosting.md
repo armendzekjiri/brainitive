@@ -20,12 +20,9 @@ git clone https://github.com/armendzekjiri/brainitive.git
 cd brainitive
 cp .env.docker.example .env
 
-# 1. App key — paste the output into .env as APP_KEY=…
-docker compose run --rm --no-deps app php artisan key:generate --show
+# 1. Edit .env: DB_PASSWORD, APP_URL, MAIL_* (MAIL_MAILER=log until you have SMTP)
 
-# 2. Edit .env: APP_URL, DB_PASSWORD, MAIL_* (MAIL_MAILER=log until you have SMTP)
-
-# 3. Start
+# 2. Start
 docker compose up -d
 ```
 
@@ -158,7 +155,10 @@ on start).
 
 ## Troubleshooting
 
-- **`APP_KEY is missing`** — step 1 of the quick start.
+- **App key** — generated on the first start and kept in the `storage` volume
+  (`storage/app.key`), so back that volume up. To manage it yourself, set `APP_KEY=` in `.env`
+  (`docker compose run --rm --no-deps app php artisan key:generate --show`); a key in `.env` wins.
+  Never change it on a running instance: sessions, encrypted settings and tokens depend on it.
 - **`Database not reachable`** — `DB_PASSWORD` in `.env` must match what PostgreSQL was first
   started with. Changing it later needs `ALTER USER` inside PostgreSQL, or a fresh `pgdata` volume.
 - **Upgrading from the old compose file with MariaDB** — those installs never got past the

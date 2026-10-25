@@ -364,11 +364,13 @@ Contract (envelope, event list): [`tasks/release-v1.39.0.md`](./tasks/release-v1
 - `Dockerfile` — multi-stage: composer → node (frontend; needs `vendor/tightenco/ziggy` for
   `tsc`) → `dunglas/frankenphp` runtime (Caddy + PHP 8.4, non-root, extensions installed
   with `install-php-extensions`).
-- `docker/entrypoint.sh` — `CONTAINER_ROLE=app|queue|scheduler`; the app role waits for the
+- `docker/entrypoint.sh` — `CONTAINER_ROLE=app|queue|scheduler`; without `APP_KEY` the app role
+  generates one into `storage/app.key` (the others wait for it); the app role waits for the
   DB, migrates, seeds item types / priorities / instance settings, creates Passport keys
   and runs `optimize`.
 - `compose.yaml` + `.env.docker.example` — app, queue, scheduler, PostgreSQL 16, Redis 7.
   Queue and scheduler disable the image's healthcheck (it probes Caddy, which only `app` runs).
+  compose sets `DB_CONNECTION/HOST/PORT` itself, so an old `.env` can't point at MariaDB.
 - **Releases:** `.github/workflows/release.yml` runs on every push to `main`: reads the newest
   `CHANGELOG` version in `HelpModal.tsx` (`.github/scripts/changelog-release.mjs`), creates
   tag + GitHub Release if that version is new, then calls `docker-publish.yml` → image

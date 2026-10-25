@@ -83,6 +83,15 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.39.2',
+        title: 'Docker: no app key to copy',
+        tag: 'Fix',
+        date: '2026-10-25',
+        items: [
+            'Self-hosting: the first start generates the app key itself, so cp .env.docker.example .env and docker compose up -d is all it takes. Before, a skipped copy-paste of the key left every container restarting. A .env from the old MariaDB setup now works too.',
+        ]
+    },
+    {
         version: 'v1.39.1',
         title: 'Self-hosting with Docker works again, every timezone',
         tag: 'Fix',
