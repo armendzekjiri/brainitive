@@ -17,6 +17,9 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
 COPY --from=vendor /app/vendor/tightenco/ziggy vendor/tightenco/ziggy
+# A checkout on a case-insensitive disk (macOS, Windows) may name the folder "Components"; the
+# imports say "@/components/…" and Linux is case-sensitive, so use the tracked lowercase name.
+RUN if [ -d resources/js/Components ] && [ ! -d resources/js/components ]; then mv resources/js/Components resources/js/components; fi
 RUN npm run build
 
 # ── Runtime ───────────────────────────────────────────────────────────────
