@@ -47,9 +47,8 @@ access; paid plans come later and are announced in advance. →
 
 ```bash
 git clone https://github.com/armendzekjiri/brainitive.git && cd brainitive
-cp .env.docker.example .env                                                # then set DB_PASSWORD
-docker compose run --rm --no-deps app php artisan key:generate --show   # → APP_KEY in .env
-docker compose up -d --build
+cp .env.docker.example .env   # then set DB_PASSWORD
+docker compose up -d --build  # open http://localhost:8080
 ```
 
 HTTPS, backups, updates and optional features: [docs/self-hosting.md](docs/self-hosting.md).
