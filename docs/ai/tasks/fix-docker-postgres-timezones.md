@@ -1,7 +1,7 @@
 # Fix: Docker self-hosting never started; workspace timezone list cut off
 
 **Branch:** fix/docker-postgres-timezones
-**Status:** done
+**Status:** done (in release v1.39.1)
 **Started:** 2026-10-25
 **Board card:** —
 

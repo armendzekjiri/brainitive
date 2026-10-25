@@ -83,6 +83,16 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.39.1',
+        title: 'Self-hosting with Docker works again, every timezone',
+        tag: 'Fix',
+        date: '2026-10-25',
+        items: [
+            'Self-hosting: a fresh Docker install now starts. The database is PostgreSQL (what Brainitive is built and tested on) instead of MariaDB, where setup stopped during the first start. Sign-up works before mail is set up, and the queue and scheduler containers no longer show “unhealthy”. Older installs: git pull and docker compose up -d.',
+            'Workspace settings → Timezone lists every timezone in the world, with search and the current UTC offset. Before, the list ended after the first 100 (no Europe, Asia or Pacific).',
+        ]
+    },
+    {
         version: 'v1.39.0',
         title: 'Notifications, insights, webhooks and your own sidebar',
         tag: 'Feature',
