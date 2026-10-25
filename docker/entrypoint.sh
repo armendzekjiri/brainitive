@@ -4,21 +4,35 @@
 set -e
 cd /app
 
-# Generating the first APP_KEY must work before anything is configured
+# Generating an APP_KEY by hand must work before anything is configured
 case "$*" in
     *artisan\ key:generate*) exec "$@" ;;
 esac
 
-if [ -z "$APP_KEY" ]; then
-    echo "APP_KEY is missing. Generate one with:"
-    echo "  docker compose run --rm --no-deps app php artisan key:generate --show"
-    echo "and put it into your .env as APP_KEY=…"
-    exit 1
-fi
-
 # A fresh storage volume is empty: recreate Laravel's directory layout
 mkdir -p storage/app/public storage/framework/cache/data storage/framework/sessions \
          storage/framework/views storage/logs
+
+# No APP_KEY in .env: the app role generates one once and keeps it in the storage volume,
+# which queue and scheduler share (back that volume up: it also holds uploads).
+if [ -z "$APP_KEY" ]; then
+    if [ "${CONTAINER_ROLE:-app}" = "app" ] && [ ! -s storage/app.key ]; then
+        php artisan key:generate --show > storage/app.key.tmp
+        mv storage/app.key.tmp storage/app.key
+        echo "Generated an APP_KEY (kept in the storage volume as storage/app.key)."
+    fi
+    attempts=0
+    until [ -s storage/app.key ]; do
+        attempts=$((attempts + 1))
+        if [ "$attempts" -ge 60 ]; then
+            echo "APP_KEY is missing and the app container hasn't generated one: check its logs."
+            exit 1
+        fi
+        sleep 2
+    done
+    APP_KEY=$(cat storage/app.key)
+    export APP_KEY
+fi
 
 echo "Waiting for the database…"
 attempts=0
