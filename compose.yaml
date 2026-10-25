@@ -1,5 +1,5 @@
 # Brainitive self-hosting. Quick start: docs/self-hosting.md
-#   cp .env.docker.example .env   # then set APP_KEY, APP_URL, passwords, mail
+#   cp .env.docker.example .env   # then set APP_KEY, APP_URL, DB_PASSWORD, mail
 #   docker compose up -d
 x-brainitive: &brainitive
   image: ${BRAINITIVE_IMAGE:-ghcr.io/armendzekjiri/brainitive:latest}
@@ -32,25 +32,30 @@ services:
     environment:
       CONTAINER_ROLE: queue
     command: ["php", "artisan", "queue:work", "--tries=3", "--max-time=3600"]
+    # The image's healthcheck probes the web server, which only the app container runs
+    healthcheck:
+      disable: true
 
   scheduler:
     <<: *brainitive
     environment:
       CONTAINER_ROLE: scheduler
     command: ["php", "artisan", "schedule:work"]
+    # The image's healthcheck probes the web server, which only the app container runs
+    healthcheck:
+      disable: true
 
   db:
-    image: mariadb:11.4
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      MARIADB_DATABASE: ${DB_DATABASE:-brainitive}
-      MARIADB_USER: ${DB_USERNAME:-brainitive}
-      MARIADB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
-      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
+      POSTGRES_DB: ${DB_DATABASE:-brainitive}
+      POSTGRES_USER: ${DB_USERNAME:-brainitive}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     volumes:
-      - db:/var/lib/mysql
+      - db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
       timeout: 5s
       retries: 30

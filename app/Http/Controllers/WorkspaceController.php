@@ -371,7 +371,7 @@ class WorkspaceController extends Controller
             'website' => 'nullable|url|max:255',
             'industry' => 'nullable|string|max:100',
             'company_size' => 'nullable|string|max:50',
-            'timezone' => 'nullable|string|max:100',
+            'timezone' => 'nullable|timezone:all|max:100',
             'language' => 'nullable|string|max:10',
             'currency' => 'nullable|string|max:10',
             'is_public' => 'nullable|boolean',

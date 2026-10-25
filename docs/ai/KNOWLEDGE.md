@@ -326,6 +326,14 @@ must arrive through a migration that calls the idempotent seeder (see
 `2026_10_23_150000_ensure_default_item_priorities.php`, BRAI-85) — otherwise pickers are
 empty in production while tests and Docker look fine.
 
+### Docker self-hosting runs PostgreSQL — the migrations don't run on MySQL / MariaDB
+`compose.yaml` shipped MariaDB 11.4 until 2026-10-25, but no fresh install ever got past
+`2026_02_23_140000_move_bookmarks_to_workspace` (MariaDB error 1553: the unique index it drops
+backs a foreign key) — and MySQL DDL isn't transactional, so every container restart then failed
+on "Duplicate column". Tests, CI and production all run PostgreSQL, so Docker does too
+(`postgres:16-alpine`, like CI). Don't reintroduce MySQL in compose without running all
+migrations against it.
+
 ### SQLite-incompatible migrations
 - `2026_02_03_145210_add_member_role_to_workspace_user_table` uses
   `ALTER TABLE … DROP CONSTRAINT`, which SQLite doesn't support. Breaks `php artisan
