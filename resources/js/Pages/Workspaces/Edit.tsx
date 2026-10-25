@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TimezonePicker } from '@/components/TimezonePicker';
 import {
     Select,
     SelectContent,
@@ -786,21 +787,12 @@ export default function WorkspacesEdit({
                                                 <Label htmlFor="timezone" className="text-base font-medium">
                                                     Timezone
                                                 </Label>
-                                                <Select
+                                                <TimezonePicker
+                                                    id="timezone"
                                                     value={data.timezone}
-                                                    onValueChange={(value) => setData('timezone', value)}
-                                                >
-                                                    <SelectTrigger className="h-11">
-                                                        <SelectValue placeholder="Select timezone" />
-                                                    </SelectTrigger>
-                                                    <SelectContent className="max-h-[300px]">
-                                                        {timezones.slice(0, 100).map((tz) => (
-                                                            <SelectItem key={tz} value={tz}>
-                                                                {tz}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
+                                                    timezones={timezones}
+                                                    onChange={(value) => setData('timezone', value)}
+                                                />
                                             </div>
                                             <div className="space-y-2">
                                                 <Label htmlFor="language" className="text-base font-medium">
