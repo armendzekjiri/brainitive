@@ -1,7 +1,7 @@
 # Self-hosting Brainitive
 
 Brainitive is open source (AGPL-3.0) and runs on any machine with Docker. One image runs the
-web app, the queue worker and the scheduler; MariaDB and Redis run next to it.
+web app, the queue worker and the scheduler; PostgreSQL and Redis run next to it.
 Don't want to run servers? [Brainitive Cloud](https://www.brainitive.app/#pricing) is the same
 software, hosted and updated for you.
 
@@ -23,7 +23,7 @@ cp .env.docker.example .env
 # 1. App key — paste the output into .env as APP_KEY=…
 docker compose run --rm --no-deps app php artisan key:generate --show
 
-# 2. Edit .env: APP_URL, DB_PASSWORD, DB_ROOT_PASSWORD, MAIL_*
+# 2. Edit .env: APP_URL, DB_PASSWORD, MAIL_* (MAIL_MAILER=log until you have SMTP)
 
 # 3. Start
 docker compose up -d
@@ -97,11 +97,12 @@ for what changed.
 Back up the database and the `storage` volume (uploads, OAuth keys):
 
 ```bash
-docker compose exec db sh -c 'mariadb-dump -u root -p"$MARIADB_ROOT_PASSWORD" --single-transaction "$MARIADB_DATABASE"' > brainitive-$(date +%F).sql
+docker compose exec db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > brainitive-$(date +%F).sql
 docker run --rm -v brainitive_storage:/storage -v "$PWD":/backup alpine tar czf /backup/storage-$(date +%F).tgz -C /storage .
 ```
 
-(The volume name is `<folder>_storage` — check with `docker volume ls`.)
+(The volume name is `<folder>_storage` — check with `docker volume ls`.) Restore the database
+into a fresh `pgdata` volume with `docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"' < brainitive-….sql`.
 
 ## Optional features
 
@@ -158,8 +159,14 @@ on start).
 ## Troubleshooting
 
 - **`APP_KEY is missing`** — step 1 of the quick start.
-- **`Database not reachable`** — `DB_PASSWORD` in `.env` must match what MariaDB was first
-  started with. Changing it later needs `ALTER USER` inside MariaDB, or a fresh `db` volume.
+- **`Database not reachable`** — `DB_PASSWORD` in `.env` must match what PostgreSQL was first
+  started with. Changing it later needs `ALTER USER` inside PostgreSQL, or a fresh `pgdata` volume.
+- **Upgrading from the old compose file with MariaDB** — those installs never got past the
+  first migrations, so there is no data to keep. PostgreSQL uses a new `pgdata` volume, so
+  `git pull && docker compose up -d` just works; the old one can go: `docker volume rm <folder>_db`.
+- **Sign-up or "forgot password" fails with a mail error** — `MAIL_*` points to a server that
+  doesn't exist. Keep `MAIL_MAILER=log` until SMTP works (mails then appear in
+  `docker compose logs app`).
 - **Logs** — `docker compose logs -f app queue scheduler`.
 - **Mails not arriving** — Instance admin → Settings → *Send a test email* shows the mail
   server's error. SMTP saved there overrides `MAIL_*` in `.env`.

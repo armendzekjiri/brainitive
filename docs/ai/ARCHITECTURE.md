@@ -367,7 +367,8 @@ Contract (envelope, event list): [`tasks/release-v1.39.0.md`](./tasks/release-v1
 - `docker/entrypoint.sh` — `CONTAINER_ROLE=app|queue|scheduler`; the app role waits for the
   DB, migrates, seeds item types / priorities / instance settings, creates Passport keys
   and runs `optimize`.
-- `compose.yaml` + `.env.docker.example` — app, queue, scheduler, MariaDB 11.4, Redis 7.
+- `compose.yaml` + `.env.docker.example` — app, queue, scheduler, PostgreSQL 16, Redis 7.
+  Queue and scheduler disable the image's healthcheck (it probes Caddy, which only `app` runs).
 - **Releases:** `.github/workflows/release.yml` runs on every push to `main`: reads the newest
   `CHANGELOG` version in `HelpModal.tsx` (`.github/scripts/changelog-release.mjs`), creates
   tag + GitHub Release if that version is new, then calls `docker-publish.yml` → image
