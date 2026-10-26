@@ -16,6 +16,8 @@ import { LexicalComposer } from '@lexical/react/LexicalComposer';
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
+import { CollaborationPlugin } from '@lexical/react/LexicalCollaborationPlugin';
+import { LexicalCollaboration } from '@lexical/react/LexicalCollaborationContext';
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary';
 import { ListPlugin } from '@lexical/react/LexicalListPlugin';
 import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin';
@@ -53,6 +55,7 @@ import {
     SELECTION_CHANGE_COMMAND,
     $setSelection,
     LexicalEditor,
+    COLLABORATION_TAG,
 } from 'lexical';
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from '@lexical/html';
 import {
@@ -211,6 +214,8 @@ import TableCellResizerPlugin from './plugins/TableCellResizerPlugin';
 import MentionsPlugin from './plugins/MentionsPlugin';
 import { safeHtmlProp } from '@/lib/sanitize';
 import { normalizeAiHtml } from '@/lib/aiHtml';
+import { COLLAB_EXCLUDED_PROPERTIES, RICH_EDITOR_NODES } from './richEditorNodes';
+import type { LiveEditorBinding } from './collab/shared';
 
 // Custom commands
 export const INSERT_IMAGE_COMMAND: LexicalCommand<{ src: string; altText: string }> = createCommand();
@@ -3285,6 +3290,38 @@ function HtmlOnChangePlugin({
     return null;
 }
 
+/**
+ * Live co-editing (BRAI-54): hands the editor to useLiveDocument (it renders the HTML that gets saved)
+ * and reports every change as local or remote (arrived from someone else through Yjs).
+ */
+function LiveEditorBridgePlugin({ binding }: { binding: LiveEditorBinding }) {
+    const [editor] = useLexicalComposerContext();
+    const { onEditor, onChange } = binding;
+
+    useEffect(() => {
+        onEditor(editor);
+        const stop = editor.registerUpdateListener(({ dirtyElements, dirtyLeaves, tags }) => {
+            if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return;
+            onChange(tags.has(COLLABORATION_TAG));
+        });
+        return () => {
+            stop();
+            onEditor(null);
+        };
+    }, [editor, onEditor, onChange]);
+
+    return null;
+}
+
+/** Live mode has no InitialContentPlugin (the content comes from Yjs), so editability is set here. */
+function EditableSyncPlugin({ editable }: { editable: boolean }) {
+    const [editor] = useLexicalComposerContext();
+    useEffect(() => {
+        editor.setEditable(editable);
+    }, [editor, editable]);
+    return null;
+}
+
 export interface TocHeading {
     id: string;
     text: string;
@@ -3336,6 +3373,8 @@ interface RichLexicalEditorProps {
     pollScope?: { type: 'page' | 'item'; id: string } | null;
     /** Smart links (BRAI-143): live chips + paste / "/link" / "+" menu. Omit = smart links show as plain links. */
     smartLinks?: SmartLinkEditorConfig | null;
+    /** Live co-editing (BRAI-54): content comes from the shared Yjs document instead of `content`. */
+    collaboration?: LiveEditorBinding | null;
 }
 
 export function RichLexicalEditor({
@@ -3358,11 +3397,14 @@ export function RichLexicalEditor({
     documentMode = false,
     pollScope = null,
     smartLinks = null,
+    collaboration = null,
 }: RichLexicalEditorProps) {
     const [floatingAnchorElem, setFloatingAnchorElem] = useState<HTMLDivElement | null>(null);
     // Shared ref: true while InitialContentPlugin is loading content — prevents HtmlOnChangePlugin
     // from firing onChange with an empty/partially-loaded state (the race condition that deleted content).
-    const isInitializingRef = useRef(true);
+    const isInitializingRef = useRef(!collaboration);
+    // remote carets + selections render here (positioned against the relative wrapper below)
+    const cursorsContainerRef = useRef<HTMLDivElement | null>(null);
 
     const onRef = (_floatingAnchorElem: HTMLDivElement) => {
         if (_floatingAnchorElem !== null) {
@@ -3376,41 +3418,14 @@ export function RichLexicalEditor({
         onError: (error: Error) => {
             console.error('Lexical error:', error);
         },
-        nodes: [
-            HeadingNode,
-            QuoteNode,
-            ListNode,
-            ListItemNode,
-            LinkNode,
-            AutoLinkNode,
-            CodeNode,
-            CodeHighlightNode,
-            TableNode,
-            TableCellNode,
-            TableRowNode,
-            HorizontalRuleNode,
-            ImageNode,
-            GIFNode,
-            YouTubeNode,
-            FigmaNode,
-            TweetNode,
-            ExcalidrawNode,
-            EquationNode,
-            StickyNoteNode,
-            PollNode,
-            PageBreakNode,
-            LayoutContainerNode,
-            LayoutItemNode,
-            CollapsibleContainerNode,
-            CollapsibleTitleNode,
-            CollapsibleContentNode,
-            MentionNode,
-            SmartLinkNode,
-        ],
+        nodes: RICH_EDITOR_NODES,
         editable,
+        // live mode: the state comes from Yjs, never from an initial value
+        ...(collaboration ? { editorState: null } : {}),
     };
 
     return (
+        <LexicalCollaboration>
         <LexicalComposer initialConfig={initialConfig}>
             <PollScopeContext.Provider value={pollScope}>
             <SmartLinkEditorContext.Provider value={smartLinks}>
@@ -3446,8 +3461,26 @@ export function RichLexicalEditor({
                             }
                             ErrorBoundary={LexicalErrorBoundary}
                         />
+                        {collaboration && <div ref={cursorsContainerRef} className="collab-cursors pointer-events-none" aria-hidden="true" />}
                     </div>
-                    <HistoryPlugin />
+                    {collaboration ? (
+                        <>
+                            <CollaborationPlugin
+                                id={collaboration.id}
+                                providerFactory={collaboration.providerFactory}
+                                shouldBootstrap={false}
+                                username={collaboration.username}
+                                cursorColor={collaboration.color}
+                                cursorsContainerRef={cursorsContainerRef}
+                                excludedProperties={COLLAB_EXCLUDED_PROPERTIES}
+                                awarenessData={collaboration.awarenessData}
+                            />
+                            <LiveEditorBridgePlugin binding={collaboration} />
+                            <EditableSyncPlugin editable={editable} />
+                        </>
+                    ) : (
+                        <HistoryPlugin />
+                    )}
                     <ListPlugin />
                     <CheckListPlugin />
                     <LinkPlugin />
@@ -3463,7 +3496,7 @@ export function RichLexicalEditor({
                     <CodeHighlightPlugin />
                     {projectId && editable && <MentionsPlugin projectId={projectId} />}
                     {smartLinks && editable && <SmartLinkPlugin config={smartLinks} />}
-                    <InitialContentPlugin content={content} editable={editable} contentKey={contentKey} isInitializingRef={isInitializingRef} />
+                    {!collaboration && <InitialContentPlugin content={content} editable={editable} contentKey={contentKey} isInitializingRef={isInitializingRef} />}
                     <HtmlOnChangePlugin onChange={onChange} isInitializingRef={isInitializingRef} />
                     {onHeadingsChange && <HeadingsExtractorPlugin onHeadingsChange={onHeadingsChange} />}
                     {floatingAnchorElem && (
@@ -3481,5 +3514,6 @@ export function RichLexicalEditor({
             </SmartLinkEditorContext.Provider>
             </PollScopeContext.Provider>
         </LexicalComposer>
+        </LexicalCollaboration>
     );
 }

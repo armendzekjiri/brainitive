@@ -73,7 +73,8 @@ export class SmartLinkNode extends DecoratorNode<JSX.Element> {
         };
     }
 
-    constructor(payload: SmartLinkPayload, key?: NodeKey) {
+    // the default: live co-editing (Yjs, BRAI-54) creates nodes without arguments, then syncs the fields
+    constructor(payload: SmartLinkPayload = { ref: '', url: '', text: '' }, key?: NodeKey) {
         super(key);
         this.__ref = payload.ref;
         this.__url = payload.url;

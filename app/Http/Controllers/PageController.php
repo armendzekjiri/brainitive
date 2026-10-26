@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\PageUpdatedNotification;
+use App\Support\Collab\PageCollab;
 use App\Support\PageReviews\ReviewGate;
 use App\Support\PageReviews\ReviewPresenter;
 use Illuminate\Http\JsonResponse;
@@ -107,6 +108,7 @@ class PageController extends Controller
             'page' => $page,
             'breadcrumbs' => $page->path,
             'review' => ReviewPresenter::forPage($page, $user, $canUpdate), // BRAI-80
+            'collab' => PageCollab::props($page, $user), // live co-editing (BRAI-54); null = single-user editor
             'can' => [
                 'update' => $canUpdate,
                 'delete' => $user->can('delete', $page),
@@ -422,9 +424,13 @@ class PageController extends Controller
 
         Cache::put($key, $present->all(), self::PRESENCE_TTL_SECONDS * 2);
 
+        $canUpdate = $user->can('update', $page);
+
         return response()->json([
             'users' => $present->except($user->id)->values()->map(fn (array $entry) => collect($entry)->except('seen'))->all(),
-        ] + $this->draftState($page->fresh(), $user->can('update', $page)));
+        ] + $this->draftState($page->fresh(), $canUpdate)
+          // BRAI-54: live editors notice a replaced draft (discard, restore, …) and reopen it
+          + ($canUpdate ? ['collab_epoch' => PageCollab::epoch($page)] : []));
     }
 
     /**
@@ -784,14 +790,7 @@ class PageController extends Controller
      */
     private function draftState(Page $page, bool $withHash = true): array
     {
-        $editor = $page->isPublished() && ! $page->is_whiteboard ? $page->draftEditor : $page->lastEditor;
-
-        return [
-            'edit_revision' => $page->edit_revision,
-            'has_unpublished_changes' => $page->hasUnpublishedChanges(),
-            'draft_updated_at' => ($page->draft_updated_at ?? $page->updated_at)?->toIso8601String(),
-            'draft_updated_by' => $editor?->only(['id', 'name']),
-        ] + ($withHash ? ['draft_hash' => $page->draftHash()] : []); // BRAI-80: editors compare it with the latest review's snapshot
+        return $page->editorState($withHash);
     }
 
     /** Publishing a "review required" page without an approved review of this draft (BRAI-80). */

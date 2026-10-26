@@ -27,6 +27,7 @@ use App\Http\Controllers\MyWorkController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\OutlookCalendarConnectController;
+use App\Http\Controllers\PageCollabController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PageReviewController;
 use App\Http\Controllers\PageStickyNoteController;
@@ -564,6 +565,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('pages/{page}/draft', [PageController::class, 'discardDraft'])->name('pages.draft.discard');
             Route::put('pages/{page}/publish-changes', [PageController::class, 'publishChanges'])->name('pages.publish-changes');
             Route::post('pages/{page}/presence', [PageController::class, 'presence'])->name('pages.presence');
+            // Live co-editing (BRAI-54): background requests, never write the session
+            Route::post('pages/{page}/collab/session', [PageCollabController::class, 'session'])->middleware([ReadOnlySession::class, 'throttle:60,1,pages.collab.session'])->name('pages.collab.session');
+            Route::put('pages/{page}/collab/draft', [PageCollabController::class, 'save'])->middleware([ReadOnlySession::class, 'throttle:180,1,pages.collab.save'])->name('pages.collab.save');
+            Route::post('pages/{page}/collab/bootstrap', [PageCollabController::class, 'bootstrap'])->middleware([ReadOnlySession::class, 'throttle:30,1,pages.collab.bootstrap'])->name('pages.collab.bootstrap');
             Route::get('pages/{page}/versions', [PageVersionController::class, 'index'])->name('pages.versions.index');
             Route::get('pages/{page}/versions/{versionNumber}', [PageVersionController::class, 'show'])->whereNumber('versionNumber')->name('pages.versions.show');
             Route::post('pages/{page}/versions/{versionNumber}/restore', [PageVersionController::class, 'restore'])->whereNumber('versionNumber')->name('pages.versions.restore');

@@ -2723,3 +2723,37 @@ export interface Meeting {
     can_cancel: boolean;
     can_create_notes: boolean;
 }
+
+// ── Live co-editing of documents (BRAI-54, v1.43.0) ─────────────────────────────────────────
+
+/** `collab` prop of Pages/Show: null = the single-user editor. */
+export interface PageCollabProps {
+    epoch: number;
+    /** wss URL of the realtime server, or a path on this host ("/collab"). */
+    url: string;
+}
+
+/** POST pages.collab.session */
+export interface PageCollabSession {
+    url: string;
+    /** `page.<uuid>.<epoch>` */
+    document: string;
+    epoch: number;
+    token: string;
+    expires_at: number;
+    edit: boolean;
+    /** State vector of the last saved draft HTML; null = nothing saved from this live document yet. */
+    html_vector: Record<string, number> | null;
+    user: { id: number; name: string };
+}
+
+/** PUT pages.collab.save */
+export interface PageCollabSaveResponse extends PageDraftHashState {
+    status: 'saved' | 'unchanged' | 'covered' | 'baseline';
+}
+
+/** POST pages.collab.bootstrap */
+export type PageCollabBootstrap =
+    | { status: 'granted'; html: string | null; name: string; icon: string | null }
+    | { status: 'wait' }
+    | { status: 'stale'; epoch: number; reset: true };
