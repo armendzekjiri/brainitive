@@ -8,6 +8,7 @@ use App\Models\ImportRun;
 use App\Models\InboxNotification;
 use App\Models\LeadFormEvent;
 use App\Models\McpRequest;
+use App\Models\ProjectExport;
 use App\Models\WebhookDelivery;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -75,3 +76,12 @@ Schedule::call(function () {
         });
 })->name('imports:cleanup-files')->dailyAt('04:10')->withoutOverlapping();
 Schedule::command('model:prune', ['--model' => [ImportRun::class]])->dailyAt('04:20');
+
+// Project exports (BRAI-81): the ZIP can be downloaded for 24 h, then it's deleted; rows go after 30 days.
+Schedule::call(function () {
+    ProjectExport::query()->whereNotNull('file_path')->where('expires_at', '<', now())->each(fn (ProjectExport $export) => $export->expire());
+    // an export that never finished (a lost worker) leaves its work folder behind
+    ProjectExport::query()->whereIn('status', [ProjectExport::QUEUED, ProjectExport::RUNNING])->where('updated_at', '<', now()->subDay())
+        ->each(fn (ProjectExport $export) => $export->expire());
+})->name('exports:cleanup')->hourly()->withoutOverlapping();
+Schedule::command('model:prune', ['--model' => [ProjectExport::class]])->dailyAt('04:25');

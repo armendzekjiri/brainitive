@@ -2122,3 +2122,33 @@ export interface ImportRunData {
     options?: Record<string, unknown> | null;
     report?: ImportReport | null;
 }
+
+// ── Project export + restore (BRAI-81) ────────────────────────────────────────
+export type ProjectExportStatus = 'queued' | 'running' | 'ready' | 'failed' | 'expired';
+
+/** ProjectExport::present() */
+export interface ProjectExportData {
+    uuid: string;
+    status: ProjectExportStatus;
+    file_size: number;
+    counts: Record<string, number> | null;
+    error: string | null;
+    created_at: string | null;
+    finished_at: string | null;
+    expires_at: string | null;
+    /** signed, only for the exporter, until expires_at */
+    download_url: string | null;
+}
+
+/** ProjectArchiveImporter::preview() */
+export interface ProjectArchivePreview {
+    format_version: number;
+    app_version: string | null;
+    exported_at: string | null;
+    source: { name: string; key: string };
+    suggested: { name: string; key: string };
+    counts: Record<string, number>;
+    people: { ref: string; name: string; email: string | null; member_id: number | null }[];
+    members: { id: number; name: string; email: string | null }[];
+    omitted: { what: string; count: number | null; why: string }[];
+}

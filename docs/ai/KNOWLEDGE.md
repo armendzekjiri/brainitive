@@ -609,6 +609,31 @@ php artisan tinker --execute="\App\Models\User::where('email','...')->update(['e
   (`post_max_size` 55M): raise both for bigger exports. Memory stays bounded: page bodies are read from
   disk when needed, never all held at once.
 
+### Project export + restore: what travels and why (v1.41.0, BRAI-81)
+- **An archive is content, not a backup of the instance.** Included: boards, columns, swimlanes,
+  sprints, releases (without public token / published page), issues (subtasks, labels, types,
+  priorities, custom fields incl. archived ones, comments, attachments, links inside the project), docs,
+  folders and whiteboards (live content; drafts only if the exporter can see them; no unpublished changes
+  of published docs, no version history), task lists, plans (rows linked to issues by ref, no share
+  token), helpdesk structure (columns, form fields, form texts from `HelpdeskForm::SETTING_KEYS` only).
+  Never: members / roles, tickets / contacts, leads, time entries, history / watchers, integrations,
+  webhooks, automations, share links / tokens, board views, recurring issues, snippets / bookmarks.
+  `ProjectArchive::NEVER` lists them and the manifest repeats them with counts.
+- **People are metadata.** `people.json` has name + email of everyone the content points at. Restore maps
+  them to workspace members (the preview's choice, else the same email) and adds mapped people to the
+  new project as editors. It never invites or creates anyone. Comments are written by the restoring user
+  with "Originally by Jane Doe on 3 Mar 2024".
+- **Verify before writing:** `ProjectArchiveReader` unpacks through `SafeZip`, then refuses a wrong
+  format, a newer version, a missing / changed (sha256) file, an unlisted file and unsafe manifest paths.
+  The preview decodes one module at a time (web request, memory ≤ 512 MB); a module is capped at 48 MB,
+  and the export refuses a project that would exceed it (`ArchiveTooLarge`).
+- **Resume:** every record is `ImportMappings::once` with its archive ref; embedded media get
+  deterministic names (`uploads/images/<run uuid>-<ref>.png`), so a retry reuses them. Report counts
+  come from the mappings at the end, not from the progress counters (those are short after a crash).
+- **Download security:** temporary signed *relative* URL (proxies), plus the exporter's session, plus an
+  unexpired row with a file. An expired notification link redirects to the settings with a message.
+  Files go after 24 h (`exports:cleanup`; dev has no scheduler, so a new export also cleans up).
+
 ## Architectural decisions
 
 ### Inline validation over FormRequest classes

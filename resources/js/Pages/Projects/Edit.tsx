@@ -5,6 +5,7 @@ import MoveProjectCard from '@/components/projects/MoveProjectCard';
 import GithubIntegrationCard, { type GithubSettings } from '@/components/projects/GithubIntegrationCard';
 import ItemFieldsCard from '@/components/projects/ItemFieldsCard';
 import SaveAsTemplateCard from '@/components/projects/SaveAsTemplateCard';
+import ExportProjectCard from '@/components/projects/ExportProjectCard';
 import { PageProps, Workspace, Project, Label as LabelType, User, ItemType, ItemField, ProjectTemplate, BillingClientOption } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -538,6 +539,7 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                         </CardContent>
                     </Card>
                     {canSaveTemplate && <SaveAsTemplateCard workspace={workspace} project={project} templates={workspaceTemplates} />}
+                    <ExportProjectCard workspace={workspace} project={project} />
                         </TabsContent>
 
                         <TabsContent value="labels" className="space-y-8">
