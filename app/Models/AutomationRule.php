@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Automation\AutomationDefinition;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,7 +10,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * A project's WHEN / IF / THEN rule (v1.40.0, BRAI-63). The definition (trigger, trigger_config,
- * conditions, actions) is written only through AutomationDefinition::validate(); a change to it bumps
+ * condition_match all|any (BRAI-144), conditions, actions) is written only through
+ * AutomationDefinition::validate(); a change to it bumps
  * `version`, so runs created for the old definition are skipped. The rule runs as `actor_id`.
  */
 class AutomationRule extends Model
@@ -25,6 +27,7 @@ class AutomationRule extends Model
         'created_by',
         'trigger',
         'trigger_config',
+        'condition_match',
         'conditions',
         'actions',
         'last_run_at',
@@ -64,13 +67,29 @@ class AutomationRule extends Model
         return $query->where('project_id', $projectId)->where('trigger', $trigger)->where('enabled', true);
     }
 
-    /** @return array{trigger: string, trigger_config: array, conditions: array, actions: array} */
+    /**
+     * Conditions as {field, operator, value}, whatever shape they were stored in (BRAI-144).
+     *
+     * @return list<array{field: string, operator: string, value: mixed}>
+     */
+    public function normalizedConditions(): array
+    {
+        return AutomationDefinition::normalizeConditions($this->conditions);
+    }
+
+    public function conditionMatch(): string
+    {
+        return AutomationDefinition::normalizeMatch($this->condition_match);
+    }
+
+    /** @return array{trigger: string, trigger_config: array, condition_match: string, conditions: array, actions: array} */
     public function definition(): array
     {
         return [
             'trigger' => $this->trigger,
             'trigger_config' => $this->trigger_config ?? [],
-            'conditions' => $this->conditions ?? [],
+            'condition_match' => $this->conditionMatch(),
+            'conditions' => $this->normalizedConditions(),
             'actions' => $this->actions ?? [],
         ];
     }

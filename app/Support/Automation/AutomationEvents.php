@@ -119,7 +119,7 @@ final class AutomationEvents
         $created = [];
 
         try {
-            $rules = AutomationRule::enabledFor($event['project_id'], $event['trigger'])
+            $rules = AutomationRule::enabledFor($event['project_id'], $event['trigger'])->with('actor:id,timezone')
                 ->when($ruleId, fn ($q) => $q->whereKey($ruleId))->orderBy('id')->get();
             $project = $rules->isEmpty() ? null : Project::find($event['project_id']);
             $subject = $project ? AutomationSubject::find($event['subject_type'], $event['subject_id'], $project->id) : null;
@@ -132,7 +132,8 @@ final class AutomationEvents
                 if (! self::triggerMatches($rule, $event)) {
                     continue;
                 }
-                if (! AutomationConditions::allPassed(AutomationConditions::check($rule->conditions ?? [], $subject, $options))) {
+                $checked = AutomationConditions::check($rule->conditions ?? [], $subject, $options, AutomationConditions::timezoneOf($rule->actor));
+                if (! AutomationConditions::matches($checked, $rule->conditionMatch())) {
                     continue; // conditions that don't match leave no run behind
                 }
 
@@ -147,6 +148,7 @@ final class AutomationEvents
                     'subject_id' => $event['subject_id'],
                     'subject_label' => AutomationSubject::label($subject),
                     'context' => $event['context'] ?: null,
+                    'conditions' => AutomationConditions::summary($checked, $rule->conditionMatch()),
                     'status' => AutomationRun::QUEUED,
                 ]);
                 if (! $run->wasRecentlyCreated) {
