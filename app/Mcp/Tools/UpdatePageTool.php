@@ -55,6 +55,11 @@ class UpdatePageTool extends Tool
             return Response::error($e->getMessage());
         }
 
+        // BRAI-80: a published "review required" page only changes through an approved review
+        if ($page->isPublished() && $page->review_required) {
+            return Response::error('This page needs an approved review before changes go live. Edit it in Brainitive and request a review.');
+        }
+
         $changes = ['last_edited_by' => $user->id];
 
         if (! empty($validated['title'])) {

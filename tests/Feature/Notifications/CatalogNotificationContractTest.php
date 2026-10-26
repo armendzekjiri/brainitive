@@ -7,6 +7,9 @@ use App\Models\Comment;
 use App\Models\FeedbackPortal;
 use App\Models\Helpdesk;
 use App\Models\LeadForm;
+use App\Models\Page;
+use App\Models\PageComment;
+use App\Models\PageReview;
 use App\Models\Sprint;
 use App\Models\TaskList;
 use App\Models\TaskListItem;
@@ -23,6 +26,9 @@ use App\Notifications\ItemCommentedNotification;
 use App\Notifications\ItemDueNotification;
 use App\Notifications\LeadAssignedNotification;
 use App\Notifications\NotificationCatalog;
+use App\Notifications\ReviewCommentedNotification;
+use App\Notifications\ReviewDecidedNotification;
+use App\Notifications\ReviewRequestedNotification;
 use App\Notifications\SprintCompletedNotification;
 use App\Notifications\SprintStartedNotification;
 use App\Notifications\TaskAssignedNotification;
@@ -78,6 +84,10 @@ class CatalogNotificationContractTest extends TestCase
         $clientComment = $deliverable->comments()->create(['author_name' => 'Clara', 'visibility' => 'client', 'body' => 'Looks good']);
         $feedbackPortal = FeedbackPortal::create(['project_id' => $this->project->id, 'slug' => 'contract-ideas', 'title' => 'Ideas', 'enabled' => true]); // BRAI-60
         $feedbackPost = $feedbackPortal->posts()->create(['number' => 1, 'title' => 'Dark mode [x](y)', 'body' => 'Please <b>add</b> it']);
+        // BRAI-80 document review
+        $page = Page::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->editor->id, 'name' => 'Runbook']);
+        $review = PageReview::create(['page_id' => $page->id, 'requested_by' => $this->editor->id, 'requested_by_name' => $this->editor->name, 'snapshot_name' => 'Runbook', 'snapshot_content' => $page->content, 'content_hash' => $page->draftHash(), 'message' => '<b>Please</b> check']);
+        $pageComment = PageComment::create(['page_id' => $page->id, 'page_review_id' => $review->id, 'user_id' => $this->viewer->id, 'user_name' => $this->viewer->name, 'body' => 'Which Friday?']);
         auth()->logout();
 
         return [
@@ -99,6 +109,9 @@ class CatalogNotificationContractTest extends TestCase
             new ClientCommentedNotification($deliverable, $clientComment),
             new GithubSyncFailedNotification($this->project->githubConnection()->create(['uuid' => (string) Str::uuid(), 'secret' => 's']), 'The GitHub App was uninstalled.'), // BRAI-61
             new FeedbackSubmittedNotification($feedbackPost), // BRAI-60
+            new ReviewRequestedNotification($review, $this->editor), // BRAI-80
+            new ReviewDecidedNotification($review, 'changes_requested', 'Shorter please', $this->viewer),
+            new ReviewCommentedNotification($review, $pageComment, $this->viewer),
         ];
     }
 

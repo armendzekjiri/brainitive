@@ -12,6 +12,7 @@ use App\Models\InstanceSettings;
 use App\Models\Item;
 use App\Models\LeadForm;
 use App\Models\Page;
+use App\Models\PageReview;
 use App\Models\Project;
 use App\Models\ProjectHealthReport;
 use App\Models\ProjectTemplate;
@@ -30,6 +31,7 @@ use App\Policies\ClientPortalPolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\LeadFormPolicy;
 use App\Policies\PagePolicy;
+use App\Policies\PageReviewPolicy;
 use App\Policies\ProjectHealthReportPolicy;
 use App\Policies\ProjectPolicy;
 use App\Policies\ProjectTemplatePolicy;
@@ -130,6 +132,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(BoardView::class, BoardViewPolicy::class);
         Gate::policy(Release::class, ReleasePolicy::class);
         Gate::policy(Page::class, PagePolicy::class);
+        Gate::policy(PageReview::class, PageReviewPolicy::class); // BRAI-80
         Gate::policy(Bookmark::class, BookmarkPolicy::class);
         Gate::policy(Item::class, ItemPolicy::class);
         Gate::policy(SnippetCollection::class, SnippetPolicy::class);

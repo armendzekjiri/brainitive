@@ -52,6 +52,12 @@ class PageVersionController extends Controller
         $this->authorize('update', $page);
 
         $version = $this->findVersion($page, $versionNumber);
+
+        // BRAI-80: restoring on a published page publishes a new version without a review
+        if ($page->isPublished() && $page->review_required) {
+            return back()->withErrors(['review' => 'This page needs an approved review before publishing, so versions can\'t be restored directly. Copy the text into the draft and request a review.']);
+        }
+
         $restored = $page->restoreVersion($version, $request->user());
 
         return back()->with('success', $restored

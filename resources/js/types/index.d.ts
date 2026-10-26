@@ -2414,3 +2414,94 @@ export interface FeedbackEventData {
     changes: Record<string, unknown> | null;
     created_at: string | null;
 }
+
+// ── Document review (BRAI-80) ─────────────────────────────────────────────────
+
+/** pending / approved / changes_requested are open; the rest are closed. */
+export type PageReviewStatus = 'pending' | 'approved' | 'changes_requested' | 'cancelled' | 'superseded' | 'published';
+export type PageReviewDecision = 'pending' | 'approved' | 'changes_requested';
+
+/** ReviewPresenter::summary() → reviewers[] */
+export interface PageReviewReviewerData {
+    id: number;
+    /** null when the account was deleted (the name stays on the history) */
+    user_id: number | null;
+    name: string;
+    decision: PageReviewDecision;
+    comment: string | null;
+    decided_at: string | null;
+    /** false: deleted or can't open the project any more — not counted in the status */
+    active: boolean;
+}
+
+/** ReviewPresenter::summary() */
+export interface PageReviewSummary {
+    uuid: string;
+    number: number;
+    status: PageReviewStatus;
+    /** the draft changed since the snapshot was taken */
+    stale: boolean;
+    content_hash: string;
+    snapshot_name: string;
+    message: string | null;
+    requested_by: { id: number | null; name: string };
+    created_at: string | null;
+    closed_at: string | null;
+    url: string;
+    reviewers: PageReviewReviewerData[];
+}
+
+/** The `review` prop of Pages/Review. */
+export interface PageReviewDetail extends PageReviewSummary {
+    snapshot_html: string;
+    my_decision: { decision: PageReviewDecision; comment: string | null } | null;
+}
+
+/** The `review` prop of Pages/Show (ReviewPresenter::forPage); null for folders / whiteboards. */
+export interface PageReviewShowState {
+    required: boolean;
+    can_manage: boolean;
+    can_request: boolean;
+    /** sha256 of the current draft (editors only) — compared with latest.content_hash */
+    draft_hash: string | null;
+    latest: PageReviewSummary | null;
+    /** open reviews waiting for this user's decision */
+    assigned: { uuid: string; requested_by_name: string; url: string }[];
+}
+
+export interface PageReviewComment {
+    uuid: string;
+    author: { id: number | null; name: string };
+    body: string;
+    created_at: string | null;
+}
+
+/** ReviewPresenter::threads() — a root comment (comments[0]) and its replies. */
+export interface PageReviewThread {
+    uuid: string;
+    review_uuid: string | null;
+    review_number: number | null;
+    /** text-quote anchor; null = page-level comment */
+    quote: string | null;
+    prefix: string | null;
+    suffix: string | null;
+    /** the quote can't be found (unambiguously) in the snapshot being viewed */
+    outdated: boolean;
+    resolved: boolean;
+    resolved_at: string | null;
+    resolved_by_name: string | null;
+    comments: PageReviewComment[];
+}
+
+/** pages.reviews.candidates */
+export interface PageReviewCandidate {
+    id: number;
+    name: string;
+    email: string;
+    avatar: string | null;
+}
+
+/** Draft autosave / presence responses carry the draft hash since BRAI-80. */
+export interface PageDraftHashState extends PageDraftState {
+    draft_hash?: string;
+}
