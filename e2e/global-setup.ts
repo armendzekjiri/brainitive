@@ -18,6 +18,9 @@ export default async function globalSetup() {
         if (psql(`select 1 from pg_database where datname = '${DB.database}'`) !== '1') psql(`create database "${DB.database}"`);
     }
     fs.rmSync(MAIL_LOG, { force: true });
+    // live server first: seeding already publishes (cards, notifications); a refused publish makes
+    // Live pause 15 s in the shared cache, so journeys starting right away would miss their events
+    const stopLive = await startLiveServer();
     execFileSync('php', ['artisan', 'e2e:reset'], { cwd: ROOT, env: appEnv(), stdio: 'inherit' });
-    return startLiveServer();
+    return stopLive;
 }
