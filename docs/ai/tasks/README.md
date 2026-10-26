@@ -51,6 +51,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 | Release v1.43.0: find anything, write together, work offline — search, live docs, offline mode (BRAI-55/54/82) | in progress |
 | [Find anything: real search on PostgreSQL (BRAI-55)](./feat-search.md) | done |
 | [Offline notes and tasks: opt-in local drafts with explicit sync conflicts (BRAI-82)](./feat-offline.md) | done |
+| [Live co-editing of documents: Yjs + Hocuspocus, offline merge, Docker service (BRAI-54)](./feat-live-docs.md) | done |
 | [Public feedback portal (BRAI-60)](./feat-feedback-portal.md) | done |
 | [Client portal: deliverables, version-specific approvals (BRAI-73)](./feat-client-portal.md) | done |
 | [Internal document review (BRAI-80)](./feat-document-review.md) | done |
