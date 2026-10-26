@@ -549,8 +549,9 @@ php artisan tinker --execute="\App\Models\User::where('email','...')->update(['e
   slug, otherwise created with Trello's colour as hex; unnamed Trello labels are named after their colour.
 - **Not imported (counted in the report):** comments (Trello's JSON export only holds the newest 1 000
   actions anyway), custom field values, attachments, power-ups.
-- **Memory:** a 50 MB JSON file decodes to several hundred MB of PHP arrays, so `TrelloExport` raises
-  `memory_limit` (up to 1 GB, never lowers it) before decoding.
+- **Memory:** uploads are capped at 25 MB (exports are usually a few MB). Decoding needs ~16× the file size
+  in PHP arrays, and the preview runs inside the web request, so `TrelloExport` raises `memory_limit` to at
+  most 512 MB (never lowers it). Raise both together if bigger boards ever need importing.
 
 ## Architectural decisions
 

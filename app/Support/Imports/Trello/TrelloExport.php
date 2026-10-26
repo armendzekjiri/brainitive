@@ -19,7 +19,7 @@ use Throwable;
  */
 final class TrelloExport
 {
-    public const MAX_BYTES = 50 * 1024 * 1024;
+    public const MAX_BYTES = 25 * 1024 * 1024; // board exports are usually a few MB; the preview decodes in the web request
 
     public const MAX_CARDS = 5000;
 
@@ -76,7 +76,7 @@ final class TrelloExport
             throw new ImportFailed('The uploaded file couldn’t be read. Upload it again.');
         }
         if ($size > self::MAX_BYTES) {
-            throw new ImportFailed('The file is larger than 50 MB. Export a smaller board, or archive old cards in Trello first.');
+            throw new ImportFailed('The file is larger than 25 MB. Export a smaller board, or archive old cards in Trello first.');
         }
 
         // A JSON tree takes several times its file size in memory; give a big export room to decode.
@@ -410,7 +410,7 @@ final class TrelloExport
             'g' => 1024 ** 3, 'm' => 1024 ** 2, 'k' => 1024, default => 1,
         };
         if ($current < $needed) {
-            @ini_set('memory_limit', (string) min($needed, 1024 * 1024 * 1024));
+            @ini_set('memory_limit', (string) min($needed, 512 * 1024 * 1024)); // never more than 512 MB in a web request
         }
     }
 }

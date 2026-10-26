@@ -108,7 +108,7 @@ helper that doesn't exist (e.g. HTML → editor JSON), check first whether one a
 ## Ticket specs
 
 ### 1. BRAI-65 Trello (board JSON export) — see the card
-- **Input:** Trello "Print and export → Export as JSON" (one board). Limits: about 50 MB, 5 000 cards.
+- **Input:** Trello "Print and export → Export as JSON" (one board). Limits: 25 MB (the preview decodes in the web request), 5 000 cards.
 - **Preview:**
   - board name; lists with card counts; labels; checklists; members with email when present; archived
     cards (include toggle, default off);
