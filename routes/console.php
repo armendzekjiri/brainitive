@@ -98,3 +98,6 @@ Schedule::call(fn () => GithubStars::refresh())->hourly()->name('github-stars')-
 
 // Offline sync (BRAI-82): forget the outcome of a device's change after 30 days.
 Schedule::command('model:prune', ['--model' => [OfflineMutation::class]])->dailyAt('04:35');
+// v1.43.0 (BRAI-55): build the search index in the background when this index version was never
+// built (fresh install, update) — nobody runs search:reindex by hand. One small query otherwise.
+Schedule::command('search:ensure')->everyFiveMinutes()->withoutOverlapping()->runInBackground();

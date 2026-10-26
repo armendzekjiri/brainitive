@@ -2829,3 +2829,64 @@ export interface OfflineSnapshotRecord<T = unknown> {
     data: T;
     viewedAt: number;
 }
+
+// ── Find anything (BRAI-55, v1.43.0) ─────────────────────────────────────────
+
+/** A content type of the search index (`search_entries.type`). */
+export type SearchType = 'item' | 'comment' | 'page' | 'ticket' | 'plan' | 'task' | 'snippet' | 'bookmark' | 'capture' | 'attachment' | 'ticket_attachment';
+
+/** Filter group / tab of the search page (SearchTypes::GROUPS). */
+export type SearchGroup = 'issues' | 'docs' | 'comments' | 'tickets' | 'tasks' | 'plans' | 'snippets' | 'bookmarks' | 'captures' | 'files';
+
+export interface SearchResult {
+    /** "type:id" */
+    id: string;
+    type: SearchType;
+    group: SearchGroup;
+    /** Issue, Doc, Whiteboard, Comment, Ticket, Plan, Task, Snippet, Bookmark, Capture, File */
+    label: string;
+    source_id: number;
+    container_id: number | null;
+    key: string | null;
+    title: string;
+    /** Escaped text; only <mark> tags around matches. */
+    title_html: string;
+    /** Escaped text; only <mark> tags around matches. */
+    snippet_html: string;
+    url: string;
+    /** A bookmark's own link. */
+    external_url: string | null;
+    /** Where it lives, e.g. "Website · Main Board". */
+    context: string | null;
+    project: { id: number; name: string } | null;
+    workspace: string | null;
+    status: 'open' | 'done' | null;
+    is_draft: boolean;
+    updated_at: string | null;
+}
+
+export interface SearchResponse {
+    results: SearchResult[];
+    total: number;
+    counts: Record<SearchGroup, number>;
+    /** Typo fallback: titles similar to the words were added. */
+    fuzzy: boolean;
+    page: number;
+    per_page: number;
+    has_more: boolean;
+}
+
+export interface SearchFilters {
+    q: string;
+    type: SearchGroup | null;
+    project: number[];
+    status: 'open' | 'done' | null;
+    assignee: string | null;
+    updated: '7d' | '30d' | '90d' | '365d' | null;
+    page: number;
+}
+
+export interface SearchOptions {
+    projects: { id: number; name: string; workspace: string }[];
+    people: { id: number; name: string }[];
+}

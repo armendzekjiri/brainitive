@@ -292,10 +292,10 @@ test.describe('sprints', () => {
 
 test.describe('search', () => {
     test('the search endpoint finds a seeded issue and board case-insensitively', async ({ page }) => {
-        const issues = await (await page.request.get('/search?q=checkout')).json();
-        expect(issues.items.map((i: { title: string }) => i.title)).toContain('Checkout bug');
+        const issues = await (await page.request.get('/search/quick?q=CHECKOUT%20bug')).json();
+        expect(issues.results.map((i: { title: string }) => i.title)).toContain('Checkout bug');
 
-        const boards = await (await page.request.get('/search?q=main%20board')).json();
+        const boards = await (await page.request.get('/search/quick?q=main%20board')).json();
         expect(boards.boards.map((b: { title: string }) => b.title)).toContain('Main Board');
     });
 

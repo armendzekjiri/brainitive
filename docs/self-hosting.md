@@ -92,6 +92,25 @@ Building from source instead: `git pull && docker compose up -d --build`.
 Migrations run automatically when the `app` container starts. Check **Help → Changelog**
 for what changed.
 
+## Search
+
+Search ("Find anything": the search page, ⌘K and the MCP `search` tool) is built in: it runs on
+the PostgreSQL you already have — full text plus `pg_trgm` for typos and `unaccent` for accents.
+There is no extra service to run.
+
+- **Nothing to do after an update.** The first time a version with a new search index starts,
+  the `app` container (and the scheduler, every few minutes) notices that the index was never
+  built and queues the build; the `queue` container fills it in the background. Search shows
+  what is already indexed meanwhile — a few minutes for large instances. New and changed content
+  is indexed as it is saved.
+- **Extensions.** The migration creates `pg_trgm` and `unaccent` itself (the bundled `db`
+  container allows that). On your own PostgreSQL the database user needs to be allowed to create
+  them (owner of the database, PostgreSQL 13+); otherwise search still works, just without typo
+  tolerance / accent folding. After installing them later run
+  `docker compose exec app php artisan search:reindex --setup`.
+- **Rebuild by hand** (never required): `docker compose exec app php artisan search:reindex`
+  (`--queue` to run it on the queue, `--type=item` for one kind of content).
+
 ## Backups
 
 Back up the database and the `storage` volume (uploads, OAuth keys):
