@@ -9,7 +9,7 @@
     },
     "scripts": {
         "start": "node src/index.js",
-        "test": "node --test --test-force-exit --test-timeout=30000 test/"
+        "test": "node --test --test-force-exit --test-timeout=30000 test/*.test.js"
     },
     "dependencies": {
         "@hocuspocus/server": "3.4.4",
