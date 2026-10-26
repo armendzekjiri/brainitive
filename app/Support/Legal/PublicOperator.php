@@ -41,7 +41,7 @@ class PublicOperator
             'privacy_url' => $privacy,
             'imprint_url' => $imprint,
             'configured' => $privacy !== null || $imprint !== null || filled($workspace?->legal_controller_name),
-            'platform_name' => (string) config('app.name', 'Brainitive'),
+            'platform_name' => self::platformName(),
             'platform_privacy_url' => route('privacy'),
         ];
     }
@@ -50,6 +50,14 @@ class PublicOperator
      * One plain line for e-mails a visitor gets from a customer's page (BRAI-156): who sends it, and
      * that customer's privacy policy. Safe for Markdown mail lines (names stripped, URL escaped).
      */
+    /** The platform's name in public texts: APP_NAME, but never the framework default "Laravel". */
+    public static function platformName(): string
+    {
+        $name = trim((string) config('app.name'));
+
+        return $name === '' || strcasecmp($name, 'Laravel') === 0 ? 'Brainitive' : $name;
+    }
+
     public static function mailLine(?Workspace $workspace, bool $nameFallback = false): string
     {
         $op = self::for($workspace, $nameFallback);
