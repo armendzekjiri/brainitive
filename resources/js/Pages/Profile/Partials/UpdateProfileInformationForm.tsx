@@ -1,4 +1,4 @@
-import InputError from '@/Components/InputError';
+import InputError from '@/components/InputError';
 import { User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

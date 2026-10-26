@@ -15,7 +15,7 @@ import { SidebarResizer, getInitialSidebarWidth } from '@/components/SidebarResi
 import { HelpModal } from '@/components/HelpModal';
 import { NotificationsDropdown } from '@/components/NotificationsDropdown';
 import { ProjectIcon } from '@/components/ProjectIcon';
-import ApplicationLogo from '@/Components/ApplicationLogo';
+import ApplicationLogo from '@/components/ApplicationLogo';
 import {
     Sidebar,
     SidebarContent,
