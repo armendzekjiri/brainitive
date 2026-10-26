@@ -55,6 +55,7 @@ use App\Http\Controllers\WorkloadController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkTimerController;
 use App\Http\Middleware\ReadOnlySession;
+use App\Support\Auth\MicrosoftLogin;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -64,6 +65,7 @@ Route::get('/', function () {
         'canRegister' => Route::has('register'),
         'canLoginWithGoogle' => (bool) config('services.google.client_id'),
         'canLoginWithGitHub' => (bool) config('services.github.client_id'),
+        'canLoginWithMicrosoft' => MicrosoftLogin::available(),
     ])->withViewData(['meta' => [
         // link previews of the homepage (Open Graph / X), see resources/views/partials/social-meta.blade.php
         'title' => 'Brainitive – Workspaces, Boards & Wiki',

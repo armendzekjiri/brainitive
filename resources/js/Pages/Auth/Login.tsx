@@ -12,11 +12,13 @@ export default function Login({
     canResetPassword,
     canLoginWithGoogle,
     canLoginWithGitHub,
+    canLoginWithMicrosoft,
 }: {
     status?: string;
     canResetPassword: boolean;
     canLoginWithGoogle?: boolean;
     canLoginWithGitHub?: boolean;
+    canLoginWithMicrosoft?: boolean;
 }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         email: '',
@@ -42,7 +44,7 @@ export default function Login({
                 </div>
             )}
 
-            {(canLoginWithGoogle || canLoginWithGitHub) && (
+            {(canLoginWithGoogle || canLoginWithGitHub || canLoginWithMicrosoft) && (
                 <div className="mb-4 space-y-2">
                     {canLoginWithGoogle && (
                         <a
@@ -81,10 +83,24 @@ export default function Login({
                             Continue with GitHub
                         </a>
                     )}
+                    {canLoginWithMicrosoft && (
+                        <a
+                            href={route('login.microsoft')}
+                            className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm transition hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:focus:ring-offset-card"
+                        >
+                            <svg className="h-5 w-5" viewBox="0 0 21 21" aria-hidden>
+                                <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+                                <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+                                <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+                                <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+                            </svg>
+                            Continue with Microsoft
+                        </a>
+                    )}
                 </div>
             )}
 
-            {(canLoginWithGoogle || canLoginWithGitHub) && (
+            {(canLoginWithGoogle || canLoginWithGitHub || canLoginWithMicrosoft) && (
                 <div className="relative my-4">
                     <div className="absolute inset-0 flex items-center">
                         <span className="w-full border-t border-border" />

@@ -48,6 +48,8 @@ return [
         'client_secret' => env('MICROSOFT_CLIENT_SECRET'),
         'tenant' => env('MICROSOFT_TENANT', 'common'),
         'redirect' => env('MICROSOFT_REDIRECT_URI', rtrim((string) env('APP_URL'), '/').'/calendar/connections/outlook/callback'),
+        // Sign in with Microsoft (BRAI-148): the same app registration, its own redirect URI
+        'login_redirect' => env('MICROSOFT_LOGIN_REDIRECT_URI', rtrim((string) env('APP_URL'), '/').'/login/microsoft/callback'),
     ],
 
     'github' => [
