@@ -92,6 +92,8 @@ interface RowProps {
     /** Inbox page: the keyboard cursor (j / k) is on this row. */
     active?: boolean;
     comfortable?: boolean;
+    /** Arrived live just now (BRAI-151): slides in. */
+    fresh?: boolean;
 }
 
 /**
@@ -99,7 +101,7 @@ interface RowProps {
  * Inertia; ⌘/Ctrl-click still opens a new tab). Actions sit above the link and show on hover or
  * keyboard focus (always on touch screens).
  */
-export function NotificationRow({ notification: n, onOpen, onAction, selectable, selected, onSelectedChange, active, comfortable }: RowProps) {
+export function NotificationRow({ notification: n, onOpen, onAction, selectable, selected, onSelectedChange, active, comfortable, fresh }: RowProps) {
     const view = describeNotification(n.data ?? {});
     const unread = !n.read_at;
     const archived = !!n.archived_at;
@@ -132,6 +134,7 @@ export function NotificationRow({ notification: n, onOpen, onAction, selectable,
                 unread ? 'bg-primary/[0.035] dark:bg-primary/[0.06]' : '',
                 'hover:bg-accent/60 focus-within:bg-accent/60',
                 active && 'border-l-primary bg-accent/60',
+                fresh && 'animate-in fade-in-0 slide-in-from-top-1 duration-300 motion-reduce:animate-none',
             )}
         >
             {selectable && (

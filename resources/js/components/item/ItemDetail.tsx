@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { router, Link } from '@inertiajs/react';
+import { router, Link, usePage } from '@inertiajs/react';
 import CompleteSubtasksDialog from '@/components/item/CompleteSubtasksDialog';
 import DuplicateItemDialog from '@/components/item/DuplicateItemDialog';
 import { RecurringIssuesDialog } from '@/components/recurring/RecurringIssuesDialog';
@@ -35,6 +35,11 @@ import {
     Label as LabelType, Comment, Attachment, ItemHistoryEntry, ItemField,
 } from '@/types';
 import { safeHtmlProp } from '@/lib/sanitize';
+import { useLiveChannel } from '@/lib/live';
+import { TypingIndicator, useTyping } from '@/components/live/useTyping';
+import { LiveAvatarStack } from '@/components/live/LiveAvatars';
+import { useLiveItemDescription } from '@/components/item/useLiveItemDescription';
+import type { PageProps } from '@/types';
 
 // ── Minimal item shape used by the "Link issue" picker ───────────────────────
 export type ProjectItemLite = {
@@ -328,8 +333,11 @@ export function useItemDetail(args: UseItemDetailArgs) {
         setLinkType('relates_to');
     }, [item?.id]);
 
+    /** When this tab last wrote (field save, comment): older detail answers don't undo it (BRAI-151). */
+    const lastLocalWriteRef = useRef(0);
     const saveProp = useCallback((fields: Record<string, any>) => {
         if (!item) return;
+        lastLocalWriteRef.current = Date.now();
         router.patch(
             route('boards.items.update', [workspace.slug, project.slug, board.slug, item.id]),
             fields,
@@ -389,16 +397,42 @@ export function useItemDetail(args: UseItemDetailArgs) {
     const currentItemIdRef = useRef(item?.id);
     currentItemIdRef.current = item?.id;
 
-    const refreshDetails = useCallback(() => {
+    // the open editors keep what the user is typing; everything else follows the server (BRAI-151)
+    const editingDescriptionRef = useRef(false);
+    editingDescriptionRef.current = isEditingDescription;
+    const editingTitleRef = useRef(false);
+    editingTitleRef.current = isEditingTitle;
+    const savedDescriptionRef = useRef(savedDescription);
+    savedDescriptionRef.current = savedDescription;
+
+    /** `silent`: a live refresh (comment, edit elsewhere) — no loading state, nothing jumps. */
+    const refreshDetails = useCallback((silent = false) => {
         if (!item) return;
         const itemId = item.id;
-        setDetailsLoading(true);
+        const startedAt = Date.now();
+        if (!silent) setDetailsLoading(true);
         window.axios
             .get(route('boards.items.details', [workspace.slug, project.slug, board.slug, itemId]))
-            .then(({ data }: { data: { comments: Comment[]; attachments: Attachment[]; history: ItemHistoryEntry[]; time_spent: number; development?: Development; releases?: { id: number; name: string; status: string }[]; release_id?: number | null } }) => {
+            .then(({ data }: { data: { title?: string; description?: string | null; comments: Comment[]; attachments: Attachment[]; history: ItemHistoryEntry[]; time_spent: number; development?: Development; releases?: { id: number; name: string; status: string }[]; release_id?: number | null } }) => {
                 // Ignore answers for an item the user already navigated away from
                 if (currentItemIdRef.current !== itemId) return;
-                setLocalComments(data.comments);
+                // asked before this tab's last write: its title / description / comments may be older
+                // than what the user just did (the write's own reload brings the fresh ones)
+                const beforeLocalWrite = startedAt < lastLocalWriteRef.current;
+                if (typeof data.title === 'string' && !editingTitleRef.current && !beforeLocalWrite) {
+                    setTitleValue(data.title);
+                    setTitleDraft(data.title);
+                }
+                if (data.description !== undefined && !editingDescriptionRef.current && !beforeLocalWrite) {
+                    const parsed = parseDescription(data.description);
+                    if (parsed !== savedDescriptionRef.current) {
+                        savedDescriptionRef.current = parsed;
+                        setSavedDescription(parsed);
+                        setEditorContent(parsed);
+                        setEditorKey((k) => k + 1);
+                    }
+                }
+                if (!beforeLocalWrite) setLocalComments(data.comments);
                 setLocalAttachments(data.attachments);
                 setHistory(data.history);
                 setTimeSpent(data.time_spent ?? 0);
@@ -407,8 +441,40 @@ export function useItemDetail(args: UseItemDetailArgs) {
                 setReleaseId(data.release_id ? String(data.release_id) : 'none');
             })
             .catch(() => { /* keep what we have; the board itself still works */ })
-            .finally(() => setDetailsLoading(false));
-    }, [workspace.slug, project.slug, board.slug, item?.id]);
+            .finally(() => { if (!silent) setDetailsLoading(false); });
+    }, [workspace.slug, project.slug, board.slug, item?.id, parseDescription]);
+
+    // ── Live issue view (BRAI-151): comments, edits elsewhere, who's here, typing ──
+    const liveChannel = item ? `item.${item.id}` : null;
+    const liveRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const refreshLive = useCallback(() => {
+        // events come in bursts (a comment + its notification + …): one refetch
+        if (liveRefreshTimer.current) clearTimeout(liveRefreshTimer.current);
+        liveRefreshTimer.current = setTimeout(() => { liveRefreshTimer.current = null; refreshDetails(true); }, 150);
+    }, [refreshDetails]);
+    useEffect(() => () => { if (liveRefreshTimer.current) clearTimeout(liveRefreshTimer.current); }, []);
+    useLiveChannel(liveChannel, {
+        onEvent: (e) => {
+            if (e.event.startsWith('comment.')) refreshLive();
+            if (e.event === 'item.updated') {
+                // a live description save while this tab edits the description too: nothing to fetch
+                const fields = Array.isArray(e.payload.fields) ? e.payload.fields : [];
+                if (editingDescriptionRef.current && fields.every((field) => field === 'description')) return;
+                refreshLive();
+            }
+        },
+        onResync: refreshLive,
+    });
+    const typing = useTyping(liveChannel);
+    const pageUser = usePage<PageProps>().props.auth?.user;
+    const liveDescription = useLiveItemDescription({
+        itemId: item?.id ?? null,
+        routeParams: [workspace.slug, project.slug, board.slug],
+        editing: isEditingDescription,
+        canEdit: canEditItems,
+        user: { id: pageUser?.id ?? currentUserId, name: pageUser?.name ?? '' },
+        title: titleValue,
+    });
 
     // Re-fetch whenever the board reload shows this item changed (comment, upload, edit, …)
     const detailsKey = [
@@ -505,6 +571,19 @@ export function useItemDetail(args: UseItemDetailArgs) {
         setIsEditingDescription(false);
         saveProp({ description: editorContent });
     };
+    /** Live editing: every change is saved already — store the last ones and close the editor. */
+    const [finishingDescription, setFinishingDescription] = useState(false);
+    const finishLiveDescription = async () => {
+        setFinishingDescription(true);
+        const saved = await liveDescription.finish().finally(() => setFinishingDescription(false));
+        // not stored (offline, refused, replaced elsewhere): the editor stays open with its status / notice
+        if (!saved) return;
+        setSavedDescription(editorContent);
+        setEditorKey((k) => k + 1);
+        setIsEditingDescription(false);
+        // the server's version, including changes that arrived while the last save was on its way
+        refreshDetails(true);
+    };
     const cancelDescription = () => {
         setEditorContent(savedDescription);
         setEditorKey(k => k + 1);
@@ -589,6 +668,8 @@ export function useItemDetail(args: UseItemDetailArgs) {
             setCommentActive(false);
         }
 
+        typing.stopped();
+        lastLocalWriteRef.current = Date.now();
         router.post(route('boards.items.comments.store', [workspace.slug, project.slug, board.slug, item.id]), {
             body: rawBody,
             parent_id: parentId || null,
@@ -599,7 +680,7 @@ export function useItemDetail(args: UseItemDetailArgs) {
         setReplyingTo({ id: commentId, parentId, userName });
         setReplyText('');
     };
-    const cancelReply = () => { setReplyingTo(null); setReplyText(''); setReplyEditorKey(k => k + 1); };
+    const cancelReply = () => { setReplyingTo(null); setReplyText(''); setReplyEditorKey(k => k + 1); typing.stopped(); };
 
     // ── Attachments ──────────────────────────────────────────────────────────
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -671,6 +752,9 @@ export function useItemDetail(args: UseItemDetailArgs) {
         // description
         editorContent, savedDescription, editorKey, isEditingDescription,
         handleEditorChange, startEditDescription, saveDescription, cancelDescription, handleCheckboxToggle,
+        liveDescription, finishLiveDescription, finishingDescription,
+        // live (BRAI-151): who's typing a comment
+        liveChannel, typing,
         // properties
         columnId, assignedTo, itemTypeId, setItemTypeId, priorityId, setPriorityId,
         parentId, setParentId, storyPoints, setStoryPoints, originalEstimate, setOriginalEstimate,
@@ -922,7 +1006,17 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
         comment, setComment, commentEditorKey, setCommentEditorKey, commentActive, setCommentActive,
         localComments, replyingTo, replyText, setReplyText, replyEditorKey,
         handlePostComment, handleReply, cancelReply, history, detailsLoading,
+        liveDescription, finishLiveDescription, finishingDescription, typing,
     } = d;
+    const hasText = (html: string) => html.replace(/<[^>]*>/g, '').trim() !== '';
+    // replies count as typing a comment too (never any content in the signal)
+    const setReplyTextTyping = (html: string) => {
+        setReplyText(html);
+        if (hasText(html)) typing.typing();
+    };
+    // Live description (BRAI-151): the shared document once it has content; until then the saved text
+    const descriptionLive = isEditingDescription && liveDescription.mode === 'live' && liveDescription.ready;
+    const descriptionConnecting = isEditingDescription && (liveDescription.probing || liveDescription.mode === 'connecting' || (liveDescription.mode === 'live' && !liveDescription.ready));
     // Smart links in the description (BRAI-143)
     const smartLinkConfig = useMemo(() => ({ workspaceSlug: workspace.slug, projectSlug: project.slug }), [workspace.slug, project.slug]);
     const [activityTab, setActivityTab] = useState<'all' | 'comments' | 'history' | 'worklog'>('comments');
@@ -1011,8 +1105,84 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
             {/* Description */}
             <section className="pt-3 pb-4 border-t border-border/60">
                 <h2 className="text-sm font-semibold mb-3">Description</h2>
-                {isEditingDescription ? (
+                {descriptionConnecting ? (
+                    <div className="relative" aria-busy>
+                        <div className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
+                            <Loader2 className="size-3 animate-spin" /> Connecting to live editing…
+                        </div>
+                        <div className="rounded-md border border-dashed px-2 py-1 opacity-70">
+                            {savedDescription ? (
+                                <RichLexicalEditor
+                                    key={`connecting-${editorKey}`}
+                                    content={savedDescription}
+                                    onChange={() => { }}
+                                    editable={false}
+                                    showToolbar={false}
+                                    minHeight="40px"
+                                    className="border-0 bg-transparent rounded-none shadow-none"
+                                    contentKey={`${item.id}-connecting-${editorKey}`}
+                                />
+                            ) : (
+                                <p className="text-sm text-muted-foreground py-2">Add a description…</p>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-3 justify-end">
+                            <Button variant="outline" size="sm" onClick={cancelDescription}>Cancel</Button>
+                        </div>
+                    </div>
+                ) : descriptionLive ? (
+                    <div data-testid="live-description">
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                            <span className="inline-flex items-center gap-1.5">
+                                <span className={cn('size-1.5 rounded-full', liveDescription.connection === 'online' && !liveDescription.saveFailed ? 'bg-emerald-500' : 'bg-amber-500')} aria-hidden />
+                                {/* only problems are announced; "Saving…" / "Live" flip every few seconds */}
+                                {liveDescription.connection !== 'online' ? (
+                                    <span role="status">Offline — changes kept on this device</span>
+                                ) : liveDescription.saveFailed ? (
+                                    <span role="status">{liveDescription.saveFailed}</span>
+                                ) : liveDescription.pending ? 'Saving…' : 'Live — changes are saved for everyone'}
+                            </span>
+                            <LiveAvatarStack
+                                label="Editing with you"
+                                members={liveDescription.peers.map((peer) => ({ id: peer.userId, name: peer.name, avatar: null, color: peer.color }))}
+                            />
+                        </div>
+                        <RichLexicalEditor
+                            key={`live-${liveDescription.generation}`}
+                            content={null}
+                            collaboration={liveDescription.binding}
+                            projectId={project.id}
+                            pollScope={{ type: 'item', id: String(item.id) }}
+                            smartLinks={smartLinkConfig}
+                            onChange={handleEditorChange}
+                            placeholder="Add a description…"
+                            editable={liveDescription.canEdit}
+                            minHeight="160px"
+                            contentKey={`${item.id}-live-${liveDescription.generation}`}
+                            workspaceSlug={workspace.slug}
+                            itemTitle={titleValue}
+                            projectName={project.name}
+                        />
+                        {liveDescription.notice && (
+                            <p className="mt-2 flex items-start justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200" role="status">
+                                <span>{liveDescription.notice}</span>
+                                <button type="button" className="shrink-0 underline" onClick={liveDescription.dismissNotice}>Dismiss</button>
+                            </p>
+                        )}
+                        <div className="flex items-center gap-2 mt-3 justify-end">
+                            <Button size="sm" disabled={finishingDescription} onClick={() => void finishLiveDescription()}>
+                                {finishingDescription && <Loader2 className="size-3.5 animate-spin" />}Done
+                            </Button>
+                        </div>
+                    </div>
+                ) : isEditingDescription ? (
                     <div>
+                        {(liveDescription.mode === 'fallback' || liveDescription.unreachable) && (
+                            <p className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200" role="status">
+                                <span>Live editing unavailable — editing alone.</span>
+                                <button type="button" className="underline" onClick={liveDescription.unreachable ? liveDescription.retryProbe : liveDescription.retry}>Try again</button>
+                            </p>
+                        )}
                         <RichLexicalEditor
                             key={`edit-${editorKey}`}
                             content={editorContent}
@@ -1313,7 +1483,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                     />
                 ) : (
                 <>
-                <div className="flex gap-3 mb-6">
+                <div className="flex gap-3 mb-4">
                     <Avatar className="size-8 shrink-0 mt-2">
                         <AvatarFallback className="text-xs bg-primary text-primary-foreground">U</AvatarFallback>
                     </Avatar>
@@ -1325,7 +1495,11 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                             <RichLexicalEditor
                                 key={commentEditorKey}
                                 content={comment || null}
-                                onChange={(html) => { setComment(html); if (!commentActive) setCommentActive(true); }}
+                                onChange={(html) => {
+                                    setComment(html);
+                                    if (!commentActive) setCommentActive(true);
+                                    if (hasText(html)) typing.typing();
+                                }}
                                 placeholder="Add a comment…"
                                 editable={true}
                                 // @mentions (the picker needs the project, like replies and the description)
@@ -1338,10 +1512,12 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                         </div>
                         {commentActive && (
                             <div className="flex justify-end mt-2 gap-2">
-                                <Button variant="outline" size="sm" onClick={() => { setComment(''); setCommentEditorKey(k => k + 1); setCommentActive(false); }}>Cancel</Button>
+                                <Button variant="outline" size="sm" onClick={() => { setComment(''); setCommentEditorKey(k => k + 1); setCommentActive(false); typing.stopped(); }}>Cancel</Button>
                                 <Button size="sm" onClick={() => handlePostComment()}>Save</Button>
                             </div>
                         )}
+                        {/* Live (BRAI-151): colleagues writing a comment on this issue right now */}
+                        <TypingIndicator names={typing.names} />
                     </div>
                 </div>
 
@@ -1354,7 +1530,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                                 depth={0}
                                 replyingTo={replyingTo}
                                 replyText={replyText}
-                                setReplyText={setReplyText}
+                                setReplyText={setReplyTextTyping}
                                 handleReply={handleReply}
                                 handlePostComment={handlePostComment}
                                 cancelReply={cancelReply}

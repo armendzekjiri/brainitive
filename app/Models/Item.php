@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Observers\ItemObserver;
+use App\Support\Collab\ItemCollab;
+use App\Support\Live\Live;
 use App\Support\References\ContentReferences;
 use App\Support\References\SmartLinks;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
@@ -20,6 +22,9 @@ use Illuminate\Support\Str;
 class Item extends Model
 {
     use HasFactory, SoftDeletes;
+
+    /** Set while a live description save writes (BRAI-151): that one doesn't reset the live document. */
+    public bool $collabWrite = false;
 
     protected $fillable = [
         'board_id',
@@ -91,6 +96,18 @@ class Item extends Model
         static::saved(function (Item $item) {
             if ($item->wasRecentlyCreated ? (string) $item->description !== '' : $item->wasChanged('description')) {
                 SmartLinks::syncItem($item);
+            }
+        });
+
+        // Live issue view (BRAI-151): a description changed outside the live document starts a new one
+        // (epoch + 1); open views hear which fields changed (ids / field names only) and refetch
+        static::updated(function (Item $item) {
+            if ($item->wasChanged('description') && ! $item->collabWrite) {
+                ItemCollab::reset($item);
+            }
+            $fields = array_values(array_filter(['title', 'description'], fn (string $field) => $item->wasChanged($field)));
+            if ($fields !== []) {
+                Live::publish("item.{$item->id}", 'item.updated', ['id' => $item->id, 'fields' => $fields]);
             }
         });
 

@@ -6,6 +6,7 @@ use App\Models\Board;
 use App\Models\Item;
 use App\Models\Page;
 use App\Models\Plan;
+use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
@@ -37,6 +38,7 @@ final class LiveChannels
         'board' => self::ID,  // a board — BoardPolicy::view
         'plan' => self::ID,   // a Gantt plan — PlanPolicy::view
         'page' => self::UUID, // a document / whiteboard — PagePolicy::view
+        'ticket' => self::ID, // a helpdesk ticket — TicketPolicy::view (BRAI-151 live replies)
     ];
 
     /** @var array<string, Model|null> */
@@ -113,6 +115,7 @@ final class LiveChannels
                 'board' => ($board = Board::with('project.workspace')->find($id)) && $board->project?->workspace ? $board : null,
                 'plan' => ($plan = Plan::with('project.workspace')->find($id)) && $plan->project?->workspace ? $plan : null,
                 'page' => ($page = Page::with('project.workspace')->where('uuid', $id)->first()) && $page->project?->workspace ? $page : null,
+                'ticket' => ($ticket = Ticket::with('helpdesk.project.workspace')->find($id)) && $ticket->helpdesk?->project?->workspace ? $ticket : null,
                 default => null,
             };
         } catch (Throwable $e) {

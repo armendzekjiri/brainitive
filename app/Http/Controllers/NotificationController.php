@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\InboxNotification;
 use App\Models\User;
 use App\Notifications\NotificationCatalog;
+use App\Support\Live\Live;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -99,6 +100,7 @@ class NotificationController extends Controller
     public function markAllRead(Request $request): JsonResponse
     {
         $this->own($request->user())->whereNull('archived_at')->whereNull('read_at')->update(['read_at' => now()]);
+        self::announce($request->user(), 0);
 
         return response()->json(['success' => true, 'unread_count' => 0]);
     }
@@ -211,7 +213,16 @@ class NotificationController extends Controller
             'unarchive' => $rows()->update(['archived_at' => null]),
         };
 
-        return response()->json(['success' => true, 'unread_count' => $this->unread($user)]);
+        $unread = $this->unread($user);
+        self::announce($user, $unread);
+
+        return response()->json(['success' => true, 'unread_count' => $unread]);
+    }
+
+    /** The user's other tabs (bell badge, tab title) follow a read / archive at once (BRAI-151). */
+    private static function announce(User $user, int $unread): void
+    {
+        Live::publish("user.{$user->id}", 'notifications.changed', ['unread_count' => $unread]);
     }
 
     /** Filter on the `type` key inside the JSON `data` text column (cross-DB). */

@@ -15,6 +15,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { ArrowLeft, SlidersHorizontal } from 'lucide-react';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { ItemTypeIcon } from '@/components/ItemTypeIcon';
+import { LiveAvatars } from '@/components/live/LiveAvatars';
 import {
     useItemDetail,
     ItemDetailMain,
@@ -83,8 +84,8 @@ export default function ItemShow({
 
                 {/* Header – fixed height, never scrolls */}
                 <div className="border-b bg-background shadow-sm shrink-0">
-                    <div className="px-6 py-3 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
+                    <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-3">
                             <Link href={route('boards.show', [workspace.slug, project.slug, board.slug])}>
                                 <Button variant="ghost" size="icon" className="size-8">
                                     <ArrowLeft className="size-4" />
@@ -119,20 +120,24 @@ export default function ItemShow({
                             </Breadcrumb>
                         </div>
 
-                        {/* Mobile: open details sheet */}
-                        <div className="lg:hidden">
-                            <Sheet open={detailsSheetOpen} onOpenChange={setDetailsSheetOpen}>
-                                <SheetTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="size-8">
-                                        <SlidersHorizontal className="size-4" />
-                                    </Button>
-                                </SheetTrigger>
-                                <SheetContent side="right" className="w-[300px] sm:w-[360px] p-0">
-                                    <div className="px-5 py-5 h-full overflow-y-auto">
-                                        <ItemDetailSidebar d={d} inSheet />
-                                    </div>
-                                </SheetContent>
-                            </Sheet>
+                        <div className="flex shrink-0 items-center gap-1">
+                            {/* Who else has this issue open (BRAI-151) */}
+                            <LiveAvatars channel={`item.${item.id}`} />
+                            {/* Mobile: open details sheet */}
+                            <div className="lg:hidden">
+                                <Sheet open={detailsSheetOpen} onOpenChange={setDetailsSheetOpen}>
+                                    <SheetTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="size-8">
+                                            <SlidersHorizontal className="size-4" />
+                                        </Button>
+                                    </SheetTrigger>
+                                    <SheetContent side="right" className="w-[300px] sm:w-[360px] p-0">
+                                        <div className="px-5 py-5 h-full overflow-y-auto">
+                                            <ItemDetailSidebar d={d} inSheet />
+                                        </div>
+                                    </SheetContent>
+                                </Sheet>
+                            </div>
                         </div>
                     </div>
                 </div>
