@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CliController;
+use App\Http\Controllers\CollabInternalController;
 use App\Http\Controllers\Extension\CaptureController;
 use App\Http\Controllers\Extension\ExtensionController;
 use App\Http\Controllers\GithubAppWebhookController;
@@ -9,6 +10,7 @@ use App\Http\Controllers\InboundMailController;
 use App\Http\Controllers\LeadFormInboundController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\RejectCaptureTokens;
+use App\Http\Middleware\VerifyCollabSecret;
 use Illuminate\Support\Facades\Route;
 use Laravel\Passport\Http\Middleware\CheckToken;
 
@@ -83,3 +85,15 @@ Route::post('/inbound-mail/postmark', [InboundMailController::class, 'postmark']
     ->middleware('throttle:240,1,inbound-mail.postmark')->name('inbound-mail.postmark');
 Route::post('/inbound-mail/mailgun', [InboundMailController::class, 'mailgun'])
     ->middleware('throttle:240,1,inbound-mail.mailgun')->name('inbound-mail.mailgun');
+
+// Live co-editing (BRAI-54): the realtime server (realtime/) loads / stores Yjs state and re-checks
+// access. Bearer = key derived from COLLAB_SECRET; 404 while live editing isn't configured. All calls
+// come from the realtime server's one IP (a store per edited document every 2–10 s): a generous limit.
+Route::prefix('internal/collab')
+    ->middleware([VerifyCollabSecret::class, 'throttle:30000,1,internal.collab'])
+    ->name('internal.collab.')
+    ->group(function () {
+        Route::get('documents/{document}', [CollabInternalController::class, 'show'])->name('documents.show');
+        Route::put('documents/{document}', [CollabInternalController::class, 'store'])->name('documents.store');
+        Route::post('access', [CollabInternalController::class, 'access'])->name('access');
+    });

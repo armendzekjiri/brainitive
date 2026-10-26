@@ -23,7 +23,7 @@ import { StatusLozenge } from '@/components/board/ItemPrimitives';
 import { cn } from '@/lib/utils';
 import type { SmartLinkData, SmartLinkView } from '@/types';
 import { $isSmartLinkNode } from '../nodes/SmartLinkNode';
-import { smartLinkText, useSmartLinkConfig } from './smartLinkRefs';
+import { safeSmartLinkHref, smartLinkText, useSmartLinkConfig } from './smartLinkRefs';
 import { useSmartLink } from './smartLinkStore';
 
 /**
@@ -116,7 +116,7 @@ export default function SmartLinkChip({ nodeKey, refValue, url, text, view }: {
         );
     }, [editor, editable, isSelected, nodeKey, clearSelection, setSelected]);
 
-    const href = live?.url ?? url;
+    const href = safeSmartLinkHref(live?.url ?? url);
     // in the editor a click selects the link (the toolbar has "Open"); reading, it navigates
     const onLinkClick = (event: ReactMouseEvent) => {
         if (editable) event.preventDefault();

@@ -1,7 +1,8 @@
 # Self-hosting Brainitive
 
 Brainitive is open source (AGPL-3.0) and runs on any machine with Docker. One image runs the
-web app, the queue worker and the scheduler; PostgreSQL and Redis run next to it.
+web app, the queue worker, the scheduler and the realtime server for live co-editing; PostgreSQL
+and Redis run next to it.
 Don't want to run servers? [Brainitive Cloud](https://www.brainitive.app/#pricing) is the same
 software, hosted and updated for you.
 
@@ -137,6 +138,28 @@ into a fresh `pgdata` volume with `docker compose exec -T db sh -c 'psql -U "$PO
 
 After changing `.env`: `docker compose up -d` (the app container rebuilds its config cache
 on start).
+
+## Live co-editing of documents
+
+Several people can edit the same document at once — everyone sees the others' text appear and
+their named, coloured carets — and documents keep working offline (changes stay in the browser and
+merge when it reconnects). This is the `realtime` service in `compose.yaml`: the same image, running
+a small Node server (Hocuspocus / Yjs). It's **included and on by default**, with nothing to set up:
+
+- the browser connects to `/collab` on your Brainitive address; Caddy in the `app` container passes
+  it on to the `realtime` service, so there's no extra port and it works behind your own reverse
+  proxy too (proxy WebSockets — nginx needs the `Upgrade` / `Connection` headers for `/collab`);
+- the `realtime` service reaches the app on the internal port `8081` (not published). It gets neither
+  your `.env` nor the storage volume: the `app` container hands it the shared secret (derived from
+  `APP_KEY`, or `COLLAB_SECRET` from `.env`) through the small `collab` volume.
+
+The draft → publish workflow doesn't change: people edit the draft together, and **Publish /
+Update** makes it live as before. Readers of a published page keep seeing the published version.
+
+**Turn it off:** set `COLLAB_URL=` (empty) in `.env`, delete the `realtime` service from
+`compose.yaml` (or `docker compose stop realtime`) and run `docker compose up -d`. Documents are
+then edited one person at a time, as before. If the service is down while `COLLAB_URL` is set,
+editors see "Live editing unavailable — editing alone" and keep working without it.
 
 ## Email to helpdesk (forwarding addresses)
 

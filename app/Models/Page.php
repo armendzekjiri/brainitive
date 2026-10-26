@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Collab\PageCollab;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Notifications\PageMentions;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -78,6 +80,12 @@ class Page extends Model
     ];
 
     protected $appends = ['is_whiteboard'];
+
+    /**
+     * Live co-editing (BRAI-54): set while a browser saves the HTML of the live Y document, so the
+     * change doesn't reset that document (every other change of the draft does — see boot()).
+     */
+    public bool $collabWrite = false;
 
     /**
      * Whether this page is a whiteboard (Excalidraw) page.
@@ -152,6 +160,18 @@ class Page extends Model
                 ContentReferences::syncWhiteboard($page);
             } else {
                 SmartLinks::syncPage($page);
+            }
+        });
+        // Live co-editing (BRAI-54): the draft changed outside the live document (discard, restore,
+        // MCP, a single-user autosave, …) → the next live session starts a new Y doc from it
+        static::saved(function (Page $page) {
+            if ($page->collabWrite || $page->wasRecentlyCreated || $page->type !== 'page'
+                || ! $page->wasChanged(['content', 'name', 'icon', 'status', 'draft_content', 'draft_name', 'draft_icon', 'draft_updated_at'])) {
+                return;
+            }
+            $before = (new Page)->setRawAttributes($page->getRawOriginal(), true);
+            if (! $page->is_whiteboard && $before->draftHash() !== $page->draftHash()) {
+                PageCollab::reset($page);
             }
         });
         // Pages are hard-deleted and their subpages go with them (FK cascade, no events)
@@ -239,6 +259,14 @@ class Page extends Model
     }
 
     /**
+     * Yjs state of the draft for live co-editing (BRAI-54).
+     */
+    public function collabState(): HasOne
+    {
+        return $this->hasOne(PageCollabState::class);
+    }
+
+    /**
      * Reviews of the draft (BRAI-80), newest first.
      */
     public function reviews(): HasMany
@@ -274,6 +302,49 @@ class Page extends Model
         }
 
         return hash('sha256', json_encode([$state['name'], $state['icon'], $content], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
+    }
+
+    /**
+     * What editors get back after a save / heartbeat: revision, draft owner and (BRAI-80) the draft hash.
+     *
+     * @return array{edit_revision: int, has_unpublished_changes: bool, draft_updated_at: string|null, draft_updated_by: array{id: int, name: string}|null, draft_hash?: string}
+     */
+    public function editorState(bool $withHash = true): array
+    {
+        $editor = $this->isPublished() && ! $this->is_whiteboard ? $this->draftEditor : $this->lastEditor;
+
+        return [
+            'edit_revision' => $this->edit_revision,
+            'has_unpublished_changes' => $this->hasUnpublishedChanges(),
+            'draft_updated_at' => ($this->draft_updated_at ?? $this->updated_at)?->toIso8601String(),
+            'draft_updated_by' => $editor?->only(['id', 'name']),
+        ] + ($withHash ? ['draft_hash' => $this->draftHash()] : []); // BRAI-80: editors compare it with the latest review's snapshot
+    }
+
+    /**
+     * Whether saving these changes would change the draft (name, icon or content; embedded Excalidraw
+     * scenes ignored). Live co-editing (BRAI-54) skips no-op saves, so opening a doc never creates
+     * "unpublished changes" and the review hash stays put.
+     *
+     * @param  array{content?: array<string, mixed>|null, name?: string, icon?: string|null}  $changes
+     */
+    public function draftWouldChange(array $changes): bool
+    {
+        $state = $this->draftState();
+        if (isset($changes['name']) && $changes['name'] !== $state['name']) {
+            return true;
+        }
+        if (array_key_exists('icon', $changes) && $changes['icon'] !== $state['icon']) {
+            return true;
+        }
+        if (! array_key_exists('content', $changes)) {
+            return false;
+        }
+        $current = $state['content'];
+        $next = $changes['content'];
+        unset($current['excalidrawEmbeds'], $next['excalidrawEmbeds']);
+
+        return json_encode($current, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) !== json_encode($next, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     /**
