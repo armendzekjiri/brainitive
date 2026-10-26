@@ -3,6 +3,7 @@
 namespace App\Support\Imports\Notion;
 
 use App\Support\Imports\ImportFailed;
+use App\Support\Imports\Jira\CsvReader;
 use App\Support\Imports\SafeZip;
 use Illuminate\Support\Facades\File;
 
@@ -115,29 +116,24 @@ final class NotionArchive
     }
 
     /**
-     * Rows of a database CSV (header first). Cells are plain strings; a missing CSV gives [].
+     * Rows of a database CSV (header first), read with the shared streaming CsvReader (BOM, `,` / `;` /
+     * tab, multi-line cells, Windows-1252). Cells are plain strings; a missing or empty CSV gives [].
      *
      * @return list<list<string>>
      */
     public function rows(NotionNode $node): array
     {
-        if ($node->csv === null) {
+        if ($node->csv === null || (int) filesize($this->path($node->csv)) === 0) {
             return [];
         }
-        $handle = fopen($this->path($node->csv), 'rb');
-        if ($handle === false) {
-            return [];
-        }
-        $rows = [];
-        while (($row = fgetcsv($handle, null, ',', '"', '')) !== false) {
-            if ($row === [null]) {
-                continue; // blank line
+        try {
+            $reader = new CsvReader($this->path($node->csv), self::MAX_CSV_BYTES);
+            $rows = [$reader->headers()];
+            foreach ($reader->rows(100_000) as $row) {
+                $rows[] = $row;
             }
-            $rows[] = array_map(fn ($cell) => (string) $cell, $row);
-        }
-        fclose($handle);
-        if (isset($rows[0][0]) && str_starts_with($rows[0][0], "\u{FEFF}")) {
-            $rows[0][0] = substr($rows[0][0], 3);
+        } catch (ImportFailed) {
+            throw new ImportFailed('The database “'.$node->title.'” couldn’t be read: its CSV file is damaged. Export it from Notion again.');
         }
 
         return $rows;

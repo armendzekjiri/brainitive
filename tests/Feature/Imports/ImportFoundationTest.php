@@ -8,6 +8,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\ItemAssignedNotification;
+use App\Support\Boards\ItemComments;
 use App\Support\Imports\Importer;
 use App\Support\Imports\ImportFailed;
 use App\Support\Imports\ImportMappings;
@@ -134,6 +135,13 @@ class ImportFoundationTest extends TestCase
 
         $this->item(['assigned_to' => $this->viewer->id]);
         Notification::assertSentTo($this->viewer, ItemAssignedNotification::class);
+
+        // comments and @mentions through the normal path stay silent too
+        Notification::fake();
+        $item = $this->item(['assigned_to' => $this->viewer->id]);
+        Notification::fake();
+        ImportScope::run(fn () => ItemComments::add($item, $this->editor, '<p>Ping <span data-lexical-mention="true" data-mention-id="'.$this->viewer->id.'">@Viewer</span></p>'));
+        Notification::assertNothingSent();
     }
 
     public function test_safe_zip_refuses_traversal_symlinks_and_bombs(): void

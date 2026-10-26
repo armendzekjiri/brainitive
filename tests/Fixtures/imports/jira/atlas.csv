@@ -1,0 +1,29 @@
+Summary,"Issue key","Issue id","Issue Type",Status,"Status Category","Project key","Project name",Priority,Resolution,Assignee,"Assignee Id",Reporter,"Reporter Id",Created,Updated,Resolved,"Due Date",Labels,Labels,Description,Environment,Watchers,Watchers,"Log Work","Original Estimate",Component/s,"Fix Version/s","Inward issue link (Blocks)","Outward issue link (Blocks)","Outward issue link (Relates)","Outward issue link (Relates)",Attachment,"Custom field (Epic Link)","Custom field (Epic Name)","Custom field (Story Points)","Custom field (Team)","Custom field (Rank)",Sprint,Sprint,Comment,Comment,"Parent id","Parent summary"
+"Checkout revamp",ATL-1,10001,Epic,"In Progress","In Progress",ATL,Atlas,High,,"Jane Doe",557058:0a0a0a0a-0000-4000-8000-00000000000a,"Jane Doe",557058:0a0a0a0a-0000-4000-8000-00000000000a,"03/Mar/24 9:05 AM","03/Mar/24 9:05 AM",,,payments,,"h2. Goal
+Make checkout *fast* and _simple_.
+
+* One page
+* Saved cards
+** Visa
+** Mastercard
+
+See [the spec|https://example.com/spec?a=1&b=2] and https://example.com/raw_link_here.",,,,,,,,,,,,,,"Checkout revamp",,,0|i0001:,,,,,,
+"Pay with card ✓",ATL-2,10002,Story,"To Do","To Do",ATL,Atlas,Medium,,"Ola Nordmann",557058:0b0b0b0b-0000-4000-8000-00000000000b,"Jane Doe",557058:0a0a0a0a-0000-4000-8000-00000000000a,"05/Mar/24 11:30 AM","06/Mar/24 8:00 AM",,,payments,frontend,"As a shopper I want to say ""pay now"" and be done; quickly, too.
+
+{code:php}
+$total = $cart->sum(); // ""quoted"" <b>not bold</b>
+{code}
+
+||Card||Fee||
+|Visa|1%|
+|Mastercard|[pricing|https://example.com/fees]|
+
+Thanks [~accountid:557058:0a0a0a0a-0000-4000-8000-00000000000a]",,,,,,,,,ATL-4,ATL-5,OTHER-9,,ATL-1,,5,Payments,0|i0002:,"ATL Sprint 1",,"17/Mar/24 10:15 AM;557058:0a0a0a0a-0000-4000-8000-00000000000a;Looks good; ship it.
+Second line with *bold*.","18/Mar/24 2:30 PM;557058:ffffffff-0000-4000-8000-0000000000ff;A comment by someone who left",,
+"Validate card number",ATL-3,10003,Sub-task,"Code Review","In Progress",ATL,Atlas,Low,,"Jane Doe",557058:0a0a0a0a-0000-4000-8000-00000000000a,"Jane Doe",557058:0a0a0a0a-0000-4000-8000-00000000000a,"06/Mar/24 1:00 PM","06/Mar/24 1:00 PM",,"24/Mar/24 12:00 AM",,,"Use the *Luhn* check: {{luhn(number)}}",,,,,7200,,,,,,,,,,,,0|i0003:,,,,,10002,"Pay with card ✓"
+"Crash on empty cart",ATL-4,10004,Bug,Done,Done,ATL,Atlas,Blocker,Done,"Jane Doe",557058:0a0a0a0a-0000-4000-8000-00000000000a,"Ola Nordmann",557058:0b0b0b0b-0000-4000-8000-00000000000b,"10/Mar/24 4:00 PM","20/Mar/24 4:00 PM","20/Mar/24 4:00 PM",,,,"Steps:
+# Open the cart
+# Click *Pay*
+
+bq. It crashes.",,"Jane Doe","Ola Nordmann","20/Mar/24 4:00 PM;557058:0a0a0a0a-0000-4000-8000-00000000000a;3600",,Web,1.0,ATL-2,,,,"20/Mar/24 4:00 PM;557058:0a0a0a0a-0000-4000-8000-00000000000a;crash.png;https://example.atlassian.net/secure/attachment/1/crash.png",,,,Payments,0|i0004:,"ATL Sprint 1","ATL Sprint 2",,,,
+"Ünïcödé 日本語 – émoji 🚀 task",ATL-5,10005,Improvement,Closed,Done,ATL,Atlas,,Fixed,,,zoe@example.test,,"11/Mar/24 10:00 AM",,"12/Mar/24 10:00 AM",,,,,"macOS 14, Safari",,,,,,,,,,,,,,,,0|i0005:,,,,,,

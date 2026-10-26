@@ -553,6 +553,35 @@ php artisan tinker --execute="\App\Models\User::where('email','...')->update(['e
   in PHP arrays, and the preview runs inside the web request, so `TrelloExport` raises `memory_limit` to at
   most 512 MB (never lowers it). Raise both together if bigger boards ever need importing.
 
+### Jira import: what maps to what (v1.41.0, BRAI-139)
+- **Columns are read by position.** Jira repeats a column name once per value (`Labels`, `Sprint`,
+  `Comment`, `Watchers`, `Attachment`, …), so `CsvReader` rows are plain lists and `JiraExport` looks names
+  up case-insensitively. Backslash is not a CSV escape (`\\` is a wiki line break). An odd number of `"`
+  in the file = a cut-off cell → the preview fails. Uploads are capped at 25 MB; the file is streamed
+  with `fgetcsv` (preview runs in the web request).
+- **Statuses → columns:** one column per status in status-category order (the `Status Category` column,
+  else the resolution, else the name); every done-category status → one "Done" column. The user renames /
+  merges columns by typing the same name and picks the done column; it always exists and comes last.
+- **Hierarchy:** `Parent id` / `Parent` (sub-tasks, Cloud parents) or `Epic Link` (a key) → `parent_id`.
+  Issues are created parents first (sorted by depth); cycles are cut, deeper than `Item::MAX_DEPTH`
+  moves one level up, parents missing from the file → top level, each with a warning.
+- **Sprints** (optional; makes the board Scrum) come over as **planned** sprints (the CSV has no sprint
+  state). An issue's sprint is the last one Jira lists. Because an issue and its sub-issues share one
+  sprint in Brainitive, a top-level issue takes its own sprint, else the sprint most of its sub-issues
+  were in (warning when they differed). The result link opens the backlog for Scrum boards (the board
+  page shows only the active sprint).
+- **People:** assignee / reporter cells are display names (Cloud) or user names (Server, sometimes
+  emails): matched by email, else by a unique member name; the rest stays unassigned and the reporter
+  name stays in the "Jira: KEY · Reported by X on date" line. Comment authors are account ids; they
+  are resolved through the `Assignee Id` / `Reporter Id` / `Creator Id` columns, else "a Jira user".
+- **Comments** are created directly (Comment + `commented` history entry), not via `ItemComments::add`,
+  which would send mention / comment notifications (ImportScope only silences Assignments and DomainEvents).
+- **Report counts** come from the run's `import_mappings` at the end of `run()`, minus what an earlier
+  attempt already reported, so a crash + resume neither loses nor doubles counts.
+- **Not imported (counted):** custom fields (other than Epic Link/Name, Story Points, Start date, Rank, …),
+  attachments, watchers, work log entries, components, versions. Images and `[^attachments]` in the
+  markup become text; external images become links (nothing is fetched).
+
 ### Notion import: tree, links and files (v1.41.0, BRAI-66)
 - **Tree:** a Notion page with subpages becomes a **folder** (same name) holding the page first, then the
   subpages; a database (CSV) becomes a table page (+ folder when its rows have pages). Folders without
@@ -573,7 +602,8 @@ php artisan tinker --execute="\App\Models\User::where('email','...')->update(['e
 - **Markdown:** `Imports\Shared\MarkdownHtml` (league/commonmark GFM, single newline → `<br>` for Notion),
   not `PageContentConverter::markdownToHtml` (no tables / images / nested lists). HTML longer than
   500 000 characters is refused (`ImportFailed`, page named) because `SafeHtml` would truncate it.
-  Tables stop at 1 000 rows / 400 000 characters with a note; the original CSV is linked.
+  Tables stop at 1 000 rows / 400 000 characters with a note; the original CSV is linked. CSVs are read
+  with the Jira import's streaming `CsvReader` (a damaged CSV fails the preview, naming the database).
 - **Limits (fail in the preview):** 2 000 pages / databases / folders, 256 KB Markdown per page, 5 MB per
   CSV, SafeZip 5 000 files / 512 MB. Upload rule 200 MB, but `docker/php.ini` caps uploads at 50 MB
   (`post_max_size` 55M): raise both for bigger exports. Memory stays bounded: page bodies are read from

@@ -5,6 +5,7 @@ namespace App\Support\Boards;
 use App\Models\Item;
 use App\Models\User;
 use App\Notifications\MentionNotification;
+use App\Support\Imports\ImportScope;
 
 /**
  * Notify people @mentioned in an issue's description or comment (HTML or Lexical JSON).
@@ -20,6 +21,9 @@ class ItemMentions
      */
     public static function notify(?string $content, Item $item, User $actor, ?string $previous = null): array
     {
+        if (ImportScope::active()) {
+            return []; // bulk imports notify nobody per record (v1.41.0)
+        }
         $mentioned = self::userIds($content);
         $userIds = array_diff($mentioned, self::userIds($previous));
 

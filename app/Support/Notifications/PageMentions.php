@@ -6,6 +6,7 @@ use App\Models\Page;
 use App\Models\User;
 use App\Notifications\MentionNotification;
 use App\Support\Boards\ItemMentions;
+use App\Support\Imports\ImportScope;
 
 /**
  * Page @mentions are notified when the page is SAVED (Page::saveDraft), not when the mention is typed:
@@ -16,6 +17,9 @@ class PageMentions
 {
     public static function notify(Page $page, User $actor, mixed $before, mixed $after): void
     {
+        if (ImportScope::active()) {
+            return; // bulk imports notify nobody per record (v1.41.0)
+        }
         $new = array_diff(ItemMentions::userIds(self::text($after)), ItemMentions::userIds(self::text($before)), [$actor->id]);
         $project = $page->project;
         if ($new === [] || ! $project) {
