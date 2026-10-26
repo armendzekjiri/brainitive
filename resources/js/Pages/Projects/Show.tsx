@@ -248,6 +248,7 @@ function ProjectOverview({ workspace, project, members = [], recentlyUpdated = [
         { label: 'Health', aria: 'Project health', href: route('projects.health', params), icon: HeartPulse },
         { label: 'Workload', aria: 'Project workload', href: route('workload.index', params), icon: Gauge },
         { label: 'Releases', aria: 'Project releases', href: route('releases.index', params), icon: Rocket },
+        ...(canUpdate ? [{ label: 'Feedback', aria: 'Feedback portal', href: route('projects.feedback.index', params), icon: Users2 }] : []), // BRAI-60: project admins
     ];
 
     return (

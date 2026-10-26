@@ -3,6 +3,7 @@
 namespace Tests\Feature\Notifications;
 
 use App\Models\Comment;
+use App\Models\FeedbackPortal;
 use App\Models\Helpdesk;
 use App\Models\LeadForm;
 use App\Models\Sprint;
@@ -12,6 +13,7 @@ use App\Models\TicketContact;
 use App\Models\Webhook;
 use App\Notifications\AutomationNoticeNotification;
 use App\Notifications\CatalogNotification;
+use App\Notifications\FeedbackSubmittedNotification;
 use App\Notifications\InvitationAcceptedNotification;
 use App\Notifications\ItemCommentedNotification;
 use App\Notifications\ItemDueNotification;
@@ -65,6 +67,8 @@ class CatalogNotificationContractTest extends TestCase
         $contact = TicketContact::create(['email' => 'c@example.com', 'uuid' => (string) Str::uuid()]);
         $ticket = $helpdesk->tickets()->create(['subject' => 'Help', 'column_id' => $helpdesk->columns()->first()->id, 'ticket_contact_id' => $contact->id, 'key' => 'SUP-1', 'position' => 0]);
         $webhook = Webhook::create(['workspace_id' => $this->workspace->id, 'name' => 'Zapier', 'url' => 'https://hooks.example.com/x?token=secret', 'secret' => Webhook::generateSecret(), 'events' => ['*'], 'created_by' => $this->editor->id]);
+        $feedbackPortal = FeedbackPortal::create(['project_id' => $this->project->id, 'slug' => 'contract-ideas', 'title' => 'Ideas', 'enabled' => true]); // BRAI-60
+        $feedbackPost = $feedbackPortal->posts()->create(['number' => 1, 'title' => 'Dark mode [x](y)', 'body' => 'Please <b>add</b> it']);
         auth()->logout();
 
         return [
@@ -82,6 +86,7 @@ class CatalogNotificationContractTest extends TestCase
             new TicketSlaBreachedNotification($ticket, 'resolution', now()->subHour()),
             new AutomationNoticeNotification($item, 'Triage', 'Look at {{item.key}}', $this->editor), // BRAI-63
             new AutomationNoticeNotification($ticket, 'Triage', null, null), // BRAI-63
+            new FeedbackSubmittedNotification($feedbackPost), // BRAI-60
         ];
     }
 
