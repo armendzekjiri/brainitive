@@ -80,6 +80,8 @@ export function appEnv(): Record<string, string> {
         E2E_PASSWORD: PASSWORD,
         // webhooks.spec.ts delivers to a receiver on 127.0.0.1; the app honours this only with APP_ENV=e2e
         WEBHOOKS_ALLOW_PRIVATE_TARGETS: 'true',
+        // calendar-links.spec.ts serves an ICS feed + a CalDAV server on 127.0.0.1; honoured only with APP_ENV=e2e
+        CALENDAR_LINKS_ALLOW_PRIVATE: 'true',
         // helpdesk-forwarding.spec.ts: forwarding addresses on (Postmark endpoint, test token)
         INBOUND_MAIL_DOMAIN: INBOUND_MAIL.domain,
         INBOUND_MAIL_PROVIDER: 'postmark',

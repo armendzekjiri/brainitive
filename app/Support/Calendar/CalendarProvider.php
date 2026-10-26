@@ -75,7 +75,7 @@ use Carbon\CarbonInterface;
  * ── Outbound requests to user-supplied URLs (CalDAV servers, ICS links) — SSRF ───────────
  *  - Every request goes through App\Support\OutboundUrl::options($url) — at connect time AND
  *    in listEvents / getEvent / writes / listCalendars (DNS can change; never cache it).
- *    Never pass $allowPrivate = true.
+ *    Never pass $allowPrivate = true (App\Support\Calendar\SafeRemoteUrl wraps this guard; private only with APP_ENV=e2e).
  *  - Rewrite webcal:// to https:// before calling options() (it only allows http/https).
  *  - Redirects are off: follow them by hand (/.well-known/caldav, iCloud's pNN hosts), re-check
  *    each Location with options(), cap the hops, and never resend credentials to another host.

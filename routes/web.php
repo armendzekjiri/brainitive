@@ -224,7 +224,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/', 'store')->name('calendar.connections.store');
         // Generic connect for 'form' / 'url' providers (CalDAV, ICS links, …) — BRAI-140.
         Route::post('manual/{provider}', 'manualStore')->where('provider', '[a-z0-9_-]+')
-            ->middleware('throttle:10,1,calendar.connections.manual')->name('calendar.connections.manual.store');
+            ->middleware('throttle:10,1,calendar.connections.manual.store')->name('calendar.connections.manual.store');
         Route::patch('{connection}/toggle', 'toggle')->name('calendar.connections.toggle');
         Route::delete('{connection}', 'destroy')->name('calendar.connections.destroy');
         Route::post('{connection}/events', 'createEvent')->name('calendar.connections.events.create');
