@@ -94,3 +94,7 @@ Schedule::command('model:prune', ['--model' => [PortalLoginToken::class]])->dail
 
 // v1.42.0: the repository's star count for the "Star on GitHub" buttons (cache only; pages never call GitHub)
 Schedule::call(fn () => GithubStars::refresh())->hourly()->name('github-stars')->withoutOverlapping();
+
+// v1.43.0 (BRAI-55): build the search index in the background when this index version was never
+// built (fresh install, update) — nobody runs search:reindex by hand. One small query otherwise.
+Schedule::command('search:ensure')->everyFiveMinutes()->withoutOverlapping()->runInBackground();

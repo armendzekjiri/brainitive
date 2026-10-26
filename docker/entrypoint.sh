@@ -47,6 +47,8 @@ done
 
 if [ "${CONTAINER_ROLE:-app}" = "app" ]; then
     php artisan migrate --force
+    # Search index (v1.43.0): queue the first build in the background (the queue container runs it)
+    php artisan search:ensure || true
     # Item types, priorities and instance settings (idempotent)
     php artisan db:seed --force --class=Database\\Seeders\\InstanceSettingsSeeder
     php artisan db:seed --force --class=Database\\Seeders\\ItemTypeSeeder
