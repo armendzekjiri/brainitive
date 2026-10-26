@@ -1,6 +1,6 @@
 #!/bin/sh
-# Prepares a container before its command runs. CONTAINER_ROLE: app (default) | queue | scheduler.
-# Only the app role migrates the database and builds the caches.
+# Prepares a container before its command runs. CONTAINER_ROLE: app (default) | queue | scheduler |
+# realtime. Only the app role migrates the database and builds the caches.
 set -e
 cd /app
 
@@ -32,6 +32,12 @@ if [ -z "$APP_KEY" ]; then
     done
     APP_KEY=$(cat storage/app.key)
     export APP_KEY
+fi
+
+# The realtime server (live co-editing) only needs APP_KEY (its secret is derived from it) — it talks
+# to the app over HTTP, never to the database.
+if [ "${CONTAINER_ROLE:-app}" = "realtime" ]; then
+    exec "$@"
 fi
 
 echo "Waiting for the database…"

@@ -164,6 +164,45 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
         return next;
     }, [resetDocument]);
 
+    /**
+     * Last chance before the tab closes or the editor goes away: unsaved HTML goes out with
+     * `keepalive`, so the draft never lags behind the live document (fire and forget).
+     */
+    const saveOnExit = useCallback((editor: LexicalEditor | null) => {
+        const session = sessionRef.current;
+        const doc = docRef.current;
+        if (!session?.edit || !doc || !editor || !readyRef.current || !initialDoneRef.current) return;
+        const html = editor.read(() => $generateHtmlFromNodes(editor));
+        const vector = stateVector(doc);
+        if (!saveTimerRef.current && htmlVectorRef.current && covers(htmlVectorRef.current, vector)) return;
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current.handle);
+        saveTimerRef.current = null;
+        const docMeta = doc.getMap('meta');
+        const body = JSON.stringify({
+            epoch: session.epoch,
+            content: JSON.stringify({ type: 'lexical', html }),
+            name: (docMeta.get('name') as string | undefined)?.trim() || fallbackRef.current.name || 'Untitled',
+            icon: docMeta.has('icon') ? docMeta.get('icon') ?? null : fallbackRef.current.icon,
+            vector,
+        });
+        htmlVectorRef.current = vector;
+        const xsrf = decodeURIComponent(document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/)?.[1] ?? '');
+        fetch(route('pages.collab.save', routeParamsRef.current), {
+            method: 'PUT',
+            // browsers cap keepalive bodies at 64 KB; bigger documents rely on the next open's catch-up save
+            keepalive: body.length < 60_000,
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-XSRF-TOKEN': xsrf, 'X-Requested-With': 'XMLHttpRequest' },
+            body,
+        }).catch(() => { /* the live document keeps the text; the next open saves it */ });
+    }, []);
+
+    useEffect(() => {
+        const onPageHide = () => saveOnExit(editorRef.current);
+        window.addEventListener('pagehide', onPageHide);
+        return () => window.removeEventListener('pagehide', onPageHide);
+    }, [saveOnExit]);
+
     const scheduleSave = useCallback((delay: number) => {
         const at = Date.now() + delay;
         // a local change wins over a later remote-only save
@@ -377,7 +416,10 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
                 username: user.name,
                 color: collabColor(user.id),
                 awarenessData: { userId: user.id, edit },
-                onEditor: (editor) => { editorRef.current = editor; },
+                onEditor: (editor) => {
+                    if (!editor) saveOnExit(editorRef.current); // the editor closes: store what it had
+                    editorRef.current = editor;
+                },
                 onChange: notifyChange,
             });
             setMode('live');
@@ -406,6 +448,7 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
         })();
 
         return () => {
+            if (!resettingRef.current) saveOnExit(editorRef.current); // closing the editor / leaving the page
             alive = false;
             timers.forEach(clearTimeout);
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current.handle);
@@ -426,7 +469,7 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
             editorRef.current = null;
             sessionRef.current = null;
         };
-    }, [enabled, collab?.url, generation, pageUuid, user.id, user.name, fetchSession, notifyChange, resetDocument, save, scheduleSave]);
+    }, [enabled, collab?.url, generation, pageUuid, user.id, user.name, fetchSession, notifyChange, resetDocument, save, saveOnExit, scheduleSave]);
 
     /** Store the HTML now (before publish / review / close). False when that failed. */
     const flush = useCallback(async () => {

@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Brainitive — self-hosting image (FrankenPHP: Caddy + PHP in one process).
-# The same image runs the web app, the queue worker and the scheduler (see compose.yaml).
+# The same image runs the web app, the queue worker, the scheduler and the realtime server for live
+# co-editing of documents (see compose.yaml).
 
 # ── PHP dependencies ──────────────────────────────────────────────────────
 FROM composer:2 AS vendor
@@ -22,8 +23,17 @@ COPY --from=vendor /app/vendor/tightenco/ziggy vendor/tightenco/ziggy
 RUN if [ -d resources/js/Components ] && [ ! -d resources/js/components ]; then mv resources/js/Components resources/js/components; fi
 RUN npm run build
 
+# ── Realtime server for live co-editing (BRAI-54): production dependencies only ──
+FROM node:22-bookworm-slim AS realtime
+WORKDIR /realtime
+COPY realtime/package.json realtime/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+
 # ── Runtime ───────────────────────────────────────────────────────────────
 FROM dunglas/frankenphp:1-php8.4-bookworm
+
+# Node for the realtime service (just the binary, no npm): same Debian (bookworm) as this image
+COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 
 RUN install-php-extensions pdo_mysql pdo_pgsql redis gmp bcmath intl zip gd exif pcntl \
     && apt-get update && apt-get install -y --no-install-recommends libcap2-bin \
@@ -42,6 +52,7 @@ COPY docker/Caddyfile /etc/frankenphp/Caddyfile
 COPY --from=vendor /app /app
 COPY --from=assets /app/public/build /app/public/build
 COPY --from=assets /app/public/js/helpdesk-widget.js /app/public/js/helpdesk-widget.js
+COPY --from=realtime /realtime/node_modules /app/realtime/node_modules
 COPY docker/entrypoint.sh /usr/local/bin/brainitive-entrypoint
 
 RUN chmod +x /usr/local/bin/brainitive-entrypoint \
