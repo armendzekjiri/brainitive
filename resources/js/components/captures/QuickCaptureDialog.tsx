@@ -9,6 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CAPTURE_TYPES, isCaptureShortcut } from '@/lib/captures';
+import { captureOffline } from '@/lib/offline/actions';
+import { getOfflineState } from '@/lib/offline/store';
 import type { CaptureType } from '@/types';
 
 const OPEN_EVENT = 'quick-capture:open';
@@ -52,6 +54,16 @@ export function QuickCaptureDialog() {
     const submit = (e?: FormEvent) => {
         e?.preventDefault();
         if (form.processing) return;
+        // Offline mode (BRAI-82): no connection → saved on this device, synced later.
+        if (!navigator.onLine && getOfflineState().userId) {
+            void captureOffline(form.data).then((saved) => {
+                if (!saved) return toast.error('Could not save the capture on this device.');
+                form.reset();
+                setOpen(false);
+                toast.success('Saved on this device — it syncs when you’re back online');
+            });
+            return;
+        }
         form.post(route('captures.store'), {
             preserveScroll: true,
             preserveState: true,

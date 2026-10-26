@@ -8,6 +8,7 @@ import ShareButton from '@/components/share/ShareButton';
 import SubjectMeetings from '@/components/meetings/SubjectMeetings';
 import { Video } from 'lucide-react';
 import { itemTree, MAX_ITEM_DEPTH } from '@/lib/itemTree';
+import { issueSnapshot, useOfflineSnapshot } from '@/lib/offline/snapshots';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -281,6 +282,13 @@ export function useItemDetail(args: UseItemDetailArgs) {
     const [startTime, setStartTime] = useState(item?.start_time?.substring(0, 5) || '');
     const [dueDate, setDueDate] = useState(item?.due_date?.toString().split('T')[0] || '');
     const [dueTime, setDueTime] = useState(item?.due_time?.substring(0, 5) || '');
+
+    // Offline mode (BRAI-82): keep a copy of the issues the user opens (a no-op while it's off).
+    useOfflineSnapshot('issue', item?.id ?? null, () => issueSnapshot({
+        item: { ...(item as Item), comments: localComments },
+        workspace, project, board, columns, priorities, members: projectUsers, canEdit: canEditItems,
+        url: route('boards.items.show', [workspace.slug, project.slug, board.slug, (item as Item).id], false),
+    }), [item, localComments, canEditItems, columns]);
 
     // Linked issues
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
