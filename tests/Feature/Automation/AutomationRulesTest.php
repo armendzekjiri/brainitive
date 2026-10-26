@@ -72,7 +72,9 @@ class AutomationRulesTest extends TestCase
         $rule = AutomationRule::sole();
         $this->assertFalse($rule->enabled);
         $this->assertSame([1, $this->admin->id, $this->project->id], [$rule->version, $rule->actor_id, $rule->project_id]);
-        $this->assertSame([['type' => 'board', 'value' => $this->board->id]], $rule->conditions);
+        // legacy {type, value} input is stored in the BRAI-144 shape
+        $this->assertSame([['field' => 'board', 'operator' => 'is', 'value' => $this->board->id]], $rule->conditions);
+        $this->assertSame('all', $rule->condition_match);
         $this->assertSame([['type' => 'assign', 'value' => $this->editor->id, 'text' => null]], $rule->actions);
 
         // switched off: an issue changes nothing
@@ -148,7 +150,7 @@ class AutomationRulesTest extends TestCase
         $store($this->definition(['trigger' => 'item.moved', 'trigger_config' => ['column_id' => $foreignBoard->columns()->first()->id]]))->assertSessionHasErrors('trigger_config.column_id');
         // a ticket action on an issue trigger, an issue condition on a ticket trigger
         $store($this->definition(['actions' => [['type' => 'create_issue', 'value' => $this->board->id]]]))->assertSessionHasErrors('actions.0.type');
-        $store($this->definition(['trigger' => 'ticket.created']))->assertSessionHasErrors('conditions.0.type');
+        $store($this->definition(['trigger' => 'ticket.created']))->assertSessionHasErrors('conditions.0.field');
         $store($this->definition(['trigger' => 'webhook.sent']))->assertSessionHasErrors('trigger');
 
         $this->assertSame(0, AutomationRule::count());

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
@@ -41,6 +42,24 @@ class ActivityLog extends Model
         return $this->morphTo();
     }
 
+    /** Origin merged into every entry logged inside via() — e.g. ['via' => 'github']. */
+    private static ?array $origin = null;
+
+    /**
+     * Run $callback with every entry it logs marked as made by an integration (metadata.via),
+     * e.g. ActivityLog::via('github', fn () => …) → the history says "GitHub" (BRAI-61).
+     */
+    public static function via(string $origin, Closure $callback): mixed
+    {
+        $previous = self::$origin;
+        self::$origin = ['via' => $origin];
+        try {
+            return $callback();
+        } finally {
+            self::$origin = $previous;
+        }
+    }
+
     /**
      * Log an activity.
      */
@@ -51,12 +70,12 @@ class ActivityLog extends Model
         ?array $metadata = null
     ): self {
         return static::create([
-            'user_id' => auth()->id(),
+            'user_id' => self::$origin ? null : auth()->id(), // an integration acted, not a person
             'loggable_type' => get_class($model),
             'loggable_id' => $model->id,
             'action' => $action,
             'changes' => $changes,
-            'metadata' => $metadata,
+            'metadata' => self::$origin ? array_merge($metadata ?? [], self::$origin) : $metadata,
         ]);
     }
 

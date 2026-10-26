@@ -4,7 +4,8 @@ namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\ResolvesCalendarConnections;
 use App\Models\CalendarConnection;
-use App\Services\GoogleCalendarService;
+use App\Support\Calendar\CalendarProviderException;
+use App\Support\Calendar\CalendarProviders;
 use App\Support\Mcp\CalendarFormatter;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -14,12 +15,12 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('Create an event on one of the user\'s Google calendars — the main tool for planning their week. Provide a title and date (YYYY-MM-DD). Add a time (HH:MM, 24h) for a timed event, or omit it for an all-day event. Pass the user\'s IANA timezone (e.g. Europe/Zurich) so the time lands correctly.')]
+#[Description('Create an event on one of the user\'s connected calendars (any writable one, from any provider) — the main tool for planning their week. Provide a title and date (YYYY-MM-DD). Add a time (HH:MM, 24h) for a timed event, or omit it for an all-day event. Pass the user\'s IANA timezone (e.g. Europe/Zurich) so the time lands correctly.')]
 class CreateCalendarEventTool extends Tool
 {
     use ResolvesCalendarConnections;
 
-    public function handle(Request $request, GoogleCalendarService $calendar): Response|ResponseFactory
+    public function handle(Request $request): Response|ResponseFactory
     {
         $validated = $request->validate([
             'connection_id' => 'nullable|integer',
@@ -29,6 +30,7 @@ class CreateCalendarEventTool extends Tool
             'end_date' => 'nullable|date_format:Y-m-d',
             'end_time' => 'nullable|date_format:H:i',
             'description' => 'nullable|string|max:5000',
+            'location' => 'nullable|string|max:500',
             'timezone' => 'nullable|string|max:64',
         ]);
 
@@ -40,20 +42,29 @@ class CreateCalendarEventTool extends Tool
             return Response::error($e->getMessage());
         }
 
-        $event = $calendar->createEvent($connection, $validated);
-
-        if (! $event) {
-            return Response::error('Google rejected the event (the connection may need reauthorising in Brainitive).');
+        try {
+            $event = CalendarProviders::writable($connection)->createEvent($connection, [
+                'title' => $validated['title'],
+                'description' => $validated['description'] ?? null,
+                'location' => $validated['location'] ?? null,
+                'start_date' => $validated['date'],
+                'start_time' => $validated['time'] ?? null,
+                'end_date' => $validated['end_date'] ?? null,
+                'end_time' => $validated['end_time'] ?? null,
+                'timezone' => $validated['timezone'] ?? null,
+            ]);
+        } catch (CalendarProviderException $e) {
+            return Response::error($e->getMessage());
         }
 
         return Response::structured([
             'created' => true,
-            'event' => CalendarFormatter::event($event, $connection),
+            'event' => CalendarFormatter::normalized($event, $connection),
         ]);
     }
 
     /**
-     * Default to the only connected calendar when there is exactly one;
+     * Default to the only writable connected calendar when there is exactly one;
      * otherwise require an explicit connection_id.
      *
      * @throws AuthorizationException
@@ -64,12 +75,14 @@ class CreateCalendarEventTool extends Tool
             return $this->connectionForUser($user, $connectionId, 'calendar');
         }
 
-        $calendars = $this->connectionsFor($user, 'calendar');
+        $calendars = $this->connectionsFor($user, 'calendar')
+            ->filter(fn (CalendarConnection $c) => CalendarProviders::has($c->provider) && CalendarProviders::for($c)->isWritable($c))
+            ->values();
         if ($calendars->count() === 1) {
             return $calendars->first();
         }
         if ($calendars->isEmpty()) {
-            throw new AuthorizationException('No connected Google calendars. Ask the user to connect one in Brainitive.');
+            throw new AuthorizationException('No connected calendar accepts new events. Ask the user to connect one in Brainitive.');
         }
 
         throw new AuthorizationException('Multiple calendars are connected — specify connection_id (see list_calendar_connections).');
@@ -92,13 +105,14 @@ class CreateCalendarEventTool extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'connection_id' => $schema->integer()->description('Target calendar id (from list_calendar_connections). Optional if only one calendar is connected.'),
+            'connection_id' => $schema->integer()->description('Target calendar id (from list_calendar_connections, one with writable = true). Optional if only one writable calendar is connected.'),
             'title' => $schema->string()->description('Event title.')->required(),
             'date' => $schema->string()->description('Start date YYYY-MM-DD.')->required(),
             'time' => $schema->string()->description('Start time HH:MM (24h). Omit for an all-day event.'),
             'end_date' => $schema->string()->description('End date YYYY-MM-DD. Defaults to start date.'),
             'end_time' => $schema->string()->description('End time HH:MM (24h). Defaults to 30 min after start.'),
             'description' => $schema->string()->description('Optional event description / notes.'),
+            'location' => $schema->string()->description('Optional location.'),
             'timezone' => $schema->string()->description('IANA timezone for the times, e.g. Europe/Zurich. Defaults to the app timezone.'),
         ];
     }

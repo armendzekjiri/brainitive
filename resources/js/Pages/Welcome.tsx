@@ -69,11 +69,16 @@ import {
     Clock,
     FileSpreadsheet,
     ReceiptText,
+    Lightbulb,
+    BadgeCheck,
+    Video,
+    CalendarSync,
     type LucideIcon,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { Button } from '@/components/ui/button';
 import { CookieConsent } from '@/components/CookieConsent';
+import GitHubStarButton from '@/components/GitHubStarButton';
 
 /*
  * Brand palette
@@ -140,14 +145,6 @@ function RevealSection({
 
 const REPO_URL = 'https://github.com/armendzekjiri/brainitive';
 const SELF_HOSTING_URL = `${REPO_URL}/blob/main/docs/self-hosting.md`;
-
-function GitHubMark({ className = '' }: { className?: string }) {
-    return (
-        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" className={className}>
-            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-        </svg>
-    );
-}
 
 type Billing = 'monthly' | 'yearly';
 
@@ -339,10 +336,7 @@ function PricingSection() {
                                     Self-host guide
                                     <ChevronRight className="h-4 w-4" />
                                 </a>
-                                <a href={REPO_URL} target="_blank" rel="noopener" className="inline-flex items-center gap-2 rounded-xl border-2 border-border/80 px-4 py-2.5 text-sm font-bold text-[#485E72] dark:text-slate-100 hover:border-[#0E83DC]/40 hover:text-[#0E83DC] transition-all">
-                                    <GitHubMark className="h-4 w-4" />
-                                    View on GitHub
-                                </a>
+                                <GitHubStarButton className="self-center text-sm" />
                             </div>
                         </div>
                     </RevealSection>
@@ -397,45 +391,45 @@ const SPOTLIGHT: {
     shortcut?: string;
 }[] = [
     {
-        key: 'import',
-        version: 'v1.41',
-        icon: PackageOpen,
+        key: 'clients',
+        version: 'v1.42',
+        icon: Briefcase,
         color: '#0E83DC',
-        title: 'Bring your data',
+        title: 'Work with your clients',
         description:
-            'Move in from Trello, Jira or Notion in minutes — boards, issues, epics, comments and docs — with a preview before anything is created.',
+            'A client portal for approvals, a public feedback portal for ideas and votes, and document reviews inside the team — no extra tools, no accounts for outsiders.',
         points: [
-            'Trello boards, Jira CSV exports, Notion workspaces',
-            'Map statuses, types and people yourself',
-            'Export any project and restore it anywhere',
+            'Clients approve the exact version they saw',
+            'Customers vote on ideas and follow your roadmap',
+            'Reviewers comment on selected text',
         ],
     },
     {
-        key: 'automation',
-        version: 'v1.40',
-        icon: Workflow,
-        color: '#0E83DC',
-        title: 'Automations that do the busywork',
-        description:
-            'When an issue is created, moved or overdue, let Brainitive assign it, set the priority, comment or notify — rules you build in a minute.',
-        points: [
-            'When → if → then, no code',
-            'Test a rule on a real issue before switching it on',
-            'A run log for every rule',
-        ],
-    },
-    {
-        key: 'email-helpdesk',
-        version: 'v1.40',
-        icon: MailOpen,
+        key: 'calendars-meetings',
+        version: 'v1.42',
+        icon: Video,
         color: '#69A748',
-        title: 'Email into your helpdesk',
+        title: 'Every calendar, every meeting',
         description:
-            'Customers just write to support@ — every email becomes a ticket, your answers go back in the same thread, with SLAs that warn before a deadline slips.',
+            'Google, Outlook / Microsoft 365, iCloud and any CalDAV or ICS calendar in one view — and a Google Meet or Teams meeting from any card or doc.',
         points: [
-            'Connect your mailbox or use a forwarding address',
-            'Replies stay in one email thread',
-            'Response and resolution targets per priority',
+            'Schedule Meet or Teams from a card, doc or the calendar',
+            'Subscribe to your Brainitive dates in any calendar app',
+            'Sign in with Microsoft',
+        ],
+    },
+    {
+        key: 'smart-links',
+        version: 'v1.42',
+        icon: Link2,
+        color: '#0E83DC',
+        title: 'Smart links & sharper automations',
+        description:
+            'Paste an issue into a doc and see its live status; build automation conditions like “Labels has none of Bug” or “Priority is any of High, Urgent”.',
+        points: [
+            'Live chips and cards for issues, docs, tickets and plans',
+            'Field → operator → value, match all or any',
+            'Connect GitHub in one click',
         ],
     },
 ];
@@ -696,11 +690,13 @@ export default function Welcome({
     auth,
     canLoginWithGoogle,
     canLoginWithGitHub,
+    canLoginWithMicrosoft,
 }: PageProps<{
     laravelVersion?: string;
     phpVersion?: string;
     canLoginWithGoogle?: boolean;
     canLoginWithGitHub?: boolean;
+    canLoginWithMicrosoft?: boolean;
 }>) {
     const [scrolled, setScrolled] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -831,7 +827,15 @@ export default function Welcome({
                     icon: CalendarDays,
                     title: 'Calendar sync',
                     description:
-                        'Connect Google Calendar and Tasks, see your schedule, and reschedule in place.',
+                        'Google, Outlook / Microsoft 365, iCloud and any CalDAV calendar — or a read-only ICS link — next to your work; reschedule in place.',
+                    isNew: true,
+                },
+                {
+                    icon: CalendarSync,
+                    title: 'Calendar feed',
+                    description:
+                        'Your due dates, tasks, My Day and focus sessions in Apple Calendar, Google Calendar or Outlook through a private link.',
+                    isNew: true,
                 },
                 {
                     icon: Command,
@@ -865,6 +869,20 @@ export default function Welcome({
                     title: 'Whiteboards',
                     description:
                         'Excalidraw with templates, autosave and history — turn sticky notes into board issues.',
+                },
+                {
+                    icon: Link2,
+                    title: 'Smart links',
+                    description:
+                        'Paste a link to an issue, doc, ticket or plan and it shows live — status, due date and assignee — as a chip or a card.',
+                    isNew: true,
+                },
+                {
+                    icon: BadgeCheck,
+                    title: 'Document review',
+                    description:
+                        'Ask teammates to review a draft: comments on selected text, approve or request changes, and optional review before publish.',
+                    isNew: true,
                 },
                 {
                     icon: Network,
@@ -918,6 +936,13 @@ export default function Welcome({
                         'Keep content internal or generate public links for pages, snippets, and bookmarks.',
                 },
                 {
+                    icon: Video,
+                    title: 'Meetings: Google Meet & Teams',
+                    description:
+                        'Schedule a meeting from a card, doc or the calendar — invitations from your own calendar, Join right on the card, notes in one click.',
+                    isNew: true,
+                },
+                {
                     icon: Link2,
                     title: 'Share links',
                     description:
@@ -938,6 +963,20 @@ export default function Welcome({
             icon: Headset,
             color: '#0E83DC',
             items: [
+                {
+                    icon: Briefcase,
+                    title: 'Client portal',
+                    description:
+                        'Share chosen doc versions and plan snapshots with clients; they approve or request changes on the exact version and comment.',
+                    isNew: true,
+                },
+                {
+                    icon: Lightbulb,
+                    title: 'Feedback portal',
+                    description:
+                        'A public page where customers post ideas, vote and follow your roadmap — you moderate, merge duplicates and turn ideas into cards.',
+                    isNew: true,
+                },
                 {
                     icon: LifeBuoy,
                     title: 'Helpdesk portal',
@@ -1053,7 +1092,7 @@ export default function Welcome({
                     icon: GitBranch,
                     title: 'GitHub development',
                     description:
-                        'Branches, commits, pull requests and deployments show up on the issue they mention.',
+                        'Connect GitHub in one click; branches, commits, pull requests and deployments show up on the issue — and a merge can move the card.',
                     isNew: true,
                 },
                 {
@@ -1095,7 +1134,8 @@ export default function Welcome({
                     icon: KeyRound,
                     title: 'Social login',
                     description:
-                        'Sign in with email, Google, or GitHub — whatever your team prefers.',
+                        'Sign in with email, Google, GitHub or Microsoft — whatever your team prefers.',
+                    isNew: true,
                 },
                 {
                     icon: Search,
@@ -1192,6 +1232,7 @@ export default function Welcome({
                         </div>
 
                         <div className="flex items-center gap-3">
+                            <GitHubStarButton className="hidden sm:inline-flex" />
                             <Button
                                 variant="ghost"
                                 size="icon"
@@ -1304,6 +1345,9 @@ export default function Welcome({
                             <Sparkles className="h-3.5 w-3.5" />
                             Open source &middot; All-in-one workspace
                         </div>
+                        <div className="-mt-4 mb-8 flex justify-center animate-fade-in">
+                            <GitHubStarButton variant="badge" />
+                        </div>
 
 
 
@@ -1364,7 +1408,7 @@ export default function Welcome({
                                             Log in
                                         </Link>
                                     </div>
-                                    {(canLoginWithGoogle || canLoginWithGitHub) && (
+                                    {(canLoginWithGoogle || canLoginWithGitHub || canLoginWithMicrosoft) && (
                                         <>
                                             <div className="flex items-center gap-3 w-full max-w-xs">
                                                 <span className="flex-1 h-px bg-border" />
@@ -1418,6 +1462,24 @@ export default function Welcome({
                                                             <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
                                                         </svg>
                                                         Continue with GitHub
+                                                    </a>
+                                                )}
+                                                {canLoginWithMicrosoft && (
+                                                    <a
+                                                        href={route('login.microsoft')}
+                                                        className="inline-flex items-center justify-center gap-3 rounded-2xl border-2 border-border/80 bg-card px-7 py-4 text-base font-bold text-[#485E72] dark:text-slate-100 shadow-lg shadow-black/5 hover:bg-muted hover:border-border transition-all hover:scale-[1.02]"
+                                                    >
+                                                        <svg
+                                                            className="h-6 w-6 shrink-0"
+                                                            viewBox="0 0 21 21"
+                                                            aria-hidden
+                                                        >
+                                                            <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+                                                            <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+                                                            <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+                                                            <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+                                                        </svg>
+                                                        Continue with Microsoft
                                                     </a>
                                                 )}
                                             </div>
@@ -1643,15 +1705,7 @@ export default function Welcome({
                                 >
                                     Pricing
                                 </a>
-                                <a
-                                    href={REPO_URL}
-                                    target="_blank"
-                                    rel="noopener"
-                                    className="inline-flex items-center gap-1.5 text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
-                                >
-                                    <GitHubMark className="h-3.5 w-3.5" />
-                                    GitHub
-                                </a>
+                                <GitHubStarButton variant="link" className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium" />
                                 <a
                                     href={SELF_HOSTING_URL}
                                     target="_blank"

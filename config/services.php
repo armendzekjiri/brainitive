@@ -41,10 +41,39 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI', env('APP_URL').'/login/google/callback'),
     ],
 
+    // Outlook / Microsoft 365 calendars (BRAI-140): an app registration in Microsoft Entra.
+    // Without client id + secret the provider is hidden. tenant "common" = personal + work/school.
+    'microsoft' => [
+        'client_id' => env('MICROSOFT_CLIENT_ID'),
+        'client_secret' => env('MICROSOFT_CLIENT_SECRET'),
+        'tenant' => env('MICROSOFT_TENANT', 'common'),
+        'redirect' => env('MICROSOFT_REDIRECT_URI', rtrim((string) env('APP_URL'), '/').'/calendar/connections/outlook/callback'),
+        // Sign in with Microsoft (BRAI-148): the same app registration, its own redirect URI
+        'login_redirect' => env('MICROSOFT_LOGIN_REDIRECT_URI', rtrim((string) env('APP_URL'), '/').'/login/microsoft/callback'),
+    ],
+
     'github' => [
         'client_id' => env('GITHUB_CLIENT_ID'),
         'client_secret' => env('GITHUB_CLIENT_SECRET'),
         'redirect' => env('GITHUB_REDIRECT_URI', env('APP_URL').'/login/github/callback'),
+        // the open-source repository behind the "Star on GitHub" buttons (App\Support\GithubStars)
+        'repository' => env('GITHUB_REPOSITORY', 'armendzekjiri/brainitive'),
+        'show_stars' => (bool) env('GITHUB_STARS', true),
+    ],
+
+    // The instance's GitHub App (BRAI-61) for repository connections — separate from the social
+    // login above. Normally created in Admin → GitHub App (manifest flow, stored encrypted); these
+    // env vars override the stored app when GITHUB_APP_ID is set. The private key may be the PEM
+    // itself (\n escapes allowed) or a path to the .pem file.
+    'github_app' => [
+        'app_id' => env('GITHUB_APP_ID'),
+        'slug' => env('GITHUB_APP_SLUG'),
+        'client_id' => env('GITHUB_APP_CLIENT_ID'),
+        'client_secret' => env('GITHUB_APP_CLIENT_SECRET'),
+        'private_key' => env('GITHUB_APP_PRIVATE_KEY'),
+        'webhook_secret' => env('GITHUB_APP_WEBHOOK_SECRET'),
+        // e2e only (APP_ENV=e2e): a fake app + faked GitHub API, no network
+        'fake' => (bool) env('GITHUB_APP_FAKE', false),
     ],
 
     // Workspace AI endpoints on localhost / private networks (e.g. Ollama next to a

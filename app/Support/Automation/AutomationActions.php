@@ -123,8 +123,9 @@ final class AutomationActions
 
         return self::result(self::OK, "Assigned to {$assignee->name}.", function () use ($subject, $assignee, $actor) {
             $subject->update(['assigned_to' => $assignee->id]); // items: ItemObserver → history + Assignments::item()
-            if ($subject instanceof Ticket && $assignee->id !== $actor->id) {
-                $assignee->notify(new TicketAssignedNotification($subject, $actor)); // like TicketController::update
+            if ($subject instanceof Ticket) {
+                // also when the rule acts as the assignee: the automation assigned, not them (v1.41.2)
+                $assignee->notify(new TicketAssignedNotification($subject, $actor, AutomationRunner::ruleName()));
             }
         });
     }

@@ -1,7 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { safeHtml } from '@/lib/sanitize';
 import { Head, useForm, router, Link, usePage } from '@inertiajs/react';
-import { PageProps, Workspace, Project, Page as PageType, PageDraftState, User } from '@/types';
+import { PageProps, Workspace, Project, Page as PageType, PageDraftState, PageDraftHashState, PageReviewShowState, User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,7 @@ import {
 import {
     DropdownMenu,
     DropdownMenuContent,
+    DropdownMenuCheckboxItem,
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
@@ -73,7 +74,12 @@ import {
     Undo2,
     RefreshCw,
     ListChecks,
+    ShieldCheck,
+    MessageSquareMore,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import RequestReviewDialog from '@/components/page-review/RequestReviewDialog';
+import PageReviewBanner from '@/components/page-review/PageReviewBanner';
 import TurndownService from 'turndown';
 import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallback, useMemo, Suspense, lazy } from 'react';
 import { usePagePresence } from '@/hooks/usePagePresence';
@@ -106,6 +112,8 @@ import {
 } from '@/components/ui/select';
 import ShareButton from '@/components/share/ShareButton';
 import ExtractActionItemsDialog from '@/components/meetingNotes/ExtractActionItemsDialog';
+import SubjectMeetings from '@/components/meetings/SubjectMeetings';
+import { Video } from 'lucide-react';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -119,6 +127,8 @@ interface Props extends PageProps {
     };
     breadcrumbs: { id: number; name: string; slug: string; uuid: string; type: string }[];
     can: { update: boolean; delete: boolean; create: boolean };
+    /** document review (BRAI-80); null for folders and whiteboards */
+    review: PageReviewShowState | null;
 }
 
 // Detect if page content is Excalidraw (full-page whiteboard)
@@ -651,7 +661,7 @@ const EXPORT_HTML_STYLES = `
 
 type DraftChanges = { content?: string; name?: string; icon?: string };
 
-export default function PageShow({ workspace, project, page, breadcrumbs, can }: Props) {
+export default function PageShow({ workspace, project, page, breadcrumbs, can, review }: Props) {
     // New whiteboards: redirect straight to the Excalidraw editor.
     // We arrive here (pages.show?new=1) because Inertia can't follow a redirect
     // to a non-Inertia blade view directly from a form post.
@@ -669,6 +679,8 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
     );
     const isPublished = page.status === 'published';
     const isDocument = page.type === 'page' && !isExcalidrawPage(page.content);
+    // Smart links (BRAI-143): live chips, paste-to-chip and the "/link" picker
+    const smartLinkConfig = useMemo(() => ({ workspaceSlug: workspace.slug, projectSlug: project.slug }), [workspace.slug, project.slug]);
 
     // What the editor works on: the shared draft of a published page, or the page itself
     const editSource = isPublished && page.draft_updated_at
@@ -682,14 +694,16 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
     const [changeNoteDialogOpen, setChangeNoteDialogOpen] = useState(false);
     // ?history=1 comes from the whiteboard editor's History button
     const [actionItemsOpen, setActionItemsOpen] = useState(false);
+    const [meetingOpen, setMeetingOpen] = useState(false); // "Schedule meeting" (BRAI-147)
     const [historyOpen, setHistoryOpen] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('history') === '1');
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [isPublishing, setIsPublishing] = useState(false);
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
     const [headings, setHeadings] = useState<TocHeading[]>([]);
+    // Full width by default (v1.42.0); a document remembers "Exit full width" per browser
     const [isFullWidth, setIsFullWidth] = useState(() => {
-        try { return localStorage.getItem(`page-full-width-${page.uuid}`) === 'true'; } catch { return false; }
+        try { return localStorage.getItem(`page-full-width-${page.uuid}`) !== 'false'; } catch { return true; }
     });
     // Classic formatting toolbar is opt-in; the floating selection toolbar covers everyday formatting
     const [showFormattingToolbar, setShowFormattingToolbar] = useState(() => {
@@ -708,6 +722,9 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
     const [notifyWatchers, setNotifyWatchers] = useState(true);
     const [changeNote, setChangeNote] = useState('');
     const [editorKey, setEditorKey] = useState(0);
+    // Document review (BRAI-80): hash of the saved draft, compared with the latest review's snapshot
+    const [draftHash, setDraftHash] = useState<string | null>(review?.draft_hash ?? null);
+    const [requestReviewOpen, setRequestReviewOpen] = useState(false);
     const [formData, setFormData] = useState({ name: editSource.name, icon: editSource.icon || '📄' });
 
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -734,8 +751,9 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
         );
     };
 
-    const applyDraftState = useCallback((state: PageDraftState) => {
+    const applyDraftState = useCallback((state: PageDraftHashState) => {
         revisionRef.current = state.edit_revision;
+        if (state.draft_hash) setDraftHash(state.draft_hash);
         setHasDraft(state.has_unpublished_changes);
         setDraftEditor(state.draft_updated_by);
         setDraftUpdatedAt(state.draft_updated_at);
@@ -810,6 +828,8 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
 
     // Who else is here — and did someone else save while we were looking?
     const presentUsers = usePagePresence(route('pages.presence', routeParams), isEditing, (state) => {
+        const hash = (state as PageDraftHashState).draft_hash;
+        if (hash && can.update) setDraftHash(hash);
         const savedByOther = state.draft_updated_by && state.draft_updated_by.id !== currentUser.id;
         if (state.edit_revision > revisionRef.current && savedByOther && !conflictRef.current) {
             setRemoteChange({ name: state.draft_updated_by?.name ?? null });
@@ -851,6 +871,42 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
     useEffect(() => {
         setIsEditing(can.update && page.status === 'draft');
     }, [page.uuid, page.status]);
+
+    useEffect(() => {
+        if (review?.draft_hash) setDraftHash(review.draft_hash);
+    }, [review?.draft_hash]);
+
+    // "Review required before publish": the server decides; this only mirrors it on the buttons
+    const latestReview = review?.latest ?? null;
+    const reviewApproved = !!latestReview && latestReview.status === 'approved' && latestReview.content_hash === draftHash;
+    const publishBlocked = !!review?.required && !reviewApproved;
+    const publishBlockedTitle = publishBlocked ? 'Needs an approved review of this draft before publishing' : undefined;
+
+    const showReviewError = (errors: Record<string, string>) => {
+        if (errors.review) toast.error(errors.review);
+    };
+
+    /** Save pending edits first: the review snapshots what's stored. False when that failed (409 / offline). */
+    const saveBeforeReview = async (): Promise<boolean> => {
+        await flushSave();
+        return !conflictRef.current && Object.keys(pendingChangesRef.current).length === 0;
+    };
+
+    const openRequestReview = async () => {
+        if (!(await saveBeforeReview())) {
+            toast.error('Your latest changes aren\'t saved yet. Resolve that first, then request a review.');
+            return;
+        }
+        setRequestReviewOpen(true);
+    };
+
+    const setReviewRequired = (required: boolean) => {
+        router.put(route('pages.reviews.settings', routeParams), { review_required: required }, {
+            preserveScroll: true,
+            onSuccess: () => toast.success(required ? 'Publishing this page now needs an approved review.' : 'Publishing this page no longer needs a review.'),
+            onError: (errors) => toast.error(Object.values(errors)[0] ?? 'Could not change the review setting.'),
+        });
+    };
 
     // Save what's left when leaving; warn if a save could still be lost
     useEffect(() => {
@@ -957,6 +1013,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
         }
         router.post(route('pages.publish', routeParams), {}, {
             preserveScroll: true,
+            onError: showReviewError,
             onFinish: () => setIsPublishing(false),
         });
     };
@@ -977,7 +1034,9 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                 setIsEditing(false);
             },
             onError: (errors) => {
-                restorePending(pending);
+                // a review refusal already saved the changes into the draft (the server commits them)
+                if (!errors.review) restorePending(pending);
+                showReviewError(errors);
                 if (errors.page) {
                     conflictRef.current = true;
                     setConflict({ name: null });
@@ -1140,6 +1199,11 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
 
                                 {/* Status */}
                                 {getStatusBadge()}
+                                {review?.required && can.update && (
+                                    <Badge variant="outline" className="hidden sm:inline-flex border-border/70 bg-background text-muted-foreground" title="Publishing needs an approved review of the draft">
+                                        <ShieldCheck className="size-3 mr-1" /> Review required
+                                    </Badge>
+                                )}
                                 {hasDraft && can.update && (
                                     <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400">
                                         Unpublished changes
@@ -1176,10 +1240,10 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
 
                                 {/* Publish — first publish of a draft */}
                                 {isEditing && page.status === 'draft' && page.type === 'page' && (
-                                    <Button size="sm" onClick={handlePublish} disabled={isPublishing}>
+                                    <span title={publishBlockedTitle} className="inline-flex"><Button size="sm" onClick={handlePublish} disabled={isPublishing || publishBlocked}>
                                         {isPublishing ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Globe className="size-4 mr-1.5" />}
                                         Publish
-                                    </Button>
+                                    </Button></span>
                                 )}
 
                                 {/* Editing a published page: Close keeps the draft, Update publishes it */}
@@ -1199,10 +1263,10 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                                                 Notify watchers
                                             </label>
                                         )}
-                                        <Button size="sm" onClick={() => handlePublishChanges()} disabled={isPublishing || !!conflict}>
+                                        <span title={publishBlockedTitle} className="inline-flex"><Button size="sm" onClick={() => handlePublishChanges()} disabled={isPublishing || !!conflict || publishBlocked}>
                                             {isPublishing ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Globe className="size-4 mr-1.5" />}
                                             Update
-                                        </Button>
+                                        </Button></span>
                                     </>
                                 )}
 
@@ -1251,6 +1315,17 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                                                 Page history
                                             </DropdownMenuItem>
                                         )}
+                                        {review?.can_request && (
+                                            <DropdownMenuItem onClick={openRequestReview}>
+                                                <MessageSquareMore className="size-4 mr-2" />
+                                                Request review…
+                                            </DropdownMenuItem>
+                                        )}
+                                        {review?.can_manage && (
+                                            <DropdownMenuCheckboxItem checked={review.required} onCheckedChange={(checked) => setReviewRequired(checked === true)}>
+                                                Review required before publish
+                                            </DropdownMenuCheckboxItem>
+                                        )}
                                         {isEditing && isPublished && (
                                             <DropdownMenuItem onClick={() => setChangeNoteDialogOpen(true)}>
                                                 <MessageSquareText className="size-4 mr-2" />
@@ -1290,6 +1365,12 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                                             <DropdownMenuItem onClick={() => setActionItemsOpen(true)}>
                                                 <ListChecks className="size-4 mr-2" />
                                                 Extract action items
+                                            </DropdownMenuItem>
+                                        )}
+                                        {page.type === 'page' && can.update && (
+                                            <DropdownMenuItem onClick={() => setMeetingOpen(true)}>
+                                                <Video className="size-4 mr-2" />
+                                                Schedule meeting
                                             </DropdownMenuItem>
                                         )}
                                         {can.create && (
@@ -1377,6 +1458,15 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                                     <Button size="sm" onClick={() => setIsEditing(true)}>Continue editing</Button>
                                 </div>
                             )}
+                            {/* Document review (BRAI-80) */}
+                            {review && (
+                                <PageReviewBanner
+                                    review={review}
+                                    draftHash={draftHash}
+                                    hasSomethingToPublish={page.status === 'draft' || hasDraft}
+                                    onRequestReview={openRequestReview}
+                                />
+                            )}
 
                             {/* Icon, title and meta */}
                             <div className="mb-6">
@@ -1444,6 +1534,17 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                                         </>
                                     )}
                                 </div>
+                                {/* Online meetings of this doc (BRAI-147) */}
+                                {page.type === 'page' && (
+                                    <SubjectMeetings
+                                        variant="strip"
+                                        workspace={workspace}
+                                        project={project}
+                                        subject={{ type: 'page', id: page.uuid, title: page.name || 'Untitled', url: route('pages.show', [workspace.slug, project.slug, page.uuid]) }}
+                                        scheduleOpen={meetingOpen}
+                                        onScheduleOpenChange={setMeetingOpen}
+                                    />
+                                )}
                             </div>
 
                             {/* Whiteboard page: embedded view-mode canvas + open editor button */}
@@ -1473,6 +1574,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                                     onChange={handleUpdateContent}
                                     editable={isEditing}
                                     pollScope={{ type: 'page', id: page.uuid }}
+                                    smartLinks={smartLinkConfig}
                                     placeholder="Start writing, or press / for commands…"
                                     showToolbar={isEditing && showFormattingToolbar}
                                     minHeight="400px"
@@ -1684,9 +1786,10 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                                 Notify {otherWatcherCount} {otherWatcherCount === 1 ? 'watcher' : 'watchers'}
                             </label>
                         )}
+                        {publishBlocked && <p className="text-sm text-muted-foreground">{publishBlockedTitle}.</p>}
                         <div className="flex justify-end gap-2">
                             <Button type="button" variant="outline" onClick={() => setChangeNoteDialogOpen(false)}>Cancel</Button>
-                            <Button type="submit" disabled={isPublishing}>
+                            <Button type="submit" disabled={isPublishing || publishBlocked}>
                                 {isPublishing && <Loader2 className="size-4 mr-1.5 animate-spin" />}
                                 Update
                             </Button>
@@ -1704,6 +1807,16 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can }:
                     isPublished={isPublished}
                     isWhiteboard={isExcalidrawPage(page.content)}
                     hasUnpublishedChanges={hasDraft}
+                />
+            )}
+
+            {review?.can_request && (
+                <RequestReviewDialog
+                    open={requestReviewOpen}
+                    onOpenChange={setRequestReviewOpen}
+                    routeParams={routeParams}
+                    preselected={(review.latest?.reviewers ?? []).filter((r) => r.active && r.user_id !== null && r.user_id !== currentUser.id).map((r) => r.user_id as number)}
+                    beforeSubmit={saveBeforeReview}
                 />
             )}
 

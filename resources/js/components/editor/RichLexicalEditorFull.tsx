@@ -201,6 +201,10 @@ import {
     $createCollapsibleContentNode,
 } from './nodes';
 import { MentionNode } from './nodes/MentionNode';
+import { SmartLinkNode } from './nodes/SmartLinkNode';
+import SmartLinkPlugin from './smartLinks/SmartLinkPlugin';
+import { OPEN_SMART_LINK_PICKER_COMMAND } from './smartLinks/smartLinkCommands';
+import { SmartLinkEditorContext, useSmartLinkConfig, type SmartLinkEditorConfig } from './smartLinks/smartLinkRefs';
 
 import TableActionMenuPlugin from './plugins/TableActionMenuPlugin';
 import TableCellResizerPlugin from './plugins/TableCellResizerPlugin';
@@ -376,6 +380,7 @@ interface SlashMenuItem {
 // Slash Commands Plugin
 function SlashCommandsPlugin() {
     const [editor] = useLexicalComposerContext();
+    const smartLinks = useSmartLinkConfig();
     const [showMenu, setShowMenu] = useState(false);
     const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
     const [searchTerm, setSearchTerm] = useState('');
@@ -650,7 +655,17 @@ function SlashCommandsPlugin() {
                 editor.dispatchCommand(INSERT_COLLAPSIBLE_COMMAND, undefined);
             },
         },
-    ], []);
+        // Smart links (BRAI-143): only where links can resolve (docs, issue descriptions)
+        ...(smartLinks ? [{
+            title: 'Link to issue, doc, ticket or plan',
+            description: 'Live smart link with status and due date',
+            icon: <Link className="size-4" />,
+            keywords: ['link', 'smart', 'issue', 'doc', 'ticket', 'plan', 'reference', 'mention'],
+            onSelect: (editor: any) => {
+                editor.dispatchCommand(OPEN_SMART_LINK_PICKER_COMMAND, undefined);
+            },
+        }] : []),
+    ], [smartLinks]);
 
     const filteredItems = useMemo(() => {
         if (!searchTerm) return slashMenuItems;
@@ -1636,17 +1651,31 @@ function CommandsPlugin() {
 
 // ─── Draggable Block Plugin ────────────────────────────────────────────────────
 
+/** How far left of the editor the block handles reach (they sit 60px left of a block). */
+const HANDLE_GUTTER = 72;
+
 function DraggableBlockPlugin({ anchorElem }: { anchorElem: HTMLElement | null }) {
     const [editor] = useLexicalComposerContext();
+    const smartLinks = useSmartLinkConfig();
     const [hoveredKey, setHoveredKey] = useState<string | null>(null);
     // Viewport-relative coords (for position:fixed via portal)
     const [handlePos, setHandlePos] = useState({ top: 0, left: 0 });
     const [showAddMenu, setShowAddMenu] = useState(false);
+    // The block the "+" menu was opened for: frozen while the menu is open
+    const [menuKey, setMenuKey] = useState<string | null>(null);
     const [dropLine, setDropLine] = useState<{ top: number; left: number; width: number } | null>(null);
     const draggedKeyRef = useRef<string | null>(null);
     const isDraggingRef = useRef(false);
     const isOverHandleRef = useRef(false);
+    const menuOpenRef = useRef(false);
     const [draggedKey, setDraggedKey] = useState<string | null>(null);
+
+    const setMenuOpen = (open: boolean) => {
+        menuOpenRef.current = open;
+        setShowAddMenu(open);
+        if (open) setMenuKey(hoveredKey);
+        // closed: the next pointer move decides whether the handles stay
+    };
 
     const getTopBlockUnderY = useCallback((clientY: number): { key: string; el: HTMLElement } | null => {
         if (!anchorElem) return null;
@@ -1668,34 +1697,34 @@ function DraggableBlockPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
         return found;
     }, [editor, anchorElem]);
 
-    // Hide handle on any scroll so stale fixed positions don't linger
+    // Hide handle on any scroll so stale fixed positions don't linger (not while the "+" menu is open)
     useEffect(() => {
-        const onScroll = () => { if (!isDraggingRef.current) setHoveredKey(null); };
+        const onScroll = () => { if (!isDraggingRef.current && !menuOpenRef.current) setHoveredKey(null); };
         window.addEventListener('scroll', onScroll, true);
         return () => window.removeEventListener('scroll', onScroll, true);
     }, []);
 
+    // The handles sit in the gutter left of the text (outside the editor in documents). Track the
+    // pointer on the whole document, so crossing from the text to the "+" doesn't hide them: they
+    // stay while the pointer is over the text, the gutter, the handles or the open "+" menu.
     useEffect(() => {
         if (!anchorElem) return;
         const onMouseMove = (e: MouseEvent) => {
-            if (isDraggingRef.current) return;
-            const block = getTopBlockUnderY(e.clientY);
+            if (isDraggingRef.current || menuOpenRef.current || isOverHandleRef.current) return;
+            const r = anchorElem.getBoundingClientRect();
+            const inside = e.clientY >= r.top && e.clientY <= r.bottom && e.clientX >= r.left - HANDLE_GUTTER && e.clientX <= r.right;
+            const block = inside ? getTopBlockUnderY(e.clientY) : null;
             if (block) {
                 setHoveredKey(block.key);
-                const r = block.el.getBoundingClientRect();
+                const br = block.el.getBoundingClientRect();
                 // Store raw viewport coords — used with position:fixed
-                setHandlePos({ top: r.top, left: r.left });
+                setHandlePos((pos) => (pos.top === br.top && pos.left === br.left ? pos : { top: br.top, left: br.left }));
             } else {
                 setHoveredKey(null);
             }
         };
-        const onMouseLeave = () => { if (!isDraggingRef.current && !isOverHandleRef.current) setHoveredKey(null); };
-        anchorElem.addEventListener('mousemove', onMouseMove);
-        anchorElem.addEventListener('mouseleave', onMouseLeave);
-        return () => {
-            anchorElem.removeEventListener('mousemove', onMouseMove);
-            anchorElem.removeEventListener('mouseleave', onMouseLeave);
-        };
+        document.addEventListener('mousemove', onMouseMove);
+        return () => document.removeEventListener('mousemove', onMouseMove);
     }, [anchorElem, getTopBlockUnderY]);
 
     useEffect(() => {
@@ -1759,46 +1788,71 @@ function DraggableBlockPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
         e.dataTransfer.setData('text/plain', hoveredKey);
     };
 
+    /** Insert a new block of the type after the block the menu was opened for, with the caret in it. */
     const insertBlockAfter = (type: string) => {
-        if (!hoveredKey) return;
+        const key = menuKey ?? hoveredKey;
+        setMenuOpen(false);
+        if (!key) return;
         editor.update(() => {
-            const node = $getNodeByKey(hoveredKey);
+            const node = $getNodeByKey(key);
             if (!node) return;
-            let newNode: any;
-            if (type === 'h1') newNode = $createHeadingNode('h1');
-            else if (type === 'h2') newNode = $createHeadingNode('h2');
-            else if (type === 'h3') newNode = $createHeadingNode('h3');
-            else if (type === 'quote') newNode = $createQuoteNode();
-            else if (type === 'code') newNode = $createCodeNode();
-            else newNode = $createParagraphNode();
-            const text = $createTextNode('');
-            newNode.append(text);
-            node.insertAfter(newNode);
-            text.select();
+            let block: ElementNode;
+            let caret: ElementNode;
+            if (type === 'bullet' || type === 'number' || type === 'check') {
+                const list = $createListNode(type);
+                const item = $createListItemNode(type === 'check' ? false : undefined);
+                list.append(item);
+                block = list;
+                caret = item;
+            } else {
+                block = type === 'h1' || type === 'h2' || type === 'h3' ? $createHeadingNode(type)
+                    : type === 'quote' ? $createQuoteNode()
+                        : type === 'code' ? $createCodeNode()
+                            : $createParagraphNode();
+                caret = block;
+            }
+            node.insertAfter(block);
+            caret.select();
         });
-        setShowAddMenu(false);
+        editor.focus();
     };
 
+    const openSmartLinkPicker = () => {
+        const key = menuKey ?? hoveredKey;
+        setMenuOpen(false);
+        editor.dispatchCommand(OPEN_SMART_LINK_PICKER_COMMAND, key ? { afterBlockKey: key } : undefined);
+    };
+
+    const visible = hoveredKey !== null || showAddMenu;
+
     // Render via portal into document.body so overflow:hidden on the editor wrapper never clips the handles
-    const handles = hoveredKey ? createPortal(
+    const handles = visible ? createPortal(
         <>
             <div
                 className="fixed z-[200] flex items-center gap-0"
                 style={{ top: handlePos.top + 2, left: handlePos.left - 60 }}
+                data-block-handles=""
                 onMouseEnter={() => { isOverHandleRef.current = true; }}
-                onMouseLeave={() => { isOverHandleRef.current = false; setHoveredKey(null); }}
+                onMouseLeave={() => { isOverHandleRef.current = false; }}
             >
-                <Popover open={showAddMenu} onOpenChange={setShowAddMenu}>
+                <Popover open={showAddMenu} onOpenChange={setMenuOpen}>
                     <PopoverTrigger asChild>
                         <button
                             type="button"
                             className="h-6 w-6 flex items-center justify-center rounded hover:bg-accent text-muted-foreground/60 hover:text-foreground transition-colors"
                             title="Add block below"
+                            aria-label="Add block below"
                         >
                             <Plus className="size-3.5" />
                         </button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-48 p-1" align="start">
+                    <PopoverContent
+                        className="w-56 p-1"
+                        align="start"
+                        aria-label="Add block below"
+                        // the caret goes into the new block, not back to the "+" button
+                        onCloseAutoFocus={(e) => e.preventDefault()}
+                    >
                         {[
                             { label: 'Paragraph', value: 'paragraph', icon: <Type className="size-3.5" /> },
                             { label: 'Heading 1', value: 'h1', icon: <Heading1 className="size-3.5" /> },
@@ -1808,27 +1862,31 @@ function DraggableBlockPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
                             { label: 'Code Block', value: 'code', icon: <FileCode className="size-3.5" /> },
                             { label: 'Bullet List', value: 'bullet', icon: <List className="size-3.5" /> },
                             { label: 'Numbered List', value: 'number', icon: <ListOrdered className="size-3.5" /> },
+                            { label: 'Checklist', value: 'check', icon: <ListChecks className="size-3.5" /> },
                         ].map(bt => (
                             <button
                                 key={bt.value}
                                 type="button"
                                 className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted text-left"
-                                onClick={() => {
-                                    if (bt.value === 'bullet') {
-                                        insertBlockAfter('paragraph');
-                                        editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined);
-                                    } else if (bt.value === 'number') {
-                                        insertBlockAfter('paragraph');
-                                        editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined);
-                                    } else {
-                                        insertBlockAfter(bt.value);
-                                    }
-                                }}
+                                onClick={() => insertBlockAfter(bt.value)}
                             >
                                 {bt.icon}
                                 {bt.label}
                             </button>
                         ))}
+                        {smartLinks && (
+                            <>
+                                <div className="my-1 h-px bg-border" role="separator" />
+                                <button
+                                    type="button"
+                                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted text-left"
+                                    onClick={openSmartLinkPicker}
+                                >
+                                    <Link className="size-3.5" />
+                                    Link to issue, doc…
+                                </button>
+                            </>
+                        )}
                     </PopoverContent>
                 </Popover>
 
@@ -3276,6 +3334,8 @@ interface RichLexicalEditorProps {
     // Mention notification context — passed to MentionsPlugin
     /** Where polls in this content store their votes (doc / issue). Omit = no voting. */
     pollScope?: { type: 'page' | 'item'; id: string } | null;
+    /** Smart links (BRAI-143): live chips + paste / "/link" / "+" menu. Omit = smart links show as plain links. */
+    smartLinks?: SmartLinkEditorConfig | null;
 }
 
 export function RichLexicalEditor({
@@ -3297,6 +3357,7 @@ export function RichLexicalEditor({
     stickyTopOffset = 52,
     documentMode = false,
     pollScope = null,
+    smartLinks = null,
 }: RichLexicalEditorProps) {
     const [floatingAnchorElem, setFloatingAnchorElem] = useState<HTMLDivElement | null>(null);
     // Shared ref: true while InitialContentPlugin is loading content — prevents HtmlOnChangePlugin
@@ -3344,6 +3405,7 @@ export function RichLexicalEditor({
             CollapsibleTitleNode,
             CollapsibleContentNode,
             MentionNode,
+            SmartLinkNode,
         ],
         editable,
     };
@@ -3351,6 +3413,7 @@ export function RichLexicalEditor({
     return (
         <LexicalComposer initialConfig={initialConfig}>
             <PollScopeContext.Provider value={pollScope}>
+            <SmartLinkEditorContext.Provider value={smartLinks}>
             <RichLexicalOnChangeContext.Provider value={onChange}>
                 <div className={cn("border rounded-lg overflow-hidden bg-white dark:bg-card", documentMode && "bg-transparent dark:bg-transparent", className)}>
                     <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} projectName={projectName} projectId={projectId} stickyToolbar={stickyToolbar} stickyTopOffset={stickyTopOffset} documentMode={documentMode} />
@@ -3399,6 +3462,7 @@ export function RichLexicalEditor({
                     <CommandsPlugin />
                     <CodeHighlightPlugin />
                     {projectId && editable && <MentionsPlugin projectId={projectId} />}
+                    {smartLinks && editable && <SmartLinkPlugin config={smartLinks} />}
                     <InitialContentPlugin content={content} editable={editable} contentKey={contentKey} isInitializingRef={isInitializingRef} />
                     <HtmlOnChangePlugin onChange={onChange} isInitializingRef={isInitializingRef} />
                     {onHeadingsChange && <HeadingsExtractorPlugin onHeadingsChange={onHeadingsChange} />}
@@ -3414,6 +3478,7 @@ export function RichLexicalEditor({
                     )}
                 </div>
             </RichLexicalOnChangeContext.Provider>
+            </SmartLinkEditorContext.Provider>
             </PollScopeContext.Provider>
         </LexicalComposer>
     );

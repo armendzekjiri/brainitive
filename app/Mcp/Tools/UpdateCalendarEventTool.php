@@ -3,7 +3,8 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\ResolvesCalendarConnections;
-use App\Services\GoogleCalendarService;
+use App\Support\Calendar\CalendarProviderException;
+use App\Support\Calendar\CalendarProviders;
 use App\Support\Mcp\CalendarFormatter;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -13,16 +14,16 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('Reschedule or edit an existing Google Calendar event (e.g. move it to a new time, rename it, change its notes). Identify it by connection_id + event_id (from list_calendar_events). To move a timed event, pass start_date + start_time (and optionally end_time); include the timezone.')]
+#[Description('Reschedule or edit an existing calendar event on a writable connected calendar (e.g. move it to a new time, rename it, change its notes). Identify it by connection_id + event_id (from list_calendar_events). To move a timed event, pass start_date + start_time (and optionally end_time); include the timezone.')]
 class UpdateCalendarEventTool extends Tool
 {
     use ResolvesCalendarConnections;
 
-    public function handle(Request $request, GoogleCalendarService $calendar): Response|ResponseFactory
+    public function handle(Request $request): Response|ResponseFactory
     {
         $validated = $request->validate([
             'connection_id' => 'required|integer',
-            'event_id' => 'required|string',
+            'event_id' => 'required|string|max:1024|not_in:.,..',
             'title' => 'sometimes|string|max:500',
             'description' => 'sometimes|nullable|string|max:10000',
             'location' => 'sometimes|nullable|string|max:500',
@@ -39,15 +40,16 @@ class UpdateCalendarEventTool extends Tool
             return Response::error($e->getMessage());
         }
 
-        $event = $calendar->updateEvent($connection, $validated['event_id'], $validated);
-
-        if (! $event) {
-            return Response::error('Could not update the event (it may not exist, or the connection needs reauthorising).');
+        try {
+            $changes = array_diff_key($validated, array_flip(['connection_id', 'event_id']));
+            $event = CalendarProviders::writable($connection)->updateEvent($connection, $validated['event_id'], $changes);
+        } catch (CalendarProviderException $e) {
+            return Response::error($e->getMessage());
         }
 
         return Response::structured([
             'updated' => true,
-            'event' => CalendarFormatter::event($event, $connection),
+            'event' => CalendarFormatter::normalized($event, $connection),
         ]);
     }
 

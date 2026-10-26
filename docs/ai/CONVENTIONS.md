@@ -212,6 +212,10 @@ export default function MyPage({ entity }: Props) {
 - Radii: `rounded-2xl` cards, `rounded-xl` buttons, `rounded-full` badges.
 - Animations (`app.css`): `.animate-fade-in`, `.animate-fade-in-up`, `.animate-pulse-slow`.
 - Content width `max-w-6xl mx-auto`; section padding `px-6 py-24 sm:py-32`.
+- **Page icons:** always render through `components/page/PageIcon.tsx` (`<PageIcon icon=… />`, or
+  `isImageIcon()` for a custom element) — an uploaded icon is a `data:` URL, never print it as text.
+- **Pages for people outside the workspace** (feedback / client portals) use `Layouts/PortalLayout.tsx`
+  and live under `/feedback/` or `/client/` in `routes/portal.php` — see KNOWLEDGE "Guest identities".
 
 ---
 
@@ -234,7 +238,7 @@ Key relationships:
 | Ticket | Replies / Attachments / FieldValues | HasMany; Contact BelongsTo |
 | SnippetCollection | Snippets | HasMany |
 | Bookmark | Items | HasMany |
-| CalendarConnection | (Google data, fetched live) | via Services |
+| CalendarConnection | (external calendar data, fetched live) | via `CalendarProviders` (Google Tasks: `GoogleTasksService`) |
 
 ---
 
@@ -275,6 +279,16 @@ through `app/Support/Mcp/PageContentConverter`.
   The classic `ToolbarPlugin` is opt-in via the header toggle (`localStorage`
   `page-formatting-toolbar`). Block conversions go through the shared `applyBlockType()`.
 
+**Smart links (v1.42.0, BRAI-143).** A link to workspace content is stored as a plain anchor:
+`<a href="<canonical url>" data-smart-link="item:12|page:<uuid>|ticket:<id>|plan:<id>" data-smart-link-view="inline|card">text</a>`.
+- Never store a smart link in another shape (no custom element, no JSON-only node): everything outside
+  the editor (share page, client portal, MCP, exports, search, `SafeHtml`) must keep seeing a working link.
+  `SmartLinkNode` imports `a[data-smart-link]` with a higher priority than `LinkNode`.
+- Refs are ids / uuids, never titles; the chip's live data comes from `smart-links.index`, batched per
+  tick by `smartLinkStore.ts` — never one request per chip.
+- Turn smart links on with the editor's `smartLinks={{ workspaceSlug, projectSlug }}` prop; without it the
+  node renders as a plain link (comments, tickets, public pages).
+
 ---
 
 ## Page workflow (draft → publish → versions)
@@ -296,6 +310,17 @@ Pages work like Confluence. Keep these rules when touching pages:
   `PageController::show()` reveals them to editors.
 - Presence is a cache-backed heartbeat (`pages.presence`, `usePagePresence`), not websockets
   — Reverb/Echo aren't installed.
+- **Review required before publish (v1.42.0, BRAI-80).** Anything that publishes or changes the
+  live version of a page goes through `ReviewGate::publishing()` (locks the page row, re-reads it,
+  refuses unless an approved, open review matches `Page::draftHash()`). Don't add a publish /
+  restore / live-write path that skips it; on review-required published pages name / icon edits go
+  to the draft. The switch (`pages.review_required`) is for project admins and not for whiteboards.
+- **Reviews read the snapshot, not the draft.** Show reviewers `page_reviews.snapshot_*` through
+  `PageReviewPolicy`; never widen `PagePolicy::view` for them. "Stale" is computed from the hash,
+  never stored.
+- **Inline comments anchor by text quote** (`quote` + ≤ 64-char prefix / suffix), never by editing
+  the page HTML. Change the matching rule in `QuoteAnchor.php` **and** `components/page-review/anchors.ts`
+  together. Details: [`tasks/feat-document-review.md`](./tasks/feat-document-review.md).
 
 ## Board & issue view design (Jira-style)
 
@@ -305,6 +330,8 @@ Pages work like Confluence. Keep these rules when touching pages:
 - Cards: summary first, metadata in the footer (type icon + key left; points, priority,
   assignee right). Keep new card metadata in that footer, not in extra rows.
 - No buttons without handlers — wire them or leave them out.
+- Integration-driven moves (GitHub merge transitions, v1.42.0) live in `boards.settings.github.merge_column_id`
+  and save the item model (history marked with `ActivityLog::via()`), never raw column updates.
 
 ## Sprints (Scrum boards)
 
@@ -320,6 +347,38 @@ Pages work like Confluence. Keep these rules when touching pages:
 - Report charts use the `.viz-root` colour roles in `app.css` (validated with the dataviz
   validator): `--viz-series-1` for the measured series, `--viz-reference` grey for the
   guideline / committed.
+
+## Calendar providers (v1.42.0, BRAI-140)
+
+- Everything calendar-related (page, reschedule, event dialog, quick create, MCP tools, reminders)
+  talks to `App\Support\Calendar\CalendarProviders`, never to a provider service directly. Writes go
+  through `CalendarProviders::writable()`.
+- **Adding a provider** (Outlook, CalDAV / iCloud, ICS link): one class in
+  `app/Support/Calendar/Providers/` extending `BaseCalendarProvider` + one line in `PROVIDERS`. Follow
+  the recipe in [`tasks/feat-calendar-providers.md`](./tasks/feat-calendar-providers.md#how-to-add-a-provider-contract-for-the-outlook-and-caldav--ics-branches)
+  and the `CalendarProvider` docblock (normative). Google Tasks stay outside the contract.
+- **User-entered URLs (CalDAV servers, ICS links) only through `App\Support\Calendar\SafeRemoteUrl`**
+  (`send()`, `allowed()`), never `Http::` directly. Private / loopback addresses are refused everywhere
+  except `APP_ENV=e2e` + `CALENDAR_LINKS_ALLOW_PRIVATE`; don't add another switch. Never log or show an ICS
+  URL (it is a secret) — show the host.
+- **OAuth providers** (Google, Outlook): authorization code + PKCE S256, `state` / verifier one-time in the
+  session; tokens in encrypted columns, saved with `forceFill()->save()`. Only Google deactivates a
+  connection on a refused refresh.
+- **Conferencing is optional** (`conferenceProviders()` + `createEvent(conference, attendees)`); the extra
+  normalized keys `conference_url` / `conference_provider` are present only with a call — don't add them
+  to `NormalizedEvent::KEYS`.
+- Every throttle on a calendar / meetings route gets its own key (`throttle:N,1,<route name>`).
+
+## Workflow automation (BRAI-63, conditions BRAI-144)
+
+- **`AutomationCatalog` is the single source of truth** for triggers, actions and the condition matrix
+  (`CONDITION_FIELDS`, `OPERATORS`, `CUSTOM_FIELD_OPERATORS`). The builder (`ConditionRow.tsx`,
+  `conditions.ts`) renders what `forFrontend()` sends — never hard-code a field / operator list in React.
+- Definitions are stored only through `AutomationDefinition::validate()`; conditions are read through
+  `normalizeCondition()` (legacy `{type, value}` → `{field, operator, value}`), so engine, describe and
+  builder never see the old shape.
+- A field's value is read in one place, `ConditionFacts::get()`; evaluation + wording in
+  `AutomationConditions` (the client wording in `conditions.ts` mirrors `describe()` — change both).
 
 ## Licence & dependencies
 

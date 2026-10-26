@@ -7,10 +7,13 @@ use App\Models\Board;
 use App\Models\BoardView;
 use App\Models\Bookmark;
 use App\Models\Capture;
+use App\Models\ClientPortal;
 use App\Models\InstanceSettings;
 use App\Models\Item;
 use App\Models\LeadForm;
+use App\Models\Meeting;
 use App\Models\Page;
+use App\Models\PageReview;
 use App\Models\Project;
 use App\Models\ProjectHealthReport;
 use App\Models\ProjectTemplate;
@@ -25,9 +28,12 @@ use App\Policies\BoardPolicy;
 use App\Policies\BoardViewPolicy;
 use App\Policies\BookmarkPolicy;
 use App\Policies\CapturePolicy;
+use App\Policies\ClientPortalPolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\LeadFormPolicy;
+use App\Policies\MeetingPolicy;
 use App\Policies\PagePolicy;
+use App\Policies\PageReviewPolicy;
 use App\Policies\ProjectHealthReportPolicy;
 use App\Policies\ProjectPolicy;
 use App\Policies\ProjectTemplatePolicy;
@@ -128,6 +134,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(BoardView::class, BoardViewPolicy::class);
         Gate::policy(Release::class, ReleasePolicy::class);
         Gate::policy(Page::class, PagePolicy::class);
+        Gate::policy(PageReview::class, PageReviewPolicy::class); // BRAI-80
         Gate::policy(Bookmark::class, BookmarkPolicy::class);
         Gate::policy(Item::class, ItemPolicy::class);
         Gate::policy(SnippetCollection::class, SnippetPolicy::class);
@@ -136,6 +143,8 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Capture::class, CapturePolicy::class);
         Gate::policy(ProjectHealthReport::class, ProjectHealthReportPolicy::class);
         Gate::policy(WorkloadAllocation::class, WorkloadPolicy::class);
+        Gate::policy(ClientPortal::class, ClientPortalPolicy::class); // client portal, team side (v1.42.0, BRAI-73)
+        Gate::policy(Meeting::class, MeetingPolicy::class); // online meetings (v1.42.0, BRAI-147)
         // client billing (v1.38.0): workspace admins only
         Gate::define('manageBilling', [BillingPolicy::class, 'manageBilling']);
 

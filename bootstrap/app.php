@@ -3,6 +3,7 @@
 use App\Http\Middleware\AddCorsHeaders;
 use App\Http\Middleware\DeferAutomations;
 use App\Http\Middleware\EnsureInstanceAdmin;
+use App\Http\Middleware\EnsurePortalIdentity;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\FrameProtection;
 use App\Http\Middleware\GuardOAuthFlows;
@@ -45,6 +46,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'cors' => AddCorsHeaders::class,
             'instance.admin' => EnsureInstanceAdmin::class,
+            'portal.identity' => EnsurePortalIdentity::class, // v1.42.0 guest portals
         ]);
 
         // Public helpdesk widget/portal (embedded on external sites) — no session, no CSRF

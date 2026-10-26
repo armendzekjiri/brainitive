@@ -82,7 +82,7 @@ class ContentReferenceController extends Controller
     }
 
     /**
-     * Remove a manual reference. Derived ones follow their plan row / whiteboard card.
+     * Remove a manual reference. Derived ones follow their plan row / whiteboard card / smart link.
      */
     public function destroy(Request $request, Workspace $workspace, Project $project, ContentReference $contentReference): JsonResponse
     {
@@ -98,7 +98,7 @@ class ContentReferenceController extends Controller
 
         if ($contentReference->isDerived()) {
             throw ValidationException::withMessages([
-                'reference' => 'This link comes from a plan row or whiteboard card. Change it there.',
+                'reference' => 'This link comes from a plan row, a whiteboard card or a smart link. Change it there.',
             ]);
         }
 

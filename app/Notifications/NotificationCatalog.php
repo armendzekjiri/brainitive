@@ -32,6 +32,9 @@ final class NotificationCatalog
         'helpdesk' => ['label' => 'Helpdesk', 'description' => 'New tickets, customer replies and ticket assignments.', 'defaults' => ['in_app' => true, 'push' => true, 'email' => true]],
         'leads' => ['label' => 'Leads', 'description' => 'New leads from your forms and leads assigned to you.', 'defaults' => ['in_app' => true, 'push' => true, 'email' => true]],
         'workspace' => ['label' => 'Workspace', 'description' => 'Invitations accepted, role changes and other membership news.', 'defaults' => ['in_app' => true, 'push' => false, 'email' => false]],
+        // v1.42.0 "Work with clients"
+        'reviews' => ['label' => 'Reviews & approvals', 'description' => 'Review requests, reviewer decisions, and client approvals or change requests.', 'defaults' => ['in_app' => true, 'push' => true, 'email' => true]],
+        'feedback' => ['label' => 'Feedback portal', 'description' => 'New ideas waiting for moderation on your public feedback portals.', 'defaults' => ['in_app' => true, 'push' => false, 'email' => false]],
     ];
 
     /**
@@ -68,6 +71,14 @@ final class NotificationCatalog
         'sla_breached' => 'helpdesk',
         'automation_notice' => 'status', // BRAI-63: the "Notify" action of an automation rule
         'export_ready' => 'workspace', // BRAI-81: a project export can be downloaded
+        // v1.42.0 — one line per type, reserved by the foundation so the tickets don't collide
+        'feedback_submitted' => 'feedback', // BRAI-60: a new post waits for moderation (project admins)
+        'client_decision' => 'reviews', // BRAI-73: a client approved / requested changes on a deliverable
+        'client_commented' => 'reviews', // BRAI-73: a client commented on a deliverable
+        'review_requested' => 'reviews', // BRAI-80: you were asked to review a page revision
+        'review_decided' => 'reviews', // BRAI-80: a reviewer approved / requested changes (to the author)
+        'review_commented' => 'reviews', // BRAI-80: an inline review comment or reply on your page / thread
+        'github_sync_failed' => 'workspace', // BRAI-61: the GitHub connection lost access (project admins)
     ];
 
     public static function category(string $type): string

@@ -20,12 +20,16 @@ import {
 import { useFlashToast } from '@/components/automations/useFlashToast';
 import RunLog from '@/components/automations/RunLog';
 import TestRulePanel from '@/components/automations/TestRulePanel';
-import ValueField, { selectClass } from '@/components/automations/ValueField';
-import type { AutomationAction, AutomationCatalog, AutomationCatalogEntry, AutomationCondition, AutomationOptions, AutomationRule, AutomationRun, AutomationSubject } from '@/types';
+import ValueField, { choices, selectClass } from '@/components/automations/ValueField';
+import ConditionRow from '@/components/automations/ConditionRow';
+import { blankCondition, describeCondition, fieldsFor, flatChoices, joinConditions } from '@/components/automations/conditions';
+import { cn } from '@/lib/utils';
+import type { AutomationAction, AutomationCatalog, AutomationCatalogEntry, AutomationCondition, AutomationMatch, AutomationOptions, AutomationRule, AutomationRun, AutomationSubject } from '@/types';
 
 /**
- * The automation rule builder (v1.40.0, BRAI-63): WHEN (trigger) / IF (conditions, all must match) /
- * THEN (ordered actions), "Test on an issue" (dry run) and, for a saved rule, its run history.
+ * The automation rule builder (v1.40.0, BRAI-63): WHEN (trigger) / IF (conditions: field → operator →
+ * value rows, all or any must match, BRAI-144) / THEN (ordered actions), the rule as a sentence,
+ * "Test on an issue" (dry run) and, for a saved rule, its run history.
  * Saving a changed definition makes a new version; the rule then runs as you.
  */
 interface Props {
@@ -41,6 +45,7 @@ interface FormData {
     name: string;
     trigger: string;
     trigger_config: { column_id?: number | null };
+    condition_match: AutomationMatch;
     conditions: AutomationCondition[];
     actions: AutomationAction[];
 }
@@ -61,6 +66,17 @@ function Step({ word, title, description, children }: { word: string; title: str
     );
 }
 
+/** "Assign to Max Member", "Set due date today + 3 days" — for the sentence preview. */
+function describeAction(action: AutomationAction, spec: AutomationCatalogEntry | undefined, options: AutomationOptions, subject: AutomationSubject): string {
+    if (!spec) return action.type;
+    if (!spec.value) return spec.label;
+    if (action.value === null || action.value === '') return `${spec.label} …`;
+    if (spec.value === 'days') return `${spec.label} today + ${action.value} ${action.value === 1 ? 'day' : 'days'}`;
+    if (spec.value === 'text') return `${spec.label} "${action.value}"`;
+    const name = flatChoices(choices(spec.value, options, subject)).find((o) => o.value === String(action.value))?.label;
+    return `${spec.label} ${name ?? '…'}`;
+}
+
 function FieldError({ message }: { message?: string }) {
     return message ? <p className="text-sm text-destructive">{message}</p> : null;
 }
@@ -72,6 +88,7 @@ export default function AutomationsEdit({ workspace, project, rule, runs, catalo
         name: rule?.name ?? '',
         trigger: rule?.trigger ?? 'item.created',
         trigger_config: { column_id: rule?.trigger_config?.column_id ?? null },
+        condition_match: rule?.condition_match ?? 'all',
         conditions: rule?.conditions ?? [],
         actions: rule?.actions ?? [],
     });
@@ -81,26 +98,31 @@ export default function AutomationsEdit({ workspace, project, rule, runs, catalo
 
     const trigger = catalog.triggers.find((t) => t.key === data.trigger) ?? catalog.triggers[0];
     const subject: AutomationSubject = trigger.subject ?? 'item';
-    const conditionTypes = catalog.conditions.filter((c) => fits(c, subject));
+    const conditionFields = fieldsFor(catalog, options, subject);
     const actionTypes = catalog.actions.filter((a) => fits(a, subject));
-    const conditionSpec = (type: string) => catalog.conditions.find((c) => c.key === type);
     const actionSpec = (type: string) => catalog.actions.find((a) => a.key === type);
 
     const changeTrigger = (key: string) => {
         const next = catalog.triggers.find((t) => t.key === key);
         const nextSubject = next?.subject ?? 'item';
+        const nextFields = new Set(fieldsFor(catalog, options, nextSubject).map((f) => f.key));
         // conditions / actions that don't fit the new subject are dropped
         setData((d) => ({
             ...d,
             trigger: key,
             trigger_config: { column_id: key === 'item.moved' ? d.trigger_config.column_id ?? null : null },
-            conditions: d.conditions.filter((c) => { const s = conditionSpec(c.type); return s ? fits(s, nextSubject) : false; }),
+            conditions: d.conditions.filter((c) => nextFields.has(c.field) || (nextSubject === subject && c.field.startsWith('custom:'))),
             actions: d.actions.filter((a) => { const s = actionSpec(a.type); return s ? fits(s, nextSubject) : false; }),
         }));
     };
 
-    const setCondition = (i: number, patch: Partial<AutomationCondition>) =>
-        setData('conditions', data.conditions.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+    const setCondition = (i: number, condition: AutomationCondition) =>
+        setData('conditions', data.conditions.map((c, j) => (j === i ? condition : c)));
+    const moveCondition = (i: number, by: -1 | 1) => {
+        const next = [...data.conditions];
+        [next[i], next[i + by]] = [next[i + by], next[i]];
+        setData('conditions', next);
+    };
     const setAction = (i: number, patch: Partial<AutomationAction>) =>
         setData('actions', data.actions.map((a, j) => (j === i ? { ...a, ...patch } : a)));
     const moveAction = (i: number, by: -1 | 1) => {
@@ -170,37 +192,56 @@ export default function AutomationsEdit({ workspace, project, rule, runs, catalo
                         <FieldError message={errorOf('trigger') ?? errorOf('trigger_config.column_id')} />
                     </Step>
 
-                    <Step word="IF" title="Conditions" description="All conditions must match. No conditions: the rule runs for every trigger.">
-                        {data.conditions.map((condition, i) => {
-                            const spec = conditionSpec(condition.type);
-                            return (
-                                <div key={i} className="space-y-1">
-                                    <div className="flex items-start gap-2">
-                                        <div className="grid flex-1 gap-2 sm:grid-cols-2">
-                                            <select aria-label={`Condition ${i + 1}`} className={selectClass} value={condition.type} onChange={(e) => setCondition(i, { type: e.target.value, value: null })}>
-                                                {conditionTypes.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-                                            </select>
-                                            {spec?.value && (
-                                                <ValueField kind={spec.value} value={condition.value} onChange={(value) => setCondition(i, { value })} options={options} subject={subject} label={`Condition ${i + 1} value`} invalid={!!errorOf(`conditions.${i}.value`)} />
+                    <Step word="IF" title="Conditions" description="Pick a field, how to compare it and the value. No conditions: the rule runs for every trigger.">
+                        {data.conditions.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-2 text-sm">
+                                <span className="text-muted-foreground">Run when</span>
+                                <div role="group" aria-label="Match" className="inline-flex rounded-md border p-0.5">
+                                    {(['all', 'any'] as const).map((m) => (
+                                        <button
+                                            key={m}
+                                            type="button"
+                                            aria-pressed={data.condition_match === m}
+                                            onClick={() => setData('condition_match', m)}
+                                            className={cn(
+                                                'rounded px-3 py-1 text-sm font-medium transition-colors',
+                                                data.condition_match === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
                                             )}
-                                        </div>
-                                        <Button type="button" variant="ghost" size="icon" aria-label={`Remove condition ${i + 1}`} onClick={() => setData('conditions', data.conditions.filter((_, j) => j !== i))}><X className="size-4" /></Button>
-                                    </div>
-                                    <FieldError message={errorOf(`conditions.${i}.type`) ?? errorOf(`conditions.${i}.value`)} />
+                                        >
+                                            {m === 'all' ? 'All' : 'Any'}
+                                        </button>
+                                    ))}
                                 </div>
-                            );
-                        })}
+                                <span className="text-muted-foreground">{data.condition_match === 'all' ? 'of these conditions match' : 'of these conditions matches'}</span>
+                            </div>
+                        )}
+                        {data.conditions.map((condition, i) => (
+                            <ConditionRow
+                                key={i}
+                                index={i}
+                                count={data.conditions.length}
+                                condition={condition}
+                                fields={conditionFields}
+                                catalog={catalog}
+                                options={options}
+                                subject={subject}
+                                errors={{ field: errorOf(`conditions.${i}.field`), operator: errorOf(`conditions.${i}.operator`), value: errorOf(`conditions.${i}.value`) }}
+                                onChange={(next) => setCondition(i, next)}
+                                onMove={(by) => moveCondition(i, by)}
+                                onRemove={() => setData('conditions', data.conditions.filter((_, j) => j !== i))}
+                            />
+                        ))}
                         <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             className="gap-1.5"
-                            disabled={data.conditions.length >= catalog.maxConditions}
-                            onClick={() => setData('conditions', [...data.conditions, { type: conditionTypes[0].key, value: null }])}
+                            disabled={data.conditions.length >= catalog.maxConditions || conditionFields.length === 0}
+                            onClick={() => setData('conditions', [...data.conditions, blankCondition(catalog, conditionFields)])}
                         >
                             <Plus className="size-3.5" />Add condition
                         </Button>
-                        <FieldError message={errors.conditions} />
+                        <FieldError message={errors.conditions ?? errorOf('condition_match')} />
                     </Step>
 
                     <Step word="THEN" title="Actions" description={`Run in this order, as the rule's person, with their permissions at that moment. At most ${catalog.maxActions}.`}>
@@ -252,6 +293,19 @@ export default function AutomationsEdit({ workspace, project, rule, runs, catalo
                         </Button>
                         <FieldError message={errors.actions} />
                     </Step>
+
+                    <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-sm" aria-label="Rule in words" role="note">
+                        <span className="font-semibold">When</span> {trigger.label}
+                        {data.trigger === 'item.moved' && data.trigger_config.column_id ? ` to ${flatChoices(choices('column', options, subject)).find((o) => o.value === String(data.trigger_config.column_id))?.label ?? '…'}` : ''}
+                        {data.conditions.length > 0 && (
+                            <>
+                                {', '}<span className="font-semibold">if</span>{' '}
+                                {joinConditions(data.conditions.map((c) => describeCondition(c, catalog, options, subject)), data.condition_match)}
+                            </>
+                        )}
+                        {', '}<span className="font-semibold">then</span>{' '}
+                        {data.actions.length > 0 ? data.actions.map((a) => describeAction(a, actionSpec(a.type), options, subject)).join(', ') : '…'}
+                    </div>
 
                     <div className="flex justify-end gap-2">
                         <Button type="button" variant="outline" asChild><Link href={route('automations.index', params)}>Cancel</Link></Button>

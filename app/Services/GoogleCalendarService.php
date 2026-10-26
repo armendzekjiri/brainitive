@@ -4,9 +4,11 @@ namespace App\Services;
 
 use App\Models\CalendarConnection;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * Thin wrapper around the Google Calendar REST API. We use the global Http
@@ -58,13 +60,19 @@ class GoogleCalendarService
         return true;
     }
 
-    /** Fetch the user's calendar list. Returns an array of {id, summary, backgroundColor, primary}. */
-    public function listCalendars(CalendarConnection $connection): array
+    /**
+     * Fetch the user's calendar list. Returns an array of {id, summary, backgroundColor, primary,
+     * access_role}, or null when the token is gone or Google refused.
+     */
+    public function listCalendars(CalendarConnection $connection): ?array
     {
         if (! $this->ensureFreshToken($connection)) {
-            return [];
+            return null;
         }
         $resp = $this->get($connection, '/users/me/calendarList');
+        if (! $resp->successful()) {
+            return null;
+        }
         $items = $resp->json('items', []);
 
         return array_map(fn ($c) => [
@@ -76,11 +84,14 @@ class GoogleCalendarService
         ], $items);
     }
 
-    /** Fetch events from this connection's calendar between $start and $end. */
-    public function listEvents(CalendarConnection $connection, Carbon $start, Carbon $end): array
+    /**
+     * Fetch raw events from this connection's calendar between $start and $end, or null when
+     * the token is gone or Google refused (GoogleCalendarProvider turns that into an error).
+     */
+    public function listEvents(CalendarConnection $connection, CarbonInterface $start, CarbonInterface $end): ?array
     {
         if (! $this->ensureFreshToken($connection)) {
-            return [];
+            return null;
         }
         $calId = rawurlencode($connection->external_calendar_id);
         $resp = $this->get($connection, "/calendars/{$calId}/events", [
@@ -90,6 +101,14 @@ class GoogleCalendarService
             'orderBy' => 'startTime',
             'maxResults' => 250,
         ]);
+        if (! $resp->successful()) {
+            Log::warning('Google events list failed', [
+                'connection_id' => $connection->id,
+                'status' => $resp->status(),
+            ]);
+
+            return null;
+        }
 
         return $resp->json('items', []);
     }
@@ -114,6 +133,9 @@ class GoogleCalendarService
         if (! empty($data['description'])) {
             $body['description'] = $data['description'];
         }
+        if (! empty($data['location'])) {
+            $body['location'] = $data['location'];
+        }
         if (! empty($data['time'])) {
             $startDateTime = Carbon::parse("{$startDate} {$data['time']}", $tz);
             $endDateTime = ! empty($data['end_time'])
@@ -126,9 +148,27 @@ class GoogleCalendarService
             $body['end'] = ['date' => Carbon::parse($endDate)->copy()->addDay()->toDateString()];
         }
 
+        // Online meeting + guests (BRAI-147): a Meet link is created with the event; Google
+        // only reads conferenceData with conferenceDataVersion=1 and emails guests with sendUpdates.
+        $query = [];
+        if (! empty($data['attendees'])) {
+            $body['attendees'] = array_map(fn (array $a) => array_filter([
+                'email' => $a['email'],
+                'displayName' => $a['name'] ?? null,
+            ]), $data['attendees']);
+            $query['sendUpdates'] = 'all';
+        }
+        if (($data['conference'] ?? null) === 'google_meet') {
+            $body['conferenceData'] = ['createRequest' => [
+                'requestId' => (string) Str::uuid(),
+                'conferenceSolutionKey' => ['type' => 'hangoutsMeet'],
+            ]];
+            $query['conferenceDataVersion'] = 1;
+        }
+
         $resp = Http::withToken($connection->access_token)
             ->acceptJson()
-            ->post(self::API_BASE."/calendars/{$calId}/events", $body);
+            ->post(self::API_BASE."/calendars/{$calId}/events".($query ? '?'.http_build_query($query) : ''), $body);
 
         if (! $resp->successful()) {
             Log::warning('Google event create failed', [
@@ -193,7 +233,7 @@ class GoogleCalendarService
 
         $resp = Http::withToken($connection->access_token)
             ->acceptJson()
-            ->patch(self::API_BASE."/calendars/{$calId}/events/{$eventId}", $body);
+            ->patch(self::API_BASE."/calendars/{$calId}/events/".rawurlencode($eventId), $body);
 
         if (! $resp->successful()) {
             Log::warning('Google event update failed', [
@@ -209,14 +249,14 @@ class GoogleCalendarService
         return $resp->json();
     }
 
-    /** Fetch a single event with full details. */
+    /** Fetch a single event with full details (null when missing or on failure). */
     public function getEvent(CalendarConnection $connection, string $eventId): ?array
     {
         if (! $this->ensureFreshToken($connection)) {
             return null;
         }
         $calId = rawurlencode($connection->external_calendar_id);
-        $resp = $this->get($connection, "/calendars/{$calId}/events/{$eventId}");
+        $resp = $this->get($connection, "/calendars/{$calId}/events/".rawurlencode($eventId));
         if (! $resp->successful()) {
             Log::warning('Google event fetch failed', [
                 'connection_id' => $connection->id,
@@ -230,7 +270,28 @@ class GoogleCalendarService
         return $resp->json();
     }
 
-    /** Delete an event. */
+    /**
+     * The conference kinds Google allows on this calendar (calendarList
+     * conferenceProperties.allowedConferenceSolutionTypes, e.g. ['hangoutsMeet']), or null when
+     * Google didn't answer.
+     *
+     * @return list<string>|null
+     */
+    public function conferenceSolutionTypes(CalendarConnection $connection): ?array
+    {
+        if (! $this->ensureFreshToken($connection)) {
+            return null;
+        }
+        $resp = $this->get($connection, '/users/me/calendarList/'.rawurlencode($connection->external_calendar_id));
+        if (! $resp->successful()) {
+            return null;
+        }
+        $types = $resp->json('conferenceProperties.allowedConferenceSolutionTypes');
+
+        return is_array($types) ? array_values(array_filter($types, 'is_string')) : null;
+    }
+
+    /** Delete an event; guests get Google's cancellation email (BRAI-147). */
     public function deleteEvent(CalendarConnection $connection, string $eventId): bool
     {
         if (! $this->ensureFreshToken($connection)) {
@@ -238,7 +299,7 @@ class GoogleCalendarService
         }
         $calId = rawurlencode($connection->external_calendar_id);
         $resp = Http::withToken($connection->access_token)
-            ->delete(self::API_BASE."/calendars/{$calId}/events/{$eventId}");
+            ->delete(self::API_BASE."/calendars/{$calId}/events/".rawurlencode($eventId).'?sendUpdates=all');
 
         return $resp->successful() || $resp->status() === 410; // 410 = already gone
     }

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<d:multistatus xmlns:d="DAV:" xmlns:cal="urn:ietf:params:xml:ns:caldav">
+  <d:response>
+    <d:href>/123456/principal/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:displayname>Erin Example</d:displayname>
+        <cal:calendar-home-set><d:href>{{home}}</d:href></cal:calendar-home-set>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>

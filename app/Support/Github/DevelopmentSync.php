@@ -110,7 +110,16 @@ class DevelopmentSync
 
     private function pullRequest(string $repo, array $payload): void
     {
-        $pr = (array) data_get($payload, 'pull_request', []);
+        $this->applyPullRequest($repo, (array) data_get($payload, 'pull_request', []));
+    }
+
+    /**
+     * Upsert the PR's link on every issue it mentions, then run merge transitions (BRAI-61).
+     * Also used by "Refresh", which re-reads a PR from GitHub's API (same shape as the webhook).
+     * A merged PR stays merged even if an older payload arrives late.
+     */
+    public function applyPullRequest(string $repo, array $pr): void
+    {
         $number = (int) data_get($pr, 'number');
         if ($number < 1) {
             return;
@@ -121,22 +130,24 @@ class DevelopmentSync
         $state = $merged ? 'merged' : (data_get($pr, 'state') === 'closed' ? 'closed' : (data_get($pr, 'draft') ? 'draft' : 'open'));
 
         foreach ($this->items(IssueKeys::find($text, $this->projectKey())) as $item) {
-            ItemDevLink::updateOrCreate(
-                ['item_id' => $item->id, 'kind' => 'pull_request', 'repository' => $repo, 'identifier' => (string) $number],
-                [
-                    'github_connection_id' => $this->connection->id,
-                    'title' => Str::limit((string) data_get($pr, 'title'), 480),
-                    'url' => $this->githubUrl(data_get($pr, 'html_url')),
-                    'author' => Str::limit((string) data_get($pr, 'user.login'), 190) ?: null,
-                    'state' => $state,
-                    'meta' => [
-                        'base' => (string) data_get($pr, 'base.ref'),
-                        'head' => (string) data_get($pr, 'head.ref'),
-                        'merged_at' => $merged ? data_get($pr, 'merged_at') : null,
-                    ],
-                    'occurred_at' => $this->time(data_get($pr, 'updated_at')) ?? now(),
-                ],
-            );
+            $link = ItemDevLink::firstOrNew(['item_id' => $item->id, 'kind' => 'pull_request', 'repository' => $repo, 'identifier' => (string) $number]);
+            $wasMerged = $link->exists && $link->state === 'merged';
+            $link->fill([
+                'github_connection_id' => $this->connection->id,
+                'title' => Str::limit((string) data_get($pr, 'title'), 480),
+                'url' => $this->githubUrl(data_get($pr, 'html_url')),
+                'author' => Str::limit((string) data_get($pr, 'user.login'), 190) ?: null,
+                'state' => $wasMerged ? 'merged' : $state,
+                // keep what other features stored on the link (merge_transition)
+                'meta' => array_merge($link->meta ?? [], [
+                    'base' => (string) data_get($pr, 'base.ref'),
+                    'head' => (string) data_get($pr, 'head.ref'),
+                    'merged_at' => $merged ? data_get($pr, 'merged_at') : ($wasMerged ? ($link->meta['merged_at'] ?? null) : null),
+                ]),
+                'occurred_at' => $this->time(data_get($pr, 'updated_at')) ?? now(),
+            ])->save();
+
+            MergeTransitions::pullRequestSaved($link);
         }
     }
 

@@ -81,6 +81,11 @@ export function PageHistoryDialog({ open, onOpenChange, routeParams, canRestore,
                 setConfirmRestore(false);
                 onOpenChange(false);
             },
+            // "review required" pages refuse restores (BRAI-80)
+            onError: (errors) => {
+                setConfirmRestore(false);
+                setError(errors.review ?? 'Could not restore this version.');
+            },
             onFinish: () => setRestoring(false),
         });
     };
