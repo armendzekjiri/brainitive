@@ -5,6 +5,8 @@ import DuplicateItemDialog from '@/components/item/DuplicateItemDialog';
 import { RecurringIssuesDialog } from '@/components/recurring/RecurringIssuesDialog';
 import LogWorkPopover from '@/components/item/LogWorkPopover';
 import ShareButton from '@/components/share/ShareButton';
+import SubjectMeetings from '@/components/meetings/SubjectMeetings';
+import { Video } from 'lucide-react';
 import { itemTree, MAX_ITEM_DEPTH } from '@/lib/itemTree';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -750,6 +752,12 @@ function HistoryEntryBody({ entry }: { entry: ItemHistoryEntry }) {
             return <span>attached <HistoryValue value={meta.name} /></span>;
         case 'attachment_removed':
             return <span>removed the attachment <HistoryValue value={meta.name} /></span>;
+        case 'meeting_scheduled': // BRAI-147
+            return <span>scheduled {meta.conference === 'Microsoft Teams' ? 'a Teams meeting' : meta.conference === 'Google Meet' ? 'a Google Meet' : 'a meeting'} <HistoryValue value={meta.title} /> for <HistoryValue value={meta.when} /></span>;
+        case 'meeting_cancelled':
+            return <span>cancelled the meeting <HistoryValue value={meta.title} /> ({String(meta.when ?? '')})</span>;
+        case 'meeting_removed':
+            return <span>removed the meeting <HistoryValue value={meta.title} /> from this issue</span>;
         case 'work_logged':
             return (
                 <span>
@@ -1353,6 +1361,7 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
     } = d;
     const [duplicating, setDuplicating] = useState(false);
     const [makingRecurring, setMakingRecurring] = useState(false);
+    const [schedulingMeeting, setSchedulingMeeting] = useState(false);
     const [detailsOpen, setDetailsOpen] = useState(true);
     if (!item) return null;
 
@@ -1728,11 +1737,30 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                 primaryUrl={route('boards.items.development.primary', [workspace.slug, project.slug, board.slug, item.id])}
                 canEdit={d.canEditItems}
             />
+            {/* Online meetings (BRAI-147) */}
+            <SubjectMeetings
+                variant="section"
+                workspace={workspace}
+                project={project}
+                subject={{
+                    type: 'item',
+                    id: String(item.id),
+                    title: `${item.key} ${(live ?? item).title}`.trim(),
+                    url: route('boards.items.show', [workspace.slug, project.slug, board.slug, item.id]),
+                }}
+                scheduleOpen={schedulingMeeting}
+                onScheduleOpenChange={setSchedulingMeeting}
+            />
             <div className="border-t pt-3">
                 <div className="flex flex-wrap items-center gap-1">
                     <Button variant="ghost" size="sm" className="h-8 gap-2 text-muted-foreground hover:text-foreground" onClick={() => setDuplicating(true)}>
                         <Copy className="size-3.5" /> Duplicate
                     </Button>
+                    {d.canEditItems && (
+                        <Button variant="ghost" size="sm" className="h-8 gap-2 text-muted-foreground hover:text-foreground" onClick={() => setSchedulingMeeting(true)}>
+                            <Video className="size-3.5" /> Schedule meeting
+                        </Button>
+                    )}
                     {d.canEditItems && (
                         <Button variant="ghost" size="sm" className="h-8 gap-2 text-muted-foreground hover:text-foreground" onClick={() => setMakingRecurring(true)}>
                             <Repeat className="size-3.5" /> Make this recurring

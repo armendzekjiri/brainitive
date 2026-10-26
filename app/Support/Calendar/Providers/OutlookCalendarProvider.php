@@ -84,7 +84,27 @@ class OutlookCalendarProvider extends BaseCalendarProvider
 
     public function capabilities(): array
     {
-        return ['write' => true, 'tasks' => false];
+        return ['write' => true, 'tasks' => false, 'conferencing' => true];
+    }
+
+    /**
+     * Teams, only when this calendar allows Teams-for-business meetings
+     * (`allowedOnlineMeetingProviders`). Personal Microsoft accounts usually don't; a failed
+     * lookup offers nothing.
+     */
+    public function conferenceProviders(CalendarConnection $connection): array
+    {
+        if ($connection->kind !== 'calendar' || ! $this->isWritable($connection)) {
+            return [];
+        }
+        try {
+            $response = $this->send($connection, 'GET', $this->calendarUrl($connection), ['query' => ['$select' => 'allowedOnlineMeetingProviders']]);
+        } catch (CalendarSyncFailed) {
+            return [];
+        }
+        $allowed = $response->successful() ? $response->json('allowedOnlineMeetingProviders') : null;
+
+        return is_array($allowed) && in_array('teamsForBusiness', $allowed, true) ? ['teams'] : [];
     }
 
     // ── OAuth (used by OutlookCalendarConnectController) ─────────────────────────────────────
@@ -181,7 +201,7 @@ class OutlookCalendarProvider extends BaseCalendarProvider
         foreach ($this->pages($connection, $this->calendarUrl($connection).'/calendarView', [
             'startDateTime' => Carbon::instance($start)->startOfDay()->utc()->format('Y-m-d\TH:i:s\Z'),
             'endDateTime' => Carbon::instance($end)->addDay()->startOfDay()->utc()->format('Y-m-d\TH:i:s\Z'),
-            '$select' => 'id,subject,body,bodyPreview,location,start,end,isAllDay,isCancelled,webLink',
+            '$select' => 'id,subject,body,bodyPreview,location,start,end,isAllDay,isCancelled,webLink,isOnlineMeeting,onlineMeeting,onlineMeetingProvider',
             '$orderby' => 'start/dateTime',
             '$top' => self::PAGE_SIZE,
         ], 'Outlook didn’t answer. Try again later, or reconnect this calendar.') as $raw) {
@@ -220,13 +240,34 @@ class OutlookCalendarProvider extends BaseCalendarProvider
         if (filled($data['location'] ?? null)) {
             $body['location'] = ['displayName' => (string) $data['location']];
         }
+        // Online meeting + attendees (BRAI-147): Outlook sends the invitations itself.
+        $attendees = $this->requestedAttendees($data);
+        if ($attendees !== []) {
+            $body['attendees'] = array_map(fn (array $a) => [
+                'emailAddress' => array_filter(['address' => $a['email'], 'name' => $a['name']]),
+                'type' => 'required',
+            ], $attendees);
+        }
+        if ($this->requestedConference($connection, $data) === 'teams') {
+            $body['isOnlineMeeting'] = true;
+            $body['onlineMeetingProvider'] = 'teamsForBusiness';
+        }
 
         $response = $this->send($connection, 'POST', $this->calendarUrl($connection).'/events', ['json' => $body], write: true);
         if (! $response->successful()) {
             $this->fail($connection, $response, 'create', 'Outlook rejected the event. Try again, or reconnect Outlook.');
         }
+        $created = (array) $response->json();
 
-        return $this->normalize((array) $response->json(), null)
+        // The Teams link can lag behind the create: read the event once more.
+        if (! empty($body['isOnlineMeeting']) && ! is_string($created['onlineMeeting']['joinUrl'] ?? null) && is_string($created['id'] ?? null)) {
+            $again = $this->send($connection, 'GET', $this->calendarUrl($connection).'/events/'.rawurlencode($created['id']));
+            if ($again->successful()) {
+                $created = (array) $again->json();
+            }
+        }
+
+        return $this->normalize($created, null)
             ?? throw new CalendarSyncFailed('Outlook rejected the event. Try again, or reconnect Outlook.');
     }
 
@@ -294,6 +335,9 @@ class OutlookCalendarProvider extends BaseCalendarProvider
             'description' => $this->description($event),
             'location' => is_string($event['location']['displayName'] ?? null) && trim($event['location']['displayName']) !== '' ? trim($event['location']['displayName']) : null,
             'external_url' => is_string($webLink) && str_starts_with(strtolower($webLink), 'https://') ? $webLink : null,
+            // BRAI-147: the online meeting's join link (Teams for business; others → 'other')
+            'conference_url' => is_array($event['onlineMeeting'] ?? null) ? ($event['onlineMeeting']['joinUrl'] ?? null) : null,
+            'conference_provider' => ($event['onlineMeetingProvider'] ?? null) === 'teamsForBusiness' ? 'teams' : 'other',
         ];
         $title = is_string($event['subject'] ?? null) ? $event['subject'] : null;
 

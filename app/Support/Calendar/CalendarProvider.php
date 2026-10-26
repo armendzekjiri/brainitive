@@ -60,6 +60,20 @@ use Carbon\CarbonInterface;
  *  updateEvent: partial — only keys present change. When start_date is present the times are
  *  replaced as a whole (start_time null = all-day).
  *
+ * ── Online meetings / conferencing (BRAI-147, optional) ───────────────────────────────────
+ *  A provider that can attach a video call to a new event:
+ *  - capabilities()['conferencing'] = true (a missing key means false);
+ *  - conferenceProviders($connection) lists the kinds THIS calendar allows ('google_meet',
+ *    'teams'); BaseCalendarProvider returns [] (no conferencing). It may call the provider
+ *    (callers cache it, see App\Support\Meetings\MeetingCalendars) and returns [] when unsure;
+ *  - createEvent($data) may carry `conference` (one of those kinds; anything else → throw
+ *    CalendarSyncFailed) and `attendees` (list of ['email' => …, 'name' => …|null], validated
+ *    and capped by the caller; the provider sends the invitations). Providers without
+ *    conferencing ignore both keys;
+ *  - normalized events MAY carry `conference_url` (https only — NormalizedEvent::make drops
+ *    anything else) and `conference_provider` ('google_meet' | 'teams' | 'other'). Both keys
+ *    are present only when the event has a call: read them with `?? null`.
+ *
  * ── Errors ──────────────────────────────────────────────────────────────────────────────
  *  - Read-only provider/calendar: write methods throw CalendarReadOnly (→ 422 "This calendar
  *    is read-only."). BaseCalendarProvider does this when capabilities()['write'] is false.
@@ -120,11 +134,19 @@ interface CalendarProvider
      */
     public function formFields(): array;
 
-    /** @return array{write: bool, tasks: bool} */
+    /** @return array{write: bool, tasks: bool, conferencing?: bool} */
     public function capabilities(): array;
 
     /** Whether events of this particular connection can be created / changed / deleted. */
     public function isWritable(CalendarConnection $connection): bool;
+
+    /**
+     * The online-meeting kinds this calendar can attach to a new event (BRAI-147), e.g.
+     * ['google_meet'] or ['teams']; [] = none. See "Online meetings" above.
+     *
+     * @return list<'google_meet'|'teams'>
+     */
+    public function conferenceProviders(CalendarConnection $connection): array;
 
     /**
      * Connect from the generic dialog ('form' / 'url'). $input holds the validated formFields()

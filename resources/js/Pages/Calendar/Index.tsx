@@ -16,6 +16,9 @@ import { safeExternalHref } from '@/lib/sanitize';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { AssigneeAvatar } from '@/components/board/ItemPrimitives';
 import CalendarFeedButton from '@/components/calendar/CalendarFeedDialog';
+import QuickCreateMeetingFields, { NO_MEETING, type QuickMeeting } from '@/components/meetings/QuickCreateMeetingFields';
+import { CONFERENCE_LABELS, copyMeetingLink, safeJoinUrl } from '@/lib/meetings';
+import { Video } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
 
 type ProjectFilterOption = {
@@ -448,6 +451,7 @@ function EventChip({
                 {fill && timeLabel && <span className="text-[10px] text-muted-foreground font-mono tabular-nums">{timeLabel}</span>}
                 <span className={cn('truncate font-medium flex items-center gap-1', event.is_completed && 'line-through')}>
                     {event.is_recurring_instance && <Repeat className="size-2.5 shrink-0 opacity-70" />}
+                    {safeJoinUrl(event.conference_url) && <Video className="size-3 shrink-0 text-primary" aria-hidden data-testid="event-video-icon" />}
                     {!compact && !fill && event.due_time && <span className="text-muted-foreground mr-1">{formatTime(event.due_time)}</span>}
                     {event.title}
                 </span>
@@ -503,10 +507,12 @@ function QuickCreateModal({
     const [dateInput, setDateInput] = useState('');
     const [timeInput, setTimeInput] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [meeting, setMeeting] = useState<QuickMeeting>(NO_MEETING); // video call + guests (BRAI-147)
 
     useEffect(() => {
         if (!state) return;
         setTitle('');
+        setMeeting(NO_MEETING);
         setDateInput(state.date);
         setTimeInput(state.time ?? '');
         setSubmitting(false);
@@ -537,7 +543,7 @@ function QuickCreateModal({
     const canSubmit = title.trim() && dateInput && (
         (type === 'board' && project && boardId)
         || (type === 'list' && project && taskListId)
-        || (type === 'external' && connectionId && hasExternalSource)
+        || (type === 'external' && connectionId && hasExternalSource && !(externalKind === 'event' && meeting.conference && !timeInput))
     );
 
     const submit = (e: React.FormEvent) => {
@@ -550,6 +556,9 @@ function QuickCreateModal({
             if (!conn) { setSubmitting(false); return; }
             const payload: Record<string, any> = { title: title.trim(), date: dateInput, timezone: browserTimezone() };
             if (timeInput) payload.time = timeInput;
+            if (externalKind === 'event' && meeting.conference) payload.conference = meeting.conference;
+            // guests only go with a video call setup the form still shows (the fields clear themselves otherwise)
+            if (externalKind === 'event' && meeting.attendees.length > 0) payload.attendees = meeting.attendees;
             const routeName = externalKind === 'task'
                 ? 'calendar.connections.tasks.create'
                 : 'calendar.connections.events.create';
@@ -726,6 +735,9 @@ function QuickCreateModal({
                                     </SelectContent>
                                 </Select>
                             </div>
+                            {externalKind === 'event' && (
+                                <QuickCreateMeetingFields open={open} connectionId={connectionId} value={meeting} onChange={setMeeting} hasTime={!!timeInput} />
+                            )}
                         </>
                     )}
 
@@ -1529,6 +1541,16 @@ function ExternalEventDialog({
                             )}
                         </div>
                     </fieldset>
+                )}
+                {!loading && safeJoinUrl(details?.conference_url) && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-3 py-2" data-testid="event-conference">
+                        <Video className="size-4 text-primary" />
+                        <span className="flex-1 text-sm">{CONFERENCE_LABELS[details?.conference_provider ?? 'other']}</span>
+                        <Button size="sm" variant="outline" type="button" onClick={() => copyMeetingLink(safeJoinUrl(details?.conference_url)!)}>Copy link</Button>
+                        <Button size="sm" asChild>
+                            <a href={safeJoinUrl(details?.conference_url)!} target="_blank" rel="noopener noreferrer">Join</a>
+                        </Button>
+                    </div>
                 )}
                 {!loading && safeExternalHref(details?.external_url) && (
                     <a href={safeExternalHref(details?.external_url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">

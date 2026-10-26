@@ -56,7 +56,7 @@ class CalendarProvidersTest extends TestCase
             'connect_mode' => 'oauth',
             'redirect_url' => route('calendar.connections.google.redirect'),
             'fields' => [],
-            'capabilities' => ['write' => true, 'tasks' => true],
+            'capabilities' => ['write' => true, 'tasks' => true, 'conferencing' => true],
         ], $catalog['google']);
         $this->assertSame('form', $catalog['fake']['connect_mode']);
         $this->assertNull($catalog['fake']['redirect_url']);

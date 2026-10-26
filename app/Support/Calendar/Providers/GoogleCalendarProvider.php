@@ -53,7 +53,21 @@ class GoogleCalendarProvider extends BaseCalendarProvider
 
     public function capabilities(): array
     {
-        return ['write' => true, 'tasks' => true];
+        return ['write' => true, 'tasks' => true, 'conferencing' => true];
+    }
+
+    /**
+     * Google Meet, when the calendar allows it (a Workspace admin can switch Meet off). When
+     * Google doesn't answer, Meet is offered anyway: creating the event reports the real error.
+     */
+    public function conferenceProviders(CalendarConnection $connection): array
+    {
+        if ($connection->kind !== 'calendar' || ! $this->isWritable($connection)) {
+            return [];
+        }
+        $types = $this->service->conferenceSolutionTypes($connection);
+
+        return $types === null || in_array('hangoutsMeet', $types, true) ? ['google_meet'] : [];
     }
 
     public function listCalendars(CalendarConnection $connection): array
@@ -101,6 +115,7 @@ class GoogleCalendarProvider extends BaseCalendarProvider
     {
         $this->assertWritable($connection);
         $input = EventInput::from($data);
+        $conference = $this->requestedConference($connection, $data);
 
         $created = $this->service->createEvent($connection, [
             'title' => (string) ($data['title'] ?? ''),
@@ -111,7 +126,15 @@ class GoogleCalendarProvider extends BaseCalendarProvider
             'description' => $data['description'] ?? null,
             'location' => $data['location'] ?? null,
             'timezone' => $input->timezone(),
+            'conference' => $conference,
+            'attendees' => $this->requestedAttendees($data),
         ]);
+
+        // Google may create the Meet asynchronously ("pending"): read the event once more.
+        if ($conference !== null && is_array($created) && ! empty($created['id']) && $this->joinUrl($created) === null
+            && ($created['conferenceData']['createRequest']['status']['statusCode'] ?? null) === 'pending') {
+            $created = $this->service->getEvent($connection, (string) $created['id']) ?? $created;
+        }
 
         return $this->normalize($created ?? [], null)
             ?? throw new CalendarSyncFailed('Google rejected the event. Try again, or reconnect this calendar.');
@@ -168,6 +191,9 @@ class GoogleCalendarProvider extends BaseCalendarProvider
             'description' => $event['description'] ?? null,
             'location' => $event['location'] ?? null,
             'external_url' => $event['htmlLink'] ?? null,
+            'conference_url' => $this->joinUrl($event),
+            'conference_provider' => ($event['conferenceData']['conferenceSolution']['key']['type'] ?? null) === 'hangoutsMeet'
+                || (! isset($event['conferenceData']) && isset($event['hangoutLink'])) ? 'google_meet' : 'other',
         ];
 
         if (! empty($start['date'])) {
@@ -180,6 +206,22 @@ class GoogleCalendarProvider extends BaseCalendarProvider
         $endAt = ! empty($end['dateTime']) ? Carbon::parse($end['dateTime']) : $startAt->copy();
 
         return NormalizedEvent::timed((string) $id, $event['summary'] ?? null, $startAt, $endAt, $timezone, $extra);
+    }
+
+    /**
+     * The video call's link: the conference's video entry point, else the classic hangoutLink.
+     *
+     * @param  array<string, mixed>  $event
+     */
+    private function joinUrl(array $event): ?string
+    {
+        foreach ((array) ($event['conferenceData']['entryPoints'] ?? []) as $entry) {
+            if (is_array($entry) && ($entry['entryPointType'] ?? null) === 'video' && is_string($entry['uri'] ?? null)) {
+                return $entry['uri'];
+            }
+        }
+
+        return is_string($event['hangoutLink'] ?? null) ? $event['hangoutLink'] : null;
     }
 
     private function failureMessage(CalendarConnection $connection): string

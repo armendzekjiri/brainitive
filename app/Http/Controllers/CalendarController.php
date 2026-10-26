@@ -539,6 +539,9 @@ class CalendarController extends Controller
             'read_only' => $readOnly,
             'all_day' => (bool) $event['all_day'],
             'location' => $event['location'] ?? null,
+            // the event's video call, when it has one (BRAI-147; optional normalized keys)
+            'conference_url' => $event['conference_url'] ?? null,
+            'conference_provider' => $event['conference_provider'] ?? null,
         ];
     }
 
