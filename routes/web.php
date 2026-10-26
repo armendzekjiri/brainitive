@@ -154,6 +154,9 @@ Route::middleware('cors')->group(function () {
 // Feedback + client portals and guest sign-in (v1.42.0) — people outside the workspace
 require __DIR__.'/portal.php';
 
+// Private calendar feed for Apple / Outlook / Google Calendar (BRAI-142): public .ics + owner JSON
+require __DIR__.'/calendar-feed.php';
+
 // Workspace invitation (guest can view; auth user with matching email can accept)
 Route::get('/invite/{token}', [InvitationController::class, 'show'])->name('invitations.show');
 

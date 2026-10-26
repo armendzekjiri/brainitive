@@ -2165,3 +2165,32 @@ export interface PortalIdentityData {
     /** a Brainitive account (signed in to the app) rather than an emailed guest */
     is_member: boolean;
 }
+
+// ── Calendar feed (BRAI-142) ──────────────────────────────────────────────────
+
+/** What a calendar feed includes (CalendarFeed::DEFAULT_OPTIONS). */
+export interface CalendarFeedOptions {
+    assigned: boolean;
+    created: boolean;
+    tasks: boolean;
+    my_day: boolean;
+    focus: boolean;
+    completed: boolean;
+    descriptions: boolean;
+    /** empty = every project the user can open */
+    project_ids: number[];
+}
+
+/** JSON of calendar-feed.show / store / update / reset / destroy (CalendarFeedController::payload). */
+export interface CalendarFeedPayload {
+    feed: {
+        url: string;
+        links: { apple: string; google: string; outlook: string };
+        options: CalendarFeedOptions;
+        created_at: string | null;
+        last_fetched_at: string | null;
+        fetch_count: number;
+    } | null;
+    defaults: CalendarFeedOptions;
+    projects: { id: number; name: string; workspace: string | null }[];
+}
