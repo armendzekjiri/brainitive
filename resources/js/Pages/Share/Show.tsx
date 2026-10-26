@@ -2,6 +2,7 @@ import ApplicationLogo from '@/components/ApplicationLogo';
 import { safeHtmlProp } from '@/lib/sanitize';
 import { Head } from '@inertiajs/react';
 import { Link2Off } from 'lucide-react';
+import PageIcon from '@/components/page/PageIcon';
 
 interface Shared {
     type: 'doc' | 'issue';
@@ -54,7 +55,7 @@ export default function ShareShow({ shared }: { shared: Shared | null }) {
             <main className="mx-auto max-w-3xl px-6 py-10">
                 {shared.key && <p className="font-mono text-sm text-muted-foreground mb-1">{shared.key}</p>}
                 <h1 className="text-3xl font-bold tracking-tight mb-4">
-                    {shared.icon && shared.type === 'doc' ? <span className="mr-2">{shared.icon}</span> : null}
+                    {shared.icon && shared.type === 'doc' ? <PageIcon icon={shared.icon} className="mr-2" imageClassName="mr-2 inline-block size-8 align-[-0.15em]" /> : null}
                     {shared.title}
                 </h1>
                 {meta.length > 0 && (

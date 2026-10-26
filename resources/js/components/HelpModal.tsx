@@ -83,6 +83,15 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.41.2',
+        title: 'Uploaded document icons show as images',
+        tag: 'Fix',
+        date: '2026-10-26',
+        items: [
+            'Workspace home, project page and shared docs: a document with an uploaded image as its icon showed a long line of code across the page — it now shows the image.',
+        ]
+    },
+    {
         version: 'v1.41.1',
         title: 'Calendar opens again after deleting a board',
         tag: 'Fix',

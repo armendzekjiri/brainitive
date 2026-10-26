@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { cn } from '@/lib/utils';
+import PageIcon from '@/components/page/PageIcon';
 
 type ProjRef = { slug: string; name: string; color?: string | null };
 type DueItem = { id: number; key: string; title: string; due_date: string; board?: { slug: string; name: string; project?: ProjRef } };
@@ -427,7 +428,7 @@ export default function WorkspacesShow({ workspace, userRole, stats, upcomingDue
                                                     <div className="flex items-start gap-3">
                                                         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl" style={{ background: `${doc.project?.color || '#0E83DC'}1A` }}>
                                                             {doc.icon ? (
-                                                                <span className="text-xl leading-none">{doc.icon}</span>
+                                                                <PageIcon icon={doc.icon} className="text-xl" imageClassName="size-6" />
                                                             ) : (
                                                                 <FileText className="size-5" style={{ color: doc.project?.color || '#0E83DC' }} />
                                                             )}
