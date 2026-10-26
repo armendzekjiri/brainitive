@@ -1,5 +1,8 @@
 # feat/legal-compliance — Legal & privacy review (BRAI-156, board item 363, release v1.44.0)
 
+**Branch:** feat/legal-compliance (into `release/v1.44.0`)
+**Status:** done (merged into release/v1.44.0)
+
 ## Goal
 The user: "on what we now all collect are we okay with term of use, collecting data (umami),
 datenschutz etc! check everything and make like a real lawyer … like the support pages that we create".

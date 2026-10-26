@@ -1,7 +1,7 @@
 # Live boards + plans (BRAI-152)
 
 **Branch:** feat/live-boards (from release/v1.44.0, on top of the live channel foundation)
-**Status:** done (ready for the lead to merge into release/v1.44.0)
+**Status:** done (merged into release/v1.44.0)
 **Board card:** BRAI-152 (board item 328) · release v1.44.0 "Everything live"
 
 ## Goal

@@ -1,7 +1,7 @@
 # Live channels — the foundation of "Everything live" (BRAI-151, part 1)
 
 **Branch:** feat/live-foundation (from release/v1.44.0)
-**Status:** done (ready for the lead to merge into release/v1.44.0)
+**Status:** done (merged into release/v1.44.0)
 **Board card:** BRAI-151 (board item 327) · release v1.44.0 "Everything live"
 
 ## Problem / goal
@@ -152,7 +152,7 @@ less than a minute ago. So **payloads carry no content**, only what tells a clie
 - `resources/js/lib/live/{client,hooks,index}.ts`; `useNotifications.ts` subscribes.
 - Docker: compose `LIVE_PUBLISH_URL` (app/queue/scheduler) + `LIVE_PUBLISH_FROM=private` (realtime);
   Caddy unchanged (`/collab*` already matches). `docs/self-hosting.md`, `.env.example`.
-- e2e: `e2e/helpers/realtime.ts` + global setup starts one live server on `E2E_PORT + 101` for the
+- e2e: `e2e/helpers/live.ts` (`startLiveServer`) + global setup starts one live server on `E2E_PORT + 101` (before seeding) for the
   whole run (`live-docs.spec.ts` keeps its own on `+ 100`); specs opt in with `X-E2E-Live: 1`.
 
 ## Test plan

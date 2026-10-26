@@ -1,7 +1,7 @@
 # Live whiteboards — draw together (BRAI-153)
 
 **Branch:** feat/live-whiteboards
-**Status:** done (ready for the lead to merge into release/v1.44.0)
+**Status:** done (merged into release/v1.44.0)
 **Started:** 2026-10-26
 **Board card:** BRAI-153 (board item 329) · release v1.44.0
 

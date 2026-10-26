@@ -1,7 +1,7 @@
 # Live basics — comments, who's here, typing, live issue descriptions (BRAI-151, part 2)
 
 **Branch:** feat/live-basics (from release/v1.44.0, release merged in after live-whiteboards)
-**Status:** done (ready for the lead to merge into release/v1.44.0)
+**Status:** done (merged into release/v1.44.0)
 **Board card:** BRAI-151 (board item 327) · release v1.44.0 "Everything live"
 
 ## Problem / goal

@@ -1,7 +1,7 @@
 # Web push devices + test notification (BRAI-154)
 
 **Branch:** feat/push-test (from `release/v1.44.0`)
-**Status:** done (waiting for the release merge)
+**Status:** done (merged into release/v1.44.0)
 **Started:** 2026-10-26
 **Board card:** BRAI-154 (item 330)
 

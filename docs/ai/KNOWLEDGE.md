@@ -916,6 +916,119 @@ home and project page printed the base64 across the layout (e2e `page-icons.spec
   Safari evicts IndexedDB after ~7 days unused; Firefox < 126 can't list databases (the `localStorage`
   account list covers clearing).
 
+### Live channels: no content in payloads, publishing never fails a request (v1.44.0, BRAI-151/152)
+- **Payloads tell clients what to refetch, never what changed.** A message reaches every socket on the
+  channel — including one whose access was revoked < 60 s ago (the server re-checks once a minute). So
+  `Live::publish()` refuses any key outside `Live::KEY` (ids, counts, revisions, `*_at`, status / type keys,
+  `fields`); clients refetch through the normal policy-checked endpoints. A new key is a conscious change of
+  `Live::KEY` + a test. Presence carries id / name / avatar only; signals carry `{}` or a field name.
+- **Publishing is after commit, once per request, and never throws.** A rolled-back change publishes nothing;
+  messages go out in one POST after the response. After a failed POST publishing **pauses 15 s** (cache
+  flag) — so in e2e the live server must be up before anything publishes: `e2e/global-setup.ts` starts it
+  **before seeding** (seeding publishes cards / notifications; a refused publish paused live for the first
+  journeys). In this sandbox the e2e app's very first publish sometimes still fails (cURL 7): live specs run
+  alone may then time out — run them together with other specs.
+- **`LIVE_PUBLISH_URL` is the realtime server's own address** (prod `http://127.0.0.1:6201`, dev `:6202`,
+  Docker `http://realtime:1234`), never the public URL: the publish endpoint refuses proxied requests
+  (`X-Forwarded-*` / `Forwarded` / `X-Real-IP`) and non-loopback peers (`LIVE_PUBLISH_FROM=private` for
+  Docker). Without it presence + typing still work and the bell polls every 30 s. Restart the realtime
+  service after a deploy that changes `realtime/`.
+- **Writes that bypass model events must touch `BoardLive`** (query-builder updates, pivot syncs, mass
+  deletes): `BoardLive::itemIds()` / `columnsReordered()` / `itemsLeft()`, or open boards miss the change.
+  Inside `ImportScope` nothing is published per record — one `board.refreshed` per board at the end.
+- **Echo suppression = `X-Live-Client` + actor.** A tab ignores an event only when `client_id` **and**
+  `actor_id` match its own (another member reusing a tab id can't hide changes).
+- **Events during a disconnect are lost** (no replay): every subscriber refetches in `onResync`.
+- **Tests:** `phpunit.xml` forces `LIVE_ENABLED=false` (a developer's `COLLAB_URL` never publishes from other
+  tests). Publishing tests use `Http::fake` + `defer()->invoke()`; avoid `withoutDefer()` for `BoardLive` (it
+  defeats the per-request coalescing being tested).
+- **e2e realtime ports** (each spec that stops / restarts its server owns a port; the app learns it per
+  request from `X-E2E-Collab-Port`, honoured only with `APP_ENV=e2e`): `COLLAB.port` (E2E_PORT + 100)
+  live-docs, `LIVE.port` (E2E_PORT + 101) the global live-channel server (opt in with `X-E2E-Live: 1`),
+  `COLLAB.port + 3` live whiteboards, `COLLAB.port + 4` live issue descriptions. New live specs pick the
+  next free offset.
+
+### Live whiteboards + live issue descriptions: epochs, saves, side effects (v1.44.0, BRAI-153/151)
+- **Any content write outside a live save starts a new epoch.** Whiteboards: `Page::saved` with `content`
+  changed without `collabWrite` (single-user / fallback save, version restore, MCP, duplicate) → epoch + 1,
+  live browsers get "This whiteboard was replaced … Load latest". Descriptions: `Item::updated` with the
+  description changed without `$item->collabWrite` (single-user save, MCP, checkbox toggle in view mode,
+  automations) → epoch + 1, live editors reopen on the new text. A fallback save always wins.
+- **Live description saves are normal item updates** (`$item->update` + `ItemMentions::notify` with the
+  previous text): history, webhooks, automations, smart links, search all run — so `item.updated` webhooks /
+  rules fire once per live save (every few seconds while people type). Only the history collapses
+  description-only saves of one person within 10 min. `itemDetails` returns `title` + `description` so
+  viewers follow via refetch (~2–4 s), not keystroke by keystroke.
+- **Whiteboard checkpoints live:** only the 30-min interval + explicit Save / Save & exit (the "someone else
+  saved last" rule would create a version per save with two people drawing). Deleted elements stay as
+  tombstones until the next epoch. Live images come from `/storage/…` on this site only — with the public
+  disk on S3 they appear after a reload.
+- Offline Y copies (`brainitive-whiteboards-u…`, `item-<id>`) are per user and cleared on sign-out
+  (`clearAllOfflineData` → `forgetLiveWhiteboardCopies`).
+
+### Notification inbox: live merges check the view they were made for (v1.44.0, BRAI-151)
+`useNotificationFeed` (`components/notifications/useNotifications.ts`) keys every reload / merge by its
+view (`filter|archived`): an answer for another view is dropped, the archive never merges live arrivals, and
+a merge while a load is running retries 500 ms later instead of reloading. Before the fix a merge started in
+the inbox could land after switching to "Show archived" and replace the archive with inbox rows. Live merges
+also wait for read / archive actions in flight (a page older than the action is asked again).
+
+### Web push: expired devices are flagged, delivered ≠ shown (v1.44.0, BRAI-154)
+- **404 / 410 from the push service flags the row** (`push_subscriptions.expired_at`) instead of deleting it
+  (the package's `ReportHandler` deleted silently; ours is `PushReportHandler`): it stays in the device list
+  with the reason, gets no more pushes (`User::routeNotificationForWebPush()`), and is pruned after 30 days.
+  Re-registering the same endpoint clears the flag; "Register this device" subscribes fresh.
+- **A test that says *delivered* only means the push service accepted it.** If nothing shows, the OS /
+  browser hides it (Windows: Chrome not running / "Continue running background apps" off, Focus; macOS:
+  System Settings → Notifications; iPhone: Home Screen app only, iOS 16.4+).
+- **One client:** `WebPushClient::make()` for real pushes and the test — never build a `WebPush` elsewhere.
+  `ChannelManager` keeps the `WebPushChannel` (and its client) once built: tests that change
+  `webpush.client_options` between notifications must queue all mock answers up front; queue workers need
+  a restart after VAPID changes.
+- **e2e:** the local server has a test-only VAPID pair (`e2e/env.ts`) and `WEBPUSH_FAKE` (`FakePushService`,
+  `APP_ENV=e2e` only; endpoint `e2e-expired` → 410, `e2e-rejected` → 403). Headless Chromium reports
+  notification permission `denied`, so specs stub `Notification` / `PushManager` (`push-devices.spec.ts`).
+
+### Branded email: secured encoding, inlined CSS, logos (v1.44.0, BRAI-155)
+- **`Markdown::withSecuredEncoding()` is on** (`BrandedMail::register()`): every `{{ }}` echo in mail templates
+  escapes `[ ] < > \`, so user text can't form Markdown links / images / HTML. Never put a Markdown link in a
+  line — use `->action()` or `->footerLink()`. Quoted user text goes through `->quote()` (`mail::quote`:
+  escaped, `nl2br`, never parsed — a code fence could otherwise close the panel).
+- **HTML blocks in mail Markdown end at a blank line:** keep raw HTML (billing message) on lines without
+  blank lines (nl2br).
+- **CssToInlineStyles drops `@media` rules from the theme:** dark-mode / phone rules live in the layout's
+  `<style>` with `!important`, not in `themes/brainitive.css`.
+- **`InstanceMailConfig::apply()` rebuilds the mailer:** with the array mailer in tests, messages sent before
+  it ran are gone.
+- **"Laravel" never reaches a mail:** templates say "Brainitive"; `config('app.name')` only shows as footer
+  context when it isn't a default, and `PublicOperator::platformName()` falls back to "Brainitive". Set
+  `MAIL_FROM_NAME=Brainitive` in production (env / admin settings).
+- **Email logos** (`public/images/email/logo.png`, `logo-dark.png`) must be RGBA PNGs: the first 256-colour
+  versions had no tRNS chunk and transparent pixels rendered black. Keep explicit width / height (220 px).
+
+### Legal & privacy: one config, customer pages, no third-party loads (v1.44.0, BRAI-156)
+- **Cloud vs self-hosted:** `config/legal.php` is read only through `LegalInfo`. Cloud = `LEGAL_CLOUD` or an
+  APP_URL host in `LegalInfo::CLOUD_HOSTS`; the operator's own facts are `CLOUD_DEFAULTS` — never config
+  defaults, so a self-hosted install can't show them. Self-hosted: `/legal/dpa`, `/legal/subprocessors`,
+  `/refund` 404; `/imprint` 404 until an operator field or `LEGAL_IMPRINT_URL` is set. e2e runs as Cloud
+  (`LEGAL_CLOUD=true` in `e2e/env.ts`).
+- **Customers' public pages carry `operator`** (`PublicOperator::for($workspace)`, https URLs only, re-checked
+  on read). The workspace name is a fallback **only** with `nameFallback: true` (support page / widget / lead
+  forms, which always showed the organisation); token links (share links, plans, changelogs, portals, ticket
+  links) stay generic so they never reveal internal workspace names. Visitor mails append
+  `PublicOperator::mailLine()` (plain, Markdown-safe). A new public page for a workspace's visitors passes
+  `operator` and adds its path prefix to `Analytics::EXCLUDED_PREFIXES` (Umami never runs there).
+- **Lead consent is proof, not a field:** the server renders the consent text, enforces "required" (422
+  `consent`) and stores exactly that text + `consent_at`; `consent: true` without a checkbox stores nothing.
+  The lead-form visit id is memory-only (no sessionStorage, § 25 TDDDG) — a reload counts as a new visit.
+- **No third-party requests from our pages:** fonts are self-hosted (`resources/fonts/`, @fontsource);
+  Excalidraw fonts need `window.EXCALIDRAW_ASSET_PATH` (`app.blade.php` + `excalidraw-editor.blade.php`) —
+  without it Excalidraw silently loads them from esm.sh. Embeds render in `ExternalEmbedGate`.
+  `LegalPagesTest` greps the sources for known CDN hosts.
+- **Self-service account deletion uses `UserDeletion`:** `$user->delete()`'s FK cascades wiped other people's
+  projects / boards / items. `ProfileController::destroy` refuses while the user owns a workspace with other
+  members, then hands their content in other workspaces to those owners.
+
 ## Architectural decisions
 
 ### Inline validation over FormRequest classes

@@ -1,7 +1,7 @@
 # Branded email templates (BRAI-155)
 
 **Branch:** feat/email-templates (into `release/v1.44.0`)
-**Status:** done (pending lead review)
+**Status:** done (merged into release/v1.44.0)
 **Started:** 2026-10-26
 **Board card:** BRAI-155 (item 360)
 
