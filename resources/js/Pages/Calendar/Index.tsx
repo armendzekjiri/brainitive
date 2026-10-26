@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { AssigneeAvatar } from '@/components/board/ItemPrimitives';
+import CalendarFeedButton from '@/components/calendar/CalendarFeedDialog';
 import { useState, useMemo, useEffect, useRef } from 'react';
 
 type ProjectFilterOption = {
@@ -1877,6 +1878,7 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
                     <div className="flex-1" />
                     <FilterBar projectsForFilter={projectsForFilter} connections={connections} filters={filters} view={view} date={date} />
                     <ConnectionsMenu connections={connections} />
+                    <CalendarFeedButton />
                     <div className="inline-flex p-[3px] bg-secondary border border-border rounded-[7px] gap-[1px]">
                         {VIEWS.map((v) => {
                             const icons = { month: Calendar, week: Kanban, day: Clock };
