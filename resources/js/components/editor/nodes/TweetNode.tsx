@@ -27,6 +27,7 @@ import {
     KEY_BACKSPACE_COMMAND,
     KEY_DELETE_COMMAND,
 } from 'lexical';
+import { ExternalEmbedGate } from '@/components/legal/ExternalEmbedGate';
 
 export interface TweetPayload {
     tweetID: string;
@@ -195,7 +196,9 @@ export class TweetNode extends DecoratorNode<JSX.Element> {
     decorate(): JSX.Element {
         return (
             <Suspense fallback={<div className="w-[550px] h-[200px] mx-auto bg-muted rounded-lg animate-pulse" />}>
-                <TweetComponent tweetID={this.__id} nodeKey={this.getKey()} />
+                <ExternalEmbedGate providerId="x" providerName="X (Twitter)" url={`https://x.com/i/status/${this.__id}`}>
+                    <TweetComponent tweetID={this.__id} nodeKey={this.getKey()} />
+                </ExternalEmbedGate>
             </Suspense>
         );
     }

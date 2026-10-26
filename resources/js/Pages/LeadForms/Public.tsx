@@ -2,6 +2,7 @@ import { Head } from '@inertiajs/react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import LeadFormRenderer, { SubmitResult } from '@/components/leadForms/LeadFormRenderer';
 import { LeadAnswers, LeadFormDefinition, LeadFormSettings, LeadFormTheme } from '@/lib/leadForms';
+import type { PublicOperatorData } from '@/types';
 
 interface Props {
     form: {
@@ -11,23 +12,25 @@ interface Props {
         theme: LeadFormTheme;
         settings: LeadFormSettings;
         organization?: string | null;
+        /** consent checkbox text, null without a checkbox (BRAI-156) */
+        consent_text?: string | null;
     };
     embed: boolean;
+    /** who runs the form: the workspace (BRAI-156) */
+    operator?: PublicOperatorData | null;
     submitUrl: string;
     eventsUrl: string;
 }
 
 const UTM_KEYS = ['source', 'medium', 'campaign', 'term', 'content'] as const;
 
-/** One random id per visit (tab), so analytics count people, not reloads. */
-function visitId(slug: string): string {
-    const key = `lf-session-${slug}`;
+/**
+ * One random id per page view for the form's funnel numbers. Kept in memory only — nothing is
+ * stored on the visitor's device (§ 25 TDDDG, BRAI-156), so a reload counts as a new visit.
+ */
+function visitId(): string {
     try {
-        const existing = sessionStorage.getItem(key);
-        if (existing) return existing;
-        const id = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
-        sessionStorage.setItem(key, id);
-        return id;
+        return Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
     } catch {
         return Math.random().toString(36).slice(2, 14);
     }
@@ -42,8 +45,8 @@ function flatten(errors: Record<string, string[] | string>): Record<string, stri
 /**
  * The public lead form at /f/{slug} (and /f/{slug}/embed inside an iframe): no login, no app chrome.
  */
-export default function Public({ form, embed, submitUrl, eventsUrl }: Props) {
-    const sessionId = useMemo(() => visitId(form.public_slug), [form.public_slug]);
+export default function Public({ form, embed, submitUrl, eventsUrl, operator = null }: Props) {
+    const sessionId = useMemo(() => visitId(), []);
     const rootRef = useRef<HTMLDivElement>(null);
     const honeypotRef = useRef<HTMLInputElement>(null);
     const params = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -87,7 +90,7 @@ export default function Public({ form, embed, submitUrl, eventsUrl }: Props) {
         return () => observer.disconnect();
     }, [embed, form.public_slug]);
 
-    const submit = async (answers: LeadAnswers): Promise<SubmitResult> => {
+    const submit = async (answers: LeadAnswers, extra: { consent: boolean }): Promise<SubmitResult> => {
         const utm: Record<string, string> = {};
         for (const key of UTM_KEYS) {
             const value = params.get(`utm_${key}`);
@@ -103,6 +106,7 @@ export default function Public({ form, embed, submitUrl, eventsUrl }: Props) {
                 utm: Object.keys(utm).length ? utm : null,
                 referrer: document.referrer ? document.referrer.slice(0, 500) : null,
                 website: honeypotRef.current?.value || null,
+                consent: extra.consent,
             }),
         });
         const data = await response.json().catch(() => ({}));
@@ -132,6 +136,8 @@ export default function Public({ form, embed, submitUrl, eventsUrl }: Props) {
                 onSubmit={submit}
                 onEvent={(type, step) => send(type, step)}
                 fullPage={!embed}
+                consentText={form.consent_text ?? null}
+                operator={operator}
             />
         </div>
     );

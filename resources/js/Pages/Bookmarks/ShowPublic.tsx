@@ -145,7 +145,7 @@ export default function BookmarksShowPublic({ bookmark }: Props) {
                                                     rel="noopener noreferrer"
                                                     className="flex items-start gap-2 rounded-lg p-2 -mx-2 text-primary hover:bg-muted/50 transition-colors group"
                                                 >
-                                                    {item.metadata?.favicon_url ? (
+                                                    {item.metadata?.favicon_url && !item.metadata.favicon_url.includes('google.com/s2/favicons') ? (
                                                         <img
                                                             src={item.metadata.favicon_url}
                                                             alt=""

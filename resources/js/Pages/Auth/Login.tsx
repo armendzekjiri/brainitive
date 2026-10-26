@@ -2,6 +2,7 @@ import Checkbox from '@/components/Checkbox';
 import InputError from '@/components/InputError';
 import InputLabel from '@/components/InputLabel';
 import PrimaryButton from '@/components/PrimaryButton';
+import { TermsNotice } from '@/components/legal/TermsNotice';
 import TextInput from '@/components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
@@ -98,6 +99,10 @@ export default function Login({
                         </a>
                     )}
                 </div>
+            )}
+
+            {(canLoginWithGoogle || canLoginWithGitHub || canLoginWithMicrosoft) && (
+                <TermsNotice action="continuing with Google, GitHub or Microsoft for the first time" className="mb-4" />
             )}
 
             {(canLoginWithGoogle || canLoginWithGitHub || canLoginWithMicrosoft) && (

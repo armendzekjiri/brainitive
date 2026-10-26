@@ -33,6 +33,8 @@ class PortalLoginLinkNotification extends Notification implements ShouldQueue
             ->greeting('Hi '.$notifiable->displayName().',')
             ->line('Use this button to sign in. It works once and for '.PortalAuth::LINK_MINUTES.' minutes.')
             ->action('Sign in', route('guest.login.show', ['token' => $this->token], true))
-            ->line("If you didn't ask for it, ignore this email: nobody can sign in without the link.");
+            ->line("If you didn't ask for it, ignore this email: nobody can sign in without the link.")
+            // the guest sign-in is run by the platform; the portals by the organisations that share them (BRAI-156)
+            ->line("{$app} keeps your email address to sign you in to portals shared with you. Privacy policy: ".route('privacy'));
     }
 }

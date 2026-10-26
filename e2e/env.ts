@@ -123,6 +123,8 @@ export function appEnv(): Record<string, string> {
         // live channels: the server global-setup starts; browsers only with the `X-E2E-Live: 1` opt-in
         LIVE_URL: `ws://127.0.0.1:${LIVE.port}/live`,
         LIVE_PUBLISH_URL: `http://127.0.0.1:${LIVE.port}`,
+        // legal.spec.ts (BRAI-156): Brainitive Cloud's legal pages (imprint, DPA, sub-processors) like production
+        LEGAL_CLOUD: 'true',
         PHP_CLI_SERVER_WORKERS: process.env.E2E_SERVER_WORKERS ?? '4',
     };
 }

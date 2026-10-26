@@ -79,7 +79,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { Button } from '@/components/ui/button';
-import { CookieConsent } from '@/components/CookieConsent';
+import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks';
 import GitHubStarButton from '@/components/GitHubStarButton';
 
 /*
@@ -1737,43 +1737,11 @@ export default function Welcome({
                                 >
                                     Self-hosting
                                 </a>
-                                <Link
-                                    href="/privacy"
-                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
-                                >
-                                    Privacy Policy
-                                </Link>
-                                <Link
-                                    href="/terms"
-                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
-                                >
-                                    Terms of Service
-                                </Link>
-                                <Link
-                                    href="/cookies"
-                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
-                                >
-                                    Cookie Policy
-                                </Link>
-                                <Link
-                                    href="/refund"
-                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
-                                >
-                                    Refund Policy
-                                </Link>
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        window.dispatchEvent(
-                                            new CustomEvent(
-                                                'brainitive-open-cookie-settings',
-                                            ),
-                                        )
-                                    }
-                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
-                                >
-                                    Cookie settings
-                                </button>
+                                {/* Imprint · Privacy · Terms · Cookies · Sub-processors (BRAI-156) */}
+                                <LegalFooterLinks
+                                    className="gap-x-6"
+                                    linkClassName="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium hover:no-underline"
+                                />
                             </div>
                         </div>
                         <div className="mt-8 pt-6 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -1792,7 +1760,6 @@ export default function Welcome({
                 </footer>
             </div>
 
-            <CookieConsent />
         </>
     );
 }

@@ -253,6 +253,24 @@ replies back by email in the same thread. Nothing to set up on the server beside
   sender can open at most 10 tickets per hour and helpdesk. *Recently received* in the settings
   shows what came in and why something was ignored or rejected.
 
+## Legal pages (imprint, privacy, terms)
+
+A self-hosted install never shows Brainitive Cloud's operator data. `/privacy`, `/terms` and `/cookies`
+show a short notice about *your* installation; `/imprint` appears once you set your details. Set them
+in `.env` (all optional, see `.env.example` → "Legal pages"):
+
+```bash
+LEGAL_OPERATOR_NAME="Example GmbH"
+LEGAL_ADDRESS="Example Street 1\n12345 Town, Germany"
+LEGAL_EMAIL=privacy@example.com
+LEGAL_PRIVACY_URL=https://example.com/privacy   # link your own documents instead
+LEGAL_TERMS_URL=https://example.com/terms
+```
+
+The DPA, sub-processor list and refund policy are Brainitive Cloud documents and return 404 on your
+install. Each workspace can add its own legal name, privacy policy and imprint (Workspace settings →
+Legal); they're shown on its support pages, forms and portals. Details: `docs/legal/README.md`.
+
 ## Security notes
 
 - **Uploads are served from `/storage` and must never run as code.** The Docker image ships

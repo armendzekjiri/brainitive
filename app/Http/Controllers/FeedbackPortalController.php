@@ -9,6 +9,7 @@ use App\Support\Feedback\FeedbackNotifier;
 use App\Support\Feedback\FeedbackPresenter;
 use App\Support\Feedback\FeedbackText;
 use App\Support\Feedback\FeedbackVotes;
+use App\Support\Legal\PublicOperator;
 use App\Support\Portal\PortalAuth;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -65,6 +66,7 @@ class FeedbackPortalController extends Controller
 
         return Inertia::render('Feedback/Index', [
             'portal' => FeedbackPresenter::portal($portal),
+            'operator' => PublicOperator::for($portal->project?->workspace), // who runs the portal (BRAI-156)
             'posts' => FeedbackPresenter::posts($portal, collect($page->items()), $viewer),
             'pagination' => [
                 'current_page' => $page->currentPage(),
@@ -99,6 +101,7 @@ class FeedbackPortalController extends Controller
 
         return Inertia::render('Feedback/Roadmap', [
             'portal' => FeedbackPresenter::portal($portal),
+            'operator' => PublicOperator::for($portal->project?->workspace), // who runs the portal (BRAI-156)
             'columns' => $columns,
             'identity' => $viewer?->toPortalArray(),
         ]);
@@ -149,6 +152,7 @@ class FeedbackPortalController extends Controller
 
         return Inertia::render('Feedback/Show', [
             'portal' => FeedbackPresenter::portal($portal),
+            'operator' => PublicOperator::for($portal->project?->workspace), // who runs the portal (BRAI-156)
             'post' => FeedbackPresenter::post($portal, $post, $viewer, $hasVoted, $isFollowing),
             'statuses' => FeedbackPost::STATUS_LABELS,
             'identity' => $viewer?->toPortalArray(),
@@ -238,6 +242,7 @@ class FeedbackPortalController extends Controller
 
         return Inertia::render('Feedback/Unsubscribe', [
             'portal' => FeedbackPresenter::portal($portal),
+            'operator' => PublicOperator::for($portal->project?->workspace), // who runs the portal (BRAI-156)
             'post' => ['number' => $post->number, 'title' => $post->title, 'url' => route('feedback.post', [$portal->slug, $post->number])],
             'done' => ! $following,
             'action' => $request->fullUrl(),

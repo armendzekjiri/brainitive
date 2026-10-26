@@ -26,8 +26,9 @@ class LeadIntake
      * @param  array<string, mixed>  $answers  clean answers, field id => value
      * @param  array<string, mixed>  $meta  utm / referrer
      * @param  array<string, string>  $contact  name / email / … when no question is mapped to them
+     * @param  array{consent_at?: \DateTimeInterface, consent_text?: string}  $consent  the ticked consent checkbox (BRAI-156)
      */
-    public static function create(LeadForm $form, array $answers, string $source, array $meta = [], array $contact = []): Lead
+    public static function create(LeadForm $form, array $answers, string $source, array $meta = [], array $contact = [], array $consent = []): Lead
     {
         $definition = $form->definition ?? ['steps' => []];
         // Labels at submit time, so answers to questions removed later stay readable
@@ -40,7 +41,7 @@ class LeadIntake
 
         $contact = array_merge($contact, array_filter(LeadFormDefinition::contact($definition, $answers), fn ($v) => $v !== null));
 
-        $lead = DB::transaction(function () use ($form, $answers, $source, $meta, $contact, $labels) {
+        $lead = DB::transaction(function () use ($form, $answers, $source, $meta, $contact, $labels, $consent) {
             $column = $form->columns()->first()
                 ?? $form->columns()->create(['name' => 'New', 'slug' => 'new', 'position' => 0]);
 
@@ -52,6 +53,7 @@ class LeadIntake
                 'source' => $source,
                 'meta' => array_filter($meta + ['labels' => $labels], fn ($v) => $v !== null && $v !== [] && $v !== ''),
                 'position' => 0, // newest first: same position, ordered by id desc
+                ...array_intersect_key($consent, array_flip(['consent_at', 'consent_text'])),
             ]);
         });
 

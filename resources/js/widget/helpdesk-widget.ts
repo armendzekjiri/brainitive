@@ -89,6 +89,8 @@ import { BLOCKED_UPLOAD_MESSAGE, isBlockedUpload } from '../lib/blockedUploads';
         .form-group textarea { min-height: 80px; resize: vertical; }
         .form-group .required::after { content: " *"; color: #c00; }
         .msg { padding: 12px; border-radius: 8px; margin-bottom: 12px; }
+        .privacy-note { margin: 10px 0 0; font-size: 11px; line-height: 1.4; color: #6b7280; }
+        .privacy-note a { color: inherit; text-decoration: underline; }
         .msg.success { background: #e8f5e9; color: #2e7d32; }
         .msg.error { background: #ffebee; color: #c62828; }
         .reply { margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; }
@@ -131,6 +133,8 @@ import { BLOCKED_UPLOAD_MESSAGE, isBlockedUpload } from '../lib/blockedUploads';
         // Per-helpdesk texts and subject field (BRAI-92)
         texts?: { form_title: string; submit_label: string; message_placeholder: string; success_message: string; after_submit: 'portal' | 'message' };
         subject?: { label: string; hidden: boolean };
+        // Who runs this helpdesk (BRAI-156, PublicOperator::for)
+        operator?: { name: string; privacy_url: string | null; platform_name: string; platform_privacy_url: string };
     };
 
     type TicketData = {
@@ -382,6 +386,21 @@ import { BLOCKED_UPLOAD_MESSAGE, isBlockedUpload } from '../lib/blockedUploads';
         sub.className = 'btn btn-primary';
         sub.textContent = formConfig.texts?.submit_label || 'Submit';
         form.appendChild(sub);
+        const op = formConfig.operator;
+        if (op) {
+            // Privacy line under the button: the helpdesk's owner is responsible for the data (BRAI-156)
+            const note = document.createElement('p');
+            note.className = 'privacy-note';
+            note.appendChild(document.createTextNode(`${op.name} uses what you send here to answer your request. `));
+            const href = op.privacy_url && /^https:\/\//i.test(op.privacy_url) ? op.privacy_url : op.platform_privacy_url;
+            const a = document.createElement('a');
+            a.href = href;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = op.privacy_url ? 'Privacy policy' : `How ${op.platform_name} hosts this form`;
+            note.appendChild(a);
+            form.appendChild(note);
+        }
         wrap.appendChild(form);
         return wrap;
     }

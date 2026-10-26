@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Item;
 use App\Models\Page;
 use App\Models\ShareLink;
+use App\Support\Legal\PublicOperator;
 use App\Support\Mcp\PageContentConverter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
@@ -84,7 +85,9 @@ class ShareLinkController extends Controller
                 'updated_at' => $model->updated_at?->toIso8601String(),
             ];
 
-        return Inertia::render('Share/Show', ['shared' => $shared])->toResponse($request)
+        $workspace = $model instanceof Page ? $model->project?->workspace : $model->board?->project?->workspace;
+
+        return Inertia::render('Share/Show', ['shared' => $shared, 'operator' => PublicOperator::for($workspace)])->toResponse($request)
             ->header('X-Robots-Tag', 'noindex, nofollow')
             ->header('Referrer-Policy', 'no-referrer');
     }

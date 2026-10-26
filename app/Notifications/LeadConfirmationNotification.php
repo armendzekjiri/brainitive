@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\Lead;
 use App\Support\LeadForms\LeadFormOptions;
+use App\Support\Legal\PublicOperator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -56,6 +57,7 @@ class LeadConfirmationNotification extends Notification implements ShouldQueue
             }
         }
 
-        return $mail;
+        // who sends it (BRAI-156): the workspace running the form, not the platform
+        return $mail->line(PublicOperator::mailLine($form->project?->workspace, nameFallback: true));
     }
 }

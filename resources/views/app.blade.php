@@ -50,15 +50,32 @@
             })();
         </script>
 
+        <!-- Excalidraw fonts from our own build, not its third-party CDN fallback (BRAI-156, vite.config.js) -->
+        <script>window.EXCALIDRAW_ASSET_PATH = @json(asset('build/excalidraw-assets').'/');</script>
+
         <!-- Scripts -->
         @routes
         @viteReactRefresh
         @vite(['resources/js/app.tsx', "resources/js/Pages/{$page['component']}.tsx"])
         @inertiaHead
 
-        <!-- Analytics (Nova Brain Hub): brainitive.app only, never dev / e2e / local / self-hosted installs -->
-        @if (in_array(request()->getHost(), ['brainitive.app', 'www.brainitive.app'], true))
-            <script defer src="https://stats.novabrainhub.de/script.js" data-website-id="e6d93341-8b10-4d6a-8629-b9599635909e"></script>
+        <!-- Analytics: the operator's self-hosted, cookieless Umami. brainitive.app only (never dev / e2e /
+             local / self-hosted installs), never on customers' public pages or token links, no query strings
+             (BRAI-156, docs/legal/data-inventory.md). Honours Do Not Track and the opt-out on /cookies. -->
+        @if (\App\Support\Legal\Analytics::enabledFor(request()))
+            <script>
+                window.brainitiveAnalyticsFilter = function (type, payload) {
+                    var skip = @json(\App\Support\Legal\Analytics::excludedPrefixes());
+                    var url = payload && typeof payload.url === 'string' ? payload.url : window.location.pathname;
+                    for (var i = 0; i < skip.length; i++) {
+                        if (url === skip[i] || url.indexOf(skip[i] + '/') === 0) return false;
+                    }
+                    return payload;
+                };
+            </script>
+            <script defer src="{{ config('legal.analytics.script') }}" data-website-id="{{ config('legal.analytics.website_id') }}"
+                data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"
+                data-before-send="brainitiveAnalyticsFilter"></script>
         @endif
     </head>
     <body class="font-sans antialiased">

@@ -118,6 +118,7 @@ import { useSidebarNavItems } from '@/components/sidebar/navItems';
 import { PinIcon, resolvePins, type SidebarProject } from '@/components/sidebar/pins';
 import { SIDEBAR_GROUPS, openCustomizeSidebar, projectPreferences, useSidebarPreferences } from '@/lib/sidebarPreferences';
 import GitHubStarButton from '@/components/GitHubStarButton';
+import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks';
 
 interface Props extends PropsWithChildren {
     title?: string;
@@ -1691,6 +1692,8 @@ function AppSidebar({
                                     <span className="text-sm">Sign out</span>
                                 </Link>
                             </DropdownMenuItem>
+                            {/* Imprint · Privacy · Terms · Cookies · Sub-processors (BRAI-156) */}
+                            <LegalFooterLinks className="justify-start gap-x-3 px-2 pb-1 pt-2 text-[11px] text-muted-foreground" linkClassName="hover:text-foreground" />
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </SidebarFooter>

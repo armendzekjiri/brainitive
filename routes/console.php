@@ -101,6 +101,11 @@ Schedule::call(fn () => GithubStars::refresh())->hourly()->name('github-stars')-
 Schedule::command('model:prune', ['--model' => [OfflineMutation::class]])->dailyAt('04:35');
 // Web push (BRAI-154): forget subscriptions the push service reported as expired 30 days ago.
 Schedule::command('model:prune', ['--model' => [PushSubscription::class]])->dailyAt('04:40');
+// Retention (BRAI-156, docs/legal/data-inventory.md): expired password-reset tokens, revoked / expired
+// OAuth tokens and codes (after Passport's 7-day grace), failed queue jobs (which hold payloads) after 30 days.
+Schedule::command('auth:clear-resets')->dailyAt('04:45');
+Schedule::command('passport:purge')->dailyAt('04:50');
+Schedule::command('queue:prune-failed', ['--hours' => 720])->dailyAt('04:55');
 // v1.43.0 (BRAI-55): build the search index in the background when this index version was never
 // built (fresh install, update) — nobody runs search:reindex by hand. One small query otherwise.
 Schedule::command('search:ensure')->everyFiveMinutes()->withoutOverlapping()->runInBackground();

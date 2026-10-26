@@ -20,6 +20,7 @@ use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\ItemFieldController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LeadFormController;
+use App\Http\Controllers\LegalController;
 use App\Http\Controllers\LiveTokenController;
 use App\Http\Controllers\MeetingController;
 use App\Http\Controllers\MeetingNotesController;
@@ -58,9 +59,11 @@ use App\Http\Controllers\WhiteboardCollabController;
 use App\Http\Controllers\WhiteboardController;
 use App\Http\Controllers\WorkloadController;
 use App\Http\Controllers\WorkspaceController;
+use App\Http\Controllers\WorkspaceLegalController;
 use App\Http\Controllers\WorkTimerController;
 use App\Http\Middleware\ReadOnlySession;
 use App\Support\Auth\MicrosoftLogin;
+use App\Support\Legal\LegalInfo;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Session\Middleware\StartSession;
@@ -83,19 +86,19 @@ Route::get('/', function () {
     ]]);
 });
 
-Route::get('/privacy', function () {
-    return Inertia::render('Privacy');
-})->name('privacy');
-
-Route::get('/terms', function () {
-    return Inertia::render('Terms');
-})->name('terms');
-
-Route::get('/cookies', function () {
-    return Inertia::render('Cookies');
-})->name('cookies');
+// Legal pages (BRAI-156): operator data from config/legal.php via LegalInfo; DPA, sub-processors and
+// refund policy are Brainitive Cloud documents (404 on self-hosted installs), the imprint only exists
+// when there's something to show.
+Route::get('/privacy', [LegalController::class, 'privacy'])->name('privacy');
+Route::get('/terms', [LegalController::class, 'terms'])->name('terms');
+Route::get('/cookies', [LegalController::class, 'cookies'])->name('cookies');
+Route::get('/imprint', [LegalController::class, 'imprint'])->name('imprint');
+Route::get('/legal/subprocessors', [LegalController::class, 'subprocessors'])->name('legal.subprocessors');
+Route::get('/legal/dpa', [LegalController::class, 'dpa'])->name('legal.dpa');
 
 Route::get('/refund', function () {
+    abort_unless(LegalInfo::isCloud(), 404);
+
     return Inertia::render('Refund');
 })->name('refund');
 
@@ -274,6 +277,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('workspaces/{workspace}/members/{user}', [WorkspaceController::class, 'updateMemberRole'])->name('workspaces.members.update');
     Route::delete('workspaces/{workspace}/members/{user}', [WorkspaceController::class, 'removeMember'])->name('workspaces.members.remove');
     Route::delete('workspaces/{workspace}/invitations/{invitation}', [WorkspaceController::class, 'cancelInvitation'])->name('workspaces.invitations.destroy');
+    // Who runs the workspace's public pages: name + privacy / imprint links (BRAI-156)
+    Route::patch('workspaces/{workspace}/legal', [WorkspaceLegalController::class, 'update'])->middleware('throttle:30,1,workspaces.legal.update')->name('workspaces.legal.update');
 
     // Workspace-scoped routes
     Route::prefix('workspaces/{workspace}')->group(function () {

@@ -5,6 +5,7 @@ namespace App\Notifications;
 use App\Models\ClientDeliverable;
 use App\Models\ClientPortal;
 use App\Support\ClientPortal\ClientPortalLinks;
+use App\Support\Legal\PublicOperator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -71,7 +72,9 @@ class ClientPortalGuestNotification extends Notification implements ShouldQueue
                 ->action('Open the conversation', ClientPortalLinks::client($this->deliverable));
         }
 
-        return $mail->line('You get this email because you were invited to this client portal.');
+        // who runs the portal (BRAI-156)
+        return $mail->line('You get this email because you were invited to this client portal.')
+            ->line(PublicOperator::mailLine($this->portal->project?->workspace));
     }
 
     /** User text in a Markdown mail: no links, images or formatting, at most 500 characters. */

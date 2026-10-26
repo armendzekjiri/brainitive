@@ -44,6 +44,8 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
         'task_digest',
         'notification_preferences',
         'sidebar_preferences',
+        'terms_accepted_at',
+        'terms_version',
     ];
 
     protected $appends = ['avatar_display'];
@@ -69,6 +71,7 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
             'email_verified_at' => 'datetime',
             'suspended_at' => 'datetime',
             'last_login_at' => 'datetime',
+            'terms_accepted_at' => 'datetime',
             'password' => 'hashed',
             'onboarding_state' => 'array',
             'task_digest' => 'boolean',

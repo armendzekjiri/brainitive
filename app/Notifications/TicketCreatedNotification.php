@@ -7,6 +7,7 @@ use App\Models\TicketContact;
 use App\Models\User;
 use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
+use App\Support\Legal\PublicOperator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -113,11 +114,14 @@ class TicketCreatedNotification extends Notification
             $action = 'Review Ticket';
         }
 
-        return (new MailMessage)
+        $mail = (new MailMessage)
             ->subject($subject)
             ->line($line)
             ->line($this->plainSubject())
             ->action($action, $url);
+
+        // the contact learns who runs the helpdesk (BRAI-156)
+        return $notifiable instanceof TicketContact ? $mail->line(PublicOperator::mailLine($workspace, nameFallback: true)) : $mail;
     }
 
     /** The visitor-written subject as plain text: no Markdown links, images or formatting in mails. */
