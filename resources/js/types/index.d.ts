@@ -644,7 +644,7 @@ export interface MyWorkItem {
     completed_at?: string;
     status?: 'todo' | 'done';
     position: number;
-    source: { type: 'board' | 'list'; id: number; name: string; slug: string };
+    source: { type: 'board' | 'list' | 'external'; id: number; name: string; slug: string };
     /** done/open column ids: the circle in My Work / My Day completes or reopens the issue */
     board?: { id: number; name: string; slug: string; done_column_id?: number | null; open_column_id?: number | null };
     task_list?: { id: number; name: string; slug: string };
@@ -1068,19 +1068,29 @@ export interface TicketAttachment {
 
 export interface CalendarConnectionRow {
     id: number;
+    /** A CalendarProviders key ('google', …). */
     provider: string;
+    provider_label: string;
+    provider_badge: string;
     kind: 'calendar' | 'tasks';
     account_email: string;
     account_name: string | null;
     external_calendar_id: string;
     external_calendar_name: string | null;
     external_calendar_color: string | null;
+    server_url: string | null;
     is_active: boolean;
+    /** Events of this calendar can't be created / moved / edited (ICS links, …). */
+    read_only: boolean;
+    /** Why loading this calendar failed last time (null when fine). */
+    sync_error: string | null;
+    sync_error_at: string | null;
 }
 
 export interface CalendarEvent {
     id: number | string;
-    type: 'board_item' | 'task_list_item' | 'google_event' | 'google_task';
+    /** external_event = an event of any connected calendar provider; google_task = a Google Tasks task. */
+    type: 'board_item' | 'task_list_item' | 'external_event' | 'google_task';
     key: string;
     title: string;
     start_date: string | null;
@@ -1098,16 +1108,24 @@ export interface CalendarEvent {
         color?: string | null;
         workspace: { id: number; name: string; slug: string };
     };
-    source: { type: 'board' | 'list'; id: number; name: string; slug: string };
+    source: { type: 'board' | 'list' | 'external'; id: number; name: string; slug: string };
     href_params: string[];
     item_type?: ItemType | null;
     priority?: ItemPriority | null;
     is_recurring_instance?: boolean;
-    /** Google events: the external link to the event on calendar.google.com. */
+    /** External events: the link to the event in its provider (e.g. calendar.google.com). */
     external_url?: string | null;
-    /** Google events: which connection (and therefore which Google calendar) the event came from. */
+    /** External events / Google tasks: which connection (and therefore which calendar) it came from. */
     connection_id?: number | null;
     account_email?: string | null;
+    /** External events / Google tasks: the provider key, its name and its chip badge. */
+    provider?: string;
+    provider_label?: string;
+    provider_badge?: string;
+    /** External events: can't be moved or edited here. */
+    read_only?: boolean;
+    all_day?: boolean;
+    location?: string | null;
 }
 
 /** One entry of an item's history (activity_logs), see App\Observers\ItemObserver. */
@@ -2504,4 +2522,54 @@ export interface PageReviewCandidate {
 /** Draft autosave / presence responses carry the draft hash since BRAI-80. */
 export interface PageDraftHashState extends PageDraftState {
     draft_hash?: string;
+}
+
+// ── Calendar providers (BRAI-140) ──────────────────────────────────────────────
+// Shape of App\Support\Calendar\CalendarProviders::catalog() and NormalizedEvent.
+
+export interface CalendarProviderField {
+    name: string;
+    label: string;
+    type: 'text' | 'url' | 'email' | 'password';
+    help: string | null;
+    placeholder: string | null;
+    required: boolean;
+}
+
+export interface CalendarProviderInfo {
+    key: string;
+    label: string;
+    badge: string;
+    color: string;
+    connect_mode: 'oauth' | 'form' | 'url';
+    /** oauth: where "Connect" goes. */
+    redirect_url: string | null;
+    /** form / url: the fields of the generic connect dialog. */
+    fields: CalendarProviderField[];
+    capabilities: { write: boolean; tasks: boolean };
+}
+
+/** One event as every provider returns it (end_date inclusive for all-day events). */
+export interface NormalizedCalendarEvent {
+    id: string;
+    title: string;
+    description: string | null;
+    location: string | null;
+    all_day: boolean;
+    start_date: string;
+    start_time: string | null;
+    end_date: string;
+    end_time: string | null;
+    timezone: string | null;
+    external_url: string | null;
+}
+
+/** The picker after connecting (calendar.connections.pending). */
+export interface CalendarPickerData {
+    provider: string;
+    provider_label: string;
+    account_email: string;
+    account_name: string | null;
+    calendars: { id: string; name: string; color: string | null; primary: boolean; read_only: boolean }[];
+    task_lists: { id: string; title: string }[];
 }

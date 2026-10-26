@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CalendarConnection;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -58,13 +59,19 @@ class GoogleCalendarService
         return true;
     }
 
-    /** Fetch the user's calendar list. Returns an array of {id, summary, backgroundColor, primary}. */
-    public function listCalendars(CalendarConnection $connection): array
+    /**
+     * Fetch the user's calendar list. Returns an array of {id, summary, backgroundColor, primary,
+     * access_role}, or null when the token is gone or Google refused.
+     */
+    public function listCalendars(CalendarConnection $connection): ?array
     {
         if (! $this->ensureFreshToken($connection)) {
-            return [];
+            return null;
         }
         $resp = $this->get($connection, '/users/me/calendarList');
+        if (! $resp->successful()) {
+            return null;
+        }
         $items = $resp->json('items', []);
 
         return array_map(fn ($c) => [
@@ -76,11 +83,14 @@ class GoogleCalendarService
         ], $items);
     }
 
-    /** Fetch events from this connection's calendar between $start and $end. */
-    public function listEvents(CalendarConnection $connection, Carbon $start, Carbon $end): array
+    /**
+     * Fetch raw events from this connection's calendar between $start and $end, or null when
+     * the token is gone or Google refused (GoogleCalendarProvider turns that into an error).
+     */
+    public function listEvents(CalendarConnection $connection, CarbonInterface $start, CarbonInterface $end): ?array
     {
         if (! $this->ensureFreshToken($connection)) {
-            return [];
+            return null;
         }
         $calId = rawurlencode($connection->external_calendar_id);
         $resp = $this->get($connection, "/calendars/{$calId}/events", [
@@ -90,6 +100,14 @@ class GoogleCalendarService
             'orderBy' => 'startTime',
             'maxResults' => 250,
         ]);
+        if (! $resp->successful()) {
+            Log::warning('Google events list failed', [
+                'connection_id' => $connection->id,
+                'status' => $resp->status(),
+            ]);
+
+            return null;
+        }
 
         return $resp->json('items', []);
     }
@@ -113,6 +131,9 @@ class GoogleCalendarService
         $body = ['summary' => $data['title']];
         if (! empty($data['description'])) {
             $body['description'] = $data['description'];
+        }
+        if (! empty($data['location'])) {
+            $body['location'] = $data['location'];
         }
         if (! empty($data['time'])) {
             $startDateTime = Carbon::parse("{$startDate} {$data['time']}", $tz);
@@ -193,7 +214,7 @@ class GoogleCalendarService
 
         $resp = Http::withToken($connection->access_token)
             ->acceptJson()
-            ->patch(self::API_BASE."/calendars/{$calId}/events/{$eventId}", $body);
+            ->patch(self::API_BASE."/calendars/{$calId}/events/".rawurlencode($eventId), $body);
 
         if (! $resp->successful()) {
             Log::warning('Google event update failed', [
@@ -209,14 +230,14 @@ class GoogleCalendarService
         return $resp->json();
     }
 
-    /** Fetch a single event with full details. */
+    /** Fetch a single event with full details (null when missing or on failure). */
     public function getEvent(CalendarConnection $connection, string $eventId): ?array
     {
         if (! $this->ensureFreshToken($connection)) {
             return null;
         }
         $calId = rawurlencode($connection->external_calendar_id);
-        $resp = $this->get($connection, "/calendars/{$calId}/events/{$eventId}");
+        $resp = $this->get($connection, "/calendars/{$calId}/events/".rawurlencode($eventId));
         if (! $resp->successful()) {
             Log::warning('Google event fetch failed', [
                 'connection_id' => $connection->id,
@@ -238,7 +259,7 @@ class GoogleCalendarService
         }
         $calId = rawurlencode($connection->external_calendar_id);
         $resp = Http::withToken($connection->access_token)
-            ->delete(self::API_BASE."/calendars/{$calId}/events/{$eventId}");
+            ->delete(self::API_BASE."/calendars/{$calId}/events/".rawurlencode($eventId));
 
         return $resp->successful() || $resp->status() === 410; // 410 = already gone
     }

@@ -210,18 +210,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/calendar/view', [CalendarController::class, 'updateView'])->name('calendar.view.update');
     Route::patch('/calendar/reschedule', [CalendarController::class, 'reschedule'])->name('calendar.reschedule');
 
-    // Calendar connections (external providers: Google, etc.)
+    // Calendar connections (external providers through App\Support\Calendar\CalendarProviders)
     Route::prefix('calendar/connections')->controller(CalendarConnectionController::class)->group(function () {
         Route::get('google/redirect', 'redirectToGoogle')->name('calendar.connections.google.redirect');
         Route::get('google/callback', 'googleCallback')->name('calendar.connections.google.callback');
         Route::get('pending', 'pendingPicker')->name('calendar.connections.pending');
         Route::post('/', 'store')->name('calendar.connections.store');
+        // Generic connect for 'form' / 'url' providers (CalDAV, ICS links, …) — BRAI-140.
+        Route::post('manual/{provider}', 'manualStore')->where('provider', '[a-z0-9_-]+')
+            ->middleware('throttle:10,1')->name('calendar.connections.manual.store');
         Route::patch('{connection}/toggle', 'toggle')->name('calendar.connections.toggle');
         Route::delete('{connection}', 'destroy')->name('calendar.connections.destroy');
         Route::post('{connection}/events', 'createEvent')->name('calendar.connections.events.create');
-        Route::get('{connection}/events/{eventId}', 'showEvent')->name('calendar.connections.events.show')->where('eventId', '[A-Za-z0-9_-]+');
-        Route::patch('{connection}/events/{eventId}', 'updateEvent')->name('calendar.connections.events.update')->where('eventId', '[A-Za-z0-9_-]+');
-        Route::delete('{connection}/events/{eventId}', 'deleteEvent')->name('calendar.connections.events.destroy')->where('eventId', '[A-Za-z0-9_-]+');
+        Route::get('{connection}/events/{eventId}', 'showEvent')->name('calendar.connections.events.show')->where('eventId', '[^/]+');
+        Route::patch('{connection}/events/{eventId}', 'updateEvent')->name('calendar.connections.events.update')->where('eventId', '[^/]+');
+        Route::delete('{connection}/events/{eventId}', 'deleteEvent')->name('calendar.connections.events.destroy')->where('eventId', '[^/]+');
 
         Route::post('{connection}/tasks', 'createTask')->name('calendar.connections.tasks.create');
         Route::get('{connection}/tasks/{taskId}', 'showTask')->name('calendar.connections.tasks.show')->where('taskId', '[A-Za-z0-9_-]+');

@@ -3,6 +3,7 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\ResolvesCalendarConnections;
+use App\Support\Calendar\CalendarProviders;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -10,7 +11,7 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('List the user\'s connected Google calendars and Google Tasks lists. Returns each connection_id, name, kind (calendar or tasks) and account — call this first before reading or writing calendar events / Google tasks. If nothing is returned, the user has not connected a Google calendar in Brainitive yet.')]
+#[Description('List the user\'s connected calendars (Google Calendar or any other connected provider) and Google Tasks lists. Returns each connection_id, name, kind (calendar or tasks), provider, account and whether it accepts new events (writable) — call this first before reading or writing calendar events / Google tasks. If nothing is returned, the user has not connected a calendar in Brainitive yet.')]
 class ListCalendarConnectionsTool extends Tool
 {
     use ResolvesCalendarConnections;
@@ -20,9 +21,14 @@ class ListCalendarConnectionsTool extends Tool
         $connections = $this->connectionsFor($request->user())
             ->map(fn ($c) => [
                 'connection_id' => $c->id,
-                'name' => $c->external_calendar_name,
+                'name' => (string) $c->external_calendar_name,
                 'kind' => $c->kind,            // 'calendar' or 'tasks'
+                'provider' => $c->kind === 'tasks'
+                    ? 'Google Tasks'
+                    : (CalendarProviders::has($c->provider) ? CalendarProviders::for($c)->label() : $c->provider),
                 'account' => $c->account_email,
+                'writable' => $c->kind === 'tasks'
+                    || (CalendarProviders::has($c->provider) && CalendarProviders::for($c)->isWritable($c)),
             ])
             ->values()
             ->all();
@@ -31,8 +37,8 @@ class ListCalendarConnectionsTool extends Tool
             'connections' => $connections,
             'count' => count($connections),
             'hint' => count($connections) === 0
-                ? 'No Google calendars connected. The user can connect one in Brainitive under Calendar → Connect Google.'
-                : 'Use a connection_id with kind "calendar" for events, or kind "tasks" for Google Tasks.',
+                ? 'No calendars connected. The user can connect one in Brainitive under Calendar → Add calendar.'
+                : 'Use a connection_id with kind "calendar" for events (writes need writable = true), or kind "tasks" for Google Tasks.',
         ]);
     }
 
@@ -46,7 +52,9 @@ class ListCalendarConnectionsTool extends Tool
                 'connection_id' => $schema->integer(),
                 'name' => $schema->string(),
                 'kind' => $schema->string()->description('calendar or tasks.'),
+                'provider' => $schema->string()->description('Where the calendar lives, e.g. Google Calendar.'),
                 'account' => $schema->string(),
+                'writable' => $schema->boolean()->description('False for read-only calendars (e.g. ICS links).'),
             ])),
             'count' => $schema->integer(),
             'hint' => $schema->string(),
