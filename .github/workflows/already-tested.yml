@@ -1,0 +1,52 @@
+# "Was this exact code already tested green?" — used by pre-release.yml and deploy.yml before their
+# test gate. A merge makes a new commit, but in our flow (release branch → pre-release → main) its
+# code is usually byte-for-byte what already passed. Git's tree hash identifies the code regardless
+# of the commit, so: same tree as a successful run of one of `proven-by` → skip the gate.
+# Different code (something else merged in between) → the full gate runs as before.
+# Only runs from this repository count (tests.yml has no pull_request trigger, so forks can't add any).
+name: Already tested
+
+on:
+  workflow_call:
+    inputs:
+      proven-by:
+        description: Space-separated workflow files whose successful runs prove the code (e.g. "tests.yml")
+        required: true
+        type: string
+    outputs:
+      tested:
+        description: '"true" when the same code already passed'
+        value: ${{ jobs.check.outputs.tested }}
+
+jobs:
+  check:
+    name: Already tested?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tested: ${{ steps.check.outputs.tested }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PROVEN_BY: ${{ inputs.proven-by }}
+    steps:
+      - id: check
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            echo "tested=false" >> "$GITHUB_OUTPUT"
+            echo "Manual run: the full test gate runs." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          tree=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA" --jq .commit.tree.sha)
+          for wf in $PROVEN_BY; do
+            for sha in $(gh api "repos/$GH_REPO/actions/workflows/$wf/runs?status=success&per_page=40" --jq '.workflow_runs[].head_sha' | awk '!seen[$0]++'); do
+              t=$(gh api "repos/$GH_REPO/commits/$sha" --jq .commit.tree.sha 2>/dev/null) || continue
+              if [ "$t" = "$tree" ]; then
+                echo "tested=true" >> "$GITHUB_OUTPUT"
+                echo "Already green: \`$wf\` passed on \`${sha::7}\` with exactly this code (tree \`${tree::7}\`), so the test gate is skipped." >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+            done
+          done
+          echo "tested=false" >> "$GITHUB_OUTPUT"
+          echo "This code (tree \`${tree::7}\`) hasn't passed \`$PROVEN_BY\` yet: the full test gate runs." >> "$GITHUB_STEP_SUMMARY"

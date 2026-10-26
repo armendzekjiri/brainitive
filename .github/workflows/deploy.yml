@@ -13,12 +13,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # The test gate (BRAI-95): nothing reaches production unless the exact commit passed
+  # The test gate (BRAI-95): nothing reaches production unless its exact code passed. When the
+  # same code already went green through pre-release (tests + deploy to dev + all e2e live on dev),
+  # the gate is skipped and production deploys right away; any other code runs the full gate.
+  already-tested:
+    uses: ./.github/workflows/already-tested.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      proven-by: pre-release.yml
+
   tests:
+    needs: already-tested
+    if: needs.already-tested.outputs.tested != 'true'
     uses: ./.github/workflows/tests.yml
 
   deploy:
-    needs: tests
+    needs: [already-tested, tests]
+    if: ${{ !cancelled() && needs.already-tested.result == 'success' && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
     runs-on: ubuntu-latest
     # Makes GitHub record a deployment, so issues linked via commits show "Deployed to production".
     environment:

@@ -20,12 +20,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The release branch merged here already passed tests.yml with (usually) exactly this code:
+  # then the gate is skipped. Different code (another merge in between) runs the full gate.
+  already-tested:
+    uses: ./.github/workflows/already-tested.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      proven-by: tests.yml
+
   tests:
+    needs: already-tested
+    if: needs.already-tested.outputs.tested != 'true'
     uses: ./.github/workflows/tests.yml
 
   deploy-dev:
     name: Deploy to dev.brainitive.app
-    needs: tests
+    needs: [already-tested, tests]
+    if: ${{ !cancelled() && needs.already-tested.result == 'success' && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
     runs-on: ubuntu-latest
     environment:
       name: dev
@@ -69,6 +82,8 @@ jobs:
   e2e-dev:
     name: E2E on dev.brainitive.app
     needs: deploy-dev
+    # explicit: a skipped test gate upstream would otherwise skip this job too
+    if: ${{ !cancelled() && needs.deploy-dev.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -102,6 +117,7 @@ jobs:
   ready:
     name: Ready for main
     needs: e2e-dev
+    if: ${{ !cancelled() && needs.e2e-dev.result == 'success' }}
     runs-on: ubuntu-latest
     # only this job may open the release PR (repo setting: Actions can create PRs)
     permissions:
