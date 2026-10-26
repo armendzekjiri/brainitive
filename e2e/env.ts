@@ -83,6 +83,8 @@ export function appEnv(): Record<string, string> {
         INBOUND_MAIL_POSTMARK_TOKEN: INBOUND_MAIL.postmarkToken,
         // helpdesk-email.spec.ts: a fake IMAP / SMTP connection (no network); honoured only with APP_ENV=e2e
         HELPDESK_MAIL_FAKE: 'true',
+        // github-app.spec.ts: a fake GitHub App + in-process GitHub API (BRAI-61); honoured only with APP_ENV=e2e
+        GITHUB_APP_FAKE: 'true',
         PHP_CLI_SERVER_WORKERS: process.env.E2E_SERVER_WORKERS ?? '4',
     };
 }

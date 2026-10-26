@@ -2,7 +2,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import { cn } from '@/lib/utils';
 import { PageProps } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { Building2, LayoutDashboard, ScrollText, Settings, ShieldCheck, Users } from 'lucide-react';
+import { Building2, Github, LayoutDashboard, ScrollText, Settings, ShieldCheck, Users } from 'lucide-react';
 import { ReactNode, useEffect } from 'react';
 import { toast } from 'sonner';
 
@@ -11,6 +11,7 @@ const TABS = [
     { route: 'admin.users.index', match: 'admin.users.*', label: 'Users', icon: Users },
     { route: 'admin.workspaces.index', match: 'admin.workspaces.*', label: 'Workspaces', icon: Building2 },
     { route: 'admin.settings.edit', match: 'admin.settings.*', label: 'Settings', icon: Settings },
+    { route: 'admin.github-app.show', match: 'admin.github-app.*', label: 'GitHub App', icon: Github },
     { route: 'admin.audit-log', match: 'admin.audit-log', label: 'Audit log', icon: ScrollText },
 ] as const;
 

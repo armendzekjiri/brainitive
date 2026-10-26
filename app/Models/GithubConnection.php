@@ -8,11 +8,19 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 /**
- * A project's GitHub webhook: repos post to /webhooks/github/{uuid}, signed with `secret`.
+ * A project's GitHub connection. Two modes:
+ * - `webhook` (legacy): repos post to /webhooks/github/{uuid}, signed with `secret`;
+ * - `app` (BRAI-61): the instance's GitHub App delivers to /webhooks/github-app and the project
+ *   follows some of its installation's repositories (GithubRepository).
  */
 class GithubConnection extends Model
 {
-    protected $fillable = ['uuid', 'project_id', 'secret', 'created_by', 'repositories', 'deployments', 'last_delivery_at', 'last_event', 'last_error'];
+    public const MODE_WEBHOOK = 'webhook';
+
+    public const MODE_APP = 'app';
+
+    protected $fillable = ['uuid', 'project_id', 'secret', 'created_by', 'repositories', 'deployments', 'last_delivery_at', 'last_event', 'last_error',
+        'mode', 'github_installation_id', 'access_lost_at', 'rate_limited_until', 'last_refreshed_at', 'allowed_repository_ids'];
 
     protected $hidden = ['secret'];
 
@@ -23,6 +31,10 @@ class GithubConnection extends Model
             'repositories' => 'array',
             'deployments' => 'array',
             'last_delivery_at' => 'datetime',
+            'access_lost_at' => 'datetime',
+            'rate_limited_until' => 'datetime',
+            'last_refreshed_at' => 'datetime',
+            'allowed_repository_ids' => 'array',
         ];
     }
 
@@ -44,6 +56,28 @@ class GithubConnection extends Model
     public function links(): HasMany
     {
         return $this->hasMany(ItemDevLink::class);
+    }
+
+    public function installation(): BelongsTo
+    {
+        return $this->belongsTo(GithubInstallation::class, 'github_installation_id');
+    }
+
+    /** Repositories followed through the GitHub App. */
+    public function followedRepositories(): HasMany
+    {
+        return $this->hasMany(GithubRepository::class);
+    }
+
+    /** May this project follow the repository? Only those the person who connected can read on GitHub. */
+    public function mayFollow(int $repoId): bool
+    {
+        return in_array($repoId, array_map('intval', $this->allowed_repository_ids ?? []), true);
+    }
+
+    public function usesApp(): bool
+    {
+        return $this->mode === self::MODE_APP;
     }
 
     public function webhookUrl(): string

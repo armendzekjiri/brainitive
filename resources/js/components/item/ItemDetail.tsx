@@ -870,11 +870,11 @@ function HistoryRow({ entry }: { entry: ItemHistoryEntry }) {
                 <li key={entry.id} className="flex gap-3 text-sm">
                     <Avatar className="size-7 shrink-0">
                         {entry.user?.avatar && <AvatarImage src={entry.user.avatar} />}
-                        <AvatarFallback className="text-[10px] bg-muted">{entry.user?.name?.charAt(0) ?? '?'}</AvatarFallback>
+                        <AvatarFallback className="text-[10px] bg-muted">{entry.metadata?.via === 'github' ? 'GH' : entry.user?.name?.charAt(0) ?? '?'}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1 text-muted-foreground leading-relaxed">
                         <div className="flex flex-wrap items-baseline gap-x-1.5">
-                            <span className="font-medium text-foreground">{entry.user?.name ?? 'System'}</span>
+                            <span className="font-medium text-foreground">{entry.metadata?.via === 'github' ? 'GitHub' : entry.user?.name ?? 'System'}</span>
                             <HistoryEntryBody entry={entry} />
                         </div>
                         <time className="text-xs text-muted-foreground/80" title={new Date(entry.created_at).toLocaleString()}>
@@ -1721,6 +1721,8 @@ export function ItemDetailSidebar({ d }: { d: ItemDetail }) {
                 itemKey={item.key}
                 itemTitle={item.title}
                 settingsUrl={route('projects.edit', [workspace.slug, project.slug]) + '?tab=integrations'}
+                primaryUrl={route('boards.items.development.primary', [workspace.slug, project.slug, board.slug, item.id])}
+                canEdit={d.canEditItems}
             />
             <div className="border-t pt-3">
                 <div className="flex flex-wrap items-center gap-1">

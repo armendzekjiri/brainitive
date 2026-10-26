@@ -15,6 +15,7 @@ use App\Notifications\AutomationNoticeNotification;
 use App\Notifications\CatalogNotification;
 use App\Notifications\ClientCommentedNotification;
 use App\Notifications\ClientDecisionNotification;
+use App\Notifications\GithubSyncFailedNotification;
 use App\Notifications\InvitationAcceptedNotification;
 use App\Notifications\ItemCommentedNotification;
 use App\Notifications\ItemDueNotification;
@@ -92,6 +93,7 @@ class CatalogNotificationContractTest extends TestCase
             new AutomationNoticeNotification($ticket, 'Triage', null, null), // BRAI-63
             new ClientDecisionNotification($deliverable, $decision), // BRAI-73
             new ClientCommentedNotification($deliverable, $clientComment),
+            new GithubSyncFailedNotification($this->project->githubConnection()->create(['uuid' => (string) Str::uuid(), 'secret' => 's']), 'The GitHub App was uninstalled.'), // BRAI-61
         ];
     }
 

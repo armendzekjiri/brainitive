@@ -3,6 +3,7 @@
 use App\Http\Controllers\CliController;
 use App\Http\Controllers\Extension\CaptureController;
 use App\Http\Controllers\Extension\ExtensionController;
+use App\Http\Controllers\GithubAppWebhookController;
 use App\Http\Controllers\GithubWebhookController;
 use App\Http\Controllers\InboundMailController;
 use App\Http\Controllers\LeadFormInboundController;
@@ -65,6 +66,12 @@ Route::post('/webhooks/github/{uuid}', GithubWebhookController::class)
     ->middleware('throttle:120,1,webhooks.github')
     ->where('uuid', '[0-9a-fA-F-]{36}')
     ->name('webhooks.github');
+
+// The GitHub App's webhook (BRAI-61): one endpoint for every installation, verified with the app's
+// webhook secret; routed by installation + repository to the project that follows the repository.
+Route::post('/webhooks/github-app', GithubAppWebhookController::class)
+    ->middleware('throttle:600,1,webhooks.github.app')
+    ->name('webhooks.github.app');
 
 // Lead forms: other tools push leads (Bearer = the form's inbound token)
 Route::post('/lead-forms/{uuid}/inbound', [LeadFormInboundController::class, 'store'])
