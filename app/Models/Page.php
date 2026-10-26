@@ -6,6 +6,7 @@ use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Notifications\PageMentions;
 use App\Support\References\ContentReferences;
+use App\Support\References\SmartLinks;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -140,10 +141,17 @@ class Page extends Model
             }
         });
 
-        // Issue cards on a whiteboard are derived references (BRAI-71)
+        // Issue cards on a whiteboard (BRAI-71) and smart links in a doc (BRAI-143) are derived
+        // references. Docs derive from `content`: the published version (or the draft itself
+        // before the first publish) — autosaved draft_content doesn't count until published.
         static::saved(function (Page $page) {
-            if ($page->type === 'page' && ($page->wasRecentlyCreated || $page->wasChanged('content')) && $page->is_whiteboard) {
+            if ($page->type !== 'page' || ! ($page->wasRecentlyCreated || $page->wasChanged('content'))) {
+                return;
+            }
+            if ($page->is_whiteboard) {
                 ContentReferences::syncWhiteboard($page);
+            } else {
+                SmartLinks::syncPage($page);
             }
         });
         // Pages are hard-deleted and their subpages go with them (FK cascade, no events)

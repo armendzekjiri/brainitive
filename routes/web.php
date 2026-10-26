@@ -44,6 +44,7 @@ use App\Http\Controllers\ReleaseController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ShareLinkController;
 use App\Http\Controllers\SidebarPreferencesController;
+use App\Http\Controllers\SmartLinkController;
 use App\Http\Controllers\SnippetController;
 use App\Http\Controllers\SprintController;
 use App\Http\Controllers\TaskListController;
@@ -252,6 +253,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         require __DIR__.'/imports.php';
 
         Route::get('users', [WorkspaceController::class, 'users'])->name('workspaces.users.index');
+
+        // Smart links in docs and issue descriptions (BRAI-143): batched live data + picker search
+        Route::get('smart-links', [SmartLinkController::class, 'index'])->middleware([ReadOnlySession::class, 'throttle:240,1,smart-links'])->name('smart-links.index');
+        Route::get('smart-links/search', [SmartLinkController::class, 'search'])->middleware([ReadOnlySession::class, 'throttle:120,1,smart-links.search'])->name('smart-links.search');
         Route::get('lead-form-templates', [LeadFormController::class, 'templates'])->name('lead-form-templates.index');
         Route::get('members/{user}', [WorkspaceController::class, 'memberProfile'])->name('workspaces.members.profile');
 

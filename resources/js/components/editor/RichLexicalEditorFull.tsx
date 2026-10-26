@@ -201,6 +201,10 @@ import {
     $createCollapsibleContentNode,
 } from './nodes';
 import { MentionNode } from './nodes/MentionNode';
+import { SmartLinkNode } from './nodes/SmartLinkNode';
+import SmartLinkPlugin from './smartLinks/SmartLinkPlugin';
+import { OPEN_SMART_LINK_PICKER_COMMAND } from './smartLinks/smartLinkCommands';
+import { SmartLinkEditorContext, useSmartLinkConfig, type SmartLinkEditorConfig } from './smartLinks/smartLinkRefs';
 
 import TableActionMenuPlugin from './plugins/TableActionMenuPlugin';
 import TableCellResizerPlugin from './plugins/TableCellResizerPlugin';
@@ -376,6 +380,7 @@ interface SlashMenuItem {
 // Slash Commands Plugin
 function SlashCommandsPlugin() {
     const [editor] = useLexicalComposerContext();
+    const smartLinks = useSmartLinkConfig();
     const [showMenu, setShowMenu] = useState(false);
     const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
     const [searchTerm, setSearchTerm] = useState('');
@@ -650,7 +655,17 @@ function SlashCommandsPlugin() {
                 editor.dispatchCommand(INSERT_COLLAPSIBLE_COMMAND, undefined);
             },
         },
-    ], []);
+        // Smart links (BRAI-143): only where links can resolve (docs, issue descriptions)
+        ...(smartLinks ? [{
+            title: 'Link to issue, doc, ticket or plan',
+            description: 'Live smart link with status and due date',
+            icon: <Link className="size-4" />,
+            keywords: ['link', 'smart', 'issue', 'doc', 'ticket', 'plan', 'reference', 'mention'],
+            onSelect: (editor: any) => {
+                editor.dispatchCommand(OPEN_SMART_LINK_PICKER_COMMAND, undefined);
+            },
+        }] : []),
+    ], [smartLinks]);
 
     const filteredItems = useMemo(() => {
         if (!searchTerm) return slashMenuItems;
@@ -1641,6 +1656,7 @@ const HANDLE_GUTTER = 72;
 
 function DraggableBlockPlugin({ anchorElem }: { anchorElem: HTMLElement | null }) {
     const [editor] = useLexicalComposerContext();
+    const smartLinks = useSmartLinkConfig();
     const [hoveredKey, setHoveredKey] = useState<string | null>(null);
     // Viewport-relative coords (for position:fixed via portal)
     const [handlePos, setHandlePos] = useState({ top: 0, left: 0 });
@@ -1801,6 +1817,12 @@ function DraggableBlockPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
         editor.focus();
     };
 
+    const openSmartLinkPicker = () => {
+        const key = menuKey ?? hoveredKey;
+        setMenuOpen(false);
+        editor.dispatchCommand(OPEN_SMART_LINK_PICKER_COMMAND, key ? { afterBlockKey: key } : undefined);
+    };
+
     const visible = hoveredKey !== null || showAddMenu;
 
     // Render via portal into document.body so overflow:hidden on the editor wrapper never clips the handles
@@ -1852,6 +1874,19 @@ function DraggableBlockPlugin({ anchorElem }: { anchorElem: HTMLElement | null }
                                 {bt.label}
                             </button>
                         ))}
+                        {smartLinks && (
+                            <>
+                                <div className="my-1 h-px bg-border" role="separator" />
+                                <button
+                                    type="button"
+                                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted text-left"
+                                    onClick={openSmartLinkPicker}
+                                >
+                                    <Link className="size-3.5" />
+                                    Link to issue, doc…
+                                </button>
+                            </>
+                        )}
                     </PopoverContent>
                 </Popover>
 
@@ -3299,6 +3334,8 @@ interface RichLexicalEditorProps {
     // Mention notification context — passed to MentionsPlugin
     /** Where polls in this content store their votes (doc / issue). Omit = no voting. */
     pollScope?: { type: 'page' | 'item'; id: string } | null;
+    /** Smart links (BRAI-143): live chips + paste / "/link" / "+" menu. Omit = smart links show as plain links. */
+    smartLinks?: SmartLinkEditorConfig | null;
 }
 
 export function RichLexicalEditor({
@@ -3320,6 +3357,7 @@ export function RichLexicalEditor({
     stickyTopOffset = 52,
     documentMode = false,
     pollScope = null,
+    smartLinks = null,
 }: RichLexicalEditorProps) {
     const [floatingAnchorElem, setFloatingAnchorElem] = useState<HTMLDivElement | null>(null);
     // Shared ref: true while InitialContentPlugin is loading content — prevents HtmlOnChangePlugin
@@ -3367,6 +3405,7 @@ export function RichLexicalEditor({
             CollapsibleTitleNode,
             CollapsibleContentNode,
             MentionNode,
+            SmartLinkNode,
         ],
         editable,
     };
@@ -3374,6 +3413,7 @@ export function RichLexicalEditor({
     return (
         <LexicalComposer initialConfig={initialConfig}>
             <PollScopeContext.Provider value={pollScope}>
+            <SmartLinkEditorContext.Provider value={smartLinks}>
             <RichLexicalOnChangeContext.Provider value={onChange}>
                 <div className={cn("border rounded-lg overflow-hidden bg-white dark:bg-card", documentMode && "bg-transparent dark:bg-transparent", className)}>
                     <ToolbarPlugin showToolbar={showToolbar && editable} workspaceSlug={workspaceSlug} itemTitle={itemTitle} projectName={projectName} projectId={projectId} stickyToolbar={stickyToolbar} stickyTopOffset={stickyTopOffset} documentMode={documentMode} />
@@ -3422,6 +3462,7 @@ export function RichLexicalEditor({
                     <CommandsPlugin />
                     <CodeHighlightPlugin />
                     {projectId && editable && <MentionsPlugin projectId={projectId} />}
+                    {smartLinks && editable && <SmartLinkPlugin config={smartLinks} />}
                     <InitialContentPlugin content={content} editable={editable} contentKey={contentKey} isInitializingRef={isInitializingRef} />
                     <HtmlOnChangePlugin onChange={onChange} isInitializingRef={isInitializingRef} />
                     {onHeadingsChange && <HeadingsExtractorPlugin onHeadingsChange={onHeadingsChange} />}
@@ -3437,6 +3478,7 @@ export function RichLexicalEditor({
                     )}
                 </div>
             </RichLexicalOnChangeContext.Provider>
+            </SmartLinkEditorContext.Provider>
             </PollScopeContext.Provider>
         </LexicalComposer>
     );
