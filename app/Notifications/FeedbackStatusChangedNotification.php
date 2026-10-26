@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\FeedbackPortal;
 use App\Models\FeedbackPost;
+use App\Notifications\Messages\BrandedMailMessage;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -43,18 +44,21 @@ class FeedbackStatusChangedNotification extends Notification implements ShouldQu
         $label = FeedbackPost::STATUS_LABELS[$this->status] ?? $this->status;
         $title = self::plain(Str::limit($this->post->title, 100));
 
-        $mail = (new MailMessage)
+        $mail = BrandedMailMessage::guest($notifiable, "You get this email because you follow this idea on {$this->plainPortal()}.")
             ->subject("“{$title}” is now {$label}")
-            ->greeting('Hi '.self::plain($notifiable->displayName()).',')
-            ->line("An idea you follow on {$this->plainPortal()} changed its status to **{$label}**: “{$title}”.");
+            ->eyebrow($this->plainPortal())
+            ->headline("“{$title}” is now {$label}")
+            ->line("An idea you follow on {$this->plainPortal()} changed its status to **{$label}**: “{$title}”.")
+            ->context($this->plainPortal());
 
         if ($this->note) {
-            $mail->line(self::plain(Str::limit($this->note, 1000)));
+            $mail->quote(self::plain(Str::limit($this->note, 1000)));
         }
 
+        // the signed unfollow link sits in the footer, next to "why you got this" (works without signing in)
         return $mail
             ->action('View the idea', route('feedback.post', [$this->portal->slug, $this->post->number]))
-            ->line('Don’t want these emails? [Stop following this idea]('.self::unfollowUrl($this->portal, $this->post, $notifiable->uuid).').');
+            ->footerLink('Stop following this idea', self::unfollowUrl($this->portal, $this->post, $notifiable->uuid));
     }
 
     private function plainPortal(): string

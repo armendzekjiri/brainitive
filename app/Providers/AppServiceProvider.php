@@ -48,6 +48,7 @@ use App\Support\Helpdesks\Mail\ImapMailboxConnector;
 use App\Support\Helpdesks\Mail\MailboxConnector;
 use App\Support\Helpdesks\Mail\MailHost;
 use App\Support\Helpdesks\Mail\MailTransports;
+use App\Support\Mail\BrandedMail;
 use App\Support\Push\PushReportHandler;
 use App\Support\Push\WebPushClient;
 use Illuminate\Auth\Events\Login;
@@ -93,6 +94,9 @@ class AppServiceProvider extends ServiceProvider
         // Host / X-Forwarded-Host (host-header poisoning would send the token elsewhere).
         ResetPassword::createUrlUsing(fn ($user, string $token) => rtrim((string) (config('app.url') ?: url('/')), '/')
             .route('password.reset', ['token' => $token, 'email' => $user->getEmailForPasswordReset()], false));
+
+        // BRAI-155: branded mail layout — secured Markdown encoding + the password reset mail
+        BrandedMail::register();
 
         Vite::prefetch(concurrency: 3);
 

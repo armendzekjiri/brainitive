@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Models\BillingReport;
 use App\Support\Billing\BillingDocument;
+use App\Support\Mail\BrandedMail;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Attachment;
@@ -47,13 +48,14 @@ class BillingReportMail extends Mailable implements ShouldQueue
         $snapshot = (array) $this->report->snapshot;
 
         return new Content(
-            view: 'emails.billing-report',
+            markdown: 'emails.billing-report', // the branded layout (BRAI-155)
             text: 'emails.billing-report-text',
             with: [
                 'body' => $this->body,
                 'filename' => BillingDocument::fromReport($this->report)->filename('pdf'),
-                'company' => (string) data_get($snapshot, 'issuer.company_name', ''),
-                'sender' => $this->replyToName,
+                // one line each: they are echoed into Markdown paragraphs (eyebrow, sign-off)
+                'company' => BrandedMail::line((string) data_get($snapshot, 'issuer.company_name', ''), 120),
+                'sender' => BrandedMail::line($this->replyToName, 120),
             ],
         );
     }

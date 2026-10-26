@@ -151,7 +151,8 @@ class FeedbackModerationTest extends TestCase
         // the mail: subject, the public note, a signed unfollow link
         $mail = (new FeedbackStatusChangedNotification($fresh, $this->portal, 'planned', 'Coming in Q1'))->toMail($ann);
         $this->assertStringContainsString('is now Planned', $mail->subject);
-        $this->assertStringContainsString('signature=', implode(' ', $mail->outroLines));
+        $this->assertStringContainsString('signature=', $mail->footerLinks[0]['url']); // "Stop following this idea" in the footer (BRAI-155)
+        $this->assertStringContainsString('Stop following this idea', (string) $mail->render());
         $this->assertSame(['mail'], (new FeedbackStatusChangedNotification($fresh, $this->portal, 'planned', null))->via($ann));
     }
 

@@ -704,6 +704,13 @@ Route::middleware(['auth', 'verified', 'instance.admin'])->prefix('admin')->name
     Route::delete('github-app', [Admin\GithubAppController::class, 'destroy'])->name('github-app.destroy');
 
     Route::get('audit-log', Admin\AuditLogController::class)->name('audit-log');
+
+    // Email previews (BRAI-155): every email with sample data + a test send to the admin's own address
+    Route::get('emails', [Admin\EmailPreviewController::class, 'index'])->name('emails.index');
+    Route::get('emails/{email}', [Admin\EmailPreviewController::class, 'show'])->where('email', '[a-z0-9-]{1,64}')
+        ->middleware('throttle:120,1,admin.emails.show')->name('emails.show');
+    Route::post('emails/{email}/send', [Admin\EmailPreviewController::class, 'send'])->where('email', '[a-z0-9-]{1,64}')
+        ->middleware('throttle:5,1,admin.emails.send')->name('emails.send');
 });
 
 require __DIR__.'/auth.php';

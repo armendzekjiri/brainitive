@@ -337,7 +337,7 @@ class BillingDocumentTest extends TestCase
             $this->assertStringContainsString(' via ', $queued->envelope()->from->name);
 
             $html = $mail->render();
-            $this->assertStringContainsString('Hello &lt;b&gt;Muster&lt;/b&gt;,<br />', $html);
+            $this->assertStringContainsString('Hello &lt;b&gt;Muster&lt;/b&gt;,<br>', $html); // escaped, line breaks kept (branded layout, BRAI-155)
             $this->assertStringContainsString('invoice-inv-2026-014-muster-gmbh.pdf', $html);
 
             return true;
