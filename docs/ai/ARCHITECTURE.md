@@ -333,6 +333,13 @@ Plan [`tasks/feat-automation.md`](./tasks/feat-automation.md); contract `tasks/r
 - **Notification:** `AutomationNoticeNotification` (`automation_notice`, category status) for the Notify action; assignments / comments / status changes made by rules notify through the usual paths (`ItemObserver` → `Assignments`, `ItemComments`).
 - **Tests:** `tests/Feature/Automation/{AutomationEngineTest,AutomationRulesTest}.php`, e2e `e2e/tests/automations.spec.ts`.
 
+### Trello import (v1.41.0, BRAI-65)
+- `app/Support/Imports/Trello/`: `TrelloImporter` (registry key `trello`), `TrelloExport` (reads +
+  validates the board JSON, limits, normalized lists / cards / checklists / labels / members),
+  `TrelloDescription` (card Markdown → sanitized HTML + check lists / attachment links).
+- Preview + options UI: `components/imports/sources/TrelloPreview.tsx`. Fixture:
+  `tests/Fixtures/imports/trello/board.json`. Tests: `TrelloImporterTest`, `e2e/tests/import-trello.spec.ts`.
+
 ### Sharing (read-only links)
 - **Docs and issues:** `ShareLink` (morph `shareable`: `Page` / `Item`, random token, `expires_at`, `revoked_at`, views), `ShareLinkController` — manage via `share-links.*` (needs `update` on the item), public view `/s/{token}` → `Pages/Share/Show.tsx` (`noindex`, 410 when revoked / expired / deleted). UI: `components/share/ShareButton.tsx`.
 - **Plans** keep their own `share_token` (`/share/plans/{token}`); bookmarks / snippets have `visibility = public`.

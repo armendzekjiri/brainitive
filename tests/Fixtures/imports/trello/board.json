@@ -1,0 +1,276 @@
+{
+  "id": "65f0a1b2c3d4e5f600000001",
+  "name": "Launch plan 🚀",
+  "desc": "A synthetic board for the Trello importer tests.",
+  "descData": null,
+  "closed": false,
+  "idOrganization": null,
+  "pinned": false,
+  "url": "https://trello.com/b/AbCdEf12/launch-plan",
+  "shortUrl": "https://trello.com/b/AbCdEf12",
+  "prefs": { "permissionLevel": "private", "background": "blue", "cardCovers": true },
+  "labelNames": { "green": "Frontend", "red": "Bug", "purple": "", "yellow": "Unused" },
+  "actions": [
+    {
+      "id": "65f0a1b2c3d4e5f6000000a1",
+      "idMemberCreator": "65f0a1b2c3d4e5f6000000m1",
+      "type": "commentCard",
+      "date": "2024-03-02T09:15:00.000Z",
+      "data": {
+        "text": "Looks good to me!",
+        "card": { "id": "65f0a1b2c3d4e5f6000000c1", "name": "Set up the repository", "idShort": 1, "shortLink": "aaaa0001" },
+        "board": { "id": "65f0a1b2c3d4e5f600000001", "name": "Launch plan 🚀", "shortLink": "AbCdEf12" },
+        "list": { "id": "65f0a1b2c3d4e5f6000000l1", "name": "Backlog 📋" }
+      },
+      "memberCreator": { "id": "65f0a1b2c3d4e5f6000000m1", "fullName": "Jane Doe", "username": "janedoe" }
+    },
+    {
+      "id": "65f0a1b2c3d4e5f6000000a2",
+      "idMemberCreator": "65f0a1b2c3d4e5f6000000m2",
+      "type": "commentCard",
+      "date": "2024-03-02T10:00:00.000Z",
+      "data": {
+        "text": "Wait for the CI config.",
+        "card": { "id": "65f0a1b2c3d4e5f6000000c1", "name": "Set up the repository", "idShort": 1, "shortLink": "aaaa0001" },
+        "board": { "id": "65f0a1b2c3d4e5f600000001", "name": "Launch plan 🚀", "shortLink": "AbCdEf12" },
+        "list": { "id": "65f0a1b2c3d4e5f6000000l1", "name": "Backlog 📋" }
+      },
+      "memberCreator": { "id": "65f0a1b2c3d4e5f6000000m2", "fullName": "Bob Builder", "username": "bobbuilder" }
+    },
+    {
+      "id": "65f0a1b2c3d4e5f6000000a3",
+      "idMemberCreator": "65f0a1b2c3d4e5f6000000m1",
+      "type": "commentCard",
+      "date": "2024-03-04T16:30:00.000Z",
+      "data": {
+        "text": "API draft is up.",
+        "card": { "id": "65f0a1b2c3d4e5f6000000c3", "name": "Implement the API", "idShort": 3, "shortLink": "aaaa0003" },
+        "board": { "id": "65f0a1b2c3d4e5f600000001", "name": "Launch plan 🚀", "shortLink": "AbCdEf12" },
+        "list": { "id": "65f0a1b2c3d4e5f6000000l2", "name": "Doing" }
+      },
+      "memberCreator": { "id": "65f0a1b2c3d4e5f6000000m1", "fullName": "Jane Doe", "username": "janedoe" }
+    },
+    {
+      "id": "65f0a1b2c3d4e5f6000000a4",
+      "idMemberCreator": "65f0a1b2c3d4e5f6000000m1",
+      "type": "updateCard",
+      "date": "2024-03-05T08:00:00.000Z",
+      "data": {
+        "card": { "id": "65f0a1b2c3d4e5f6000000c4", "name": "Ship v1", "idList": "65f0a1b2c3d4e5f6000000l3" },
+        "listBefore": { "id": "65f0a1b2c3d4e5f6000000l2", "name": "Doing" },
+        "listAfter": { "id": "65f0a1b2c3d4e5f6000000l3", "name": "Done ✅" },
+        "old": { "idList": "65f0a1b2c3d4e5f6000000l2" }
+      },
+      "memberCreator": { "id": "65f0a1b2c3d4e5f6000000m1", "fullName": "Jane Doe", "username": "janedoe" }
+    }
+  ],
+  "cards": [
+    {
+      "id": "65f0a1b2c3d4e5f6000000c1",
+      "name": "Set up the repository",
+      "desc": "Create the repo and **protect** `main`.\n\n- add CI\n- add [the README](https://example.com/readme)\n\n<script>alert('x')</script>\nSee https://example.com/setup for details.",
+      "closed": false,
+      "idBoard": "65f0a1b2c3d4e5f600000001",
+      "idList": "65f0a1b2c3d4e5f6000000l1",
+      "pos": 32768,
+      "due": "2024-03-03T12:00:00.000Z",
+      "dueComplete": false,
+      "start": null,
+      "idLabels": ["65f0a1b2c3d4e5f6000000b1"],
+      "labels": [{ "id": "65f0a1b2c3d4e5f6000000b1", "idBoard": "65f0a1b2c3d4e5f600000001", "name": "Frontend", "color": "green" }],
+      "idMembers": ["65f0a1b2c3d4e5f6000000m1"],
+      "idChecklists": ["65f0a1b2c3d4e5f6000000k1"],
+      "idShort": 1,
+      "shortLink": "aaaa0001",
+      "shortUrl": "https://trello.com/c/aaaa0001",
+      "url": "https://trello.com/c/aaaa0001/1-set-up-the-repository",
+      "badges": { "comments": 2, "attachments": 0, "checkItems": 2, "checkItemsChecked": 1 },
+      "attachments": [],
+      "customFieldItems": [],
+      "pluginData": [],
+      "cover": { "color": null, "size": "normal" },
+      "dateLastActivity": "2024-03-02T10:00:00.000Z"
+    },
+    {
+      "id": "65f0a1b2c3d4e5f6000000c2",
+      "name": "Write the docs — Ünïcødé 文档 🚀",
+      "desc": "## Outline\n\n1. Intro\n2. Setup\n\n> Keep it short.",
+      "closed": false,
+      "idBoard": "65f0a1b2c3d4e5f600000001",
+      "idList": "65f0a1b2c3d4e5f6000000l1",
+      "pos": 16384,
+      "due": "2024-04-15T23:30:00.000Z",
+      "dueComplete": false,
+      "start": "2024-04-01T00:00:00.000Z",
+      "idLabels": ["65f0a1b2c3d4e5f6000000b2", "65f0a1b2c3d4e5f6000000b3"],
+      "idMembers": ["65f0a1b2c3d4e5f6000000m2", "65f0a1b2c3d4e5f6000000m1"],
+      "idChecklists": [],
+      "idShort": 2,
+      "shortLink": "aaaa0002",
+      "shortUrl": "https://trello.com/c/aaaa0002",
+      "badges": { "comments": 0, "attachments": 0 },
+      "attachments": [],
+      "customFieldItems": []
+    },
+    {
+      "id": "65f0a1b2c3d4e5f6000000c3",
+      "name": "Implement the API",
+      "desc": "",
+      "closed": false,
+      "idBoard": "65f0a1b2c3d4e5f600000001",
+      "idList": "65f0a1b2c3d4e5f6000000l2",
+      "pos": 16384,
+      "due": null,
+      "dueComplete": false,
+      "start": null,
+      "idLabels": ["65f0a1b2c3d4e5f6000000b2"],
+      "idMembers": ["65f0a1b2c3d4e5f6000000m3"],
+      "idChecklists": ["65f0a1b2c3d4e5f6000000k2", "65f0a1b2c3d4e5f6000000k3"],
+      "idShort": 3,
+      "shortLink": "aaaa0003",
+      "shortUrl": "https://trello.com/c/aaaa0003",
+      "badges": { "comments": 1, "attachments": 2 },
+      "attachments": [
+        { "id": "65f0a1b2c3d4e5f6000000f1", "name": "api-spec.pdf", "url": "https://trello.com/1/cards/aaaa0003/attachments/f1/download/api-spec.pdf", "bytes": 20480, "mimeType": "application/pdf", "isUpload": true },
+        { "id": "65f0a1b2c3d4e5f6000000f2", "name": "Bad link", "url": "javascript:alert(1)", "bytes": null, "mimeType": "", "isUpload": false }
+      ],
+      "customFieldItems": [
+        { "id": "65f0a1b2c3d4e5f6000000x1", "idValue": null, "value": { "number": "3" }, "idCustomField": "65f0a1b2c3d4e5f6000000cf", "idModel": "65f0a1b2c3d4e5f6000000c3", "modelType": "card" }
+      ]
+    },
+    {
+      "id": "65f0a1b2c3d4e5f6000000c4",
+      "name": "Ship v1",
+      "desc": "Release *notes* are in the wiki.",
+      "closed": false,
+      "idBoard": "65f0a1b2c3d4e5f600000001",
+      "idList": "65f0a1b2c3d4e5f6000000l3",
+      "pos": 65535,
+      "due": "2024-03-10T09:00:00.000Z",
+      "dueComplete": true,
+      "start": null,
+      "idLabels": [],
+      "idMembers": [],
+      "idChecklists": [],
+      "idShort": 4,
+      "shortLink": "aaaa0004",
+      "shortUrl": "https://trello.com/c/aaaa0004",
+      "attachments": [],
+      "customFieldItems": []
+    },
+    {
+      "id": "65f0a1b2c3d4e5f6000000c5",
+      "name": "Archived card",
+      "desc": "This card was archived in Trello.",
+      "closed": true,
+      "idBoard": "65f0a1b2c3d4e5f600000001",
+      "idList": "65f0a1b2c3d4e5f6000000l2",
+      "pos": 99999,
+      "due": null,
+      "start": null,
+      "idLabels": ["65f0a1b2c3d4e5f6000000b4"],
+      "idMembers": [],
+      "idChecklists": [],
+      "idShort": 5,
+      "shortUrl": "https://trello.com/c/aaaa0005",
+      "attachments": [],
+      "customFieldItems": []
+    },
+    {
+      "id": "65f0a1b2c3d4e5f6000000c6",
+      "name": "Card in an archived list",
+      "desc": "",
+      "closed": false,
+      "idBoard": "65f0a1b2c3d4e5f600000001",
+      "idList": "65f0a1b2c3d4e5f6000000l4",
+      "pos": 1024,
+      "due": null,
+      "start": null,
+      "idLabels": [],
+      "idMembers": [],
+      "idChecklists": [],
+      "idShort": 6,
+      "shortUrl": "https://trello.com/c/aaaa0006",
+      "attachments": [],
+      "customFieldItems": []
+    },
+    {
+      "id": "65f0a1b2c3d4e5f6000000c7",
+      "name": "Empty fields card",
+      "desc": "",
+      "closed": false,
+      "idBoard": "65f0a1b2c3d4e5f600000001",
+      "idList": "65f0a1b2c3d4e5f6000000l2",
+      "pos": 32768,
+      "due": null,
+      "start": null,
+      "idLabels": [],
+      "idMembers": [],
+      "idChecklists": [],
+      "idShort": 7,
+      "attachments": [],
+      "customFieldItems": []
+    }
+  ],
+  "lists": [
+    { "id": "65f0a1b2c3d4e5f6000000l2", "name": "Doing", "closed": false, "idBoard": "65f0a1b2c3d4e5f600000001", "pos": 32768, "subscribed": false, "softLimit": null },
+    { "id": "65f0a1b2c3d4e5f6000000l1", "name": "Backlog 📋", "closed": false, "idBoard": "65f0a1b2c3d4e5f600000001", "pos": 16384, "subscribed": false, "softLimit": null },
+    { "id": "65f0a1b2c3d4e5f6000000l3", "name": "Done ✅", "closed": false, "idBoard": "65f0a1b2c3d4e5f600000001", "pos": 49152, "subscribed": false, "softLimit": null },
+    { "id": "65f0a1b2c3d4e5f6000000l5", "name": "Later", "closed": false, "idBoard": "65f0a1b2c3d4e5f600000001", "pos": 65536, "subscribed": false, "softLimit": null },
+    { "id": "65f0a1b2c3d4e5f6000000l4", "name": "Old ideas", "closed": true, "idBoard": "65f0a1b2c3d4e5f600000001", "pos": 81920, "subscribed": false, "softLimit": null }
+  ],
+  "checklists": [
+    {
+      "id": "65f0a1b2c3d4e5f6000000k1",
+      "name": "Setup",
+      "idBoard": "65f0a1b2c3d4e5f600000001",
+      "idCard": "65f0a1b2c3d4e5f6000000c1",
+      "pos": 16384,
+      "checkItems": [
+        { "id": "65f0a1b2c3d4e5f6000000i2", "name": "Install Node", "state": "incomplete", "idChecklist": "65f0a1b2c3d4e5f6000000k1", "pos": 33792, "due": null, "idMember": null },
+        { "id": "65f0a1b2c3d4e5f6000000i1", "name": "Install PHP <8.2>", "state": "complete", "idChecklist": "65f0a1b2c3d4e5f6000000k1", "pos": 16896, "due": null, "idMember": null }
+      ]
+    },
+    {
+      "id": "65f0a1b2c3d4e5f6000000k3",
+      "name": "Release",
+      "idBoard": "65f0a1b2c3d4e5f600000001",
+      "idCard": "65f0a1b2c3d4e5f6000000c3",
+      "pos": 32768,
+      "checkItems": [
+        { "id": "65f0a1b2c3d4e5f6000000i4", "name": "Tag the release", "state": "complete", "idChecklist": "65f0a1b2c3d4e5f6000000k3", "pos": 16384 }
+      ]
+    },
+    {
+      "id": "65f0a1b2c3d4e5f6000000k2",
+      "name": "QA",
+      "idBoard": "65f0a1b2c3d4e5f600000001",
+      "idCard": "65f0a1b2c3d4e5f6000000c3",
+      "pos": 16384,
+      "checkItems": [
+        { "id": "65f0a1b2c3d4e5f6000000i3", "name": "Test the endpoints ✓", "state": "incomplete", "idChecklist": "65f0a1b2c3d4e5f6000000k2", "pos": 16384 }
+      ]
+    }
+  ],
+  "labels": [
+    { "id": "65f0a1b2c3d4e5f6000000b1", "idBoard": "65f0a1b2c3d4e5f600000001", "name": "Frontend", "color": "green", "uses": 1 },
+    { "id": "65f0a1b2c3d4e5f6000000b2", "idBoard": "65f0a1b2c3d4e5f600000001", "name": "Bug", "color": "red_dark", "uses": 2 },
+    { "id": "65f0a1b2c3d4e5f6000000b3", "idBoard": "65f0a1b2c3d4e5f600000001", "name": "", "color": "purple", "uses": 1 },
+    { "id": "65f0a1b2c3d4e5f6000000b4", "idBoard": "65f0a1b2c3d4e5f600000001", "name": "Unused", "color": "yellow", "uses": 1 },
+    { "id": "65f0a1b2c3d4e5f6000000b5", "idBoard": "65f0a1b2c3d4e5f600000001", "name": "No colour", "color": null, "uses": 0 }
+  ],
+  "members": [
+    { "id": "65f0a1b2c3d4e5f6000000m1", "fullName": "Jane Doe", "username": "janedoe", "initials": "JD", "avatarHash": null, "email": "jane.doe@example.test" },
+    { "id": "65f0a1b2c3d4e5f6000000m2", "fullName": "Bob Builder", "username": "bobbuilder", "initials": "BB", "avatarHash": null },
+    { "id": "65f0a1b2c3d4e5f6000000m3", "fullName": "Zoë Ångström", "username": "zoe", "initials": "ZÅ", "avatarHash": null }
+  ],
+  "customFields": [
+    { "id": "65f0a1b2c3d4e5f6000000cf", "idModel": "65f0a1b2c3d4e5f600000001", "modelType": "board", "name": "Estimate", "pos": 16384, "type": "number", "display": { "cardFront": true } }
+  ],
+  "pluginData": [
+    { "id": "65f0a1b2c3d4e5f6000000p0", "idPlugin": "55a5d916446f517774210004", "scope": "board", "idModel": "65f0a1b2c3d4e5f600000001", "value": "{}", "access": "shared" }
+  ],
+  "boardPlugins": [
+    { "id": "65f0a1b2c3d4e5f6000000p9", "idBoard": "65f0a1b2c3d4e5f600000001", "idPlugin": "55a5d916446f517774210004", "promotional": false }
+  ]
+}
