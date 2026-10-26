@@ -524,6 +524,116 @@ php artisan tinker --execute="\App\Models\User::where('email','...')->update(['e
   scheduler. Keep `lib/sla.ts` and `TicketSla` in sync. e2e triggers the checker through
   `helpdesks.sla.e2e-check`, which only exists with `APP_ENV=e2e`, so that journey is skipped on dev.
 
+### Trello import: what maps to what (v1.41.0, BRAI-65)
+- **Always a new Kanban board.** `Board::created` adds To Do / In Progress / Done; the importer deletes
+  them in the same transaction and creates one column per **open** list, in list order. Archived lists
+  never become columns; their cards count as archived. Done column: the last open list named "done" /
+  "complete(d)" / "finished" (also "erledigt", "fertig"), else the last open list; the user can change it.
+- **Archived cards** (card closed, or on an archived list) are skipped by default, else they go to the done
+  column. Cards in the done column get `completed_at`.
+- **Order and keys:** cards sorted by list position, then card `pos`; keys come from `getNextItemKey()` in that
+  order. `position` per column and `backlog_position` are derived from that order, so a resumed run writes
+  the same values.
+- **People:** auto-suggested only by email (Trello rarely exports emails); otherwise the user maps each
+  member in the preview. The first mapped member becomes the assignee, the others are named in the
+  description ("Also on this card in Trello: …"). Option values pass `ProjectMember`; `run()` filters them
+  against the current project members again.
+- **Descriptions:** `PageContentConverter::markdownToHtml()` (bare URLs become links first) → `SafeHtml`.
+  Checklists are appended **after** sanitizing, as Lexical check lists built from escaped text
+  (`<li role="checkbox" aria-checked>`): `SafeHtml` strips `aria-checked`, and the issue view toggles by it.
+  Attachment links (http/https only) are added only when the user asks; files are never downloaded.
+- **Subtasks mode:** each checklist item → a subtask (type `subtask`, done items in the done column,
+  "Checklist: item" titles when a card has several checklists); cards with more than 50 items keep a
+  check list instead.
+- **Labels:** only labels the imported cards use. Matched to project labels by name (case-insensitive) or
+  slug, otherwise created with Trello's colour as hex; unnamed Trello labels are named after their colour.
+- **Not imported (counted in the report):** comments (Trello's JSON export only holds the newest 1 000
+  actions anyway), custom field values, attachments, power-ups.
+- **Memory:** uploads are capped at 25 MB (exports are usually a few MB). Decoding needs ~16× the file size
+  in PHP arrays, and the preview runs inside the web request, so `TrelloExport` raises `memory_limit` to at
+  most 512 MB (never lowers it). Raise both together if bigger boards ever need importing.
+
+### Jira import: what maps to what (v1.41.0, BRAI-139)
+- **Columns are read by position.** Jira repeats a column name once per value (`Labels`, `Sprint`,
+  `Comment`, `Watchers`, `Attachment`, …), so `CsvReader` rows are plain lists and `JiraExport` looks names
+  up case-insensitively. Backslash is not a CSV escape (`\\` is a wiki line break). An odd number of `"`
+  in the file = a cut-off cell → the preview fails. Uploads are capped at 25 MB; the file is streamed
+  with `fgetcsv` (preview runs in the web request).
+- **Statuses → columns:** one column per status in status-category order (the `Status Category` column,
+  else the resolution, else the name); every done-category status → one "Done" column. The user renames /
+  merges columns by typing the same name and picks the done column; it always exists and comes last.
+- **Hierarchy:** `Parent id` / `Parent` (sub-tasks, Cloud parents) or `Epic Link` (a key) → `parent_id`.
+  Issues are created parents first (sorted by depth); cycles are cut, deeper than `Item::MAX_DEPTH`
+  moves one level up, parents missing from the file → top level, each with a warning.
+- **Sprints** (optional; makes the board Scrum) come over as **planned** sprints (the CSV has no sprint
+  state). An issue's sprint is the last one Jira lists. Because an issue and its sub-issues share one
+  sprint in Brainitive, a top-level issue takes its own sprint, else the sprint most of its sub-issues
+  were in (warning when they differed). The result link opens the backlog for Scrum boards (the board
+  page shows only the active sprint).
+- **People:** assignee / reporter cells are display names (Cloud) or user names (Server, sometimes
+  emails): matched by email, else by a unique member name; the rest stays unassigned and the reporter
+  name stays in the "Jira: KEY · Reported by X on date" line. Comment authors are account ids; they
+  are resolved through the `Assignee Id` / `Reporter Id` / `Creator Id` columns, else "a Jira user".
+- **Comments** are created directly (Comment + `commented` history entry), not via `ItemComments::add`,
+  which would send mention / comment notifications (ImportScope only silences Assignments and DomainEvents).
+- **Report counts** come from the run's `import_mappings` at the end of `run()`, minus what an earlier
+  attempt already reported, so a crash + resume neither loses nor doubles counts.
+- **Not imported (counted):** custom fields (other than Epic Link/Name, Story Points, Start date, Rank, …),
+  attachments, watchers, work log entries, components, versions. Images and `[^attachments]` in the
+  markup become text; external images become links (nothing is fetched).
+
+### Notion import: tree, links and files (v1.41.0, BRAI-66)
+- **Tree:** a Notion page with subpages becomes a **folder** (same name) holding the page first, then the
+  subpages; a database (CSV) becomes a table page (+ folder when its rows have pages). Folders without
+  a page of their own (teamspace folders) stay folders; Notion's `Export-<uuid>` wrapper folder is
+  dropped. Children are ordered as the parent page links them (database rows: CSV order), then by title.
+- **Drafts:** every page is created `status = draft` by the importing user and never published, so only
+  the author and admins see them. **Folder names are visible to the whole project** (folders always are).
+- **Two passes:** pass 1 creates the tree (`notion_folder` / `notion_page`, source id = Notion id, or a
+  hash of the path when the name has none); pass 2 writes each page's content once (`notion_content`
+  mapping, in the same transaction as the update + report save) with links via `ImportMappings::map`.
+  Links to skipped (empty) pages keep their words only; links to files / pages missing from the export
+  become text and are reported (preview + report).
+- **Paths are compared in NFC** (macOS zip tools write NFD names, Notion links are NFC).
+- **Files:** only from inside the archive, stored like editor uploads: FileController's validation rules,
+  `Uploads::imageExtension` / `extension`, the public disk, `Storage::url`. Names are UUIDv5 of
+  (run uuid, path), and `imports/<run>/notion-stored.json` lists what was stored, so a retry neither
+  duplicates nor double-counts. SVG, video etc. aren't accepted by the editor and are reported.
+- **Markdown:** `Imports\Shared\MarkdownHtml` (league/commonmark GFM, single newline → `<br>` for Notion),
+  not `PageContentConverter::markdownToHtml` (no tables / images / nested lists). HTML longer than
+  500 000 characters is refused (`ImportFailed`, page named) because `SafeHtml` would truncate it.
+  Tables stop at 1 000 rows / 400 000 characters with a note; the original CSV is linked. CSVs are read
+  with the Jira import's streaming `CsvReader` (a damaged CSV fails the preview, naming the database).
+- **Limits (fail in the preview):** 2 000 pages / databases / folders, 256 KB Markdown per page, 5 MB per
+  CSV, SafeZip 5 000 files / 512 MB. Upload rule 200 MB, but `docker/php.ini` caps uploads at 50 MB
+  (`post_max_size` 55M): raise both for bigger exports. Memory stays bounded: page bodies are read from
+  disk when needed, never all held at once.
+
+### Project export + restore: what travels and why (v1.41.0, BRAI-81)
+- **An archive is content, not a backup of the instance.** Included: boards, columns, swimlanes,
+  sprints, releases (without public token / published page), issues (subtasks, labels, types,
+  priorities, custom fields incl. archived ones, comments, attachments, links inside the project), docs,
+  folders and whiteboards (live content; drafts only if the exporter can see them; no unpublished changes
+  of published docs, no version history), task lists, plans (rows linked to issues by ref, no share
+  token), helpdesk structure (columns, form fields, form texts from `HelpdeskForm::SETTING_KEYS` only).
+  Never: members / roles, tickets / contacts, leads, time entries, history / watchers, integrations,
+  webhooks, automations, share links / tokens, board views, recurring issues, snippets / bookmarks.
+  `ProjectArchive::NEVER` lists them and the manifest repeats them with counts.
+- **People are metadata.** `people.json` has name + email of everyone the content points at. Restore maps
+  them to workspace members (the preview's choice, else the same email) and adds mapped people to the
+  new project as editors. It never invites or creates anyone. Comments are written by the restoring user
+  with "Originally by Jane Doe on 3 Mar 2024".
+- **Verify before writing:** `ProjectArchiveReader` unpacks through `SafeZip`, then refuses a wrong
+  format, a newer version, a missing / changed (sha256) file, an unlisted file and unsafe manifest paths.
+  The preview decodes one module at a time (web request, memory ≤ 512 MB); a module is capped at 48 MB,
+  and the export refuses a project that would exceed it (`ArchiveTooLarge`).
+- **Resume:** every record is `ImportMappings::once` with its archive ref; embedded media get
+  deterministic names (`uploads/images/<run uuid>-<ref>.png`), so a retry reuses them. Report counts
+  come from the mappings at the end, not from the progress counters (those are short after a crash).
+- **Download security:** temporary signed *relative* URL (proxies), plus the exporter's session, plus an
+  unexpired row with a file. An expired notification link redirects to the settings with a message.
+  Files go after 24 h (`exports:cleanup`; dev has no scheduler, so a new export also cleans up).
+
 ## Architectural decisions
 
 ### Inline validation over FormRequest classes

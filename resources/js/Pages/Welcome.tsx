@@ -64,6 +64,8 @@ import {
     Workflow,
     Repeat,
     MailOpen,
+    PackageOpen,
+    Archive,
     Clock,
     FileSpreadsheet,
     ReceiptText,
@@ -395,6 +397,20 @@ const SPOTLIGHT: {
     shortcut?: string;
 }[] = [
     {
+        key: 'import',
+        version: 'v1.41',
+        icon: PackageOpen,
+        color: '#0E83DC',
+        title: 'Bring your data',
+        description:
+            'Move in from Trello, Jira or Notion in minutes — boards, issues, epics, comments and docs — with a preview before anything is created.',
+        points: [
+            'Trello boards, Jira CSV exports, Notion workspaces',
+            'Map statuses, types and people yourself',
+            'Export any project and restore it anywhere',
+        ],
+    },
+    {
         key: 'automation',
         version: 'v1.40',
         icon: Workflow,
@@ -420,20 +436,6 @@ const SPOTLIGHT: {
             'Connect your mailbox or use a forwarding address',
             'Replies stay in one email thread',
             'Response and resolution targets per priority',
-        ],
-    },
-    {
-        key: 'notifications',
-        version: 'v1.39',
-        icon: Bell,
-        color: '#0E83DC',
-        title: 'A calmer notification inbox',
-        description:
-            'Hear about what matters — comments, due dates, sprints, assignments — grouped by day, filtered your way, on the channels you pick.',
-        points: [
-            'All, Unread, Mentions and Assigned in one click',
-            'In-app, push or email — per category',
-            'Mark unread, archive, open right where you are',
         ],
     },
 ];
@@ -1073,6 +1075,20 @@ export default function Welcome({
                     title: 'Workflow automation',
                     description:
                         'Rules per project: when something happens and it matches, assign, move, set fields, comment or notify — with a run log.',
+                    isNew: true,
+                },
+                {
+                    icon: PackageOpen,
+                    title: 'Import from Trello, Jira & Notion',
+                    description:
+                        'Upload an export, check the preview, map statuses, types and people — your boards, issues and docs arrive ready to work on.',
+                    isNew: true,
+                },
+                {
+                    icon: Archive,
+                    title: 'Project export & restore',
+                    description:
+                        'Download a whole project — boards, docs, plans and files — as one archive, and restore it here or on another Brainitive.',
                     isNew: true,
                 },
                 {
