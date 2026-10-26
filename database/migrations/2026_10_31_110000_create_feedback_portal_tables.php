@@ -33,14 +33,14 @@ return new class extends Migration
             $table->unsignedInteger('number'); // public, per portal: /feedback/{slug}/{number}
             $table->string('title', 160);
             $table->text('body')->nullable(); // plain text
-            $table->foreignId('author_identity_id')->nullable()->constrained('portal_identities')->nullOnDelete();
+            $table->foreignId('author_identity_id')->nullable()->index()->constrained('portal_identities')->nullOnDelete();
             $table->string('moderation', 16)->default('pending'); // pending | approved | rejected
             $table->string('status', 16)->default('open'); // open | planned | building | released | declined
             $table->text('status_note')->nullable(); // public note shown with the status
             $table->timestamp('status_changed_at')->nullable();
             $table->unsignedInteger('votes_count')->default(0); // cached, changed in the vote's transaction
-            $table->foreignId('merged_into_id')->nullable()->constrained('feedback_posts')->nullOnDelete();
-            $table->foreignId('item_id')->nullable()->constrained()->nullOnDelete(); // internal card, never public
+            $table->foreignId('merged_into_id')->nullable()->index()->constrained('feedback_posts')->nullOnDelete();
+            $table->foreignId('item_id')->nullable()->index()->constrained()->nullOnDelete(); // internal card, never public
             $table->timestamp('approved_at')->nullable();
             $table->timestamps();
 

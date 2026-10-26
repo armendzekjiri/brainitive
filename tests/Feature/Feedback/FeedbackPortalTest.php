@@ -171,6 +171,8 @@ class FeedbackPortalTest extends TestCase
         $this->assertDatabaseHas('feedback_subscriptions', ['feedback_post_id' => $post->id, 'portal_identity_id' => $guest->id]);
 
         Notification::assertSentTo($this->admin, FeedbackSubmittedNotification::class, fn ($n) => $n->post->is($post));
+        // workspace admins may moderate too (ProjectPolicy::update), so they hear about it — once
+        Notification::assertSentToTimes($this->workspace->owner, FeedbackSubmittedNotification::class, 1);
         Notification::assertNotSentTo([$this->editor, $this->viewer, $this->outsider], FeedbackSubmittedNotification::class);
         $data = (new FeedbackSubmittedNotification($post))->toDatabase($this->admin);
         $this->assertSame('feedback_submitted', $data['type']);

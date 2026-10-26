@@ -199,10 +199,18 @@ class FeedbackModerationTest extends TestCase
         $this->assertSame($target->id, $dupe->fresh()->merged_into_id);
         $this->assertSame($target->id, $older->fresh()->merged_into_id);
 
-        foreach ([$dupe, $older] as $old) {
-            $this->get(route('feedback.post', ['acme-ideas', $old->number]))
-                ->assertStatus(301)->assertRedirect(route('feedback.post', ['acme-ideas', $target->number]));
-        }
+        // a URL that was public redirects (chains follow); a never-published duplicate stays hidden
+        $this->get(route('feedback.post', ['acme-ideas', $older->number]))
+            ->assertStatus(301)->assertRedirect(route('feedback.post', ['acme-ideas', $target->number]));
+        $this->get(route('feedback.post', ['acme-ideas', $dupe->number]))->assertNotFound();
+        FeedbackPost::whereKey($dupe->id)->update(['author_identity_id' => $cid->id]);
+        auth()->logout(); // as the guest author, not the signed-in admin
+        $this->asGuest($cid)->get(route('feedback.post', ['acme-ideas', $dupe->number]))
+            ->assertStatus(301)->assertRedirect(route('feedback.post', ['acme-ideas', $target->number]));
+        // following or voting on the merged duplicate does nothing
+        $this->asGuest($cid)->post(route('feedback.follow', ['acme-ideas', $dupe->number]))->assertNotFound();
+        $this->assertFalse(FeedbackVotes::follow($dupe->fresh(), $ann));
+        $this->assertSame(0, DB::table('feedback_subscriptions')->where('feedback_post_id', $dupe->id)->count());
 
         $event = FeedbackEvent::where('action', 'merged')->sole();
         $this->assertSame($dupe->id, $event->feedback_post_id);
@@ -257,6 +265,18 @@ class FeedbackModerationTest extends TestCase
 
         // the card is internal: the public page shows nothing of it
         $this->get(route('feedback.post', ['acme-ideas', $post->number]))->assertInertia(fn ($page) => $page->missing('post.item')->missing('post.item_id'));
+    }
+
+    public function test_create_card_on_a_board_without_columns_is_a_validation_error(): void
+    {
+        $post = $this->feedbackPost();
+        $empty = Board::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->admin->id]);
+        $empty->columns()->delete();
+
+        $this->actingAs($this->admin)->post($this->teamRoute('projects.feedback.card.create', [$post->id]), ['board_id' => $empty->id])
+            ->assertSessionHasErrors('board_id');
+        $this->assertNull($post->fresh()->item_id);
+        $this->assertSame(0, FeedbackEvent::count());
     }
 
     public function test_link_card_accepts_only_issues_of_the_same_project(): void

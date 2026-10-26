@@ -130,14 +130,18 @@ class FeedbackPortalController extends Controller
         $portal = FeedbackPortal::findPublic($portalSlug);
         $post = $portal->posts()->where('number', $number)->with('author:id,name')->firstOrFail();
 
+        $viewer = PortalAuth::current($request);
+
         if ($post->merged_into_id !== null) {
+            // only a URL that was public (or the author's own) redirects; a never-published
+            // duplicate stays 404, so post numbers don't reveal hidden ideas
+            $wasPublic = $post->moderation === 'approved' || ($viewer && $post->author_identity_id === $viewer->id);
             $target = $post->mergeTarget();
-            abort_unless($target?->isPublished(), 404);
+            abort_unless($wasPublic && $target?->isPublished(), 404);
 
             return redirect()->route('feedback.post', [$portal->slug, $target->number], 301);
         }
 
-        $viewer = PortalAuth::current($request);
         $this->ensureVisible($post, $viewer);
 
         $hasVoted = $viewer && DB::table('feedback_votes')->where(['feedback_post_id' => $post->id, 'portal_identity_id' => $viewer->id])->exists();

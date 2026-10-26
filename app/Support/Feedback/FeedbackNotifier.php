@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Notification;
 
 /**
  * Who hears about feedback (BRAI-60), sent after the surrounding transaction commits:
- * - a new post → the project admins who can open the project (never the author's own account);
+ * - a new post → everyone who may moderate it: project and workspace admins (never the author's own account);
  * - a public status change → every current follower, once per post and status (feedback_status_mails).
  */
 final class FeedbackNotifier
@@ -24,8 +24,10 @@ final class FeedbackNotifier
             $project = $post->portal->project;
             $authorUserId = $post->author?->user_id;
 
-            $recipients = $project->admins()->get()
-                ->filter(fn (User $user) => $user->id !== $authorUserId && $user->hasProjectAccess($project))
+            // everyone who may moderate (ProjectPolicy::update): project admins and workspace admins
+            $recipients = $project->admins()->get()->merge($project->workspace->admins()->get())
+                ->unique('id')
+                ->filter(fn (User $user) => $user->id !== $authorUserId && $user->hasProjectAccess($project) && $user->can('update', $project))
                 ->values();
 
             if ($recipients->isNotEmpty()) {

@@ -31,6 +31,7 @@ class FeedbackModerationController extends Controller
     public function index(Request $request, Workspace $workspace, Project $project): Response
     {
         $this->authorize('update', $project);
+        $project->setRelation('workspace', $workspace); // the per-board createItems checks below reuse it
         $portal = FeedbackPortal::where('project_id', $project->id)->first();
         $user = $request->user();
 
@@ -72,7 +73,7 @@ class FeedbackModerationController extends Controller
             'targets' => $portal ? $portal->posts()->published()->orderByDesc('votes_count')->limit(200)->get(['id', 'number', 'title'])
                 ->map(fn (FeedbackPost $p) => ['id' => $p->id, 'number' => $p->number, 'title' => $p->title])->values() : [],
             'boards' => Board::where('project_id', $project->id)->orderBy('name')->get(['id', 'name', 'slug', 'project_id'])
-                ->filter(fn (Board $board) => $user->can('createItems', $board))
+                ->filter(fn (Board $board) => $user->can('createItems', $board->setRelation('project', $project)))
                 ->map(fn (Board $board) => ['id' => $board->id, 'name' => $board->name])->values(),
             'events' => $portal ? $portal->events()->with('post:id,number')->latest('id')->limit(30)->get()
                 ->map(fn (FeedbackEvent $event) => [

@@ -59,13 +59,21 @@ final class FeedbackVotes
         });
     }
 
+    /** Locks the post like vote(): a follow never slips past a merge of the same post. */
     public static function follow(FeedbackPost $post, PortalIdentity $identity): bool
     {
-        return DB::table('feedback_subscriptions')->insertOrIgnore([
-            'feedback_post_id' => $post->id,
-            'portal_identity_id' => $identity->id,
-            'created_at' => now(),
-        ]) === 1;
+        return DB::transaction(function () use ($post, $identity) {
+            $locked = FeedbackPost::whereKey($post->id)->lockForUpdate()->first();
+            if (! $locked || $locked->merged_into_id !== null) {
+                return false;
+            }
+
+            return DB::table('feedback_subscriptions')->insertOrIgnore([
+                'feedback_post_id' => $locked->id,
+                'portal_identity_id' => $identity->id,
+                'created_at' => now(),
+            ]) === 1;
+        });
     }
 
     public static function unfollow(FeedbackPost $post, PortalIdentity $identity): bool
