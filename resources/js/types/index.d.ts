@@ -2083,3 +2083,42 @@ export interface AutomationPreview {
     conditions: { type: string; label: string; passed: boolean }[];
     actions: { label: string; status: 'ok' | 'skipped' | 'error'; message: string }[];
 }
+
+// ── Bring your data: imports (v1.41.0) ────────────────────────────────────────
+export type ImportSourceKey = 'trello' | 'jira' | 'notion' | 'brainitive' | string;
+export type ImportStatus = 'uploaded' | 'previewed' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export interface ImportSource {
+    key: ImportSourceKey;
+    label: string;
+    description: string;
+    accept: string;
+    needs_project: boolean;
+}
+
+/** ImportRun::report — counts of what was created, warnings, and content that couldn't come over. */
+export interface ImportReport {
+    created?: Record<string, number>;
+    warnings?: string[];
+    unsupported?: Record<string, number>;
+}
+
+export interface ImportRunData {
+    uuid: string;
+    source: ImportSourceKey;
+    status: ImportStatus;
+    file_name: string | null;
+    file_size: number;
+    project: { id: number; name: string; slug: string } | null;
+    user: { id: number; name: string } | null;
+    progress: { done: number; total: number };
+    error: string | null;
+    created_at: string | null;
+    finished_at: string | null;
+    /** links to what was created, importer-defined: {project_id, board_id, page_id, url, …} */
+    result: Record<string, unknown> | null;
+    /** importer-defined dry-run summary (only on the detail payload) */
+    preview?: Record<string, unknown> | null;
+    options?: Record<string, unknown> | null;
+    report?: ImportReport | null;
+}

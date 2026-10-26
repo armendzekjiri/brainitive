@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Notifications\ItemAssignedNotification;
 use App\Notifications\LeadAssignedNotification;
 use App\Notifications\TaskAssignedNotification;
+use App\Support\Imports\ImportScope;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -26,6 +27,9 @@ class Assignments
 {
     public static function item(Item $item): void
     {
+        if (ImportScope::active()) {
+            return; // bulk imports don't notify per record (v1.41.0)
+        }
         $actor = self::actor();
         $assigneeId = (int) $item->assigned_to;
         if (! $actor || ! $assigneeId || $assigneeId === $actor->id) {
@@ -43,6 +47,9 @@ class Assignments
 
     public static function task(TaskListItem $task): void
     {
+        if (ImportScope::active()) {
+            return; // bulk imports don't notify per record (v1.41.0)
+        }
         $actor = self::actor();
         $assigneeId = (int) $task->assignee_id;
         if (! $actor || ! $assigneeId || $assigneeId === $actor->id) {

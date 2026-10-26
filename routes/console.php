@@ -1,8 +1,10 @@
 <?php
 
+use App\Jobs\RunImport;
 use App\Models\AutomationRun;
 use App\Models\GithubDelivery;
 use App\Models\HelpdeskInboundEmail;
+use App\Models\ImportRun;
 use App\Models\InboxNotification;
 use App\Models\LeadFormEvent;
 use App\Models\McpRequest;
@@ -62,3 +64,14 @@ Schedule::command('model:prune', ['--model' => [HelpdeskInboundEmail::class]])->
 Schedule::command('app:check-helpdesk-sla')
     ->everyMinute()
     ->withoutOverlapping();
+
+// Bring your data (v1.41.0): uploaded import files are kept 7 days (enough to retry), runs 180 days.
+Schedule::call(function () {
+    ImportRun::query()->whereNotNull('file_path')->whereNotIn('status', [ImportRun::QUEUED, ImportRun::RUNNING])
+        ->where('updated_at', '<', now()->subDays(7))
+        ->each(function (ImportRun $run) {
+            RunImport::deleteFiles($run);
+            $run->forceFill(['file_path' => null])->save();
+        });
+})->name('imports:cleanup-files')->dailyAt('04:10')->withoutOverlapping();
+Schedule::command('model:prune', ['--model' => [ImportRun::class]])->dailyAt('04:20');
