@@ -37,8 +37,10 @@ class LegalInfo
         ],
         'providers' => [
             'hosting' => 'OVHcloud',
+            'hosting_location' => 'France (EU)', // operator, 2026-10-27
             'email' => 'MXroute',
             'backup' => 'OVHcloud (a separate server)',
+            'backup_location' => 'France (EU)', // operator, 2026-10-27
         ],
     ];
 
