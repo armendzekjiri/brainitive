@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Helpdesk;
 use App\Support\Helpdesks\HelpdeskForm;
+use App\Support\Legal\PublicOperator;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -14,7 +15,7 @@ class HelpdeskWidgetController extends Controller
      */
     public function formConfig(Helpdesk $helpdesk)
     {
-        $helpdesk->load(['fields' => function ($q) {
+        $helpdesk->load(['project.workspace', 'fields' => function ($q) {
             $q->orderBy('position');
         }]);
 
@@ -69,6 +70,8 @@ class HelpdeskWidgetController extends Controller
                 ];
             }),
             'branding' => $branding,
+            // who runs this helpdesk (BRAI-156): the widget's privacy line under the submit button
+            'operator' => PublicOperator::for($helpdesk->project?->workspace, nameFallback: true),
         ]);
     }
 
@@ -92,11 +95,13 @@ class HelpdeskWidgetController extends Controller
      */
     public function embed(Request $request, Helpdesk $helpdesk)
     {
+        $helpdesk->loadMissing('project.workspace');
         $response = Inertia::render('Widgets/HelpdeskEmbed', [
             'helpdesk_uuid' => $helpdesk->uuid,
             'base_url' => $request->getSchemeAndHttpHost(),
             'ticket_uuid' => $request->query('ticket'),
             'token' => $request->query('token'),
+            'operator' => PublicOperator::for($helpdesk->project?->workspace, nameFallback: true),
         ])->toResponse($request);
         $response->headers->set('Content-Security-Policy', 'frame-ancestors *');
 
@@ -123,6 +128,7 @@ class HelpdeskWidgetController extends Controller
                 'logo_url' => $settings['logo_url'] ?? null,
                 'brand_color' => $settings['brand_color'] ?? '#0E83DC',
             ],
+            'operator' => PublicOperator::for($helpdesk->project?->workspace, nameFallback: true),
         ]);
     }
 }

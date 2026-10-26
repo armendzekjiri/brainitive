@@ -9,6 +9,7 @@ use App\Models\ClientPortal;
 use App\Models\PortalIdentity;
 use App\Support\ClientPortal\ClientPortalAccess;
 use App\Support\ClientPortal\Deliverables;
+use App\Support\Legal\PublicOperator;
 use App\Support\Portal\PortalAuth;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -36,6 +37,7 @@ class ClientPortalController extends Controller
 
         return Inertia::render('ClientPortal/Index', [
             'portal' => $this->portalProps($portal),
+            'operator' => PublicOperator::for($portal->project?->workspace), // who runs the portal (BRAI-156)
             'identity' => PortalAuth::shared($request),
             'deliverables' => $deliverables->map(fn (ClientDeliverable $d) => $this->summary($d) + [
                 'comments_count' => $d->client_comments_count,
@@ -61,6 +63,7 @@ class ClientPortalController extends Controller
 
         return Inertia::render('ClientPortal/Deliverable', [
             'portal' => $this->portalProps($portal),
+            'operator' => PublicOperator::for($portal->project?->workspace), // who runs the portal (BRAI-156)
             'identity' => PortalAuth::shared($request),
             'deliverable' => $this->summary($item) + [
                 'message' => $item->message,
@@ -180,6 +183,7 @@ class ClientPortalController extends Controller
 
         return Inertia::render('ClientPortal/Denied', [
             'portal' => ['title' => $portal->title, 'slug' => $portal->slug],
+            'operator' => PublicOperator::for($portal->project?->workspace), // who runs the portal (BRAI-156)
             'identity' => PortalAuth::shared($request),
             'reason' => ClientPortalAccess::denialReason($member),
         ])->toResponse($request)->setStatusCode(403)->header('X-Robots-Tag', 'noindex, nofollow');

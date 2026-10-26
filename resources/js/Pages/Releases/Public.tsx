@@ -1,3 +1,5 @@
+import { OperatorNotice } from '@/components/legal/OperatorNotice';
+import type { PublicOperatorData } from '@/types';
 import ApplicationLogo from '@/components/ApplicationLogo';
 import { safeHtmlProp } from '@/lib/sanitize';
 import { Head } from '@inertiajs/react';
@@ -15,10 +17,11 @@ interface Props {
     releases: Entry[];
     changelogUrl: string | null;
     pagination?: { current: number; last: number; next: string | null; prev: string | null };
+    operator?: PublicOperatorData | null;
 }
 
 /** Published release notes of one release, or a project's public changelog. No app chrome. */
-export default function ReleasesPublic({ project, releases, changelogUrl, pagination }: Props) {
+export default function ReleasesPublic({ project, releases, changelogUrl, pagination, operator = null }: Props) {
     const single = !pagination;
     const title = single ? `${project.name} ${releases[0]?.name ?? ''} — release notes` : `${project.name} changelog`;
 
@@ -59,6 +62,7 @@ export default function ReleasesPublic({ project, releases, changelogUrl, pagina
                 {single && changelogUrl && (
                     <p className="text-sm"><a href={changelogUrl} className="text-primary hover:underline">All releases of {project.name} →</a></p>
                 )}
+                <OperatorNotice operator={operator} className="border-t pt-6 text-center" />
             </main>
         </div>
     );

@@ -1,4 +1,5 @@
 import ApplicationLogo from '@/components/ApplicationLogo';
+import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks';
 import { Link } from '@inertiajs/react';
 import { PropsWithChildren } from 'react';
 import { Moon, Sun } from 'lucide-react';
@@ -31,6 +32,9 @@ export default function Guest({ children }: PropsWithChildren) {
             <div className="mt-6 w-full overflow-hidden bg-card px-6 py-4 shadow-md sm:max-w-md sm:rounded-lg border border-border">
                 {children}
             </div>
+
+            {/* Imprint · Privacy · Terms · Cookies · Sub-processors (BRAI-156) */}
+            <LegalFooterLinks className="mt-6 mb-6 px-4 text-xs text-muted-foreground" linkClassName="hover:text-foreground" />
         </div>
     );
 }

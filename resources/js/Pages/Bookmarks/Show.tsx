@@ -728,7 +728,7 @@ export default function BookmarksShow({ workspace, bookmark, workspaceMembers, c
                                             {links.map((item) => (
                                                 <li key={item.id} className="group flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors">
                                                     <a href={safeExternalHref(item.url) ?? '#'} target="_blank" rel="noopener noreferrer" className="flex-1 min-w-0 flex items-start gap-3 text-primary hover:underline">
-                                                        {item.metadata?.favicon_url ? (
+                                                        {item.metadata?.favicon_url && !item.metadata.favicon_url.includes('google.com/s2/favicons') ? (
                                                             <img src={item.metadata.favicon_url} alt="" className="size-5 shrink-0 rounded mt-0.5" />
                                                         ) : (
                                                             <ExternalLink className="size-5 shrink-0 text-muted-foreground mt-0.5" />

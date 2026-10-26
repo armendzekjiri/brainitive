@@ -7,6 +7,7 @@ use App\Models\TicketContact;
 use App\Models\User;
 use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
+use App\Support\Legal\PublicOperator;
 use App\Support\Mail\BrandedMail;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
@@ -101,6 +102,8 @@ class TicketCreatedNotification extends Notification
                 ->headline("We received your ticket {$this->ticket->key}")
                 ->line("Your ticket has been created and we'll get back to you soon.")
                 ->quote($this->plainSubject())
+                // the contact learns who runs the helpdesk (BRAI-156)
+                ->line(PublicOperator::mailLine($workspace, nameFallback: true))
                 ->action('View ticket', $this->ticket->publicUrl())
                 ->context($sender)
                 ->signOff($sender);

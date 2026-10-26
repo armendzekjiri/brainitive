@@ -10,7 +10,16 @@
 @import '@fontsource/hanken-grotesk/latin-800.css';
 @import '@fontsource/jetbrains-mono/latin-500.css';
 @import '@fontsource/jetbrains-mono/latin-600.css';
-@import url('https://fonts.googleapis.com/css2?family=Reenie+Beanie&display=swap');
+
+/* Sticky-note handwriting font, self-hosted (no request to Google Fonts — BRAI-156).
+   Reenie Beanie © 2010 James Grieshaber, SIL Open Font License 1.1: resources/fonts/reenie-beanie/OFL.txt */
+@font-face {
+  font-family: 'Reenie Beanie';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/reenie-beanie/ReenieBeanie.ttf') format('truetype');
+}
 
 @tailwind base;
 @tailwind components;

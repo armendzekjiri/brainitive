@@ -22,15 +22,10 @@ import {
     KEY_DELETE_COMMAND,
 } from 'lexical';
 
-// Load KaTeX CSS if needed
+// KaTeX CSS from our own build, loaded with the first equation (no CDN request — BRAI-156)
+let katexCss: Promise<unknown> | null = null;
 const loadKatexCSS = () => {
-    if (!document.getElementById('katex-css')) {
-        const link = document.createElement('link');
-        link.id = 'katex-css';
-        link.rel = 'stylesheet';
-        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
-        document.head.appendChild(link);
-    }
+    katexCss ??= import('katex/dist/katex.min.css');
 };
 
 export interface EquationPayload {

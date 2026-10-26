@@ -23,6 +23,7 @@ use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Helpdesks\HelpdeskForm;
 use App\Support\Helpdesks\Mail\TicketMailer;
+use App\Support\Legal\PublicOperator;
 use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -619,7 +620,8 @@ class TicketController extends Controller
 
         $ticket->load([
             'column',
-            'helpdesk:id,uuid,settings',
+            'helpdesk:id,uuid,settings,project_id',
+            'helpdesk.project.workspace',
             'replies' => function ($q) {
                 $q->where('is_internal_note', false)
                     ->with(['contact:id,name,email', 'attachments'])
@@ -657,6 +659,8 @@ class TicketController extends Controller
             'access_token' => $accessToken,
             'app_name' => config('app.name'),
             'app_logo_url' => asset('images/logo.png'),
+            // who runs this helpdesk (BRAI-156): the workspace, not the platform
+            'operator' => PublicOperator::for($ticket->helpdesk?->project?->workspace),
         ]);
     }
 

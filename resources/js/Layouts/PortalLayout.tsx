@@ -1,7 +1,8 @@
 import ApplicationLogo from '@/components/ApplicationLogo';
 import { Button } from '@/components/ui/button';
-import type { PortalIdentityData } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
+import { OperatorNotice } from '@/components/legal/OperatorNotice';
+import type { PortalIdentityData, PublicOperatorData } from '@/types';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { LogIn, LogOut } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -35,6 +36,8 @@ export default function PortalLayout({
     children: ReactNode;
 }) {
     const back = returnTo ?? (typeof window !== 'undefined' ? window.location.pathname : '/');
+    // who runs this portal (BRAI-156): the `operator` page prop (PublicOperator::for), absent on the guest sign-in
+    const operator = (usePage().props as { operator?: PublicOperatorData | null }).operator ?? null;
 
     return (
         <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -85,6 +88,7 @@ export default function PortalLayout({
             </header>
             <main className={`mx-auto w-full ${width} flex-1 px-4 sm:px-6 py-8`}>{children}</main>
             <footer className="py-6 text-center text-xs text-muted-foreground">
+                <OperatorNotice operator={operator} className={`mx-auto mb-3 ${width} px-4 sm:px-6`} />
                 Powered by{' '}
                 <a href="/" className="underline-offset-2 hover:underline">
                     Brainitive

@@ -6,6 +6,7 @@ use App\Models\ClientDeliverable;
 use App\Models\ClientPortal;
 use App\Notifications\Messages\BrandedMailMessage;
 use App\Support\ClientPortal\ClientPortalLinks;
+use App\Support\Legal\PublicOperator;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -77,7 +78,8 @@ class ClientPortalGuestNotification extends Notification implements ShouldQueue
                 ->action('Open the conversation', ClientPortalLinks::client($this->deliverable));
         }
 
-        return $mail;
+        // who runs the portal (BRAI-156); "why you got this" is in the branded footer
+        return $mail->line(PublicOperator::mailLine($this->portal->project?->workspace));
     }
 
     /** User text in a Markdown mail: no links, images or formatting, at most 500 characters. */

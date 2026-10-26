@@ -1,3 +1,5 @@
+import { OperatorNotice } from '@/components/legal/OperatorNotice';
+import type { PublicOperatorData } from '@/types';
 import ApplicationLogo from '@/components/ApplicationLogo';
 import { safeHtmlProp } from '@/lib/sanitize';
 import { Head } from '@inertiajs/react';
@@ -19,7 +21,7 @@ interface Shared {
 }
 
 /** Read-only view of one shared doc or issue (ShareLinkController::show); no app chrome. */
-export default function ShareShow({ shared }: { shared: Shared | null }) {
+export default function ShareShow({ shared, operator = null }: { shared: Shared | null; operator?: PublicOperatorData | null }) {
     if (!shared) {
         return (
             <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center px-6 text-center">
@@ -76,6 +78,7 @@ export default function ShareShow({ shared }: { shared: Shared | null }) {
                 {shared.updated_at && (
                     <p className="mt-12 text-xs text-muted-foreground">Last updated {new Date(shared.updated_at).toLocaleString()}</p>
                 )}
+                <OperatorNotice operator={operator} className="mt-12 border-t pt-6 text-center" />
             </main>
         </div>
     );

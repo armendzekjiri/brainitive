@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\WorkspaceInvitation;
 use App\Support\Auth\MicrosoftLogin;
 use App\Support\Auth\MicrosoftLoginFailed;
+use App\Support\Legal\LegalInfo;
 use App\Support\SignOutEverywhere;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -102,6 +103,8 @@ class MicrosoftAuthController extends Controller
                     'microsoft_id' => $identity['id'],
                     'email_verified_at' => now(),
                     'password' => bcrypt(Str::random(64)),
+                    // the sign-in page says that continuing accepts the Terms (BRAI-156)
+                    ...LegalInfo::termsAcceptance(),
                 ]);
 
                 WorkspaceInvitation::acceptPendingForUser($user);

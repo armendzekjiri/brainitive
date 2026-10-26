@@ -17,12 +17,12 @@ class Lead extends Model
 
     protected $fillable = [
         'uuid', 'lead_form_id', 'column_id', 'number', 'name', 'email', 'phone', 'company',
-        'answers', 'source', 'meta', 'assigned_to', 'position',
+        'answers', 'source', 'meta', 'assigned_to', 'position', 'consent_at', 'consent_text',
     ];
 
     protected function casts(): array
     {
-        return ['answers' => 'array', 'meta' => 'array'];
+        return ['answers' => 'array', 'meta' => 'array', 'consent_at' => 'datetime'];
     }
 
     protected static function boot(): void

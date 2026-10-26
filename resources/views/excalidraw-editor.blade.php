@@ -8,6 +8,8 @@
     <meta http-equiv="Permissions-Policy" content="unload=(self)">
     <title>Whiteboard – {{ $page->name }}</title>
     <link rel="stylesheet" href="{{ asset('js/excalidraw-dist/excalidraw-bundle.css') }}">
+    {{-- Excalidraw fonts from our own build, not its third-party CDN fallback (BRAI-156, vite.config.js) --}}
+    <script>window.EXCALIDRAW_ASSET_PATH = @json(asset('build/excalidraw-assets').'/');</script>
     @if (! empty($excalidrawConfig['live']))
         {{-- Live drawing (BRAI-153): Yjs + the realtime connection, resources/js/whiteboard-live.ts --}}
         @vite('resources/js/whiteboard-live.ts')

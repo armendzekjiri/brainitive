@@ -53,6 +53,9 @@ class LeadController extends Controller
             'answers' => $rows,
             'utm' => $lead->meta['utm'] ?? null,
             'referrer' => $lead->meta['referrer'] ?? null,
+            // proof of the form's consent checkbox (BRAI-156)
+            'consent_at' => $lead->consent_at?->toIso8601String(),
+            'consent_text' => $lead->consent_text,
             'assignee' => $lead->assignee ? $lead->assignee->only(['id', 'name', 'email', 'avatar']) : null,
             'created_at' => $lead->created_at?->toIso8601String(),
         ];

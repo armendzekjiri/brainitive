@@ -42,7 +42,14 @@ class LeadFormOptions
         'notify_user_ids' => [], // project members emailed for every new lead
         'webhook_url' => null,
         'show_branding' => true,
+        // Consent checkbox above the submit button (BRAI-156): off | optional | required.
+        // The text the visitor saw is stored with the lead (leads.consent_text + consent_at).
+        'consent' => 'off',
+        'consent_text' => null,
     ];
+
+    /** Shown when the form has a checkbox but no text of its own; {organization} = who runs the form. */
+    public const DEFAULT_CONSENT_TEXT = 'I agree that {organization} stores and uses my details to respond to my request. I can withdraw this consent at any time.';
 
     private const COLOR = 'regex:/^#[0-9a-fA-F]{6}$/';
 
@@ -90,6 +97,8 @@ class LeadFormOptions
             'settings.notify_user_ids.*' => ['integer'],
             'settings.webhook_url' => ['sometimes', 'nullable', 'url:https,http', 'max:2048'],
             'settings.show_branding' => ['sometimes', 'boolean'],
+            'settings.consent' => ['sometimes', Rule::in(['off', 'optional', 'required'])],
+            'settings.consent_text' => ['sometimes', 'nullable', 'string', 'max:1000'],
         ];
     }
 
@@ -116,6 +125,9 @@ class LeadFormOptions
         foreach (['confirmation_email', 'show_branding'] as $flag) {
             $settings[$flag] = (bool) $settings[$flag];
         }
+        if (! in_array($settings['consent'], ['off', 'optional', 'required'], true)) {
+            $settings['consent'] = 'off';
+        }
 
         return $settings;
     }
@@ -126,6 +138,21 @@ class LeadFormOptions
     public static function publicSettings(array $settings): array
     {
         return array_diff_key($settings, array_flip(['notify_user_ids', 'webhook_url', 'confirmation_email', 'confirmation_subject', 'confirmation_body']));
+    }
+
+    /**
+     * The consent text a visitor sees (and that is stored with their lead), or null without a checkbox.
+     *
+     * @param  array<string, mixed>  $settings  merged settings (self::settings)
+     */
+    public static function consentText(array $settings, ?string $organization): ?string
+    {
+        if (($settings['consent'] ?? 'off') === 'off') {
+            return null;
+        }
+        $text = filled($settings['consent_text'] ?? null) ? trim((string) $settings['consent_text']) : self::DEFAULT_CONSENT_TEXT;
+
+        return str_replace('{organization}', filled($organization) ? (string) $organization : 'the organisation running this form', $text);
     }
 
     /** Logo / cover: an upload of this app (/storage/...) or an https image URL. */

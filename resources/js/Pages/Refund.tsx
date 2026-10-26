@@ -1,7 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 import { ArrowLeft, RotateCcw, Clock, CheckCircle, XCircle, CreditCard, Mail, AlertTriangle, HelpCircle } from 'lucide-react';
 import ApplicationLogo from '@/components/ApplicationLogo';
-import { CookieConsent } from '@/components/CookieConsent';
 
 const sections = [
     {
@@ -146,7 +145,6 @@ export default function Refund() {
                     </div>
                 </div>
             </div>
-            <CookieConsent />
         </>
     );
 }
