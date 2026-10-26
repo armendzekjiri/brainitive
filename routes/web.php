@@ -230,7 +230,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->middleware('throttle:10,1,calendar.connections.manual')->name('calendar.connections.manual.store');
         Route::patch('{connection}/toggle', 'toggle')->name('calendar.connections.toggle');
         Route::delete('{connection}', 'destroy')->name('calendar.connections.destroy');
-        Route::post('{connection}/events', 'createEvent')->name('calendar.connections.events.create');
+        Route::post('{connection}/events', 'createEvent')->middleware('throttle:30,1,calendar.connections.events.create')->name('calendar.connections.events.create'); // invites guests (BRAI-147)
         Route::get('{connection}/events/{eventId}', 'showEvent')->name('calendar.connections.events.show')->where('eventId', '[^/]+');
         Route::patch('{connection}/events/{eventId}', 'updateEvent')->name('calendar.connections.events.update')->where('eventId', '[^/]+');
         Route::delete('{connection}/events/{eventId}', 'deleteEvent')->name('calendar.connections.events.destroy')->where('eventId', '[^/]+');

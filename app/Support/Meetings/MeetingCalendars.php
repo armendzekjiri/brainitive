@@ -6,6 +6,7 @@ use App\Models\CalendarConnection;
 use App\Models\User;
 use App\Support\Calendar\CalendarProviders;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * The calendars a user can schedule an online meeting in (BRAI-147): their own active, writable
@@ -65,7 +66,9 @@ final class MeetingCalendars
 
         try {
             $kinds = array_values(array_intersect(['google_meet', 'teams'], CalendarProviders::for($connection)->conferenceProviders($connection)));
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
+            // logged without the message (transport errors carry URLs); the user sees "not available"
+            Log::warning('Meeting conferencing lookup failed', ['connection_id' => $connection->id, 'exception' => $e::class]);
             $kinds = [];
         }
         Cache::put($key, $kinds, $kinds === [] ? now()->addMinutes(10) : now()->addHours(12));

@@ -557,6 +557,7 @@ function QuickCreateModal({
             const payload: Record<string, any> = { title: title.trim(), date: dateInput, timezone: browserTimezone() };
             if (timeInput) payload.time = timeInput;
             if (externalKind === 'event' && meeting.conference) payload.conference = meeting.conference;
+            // guests only go with a video call setup the form still shows (the fields clear themselves otherwise)
             if (externalKind === 'event' && meeting.attendees.length > 0) payload.attendees = meeting.attendees;
             const routeName = externalKind === 'task'
                 ? 'calendar.connections.tasks.create'

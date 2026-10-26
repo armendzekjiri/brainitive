@@ -61,6 +61,7 @@ class MeetingController extends Controller
     /** Meetings of one issue / doc, oldest first (the UI splits upcoming and past). */
     public function index(Request $request, Workspace $workspace, Project $project): JsonResponse
     {
+        $this->authorize('view', $project);
         $validated = $request->validate([
             'subject_type' => ['required', Rule::in(array_keys(Meeting::SUBJECTS))],
             'subject_id' => ['required', 'string', 'max:64'],
@@ -69,24 +70,35 @@ class MeetingController extends Controller
         $this->authorize('view', $subject);
         $user = $request->user();
 
+        // By subject, not by the row's project_id: an issue moved to another project keeps its meetings.
         $meetings = Meeting::query()
-            ->where('project_id', $project->id)
             ->where('subject_type', $subject::class)
             ->where('subject_id', $subject->getKey())
             ->with(['creator:id,name', 'connection', 'notesPage'])
-            ->orderBy('starts_at')
+            ->orderBy('starts_at')->orderBy('id')
             ->limit(200)
             ->get();
 
+        // The rights are the same for every row (one subject): ask once, not per meeting.
+        $canUpdate = $user->can('update', $subject);
+        $context = [
+            'can_update_subject' => $canUpdate,
+            'can_create_pages' => $user->can('create', [Page::class, $project]),
+            'visible_notes' => Page::query()->visibleTo($user)
+                ->whereIn('id', $meetings->pluck('meeting_notes_page_id')->filter()->all())
+                ->pluck('id')->all(),
+        ];
+
         return response()->json([
-            'meetings' => $meetings->map(fn (Meeting $m) => $this->present($m->setRelation('subject', $subject), $user, $workspace, $project))->values(),
-            'can_schedule' => $user->can('update', $subject),
+            'meetings' => $meetings->map(fn (Meeting $m) => $this->present($m->setRelation('subject', $subject), $user, $workspace, $project, $context))->values(),
+            'can_schedule' => $canUpdate,
         ]);
     }
 
     /** Create the calendar event (with its video call) and link it to the issue / doc. */
     public function store(Request $request, Workspace $workspace, Project $project): JsonResponse
     {
+        $this->authorize('view', $project); // before validation: member ids must not be probed by outsiders
         $user = $request->user();
         $validated = $request->validate([
             'subject_type' => ['required', Rule::in(array_keys(Meeting::SUBJECTS))],
@@ -211,7 +223,10 @@ class MeetingController extends Controller
         return DB::transaction(function () use ($meeting, $user, $workspace, $project) {
             $locked = Meeting::query()->whereKey($meeting->id)->lockForUpdate()->firstOrFail();
             $existing = $locked->meeting_notes_page_id ? Page::find($locked->meeting_notes_page_id) : null;
-            if ($existing && $user->can('view', $existing)) {
+            if ($existing) {
+                // unpublished by its author: never replace it with a second doc
+                abort_unless($user->can('view', $existing), 403, 'The meeting notes are a draft of their author.');
+
                 return response()->json(['url' => route('pages.show', [$workspace->slug, $project->slug, $existing->uuid]), 'created' => false]);
             }
             $this->authorize('create', [Page::class, $project]);
@@ -251,8 +266,12 @@ class MeetingController extends Controller
     private function meeting(Project $project, string $id): Meeting
     {
         abort_unless(ctype_digit($id), 404);
+        $meeting = Meeting::query()->with(['subject', 'connection'])->findOrFail((int) $id);
+        // Reachable only through the project its issue / doc is in NOW (an issue can move to
+        // another project; the row's project_id is where it was scheduled).
+        abort_unless($meeting->subject !== null && (int) $meeting->subject->project_id === $project->id, 404);
 
-        return Meeting::query()->where('project_id', $project->id)->with(['subject', 'connection'])->findOrFail((int) $id);
+        return $meeting;
     }
 
     /** Project members, plus workspace admins (they open every project) — like hasProjectAccess. */
@@ -296,12 +315,23 @@ class MeetingController extends Controller
         return array_values($out);
     }
 
-    /** @return array<string, mixed> */
-    private function present(Meeting $meeting, User $viewer, Workspace $workspace, Project $project): array
+    /**
+     * One meeting for the UI. $context = rights shared by a list of one subject's meetings (the
+     * caller already checked view), so they're asked once per list, not per row.
+     *
+     * @param  array{can_update_subject: bool, can_create_pages: bool, visible_notes: list<int>}|null  $context
+     * @return array<string, mixed>
+     */
+    private function present(Meeting $meeting, User $viewer, Workspace $workspace, Project $project, ?array $context = null): array
     {
         $isOrganiser = $meeting->created_by === $viewer->id;
         $notes = $meeting->notesPage;
         $connection = $meeting->connection;
+        $context ??= [
+            'can_update_subject' => $viewer->can('update', $meeting->subject),
+            'can_create_pages' => $viewer->can('create', [Page::class, $project]),
+            'visible_notes' => $notes && $viewer->can('view', $notes) ? [$notes->id] : [],
+        ];
 
         return [
             'id' => $meeting->id,
@@ -321,12 +351,13 @@ class MeetingController extends Controller
                 'email' => $isOrganiser ? ($a['email'] ?? null) : null,
             ], (array) $meeting->attendees),
             'organizer' => $meeting->creator ? ['id' => $meeting->creator->id, 'name' => $meeting->creator->name] : null,
-            'notes_page' => $notes && $viewer->can('view', $notes)
+            'notes_page' => $notes && in_array($notes->id, $context['visible_notes'], true)
                 ? ['uuid' => $notes->uuid, 'name' => $notes->name, 'url' => route('pages.show', [$workspace->slug, $project->slug, $notes->uuid])]
                 : null,
-            'can_remove' => $viewer->can('delete', $meeting),
-            'can_cancel' => $viewer->can('cancel', $meeting) && (bool) $connection?->is_active,
-            'can_create_notes' => $viewer->can('create', [Page::class, $project]),
+            // = MeetingPolicy::delete / cancel for a viewer who can see the subject
+            'can_remove' => $isOrganiser || $context['can_update_subject'],
+            'can_cancel' => $isOrganiser && $connection !== null && $connection->user_id === $viewer->id && (bool) $connection->is_active,
+            'can_create_notes' => $context['can_create_pages'],
         ];
     }
 
@@ -344,7 +375,14 @@ class MeetingController extends Controller
             $url = route('pages.show', [$workspace->slug, $project->slug, $subject->uuid]);
             $lines[] = '<p><strong>Doc:</strong> <a href="'.e($url).'">'.e($subject->name).'</a></p>';
         }
-        $names = array_values(array_filter(array_map(fn (array $a) => $a['name'] ?? $a['email'] ?? null, (array) $meeting->attendees)));
+        // Names of members only: the doc is readable by the whole project, guest addresses are
+        // the organiser's to see (as in the meeting list).
+        $attendees = (array) $meeting->attendees;
+        $names = array_values(array_filter(array_map(fn (array $a) => ! empty($a['user_id']) ? ($a['name'] ?? null) : null, $attendees)));
+        $guests = count($attendees) - count($names);
+        if ($guests > 0) {
+            $names[] = '+'.$guests.' '.($guests === 1 ? 'guest' : 'guests');
+        }
         if ($names !== []) {
             $lines[] = '<p><strong>Attendees:</strong> '.e(implode(', ', $names)).'</p>';
         }

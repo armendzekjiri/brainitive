@@ -30,12 +30,14 @@ export default function SubjectMeetings({ workspace, project, subject, variant, 
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [canSchedule, setCanSchedule] = useState(false);
     const [loaded, setLoaded] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [removing, setRemoving] = useState<Meeting | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
     const [showPast, setShowPast] = useState(false);
 
     useEffect(() => {
         setLoaded(false);
+        setLoadError(null);
         setMeetings([]);
         const controller = new AbortController();
         axios.get<{ meetings: Meeting[]; can_schedule: boolean }>(route('meetings.index', [workspace.slug, project.slug]), {
@@ -46,7 +48,9 @@ export default function SubjectMeetings({ workspace, project, subject, variant, 
             setCanSchedule(data.can_schedule);
             setLoaded(true);
         }).catch((e) => {
-            if (!axios.isCancel(e)) setLoaded(true);
+            if (axios.isCancel(e)) return;
+            setLoadError(errorMessage(e, 'Couldn’t load the meetings.'));
+            setLoaded(true);
         });
         return () => controller.abort();
     }, [workspace.slug, project.slug, subject.type, subject.id]);
@@ -222,7 +226,8 @@ export default function SubjectMeetings({ workspace, project, subject, variant, 
                 )}
             </div>
             {!loaded && <p className="text-xs text-muted-foreground">Loading…</p>}
-            {loaded && meetings.length === 0 && <p className="text-xs text-muted-foreground">No meetings yet.</p>}
+            {loadError && <p className="text-xs text-destructive">{loadError}</p>}
+            {loaded && !loadError && meetings.length === 0 && <p className="text-xs text-muted-foreground">No meetings yet.</p>}
             {upcoming.map((m) => row(m, false))}
             {past.length > 0 && (
                 <div className="space-y-2">

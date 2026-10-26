@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { CalendarPlus, Check, Loader2, Users, Video } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -50,6 +50,9 @@ export default function ScheduleMeetingDialog({ open, onOpenChange, workspace, p
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const timezones = useMemo(() => allTimezones(), []);
+    // The prefill is read when the dialog opens; a live title change must not reset the form.
+    const subjectRef = useRef(subject);
+    subjectRef.current = subject;
 
     // Fresh form each time the dialog opens.
     useEffect(() => {
@@ -58,8 +61,8 @@ export default function ScheduleMeetingDialog({ open, onOpenChange, workspace, p
         setLoadError(null);
         setError(null);
         setSaving(false);
-        setTitle(subject.title);
-        setDescription(`${subject.title}\n${subject.url}`);
+        setTitle(subjectRef.current.title);
+        setDescription(`${subjectRef.current.title}\n${subjectRef.current.url}`);
         setDuration('30');
         setMemberIds([]);
         setEmails([]);
@@ -80,7 +83,7 @@ export default function ScheduleMeetingDialog({ open, onOpenChange, workspace, p
                 setLoadError(errorMessage(e, 'Couldn’t load your calendars.'));
             });
         return () => controller.abort();
-    }, [open, workspace.slug, project.slug, subject.title, subject.url]);
+    }, [open, workspace.slug, project.slug]);
 
     const calendar = options?.calendars.find((c) => String(c.id) === connectionId) ?? null;
     const kinds = calendar?.conference_providers ?? [];
@@ -286,6 +289,7 @@ export default function ScheduleMeetingDialog({ open, onOpenChange, workspace, p
                                     })}
                                 </div>
                             )}
+                            <Label htmlFor="meeting-emails" className="sr-only">Other guests</Label>
                             <EmailChipsInput id="meeting-emails" value={emails} onChange={setEmails} max={max} taken={memberIds.length} placeholder="Other guests: name@example.com" />
                             <p className="text-[11px] text-muted-foreground">Your calendar sends the invitations (at most {max} people).</p>
                         </div>

@@ -24,24 +24,35 @@ export default function QuickCreateMeetingFields({ open, connectionId, value, on
     hasTime: boolean;
 }) {
     const [calendars, setCalendars] = useState<MeetingCalendar[] | null>(null);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
     useEffect(() => {
         if (!open) return;
         const controller = new AbortController();
         axios.get<{ calendars: MeetingCalendar[] }>(route('calendar.meetings.calendars'), { signal: controller.signal })
-            .then(({ data }) => setCalendars(data.calendars))
-            .catch(() => setCalendars([]));
+            .then(({ data }) => { setCalendars(data.calendars); setLoadError(null); })
+            .catch((e) => {
+                if (axios.isCancel(e)) return;
+                setCalendars([]);
+                setLoadError('Couldn’t check which video calls this calendar offers.');
+            });
         return () => controller.abort();
     }, [open]);
 
     const calendar = calendars?.find((c) => c.id === connectionId) ?? null;
     const kinds = calendar?.conference_providers ?? [];
 
-    // A kind the newly picked calendar doesn't offer is dropped.
+    // A kind the newly picked calendar doesn't offer is dropped; when the fields hide (no video
+    // calls on this calendar) the guests go too — never invite people the form no longer shows.
     useEffect(() => {
-        if (value.conference && !kinds.includes(value.conference)) onChange({ ...value, conference: null });
+        if (kinds.length === 0) {
+            if (value.conference || value.attendees.length > 0) onChange(NO_MEETING);
+        } else if (value.conference && !kinds.includes(value.conference)) {
+            onChange({ ...value, conference: null });
+        }
     }, [connectionId, calendars]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    if (loadError) return <p className="text-xs text-muted-foreground">{loadError}</p>;
     if (!calendar) return null;
     if (kinds.length === 0) {
         return calendar.provider === 'outlook'

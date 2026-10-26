@@ -3,11 +3,13 @@
 namespace Tests\Feature\Meetings;
 
 use App\Models\ActivityLog;
+use App\Models\Board;
 use App\Models\CalendarConnection;
 use App\Models\ContentReference;
 use App\Models\Item;
 use App\Models\Meeting;
 use App\Models\Page;
+use App\Models\Project;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as HttpRequest;
@@ -186,6 +188,8 @@ class MeetingsTest extends TestCase
         // viewers can't change the issue; outsiders can't see it
         $this->actingAs($this->viewer)->postJson($this->url('meetings.store'), $this->payload(['connection_id' => $viewerCalendar->id]))->assertForbidden();
         $this->actingAs($this->outsider)->postJson($this->url('meetings.store'), $this->payload(['connection_id' => $outsiderCalendar->id]))->assertForbidden();
+        // outsiders can't probe membership through validation: refused before it runs
+        $this->actingAs($this->outsider)->postJson($this->url('meetings.store'), $this->payload(['member_ids' => [$this->outsider->id]]))->assertForbidden();
         // only your own calendar
         $this->actingAs($this->editor)->postJson($this->url('meetings.store'), $this->payload(['connection_id' => $viewerCalendar->id]))
             ->assertUnprocessable()->assertJsonValidationErrors('connection_id');
@@ -294,6 +298,9 @@ class MeetingsTest extends TestCase
         $this->assertStringContainsString('href="https://meet.google.com/abc-defg-hij"', $html);
         $this->assertStringContainsString(route('pages.show', [$this->workspace->slug, $this->project->slug, $doc->uuid]), $html);
         $this->assertStringContainsString('<h2>Action items</h2>', $html);
+        // members by name, guests only counted: the doc is readable by the whole project
+        $this->assertStringContainsString(e($this->viewer->name).', +1 guest', $html);
+        $this->assertStringNotContainsString('client@partner.test', $html);
         $this->assertTrue(ContentReference::where('source_type', 'page')->where('source_id', $doc->id)->where('target_id', $notes->id)->exists());
         $first->assertJsonPath('url', route('pages.show', [$this->workspace->slug, $this->project->slug, $notes->uuid]));
 
@@ -301,8 +308,31 @@ class MeetingsTest extends TestCase
         $this->actingAs($this->editor)->postJson($this->url('meetings.notes', [$meeting->id]))->assertOk()->assertJsonPath('created', false);
         $this->actingAs($this->viewer)->postJson($this->url('meetings.notes', [$meeting->id]))->assertOk()->assertJsonPath('url', $first->json('url'));
         $this->assertSame(1, Page::where('name', 'like', 'Notes — %')->count());
+
+        // unpublished by its author: others get a 403, never a second doc
+        $notes->update(['status' => 'draft']);
+        $this->actingAs($this->viewer)->postJson($this->url('meetings.notes', [$meeting->id]))->assertForbidden();
+        $this->assertSame($notes->id, $meeting->fresh()->meeting_notes_page_id);
+        $notes->update(['status' => 'published']);
         $this->actingAs($this->viewer)->getJson($this->url('meetings.index').'?subject_type=page&subject_id='.$doc->uuid)
             ->assertJsonPath('meetings.0.notes_page.uuid', $notes->uuid);
+    }
+
+    public function test_meetings_follow_an_issue_moved_to_another_project(): void
+    {
+        $meeting = $this->schedule();
+        $otherProject = Project::factory()->create(['workspace_id' => $this->workspace->id, 'created_by' => $this->editor->id]);
+        $otherProject->users()->attach($this->editor->id, ['role' => 'admin']);
+        $otherBoard = Board::factory()->create(['project_id' => $otherProject->id, 'created_by' => $this->editor->id]);
+        $this->issue->forceFill(['board_id' => $otherBoard->id, 'project_id' => $otherProject->id])->saveQuietly();
+
+        // no longer reachable through the old project …
+        $this->actingAs($this->editor)->postJson($this->url('meetings.notes', [$meeting->id]))->assertNotFound();
+        $this->actingAs($this->editor)->deleteJson($this->url('meetings.destroy', [$meeting->id]))->assertNotFound();
+        // … but listed (and reachable) in the new one
+        $this->actingAs($this->editor)->getJson(route('meetings.index', [$this->workspace->slug, $otherProject->slug]).'?subject_type=item&subject_id='.$this->issue->id)
+            ->assertOk()->assertJsonPath('meetings.0.id', $meeting->id);
+        $this->actingAs($this->editor)->deleteJson(route('meetings.destroy', [$this->workspace->slug, $otherProject->slug, $meeting->id]))->assertOk();
     }
 
     public function test_quick_create_adds_a_meet_and_guests_on_the_calendar_page(): void

@@ -34,6 +34,10 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['project_id', 'starts_at']);
+            // FK columns Postgres doesn't index itself (SET NULL on delete of a connection / user / page)
+            $table->index('calendar_connection_id');
+            $table->index('created_by');
+            $table->index('meeting_notes_page_id');
         });
     }
 
