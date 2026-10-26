@@ -2194,3 +2194,102 @@ export interface CalendarFeedPayload {
     defaults: CalendarFeedOptions;
     projects: { id: number; name: string; workspace: string | null }[];
 }
+
+// ── Client portal (v1.42.0, BRAI-73) ──────────────────────────────────────────
+
+/** awaiting | approved | changes_requested — plus superseded / withdrawn (displayStatus()) */
+export type ClientDeliverableStatus = 'awaiting' | 'approved' | 'changes_requested' | 'superseded' | 'withdrawn';
+export type ClientDecisionValue = 'approved' | 'changes_requested';
+
+/** A frozen plan snapshot (Deliverables::planSnapshot): hidden columns and issue links removed. */
+export interface ClientPlanSnapshot {
+    description: string | null;
+    data: import('@/components/plan/types').PlanData;
+    settings: import('@/components/plan/types').PlanSettings;
+}
+
+/** ClientPortalController summary (client side). */
+export interface ClientDeliverableSummary {
+    uuid: string;
+    kind: 'page' | 'plan';
+    title: string;
+    version: number;
+    status: ClientDeliverableStatus;
+    published_at: string | null;
+    is_current: boolean;
+    comments_count?: number;
+}
+
+export interface ClientPortalPublic {
+    title: string;
+    slug: string;
+    welcome: string | null;
+}
+
+export interface ClientDecisionEntry {
+    id: number;
+    name: string;
+    email?: string;
+    decision: ClientDecisionValue;
+    note: string | null;
+    version: number;
+    created_at: string | null;
+    is_me?: boolean;
+}
+
+export interface ClientCommentEntry {
+    id: number;
+    author: string;
+    from_team: boolean;
+    /** team page only */
+    visibility?: 'client' | 'internal';
+    is_me?: boolean;
+    body: string;
+    created_at: string | null;
+}
+
+/** A version of the same doc / plan, client side (by uuid). */
+export interface ClientDeliverableVersion {
+    uuid: string;
+    version: number;
+    status: ClientDeliverableStatus;
+    decision: ClientDecisionValue | 'awaiting';
+    published_at: string | null;
+}
+
+/** A version of the same doc / plan, team side (by id). */
+export interface ClientDeliverableTeamVersion {
+    id: number;
+    version: number;
+    status: ClientDeliverableStatus;
+    decision: ClientDecisionValue | 'awaiting';
+    published_at: string | null;
+}
+
+/** ClientPortalTeamController summary (team side). */
+export interface ClientDeliverableTeamSummary {
+    id: number;
+    uuid: string;
+    kind: 'page' | 'plan';
+    title: string;
+    version: number;
+    status: ClientDeliverableStatus;
+    decision: ClientDecisionValue | 'awaiting';
+    published_at: string | null;
+    published_by: string | null;
+    decisions_count: number | null;
+    comments_count: number | null;
+    last_decision_at: string | null;
+}
+
+export interface ClientPortalMemberRow {
+    id: number;
+    name: string | null;
+    email: string | null;
+    state: 'active' | 'expired' | 'revoked';
+    invited_by: string | null;
+    invited_at: string | null;
+    expires_at: string | null;
+    revoked_at: string | null;
+    last_seen_at: string | null;
+}

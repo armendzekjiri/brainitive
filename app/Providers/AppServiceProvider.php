@@ -7,6 +7,7 @@ use App\Models\Board;
 use App\Models\BoardView;
 use App\Models\Bookmark;
 use App\Models\Capture;
+use App\Models\ClientPortal;
 use App\Models\InstanceSettings;
 use App\Models\Item;
 use App\Models\LeadForm;
@@ -25,6 +26,7 @@ use App\Policies\BoardPolicy;
 use App\Policies\BoardViewPolicy;
 use App\Policies\BookmarkPolicy;
 use App\Policies\CapturePolicy;
+use App\Policies\ClientPortalPolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\LeadFormPolicy;
 use App\Policies\PagePolicy;
@@ -136,6 +138,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Capture::class, CapturePolicy::class);
         Gate::policy(ProjectHealthReport::class, ProjectHealthReportPolicy::class);
         Gate::policy(WorkloadAllocation::class, WorkloadPolicy::class);
+        Gate::policy(ClientPortal::class, ClientPortalPolicy::class); // client portal, team side (v1.42.0, BRAI-73)
         // client billing (v1.38.0): workspace admins only
         Gate::define('manageBilling', [BillingPolicy::class, 'manageBilling']);
 

@@ -248,6 +248,7 @@ function ProjectOverview({ workspace, project, members = [], recentlyUpdated = [
         { label: 'Health', aria: 'Project health', href: route('projects.health', params), icon: HeartPulse },
         { label: 'Workload', aria: 'Project workload', href: route('workload.index', params), icon: Gauge },
         { label: 'Releases', aria: 'Project releases', href: route('releases.index', params), icon: Rocket },
+        { label: 'Client portal', aria: 'Project client portal', href: route('client-portal.manage.index', params), icon: Briefcase },
     ];
 
     return (
