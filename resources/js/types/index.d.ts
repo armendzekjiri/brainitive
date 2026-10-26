@@ -2999,3 +2999,12 @@ export interface LiveTokenResponse {
     denied: string[];
     user: { id: number; name: string; avatar: string | null };
 }
+
+// ── Live whiteboards (BRAI-153, v1.44.0) ────────────────────────────────────────────────────
+
+/** `whiteboardCollab` prop of Pages/Show: the preview watches the live whiteboard; null = static. */
+export interface WhiteboardCollabProps {
+    epoch: number;
+    /** wss URL of the realtime server, or a path on this host ("/collab"). */
+    url: string;
+}

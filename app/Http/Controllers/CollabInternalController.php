@@ -8,13 +8,14 @@ use App\Models\User;
 use App\Support\Collab\CollabConfig;
 use App\Support\Collab\CollabDocument;
 use App\Support\Collab\PageCollab;
+use App\Support\Collab\WhiteboardCollab;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Internal API for the realtime server (BRAI-54), behind VerifyCollabSecret: load / store a live
+ * Internal API for the realtime server (BRAI-54; whiteboards BRAI-153), behind VerifyCollabSecret: load / store a live
  * document's Yjs state and re-check who may still be connected. Stale epoch → 409 (the server closes
  * the document; browsers reopen on the new draft), page gone → 404.
  */
@@ -67,12 +68,12 @@ class CollabInternalController extends Controller
             'user_ids' => 'present|array|max:500',
             'user_ids.*' => 'integer|min:1',
         ]);
-        [$page, $epoch] = $this->resolve($validated['document']);
+        [$page, $epoch, $kind] = $this->resolve($validated['document']);
 
         $users = User::whereIn('id', array_unique($validated['user_ids']))->get()->keyBy('id');
         $access = [];
         foreach (array_unique($validated['user_ids']) as $id) {
-            $access[(string) $id] = isset($users[$id]) ? PageCollab::access($page, $users[$id]) : null;
+            $access[(string) $id] = isset($users[$id]) ? $this->accessOf($page, $kind, $users[$id]) : null;
         }
 
         return response()->json([
@@ -82,15 +83,25 @@ class CollabInternalController extends Controller
     }
 
     /**
-     * @return array{0: Page, 1: int}
+     * The page behind a document name; 404 when it's gone or no longer of that kind (a whiteboard never
+     * opens as a document's Y doc and the other way round — BRAI-153).
+     *
+     * @return array{0: Page, 1: int, 2: string}
      */
     private function resolve(string $document): array
     {
         $parsed = CollabDocument::parse($document);
         abort_if($parsed === null, 404);
         $page = Page::with('project.workspace')->where('uuid', $parsed['uuid'])->first();
-        abort_if($page === null || ! PageCollab::supports($page), 404);
+        $supported = $page !== null && ($parsed['kind'] === CollabDocument::WHITEBOARD ? WhiteboardCollab::supports($page) : PageCollab::supports($page));
+        abort_unless($supported, 404);
 
-        return [$page, $parsed['epoch']];
+        return [$page, $parsed['epoch'], $parsed['kind']];
+    }
+
+    /** @return 'edit'|'view'|null */
+    private function accessOf(Page $page, string $kind, User $user): ?string
+    {
+        return $kind === CollabDocument::WHITEBOARD ? WhiteboardCollab::access($page, $user) : PageCollab::access($page, $user);
     }
 }

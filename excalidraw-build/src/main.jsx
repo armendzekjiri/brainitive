@@ -7,6 +7,10 @@ import {
   convertToExcalidrawElements,
   getCommonBounds,
   CaptureUpdateAction,
+  reconcileElements,
+  restoreElements,
+  bumpVersion,
+  newElementWith,
 } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import _ from 'lodash';
@@ -40,6 +44,19 @@ window.BrainitiveExcalidraw = {
     let lastElements = [];
     let lastAppState = {};
     let lastFiles = {};
+    // Live whiteboards (BRAI-153): resources/js/lib/whiteboard/live.ts listens to the scene and the pointer
+    const listeners = { change: new Set(), pointer: new Set() };
+    const emit = (type, ...args) => listeners[type].forEach((listener) => {
+      try {
+        listener(...args);
+      } catch (error) {
+        console.error(error);
+      }
+    });
+    let resolveReady;
+    const ready = new Promise((resolve) => { resolveReady = resolve; });
+    let setUi = null;
+    let ui = { collaborating: false, viewMode: options.viewModeEnabled ?? false };
 
     const initialData = {
       elements: options.initialData?.elements ?? [],
@@ -49,22 +66,33 @@ window.BrainitiveExcalidraw = {
       ...options.initialData,
     };
 
-    const ExcalidrawWrapper = () => (
-      <Excalidraw
-        initialData={initialData}
-        theme={options.theme || 'light'}
-        viewModeEnabled={options.viewModeEnabled ?? false}
-        zenModeEnabled={options.zenModeEnabled ?? false}
-        excalidrawAPI={(api) => {
-          excalidrawAPI = api;
-        }}
-        onChange={(elements, appState, files) => {
-          lastElements = elements;
-          lastAppState = appState;
-          lastFiles = files;
-        }}
-      />
-    );
+    const ExcalidrawWrapper = () => {
+      const [state, setState] = React.useState(ui);
+      setUi = (patch) => {
+        ui = { ...ui, ...patch };
+        setState(ui);
+      };
+      return (
+        <Excalidraw
+          initialData={initialData}
+          theme={options.theme || 'light'}
+          viewModeEnabled={state.viewMode}
+          zenModeEnabled={options.zenModeEnabled ?? false}
+          isCollaborating={state.collaborating}
+          excalidrawAPI={(api) => {
+            excalidrawAPI = api;
+            if (api) resolveReady(api);
+          }}
+          onChange={(elements, appState, files) => {
+            lastElements = elements;
+            lastAppState = appState;
+            lastFiles = files;
+            emit('change', elements, appState, files);
+          }}
+          onPointerUpdate={(payload) => emit('pointer', payload)}
+        />
+      );
+    };
 
     root.render(<ExcalidrawWrapper />);
 
@@ -104,15 +132,37 @@ window.BrainitiveExcalidraw = {
             e.boundElements = [...(e.boundElements || []), ...arrows];
             e.groupIds = element.groupIds;
             e.frameId = element.frameId;
+            // same id, newer version: live whiteboards (BRAI-153) take the card over the old shape
+            bumpVersion(e, element.version);
           }
           added.push(e);
         });
       });
+      const addedIds = new Set(added.map((e) => e.id));
+      // dropped labels are deleted (a newer, deleted version), not just left out: others drop them too
+      const removed = [...dropped].filter((id) => !addedIds.has(id) && byId.has(id))
+        .map((id) => newElementWith(byId.get(id), { isDeleted: true }));
       const kept = [...byId.values()].filter((e) => !dropped.has(e.id));
-      excalidrawAPI.updateScene({ elements: [...kept, ...added], captureUpdate: CaptureUpdateAction.IMMEDIATELY });
+      excalidrawAPI.updateScene({ elements: [...kept, ...removed, ...added], captureUpdate: CaptureUpdateAction.IMMEDIATELY });
     };
 
     return {
+      /** Live whiteboards (BRAI-153): the Excalidraw API once mounted, scene / pointer listeners, UI switches. */
+      whenReady: () => ready,
+      raw: () => excalidrawAPI,
+      on: (type, listener) => {
+        listeners[type].add(listener);
+        return () => listeners[type].delete(listener);
+      },
+      setCollaborating: (on) => {
+        ui = { ...ui, collaborating: !!on };
+        setUi?.({});
+      },
+      setViewMode: (on) => {
+        ui = { ...ui, viewMode: !!on };
+        setUi?.({});
+      },
+
       getSceneElements: () => liveElements(),
       getAppState: () => (excalidrawAPI ? excalidrawAPI.getAppState() : lastAppState),
       getFiles: () => (excalidrawAPI ? excalidrawAPI.getFiles() : lastFiles),
@@ -212,6 +262,10 @@ window.BrainitiveExcalidraw = {
     };
   },
   exportToCanvas,
+  // Live whiteboards (BRAI-153): Excalidraw's own merge of remote elements
+  reconcileElements,
+  restoreElements,
+  CaptureUpdateAction,
 
   templates: TEMPLATES.map(({ key, name, description }) => ({ key, name, description })),
 

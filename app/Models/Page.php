@@ -170,7 +170,9 @@ class Page extends Model
                 return;
             }
             $before = (new Page)->setRawAttributes($page->getRawOriginal(), true);
-            if (! $page->is_whiteboard && $before->draftHash() !== $page->draftHash()) {
+            // a whiteboard has no draft: any scene change outside the live document replaces it (BRAI-153)
+            $replaced = $page->is_whiteboard ? $page->wasChanged('content') : $before->draftHash() !== $page->draftHash();
+            if ($replaced) {
                 PageCollab::reset($page);
             }
         });
@@ -533,10 +535,12 @@ class Page extends Model
      * Save a whiteboard scene (whiteboards are edited live, Miro-style) and keep the history
      * useful without a version per keystroke: a checkpoint is recorded on an explicit save,
      * when the newest version is older than the interval, or when someone else saved last.
+     * `$live` (BRAI-153): several people save the same live scene in turns, so "someone else saved
+     * last" would record a version per save — live saves use the interval and explicit saves only.
      *
      * @param  array<string, mixed>  $content
      */
-    public function saveWhiteboard(User $user, array $content, bool $checkpoint = false): ?PageVersion
+    public function saveWhiteboard(User $user, array $content, bool $checkpoint = false, bool $live = false): ?PageVersion
     {
         $this->update([
             'content' => $content,
@@ -547,7 +551,7 @@ class Page extends Model
         $latest = $this->versions()->first(['id', 'created_by', 'created_at']);
         $isStale = $latest === null
             || $latest->created_at->lt(now()->subMinutes(self::WHITEBOARD_VERSION_INTERVAL_MINUTES))
-            || $latest->created_by !== $user->id;
+            || (! $live && $latest->created_by !== $user->id);
 
         return $checkpoint || $isStale ? $this->recordVersion($user) : null;
     }
