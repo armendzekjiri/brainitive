@@ -513,6 +513,9 @@ class BoardController extends Controller
             ->get(['id', 'user_id', 'action', 'changes', 'metadata', 'created_at']);
 
         return response()->json([
+            // live issue view (BRAI-151): title / description changed elsewhere are refetched with the rest
+            'title' => $item->title,
+            'description' => $item->description,
             'comments' => $comments,
             'attachments' => $attachments,
             'history' => $history,

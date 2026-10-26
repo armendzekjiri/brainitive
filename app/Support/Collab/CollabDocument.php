@@ -4,8 +4,8 @@ namespace App\Support\Collab;
 
 /**
  * Name of a page's live Y document: `page.<uuid>.<epoch>` for a document (BRAI-54),
- * `whiteboard.<uuid>.<epoch>` for a whiteboard (BRAI-153). The realtime server only ever sees this
- * name; a new epoch is a new document.
+ * `whiteboard.<uuid>.<epoch>` for a whiteboard (BRAI-153), `item.<id>.<epoch>` for an issue
+ * description (BRAI-151). The realtime server only ever sees this name; a new epoch is a new document.
  */
 final class CollabDocument
 {
@@ -31,5 +31,24 @@ final class CollabDocument
         }
 
         return ['kind' => $match[1], 'uuid' => $match[2], 'epoch' => (int) $match[3]];
+    }
+
+    /** An issue description's live document (BRAI-151). */
+    public static function itemName(int $itemId, int $epoch): string
+    {
+        return "item.{$itemId}.{$epoch}";
+    }
+
+    /**
+     * @return array{id: int, epoch: int}|null
+     */
+    public static function parseItem(string $name): ?array
+    {
+        // ≤ 18 digits: always inside PostgreSQL's bigint
+        if (! preg_match('/^item\.([1-9][0-9]{0,17})\.(\d{1,9})$/', $name, $match)) {
+            return null;
+        }
+
+        return ['id' => (int) $match[1], 'epoch' => (int) $match[2]];
     }
 }
