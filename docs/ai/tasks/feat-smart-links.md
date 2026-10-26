@@ -1,6 +1,7 @@
 # feat/smart-links — Smart links in documents (BRAI-143, board item 317)
 
 Release: v1.42.0. Branch `feat/smart-links` from `release/v1.42.0`.
+**Status:** done
 
 ## Goal
 Jira / Confluence-style smart links: paste the URL of an issue, doc / whiteboard, ticket or plan

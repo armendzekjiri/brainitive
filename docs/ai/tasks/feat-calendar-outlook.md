@@ -1,7 +1,7 @@
 # Outlook / Microsoft 365 calendar provider
 
 **Branch:** feat/calendar-outlook (from `release/v1.42.0`)
-**Status:** done (not merged)
+**Status:** done
 **Started:** 2026-10-26
 **Board card:** BRAI-140 (board item 314)
 

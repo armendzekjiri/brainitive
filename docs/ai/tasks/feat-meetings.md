@@ -1,7 +1,7 @@
 # Online meetings (Google Meet, Microsoft Teams) from cards, the calendar and documents
 
 **Branch:** feat/meetings (from `release/v1.42.0`)
-**Status:** done (not merged)
+**Status:** done
 **Started:** 2026-10-26
 **Board card:** BRAI-147 (board item 321)
 

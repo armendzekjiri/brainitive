@@ -1,6 +1,7 @@
 # feat/automation-conditions: BRAI-144 flexible condition builder (release v1.42.0)
 
 Card: BRAI-144 (board item 318). Builds on BRAI-63 (`feat-automation.md`).
+**Status:** done
 
 User: "automation work but: on the condition we need separated is, is not, contain etc, like: label
 then select one: is then chose ... so we are flexible?"

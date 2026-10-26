@@ -1,6 +1,7 @@
 # Sign in with Microsoft (BRAI-148, board item 322) — release v1.42.0
 
 Branch `feat/microsoft-login` (from `release/v1.42.0`).
+**Status:** done
 
 ## Goal
 "we need to login with microsoft, im creating now the app in microsoft so when we working here then

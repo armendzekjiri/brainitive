@@ -279,6 +279,16 @@ through `app/Support/Mcp/PageContentConverter`.
   The classic `ToolbarPlugin` is opt-in via the header toggle (`localStorage`
   `page-formatting-toolbar`). Block conversions go through the shared `applyBlockType()`.
 
+**Smart links (v1.42.0, BRAI-143).** A link to workspace content is stored as a plain anchor:
+`<a href="<canonical url>" data-smart-link="item:12|page:<uuid>|ticket:<id>|plan:<id>" data-smart-link-view="inline|card">text</a>`.
+- Never store a smart link in another shape (no custom element, no JSON-only node): everything outside
+  the editor (share page, client portal, MCP, exports, search, `SafeHtml`) must keep seeing a working link.
+  `SmartLinkNode` imports `a[data-smart-link]` with a higher priority than `LinkNode`.
+- Refs are ids / uuids, never titles; the chip's live data comes from `smart-links.index`, batched per
+  tick by `smartLinkStore.ts` — never one request per chip.
+- Turn smart links on with the editor's `smartLinks={{ workspaceSlug, projectSlug }}` prop; without it the
+  node renders as a plain link (comments, tickets, public pages).
+
 ---
 
 ## Page workflow (draft → publish → versions)
@@ -347,6 +357,28 @@ Pages work like Confluence. Keep these rules when touching pages:
   `app/Support/Calendar/Providers/` extending `BaseCalendarProvider` + one line in `PROVIDERS`. Follow
   the recipe in [`tasks/feat-calendar-providers.md`](./tasks/feat-calendar-providers.md#how-to-add-a-provider-contract-for-the-outlook-and-caldav--ics-branches)
   and the `CalendarProvider` docblock (normative). Google Tasks stay outside the contract.
+- **User-entered URLs (CalDAV servers, ICS links) only through `App\Support\Calendar\SafeRemoteUrl`**
+  (`send()`, `allowed()`), never `Http::` directly. Private / loopback addresses are refused everywhere
+  except `APP_ENV=e2e` + `CALENDAR_LINKS_ALLOW_PRIVATE`; don't add another switch. Never log or show an ICS
+  URL (it is a secret) — show the host.
+- **OAuth providers** (Google, Outlook): authorization code + PKCE S256, `state` / verifier one-time in the
+  session; tokens in encrypted columns, saved with `forceFill()->save()`. Only Google deactivates a
+  connection on a refused refresh.
+- **Conferencing is optional** (`conferenceProviders()` + `createEvent(conference, attendees)`); the extra
+  normalized keys `conference_url` / `conference_provider` are present only with a call — don't add them
+  to `NormalizedEvent::KEYS`.
+- Every throttle on a calendar / meetings route gets its own key (`throttle:N,1,<route name>`).
+
+## Workflow automation (BRAI-63, conditions BRAI-144)
+
+- **`AutomationCatalog` is the single source of truth** for triggers, actions and the condition matrix
+  (`CONDITION_FIELDS`, `OPERATORS`, `CUSTOM_FIELD_OPERATORS`). The builder (`ConditionRow.tsx`,
+  `conditions.ts`) renders what `forFrontend()` sends — never hard-code a field / operator list in React.
+- Definitions are stored only through `AutomationDefinition::validate()`; conditions are read through
+  `normalizeCondition()` (legacy `{type, value}` → `{field, operator, value}`), so engine, describe and
+  builder never see the old shape.
+- A field's value is read in one place, `ConditionFacts::get()`; evaluation + wording in
+  `AutomationConditions` (the client wording in `conditions.ts` mirrors `describe()` — change both).
 
 ## Licence & dependencies
 
