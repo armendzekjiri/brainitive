@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\User;
+use App\Support\Live\BoardLive;
 use App\Support\Live\Live;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Notifications\Events\NotificationSent;
@@ -24,5 +25,8 @@ class LiveServiceProvider extends ServiceProvider
                 Live::publish("user.{$event->notifiable->id}", 'notification.created', ['id' => (string) $event->response->id]);
             }
         });
+
+        // live boards + plans (BRAI-152): cards, columns, sprints, plans → board.{id} / plan.{id}
+        BoardLive::register();
     }
 }

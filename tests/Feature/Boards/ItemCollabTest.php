@@ -230,7 +230,9 @@ class ItemCollabTest extends TestCase
         $this->actingAs($this->editor)->patch($this->itemRoute('boards.items.update', $item), ['title' => 'Renamed', 'story_points' => 3])->assertRedirect();
 
         $messages = collect(Http::recorded())->flatMap(fn ($pair) => json_decode($pair[0]->body(), true)['messages'])
-            ->where('channel', "item.{$item->id}")->where('event', 'item.updated')->pluck('payload')->values()->all();
+            ->where('channel', "item.{$item->id}")->where('event', 'item.updated')->pluck('payload')
+            // live boards (BRAI-152) adds the card's other fields (story_points) in its own message
+            ->filter(fn ($payload) => array_intersect($payload['fields'], ['title', 'description']) !== [])->values()->all();
         $this->assertSame([['id' => $item->id, 'fields' => ['description']], ['id' => $item->id, 'fields' => ['title']]], $messages);
         Http::assertSent(fn (Request $request) => ! str_contains($request->body(), 'Live</p>') && ! str_contains($request->body(), 'Renamed'));
     }

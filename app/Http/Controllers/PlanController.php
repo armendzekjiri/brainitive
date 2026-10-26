@@ -113,6 +113,15 @@ class PlanController extends Controller
 
         $baseRevision = $validated['base_revision'] ?? null;
         if ($baseRevision !== null && ! $request->boolean('force') && (int) $baseRevision !== $plan->edit_revision) {
+            // Live plans (BRAI-152): two open editors may apply the same change (the issue sync after
+            // a live event). Saving exactly what is stored conflicts with nobody: answer "saved".
+            if ($this->isStoredDocument($project, $plan, $validated)) {
+                return response()->json([
+                    'edit_revision' => $plan->edit_revision,
+                    'version' => null,
+                    'updated_at' => $plan->updated_at?->toIso8601String(),
+                ]);
+            }
             $plan->load('lastEditor:id,name');
 
             return response()->json([
@@ -295,6 +304,41 @@ class PlanController extends Controller
         }
 
         return response()->json(['items' => ProjectIssues::summaries($workspace, $project, $items)], 201);
+    }
+
+    /**
+     * Is the posted document (data + settings, normalized like a save) the one already stored?
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function isStoredDocument(Project $project, Plan $plan, array $validated): bool
+    {
+        if (! empty($validated['checkpoint'])) {
+            return false; // "save version" wants a new version
+        }
+        $data = PlanIssueSync::restrictToProject($project, PlanDocument::normalize($validated['data']));
+        $settings = array_replace(Plan::defaultSettings(), PlanDocument::normalizeSettings($validated['settings'] ?? $plan->settings));
+
+        return self::canonical($data) === self::canonical($plan->data ?? Plan::emptyData())
+            && self::canonical($settings) === self::canonical($plan->settings ?? []);
+    }
+
+    /** JSON with sorted object keys: the same document always gives the same string. */
+    private static function canonical(mixed $value): string
+    {
+        $sort = function (mixed $value) use (&$sort): mixed {
+            if (! is_array($value)) {
+                return $value;
+            }
+            $value = array_map($sort, $value);
+            if (! array_is_list($value)) {
+                ksort($value);
+            }
+
+            return $value;
+        };
+
+        return (string) json_encode($sort($value));
     }
 
     /**

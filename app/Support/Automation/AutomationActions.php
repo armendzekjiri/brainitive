@@ -17,6 +17,7 @@ use App\Notifications\ItemStatusChangedNotification;
 use App\Notifications\TicketAssignedNotification;
 use App\Support\Boards\ItemComments;
 use App\Support\Boards\ProjectIssues;
+use App\Support\Live\BoardLive;
 use App\Support\References\ContentReferences;
 use Closure;
 use Illuminate\Support\Facades\Gate;
@@ -245,6 +246,9 @@ final class AutomationActions
 
         return self::result(self::OK, "Label {$label->name} added.", function () use ($subject, $label) {
             $subject->labels()->attach($label->id);
+            if ($subject instanceof Item) {
+                BoardLive::itemIds([$subject->id], ['labels'], (int) $subject->board_id);
+            }
             ActivityLog::log($subject, 'labels_changed', ['labels' => ['added' => [$label->name], 'removed' => []]]);
         });
     }
