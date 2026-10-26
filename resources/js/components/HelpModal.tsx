@@ -83,6 +83,20 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.41.0',
+        title: 'Bring your data: Trello, Jira and Notion imports, project export',
+        tag: 'Feature',
+        date: '2026-10-26',
+        items: [
+            'Import data (account menu): upload an export from another tool, check the preview — nothing is created until you confirm — and follow the progress. Imports continue where they stopped if anything goes wrong, without creating duplicates, and send no notification storm.',
+            'Trello: a board’s JSON export becomes a new board — lists as columns, cards as issues in the same order, with descriptions, due dates, labels and checklists (or subtasks). Map Trello members to project members.',
+            'Jira: an “Export issues → CSV (all fields)” file becomes a new board. Map statuses to columns, and types, priorities and people; epics, stories and sub-tasks stay nested; sprints, links between issues, labels, story points and comments come along.',
+            'Notion: a “Markdown & CSV” export becomes pages and folders in your project — links between pages, images and files included; databases come over as tables. Everything arrives as a draft for you to review and publish.',
+            'Project export (project settings): download a project — boards, issues, docs, whiteboards, plans, task lists and files — as one archive with checksums. Restore it as a new project here or on another Brainitive (Import data → Brainitive project).',
+            'Every import shows what couldn’t come over (e.g. custom fields, attachments), so nothing disappears silently.',
+        ]
+    },
+    {
         version: 'v1.40.1',
         title: 'Docker builds on a Mac',
         tag: 'Fix',
