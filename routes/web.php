@@ -25,6 +25,7 @@ use App\Http\Controllers\MyDayController;
 use App\Http\Controllers\MyWorkController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\OutlookCalendarConnectController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PageReviewController;
 use App\Http\Controllers\PageStickyNoteController;
@@ -214,11 +215,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::prefix('calendar/connections')->controller(CalendarConnectionController::class)->group(function () {
         Route::get('google/redirect', 'redirectToGoogle')->name('calendar.connections.google.redirect');
         Route::get('google/callback', 'googleCallback')->name('calendar.connections.google.callback');
+        Route::get('outlook/redirect', [OutlookCalendarConnectController::class, 'redirect'])
+            ->middleware('throttle:20,1,calendar.outlook.redirect')->name('calendar.connections.outlook.redirect');
+        Route::get('outlook/callback', [OutlookCalendarConnectController::class, 'callback'])
+            ->middleware('throttle:20,1,calendar.outlook.callback')->name('calendar.connections.outlook.callback');
         Route::get('pending', 'pendingPicker')->name('calendar.connections.pending');
         Route::post('/', 'store')->name('calendar.connections.store');
         // Generic connect for 'form' / 'url' providers (CalDAV, ICS links, …) — BRAI-140.
         Route::post('manual/{provider}', 'manualStore')->where('provider', '[a-z0-9_-]+')
-            ->middleware('throttle:10,1')->name('calendar.connections.manual.store');
+            ->middleware('throttle:10,1,calendar.connections.manual')->name('calendar.connections.manual.store');
         Route::patch('{connection}/toggle', 'toggle')->name('calendar.connections.toggle');
         Route::delete('{connection}', 'destroy')->name('calendar.connections.destroy');
         Route::post('{connection}/events', 'createEvent')->name('calendar.connections.events.create');

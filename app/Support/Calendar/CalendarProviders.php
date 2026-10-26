@@ -13,6 +13,7 @@ final class CalendarProviders
     /** @var array<string, class-string<CalendarProvider>> */
     public const PROVIDERS = [
         'google' => Providers\GoogleCalendarProvider::class,
+        'outlook' => Providers\OutlookCalendarProvider::class, // BRAI-140
     ];
 
     /** @var array<string, class-string<CalendarProvider>> test-only extra providers (CalendarProviders::fake) */

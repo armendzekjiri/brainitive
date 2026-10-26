@@ -41,6 +41,15 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI', env('APP_URL').'/login/google/callback'),
     ],
 
+    // Outlook / Microsoft 365 calendars (BRAI-140): an app registration in Microsoft Entra.
+    // Without client id + secret the provider is hidden. tenant "common" = personal + work/school.
+    'microsoft' => [
+        'client_id' => env('MICROSOFT_CLIENT_ID'),
+        'client_secret' => env('MICROSOFT_CLIENT_SECRET'),
+        'tenant' => env('MICROSOFT_TENANT', 'common'),
+        'redirect' => env('MICROSOFT_REDIRECT_URI', rtrim((string) env('APP_URL'), '/').'/calendar/connections/outlook/callback'),
+    ],
+
     'github' => [
         'client_id' => env('GITHUB_CLIENT_ID'),
         'client_secret' => env('GITHUB_CLIENT_SECRET'),
