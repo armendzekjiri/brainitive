@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\ClientDeliverable;
 use App\Models\ClientPortal;
+use App\Notifications\Messages\BrandedMailMessage;
 use App\Support\ClientPortal\ClientPortalLinks;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -48,30 +49,35 @@ class ClientPortalGuestNotification extends Notification implements ShouldQueue
     {
         $portal = self::plain($this->portal->title);
         $actor = self::plain($this->actorName ?: 'The team');
-        $mail = (new MailMessage)->greeting('Hi '.self::plain($notifiable->displayName()).',');
+        $mail = BrandedMailMessage::guest($notifiable, 'You get this email because you were invited to this client portal.')
+            ->eyebrow($portal)
+            ->context($portal);
 
         if ($this->kind === self::INVITED) {
             $mail->subject("You're invited to {$portal}")
+                ->headline("You're invited to {$portal}")
                 ->line("{$actor} invited you to the client portal “{$portal}”, where you can review deliverables, approve them or ask for changes.")
                 ->line('We also sent you a one-time sign-in link. If it has expired, open the portal and enter your email to get a new one.')
                 ->action('Open the portal', route('client-portal.show', $this->portal->slug));
         } elseif ($this->kind === self::PUBLISHED && $this->deliverable) {
             $title = self::plain($this->deliverable->title);
             $mail->subject("Ready for your review: {$title}")
+                ->headline("Ready for your review: {$title}")
                 ->line("{$actor} shared “{$title}” (version {$this->deliverable->version}) in {$portal}.")
                 ->action('Review it', ClientPortalLinks::client($this->deliverable));
             if ($this->text) {
-                $mail->line(self::plain($this->text));
+                $mail->quote(self::plain($this->text));
             }
         } elseif ($this->deliverable) {
             $title = self::plain($this->deliverable->title);
             $mail->subject("New reply on {$title}")
+                ->headline("New reply on {$title}")
                 ->line("{$actor} replied on “{$title}”:")
-                ->line(self::plain((string) $this->text))
+                ->quote(self::plain((string) $this->text))
                 ->action('Open the conversation', ClientPortalLinks::client($this->deliverable));
         }
 
-        return $mail->line('You get this email because you were invited to this client portal.');
+        return $mail;
     }
 
     /** User text in a Markdown mail: no links, images or formatting, at most 500 characters. */

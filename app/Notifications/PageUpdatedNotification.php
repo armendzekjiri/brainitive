@@ -61,8 +61,10 @@ class PageUpdatedNotification extends Notification
     {
         $name = NewLeadNotification::plain((string) $this->page->name);
 
-        return (new MailMessage)
+        return $this->brandedMail($notifiable, 'page_updated')
             ->subject("Page updated: {$name}")
+            ->eyebrow($this->page->project?->name)
+            ->headline("Page updated: {$name}")
             ->line("{$this->actor->name} updated the page {$name}.")
             ->action('Open page', $this->toDatabase($notifiable)['page_url']);
     }

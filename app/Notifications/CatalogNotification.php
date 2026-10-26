@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\User;
+use App\Models\Workspace;
 use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
@@ -64,19 +65,22 @@ abstract class CatalogNotification extends Notification implements ShouldQueue
         return $this->webPush($d['title'], $d['body'] ?? $d['project_name'] ?? '', $d['url']);
     }
 
+    /**
+     * The branded mail (BRAI-155): context as the eyebrow, the title as the headline, the body (a comment,
+     * note, reason …) quoted, one button. Members get "Manage notifications" in the footer.
+     */
     public function toMail(object $notifiable): MailMessage
     {
         $d = $this->toDatabase($notifiable);
-        $mail = (new MailMessage)->subject($d['title'])->line(self::plain($d['title']));
+        $workspace = property_exists($this, 'workspace') && $this->workspace instanceof Workspace ? $this->workspace->name : null;
 
-        if ($d['body']) {
-            $mail->line(self::plain($d['body']));
-        }
-        if ($d['project_name']) {
-            $mail->line(self::plain($d['project_name']));
-        }
-
-        return $mail->action('Open in Brainitive', $d['url']);
+        return $this->brandedMail($notifiable, $this->catalogType())
+            ->subject($d['title'])
+            ->eyebrow($d['project_name'])
+            ->headline($d['title'])
+            ->quote($d['body'])
+            ->context($workspace)
+            ->action('Open in Brainitive', $d['url']);
     }
 
     /** One line of plain text from HTML / rich text, at most 200 characters. */

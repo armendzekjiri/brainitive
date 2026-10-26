@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Mail\InstanceTestMail;
 use App\Models\AdminAuditLog;
 use App\Models\InstanceSettings;
 use App\Support\Admin\InstanceMailConfig;
@@ -112,10 +113,7 @@ class SettingsController extends Controller
         InstanceMailConfig::apply();
 
         try {
-            Mail::raw(
-                'This is a test email from your Brainitive instance. If you can read this, outgoing mail works.',
-                fn ($message) => $message->to($validated['to'])->subject('Brainitive test email')
-            );
+            Mail::to($validated['to'])->send(new InstanceTestMail((string) config('mail.default')));
         } catch (\Throwable $e) {
             return back()->with('error', 'Sending failed: '.$e->getMessage());
         }

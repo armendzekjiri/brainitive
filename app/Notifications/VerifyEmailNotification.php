@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Messages\BrandedMailMessage;
 use Illuminate\Auth\Notifications\VerifyEmail as VerifyEmailBase;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -30,20 +31,16 @@ class VerifyEmailNotification extends VerifyEmailBase
         return rtrim((string) (Config::get('app.url') ?: url('/')), '/').$path;
     }
 
-    /**
-     * Build the mail representation of the notification.
-     */
     public function toMail(mixed $notifiable): MailMessage
     {
         $url = $this->verificationUrl($notifiable);
-        $appName = config('app.name');
 
-        return (new MailMessage)
-            ->subject("Verify your email — {$appName}")
-            ->view('emails.verify-email', [
-                'url' => $url,
-                'user' => $notifiable,
-                'appName' => $appName,
-            ]);
+        return BrandedMailMessage::account($notifiable, 'You get this email because this address was used to create a Brainitive account.')
+            ->subject('Verify your email — Brainitive')
+            ->headline('Verify your email address')
+            ->preheader('One click and your Brainitive account is ready.')
+            ->line('Thanks for signing up! Please click the button below to verify your email address and get started.')
+            ->action('Verify email address', $url)
+            ->line('If you didn’t create an account, you can safely ignore this email.');
     }
 }

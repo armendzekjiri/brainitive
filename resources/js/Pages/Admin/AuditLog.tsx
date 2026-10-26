@@ -19,6 +19,7 @@ const ACTIONS: Record<string, string> = {
     'workspace.deleted': 'Deleted workspace',
     'settings.updated': 'Updated settings',
     'settings.test_email_sent': 'Sent test email',
+    'emails.test_sent': 'Sent an email preview to themselves',
     'github_app.created': 'Created the GitHub App',
     'github_app.removed': 'Removed the GitHub App',
 };

@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Models\Lead;
+use App\Notifications\Messages\BrandedMailMessage;
 use App\Support\LeadForms\LeadFormOptions;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -42,13 +43,18 @@ class LeadConfirmationNotification extends Notification implements ShouldQueue
     {
         $form = $this->lead->form;
         $settings = LeadFormOptions::settings($form->settings);
+        $formName = NewLeadNotification::plain($form->name);
         $vars = [
             '{name}' => self::safeName($this->lead->name),
-            '{form}' => NewLeadNotification::plain($form->name),
+            '{form}' => $formName,
         ];
 
-        $mail = (new MailMessage)
-            ->subject(NewLeadNotification::plain(strtr($settings['confirmation_subject'] ?: 'Thanks for reaching out', $vars)));
+        // the greeting is part of the form's own text ("Hi {name}," by default), so no extra one
+        $mail = BrandedMailMessage::guest($notifiable, "You get this email because you filled in the form “{$formName}”.")
+            ->withoutGreeting()
+            ->subject(NewLeadNotification::plain(strtr($settings['confirmation_subject'] ?: 'Thanks for reaching out', $vars)))
+            ->context($formName)
+            ->signOff($form->project?->workspace?->name ?: $formName);
 
         foreach (preg_split('/\n\s*\n/', strtr((string) $settings['confirmation_body'], $vars)) as $paragraph) {
             if (trim($paragraph) !== '') {
