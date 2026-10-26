@@ -144,7 +144,7 @@ test.describe('project page', () => {
         await expect(main.getByRole('heading', { level: 3 })).toContainText(['Boards', 'Main Board', 'Lists', 'Plans', 'Pages', 'Whiteboards', 'Helpdesks', 'Lead forms']);
 
         // quick links in the header
-        await expect(main.getByRole('navigation', { name: 'Project tools' }).getByRole('link')).toHaveText(['Health', 'Workload', 'Releases']);
+        await expect(main.getByRole('navigation', { name: 'Project tools' }).getByRole('link')).toHaveText(['Health', 'Workload', 'Releases', 'Client portal', 'Feedback']); // the owner is a project admin: Feedback (BRAI-60) shows
         await expect(main.getByRole('link', { name: 'Project health' })).toHaveAttribute('href', new RegExp(`/projects/${project.slug}/health$`));
 
         // recently updated: the new page and the board
