@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\ImportController;
+use App\Http\Controllers\ProjectExportController;
+use App\Http\Middleware\ReadOnlySession;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -17,3 +19,7 @@ Route::get('imports/{importRun}/status', [ImportController::class, 'status'])->n
 Route::delete('imports/{importRun}', [ImportController::class, 'destroy'])->name('imports.destroy');
 
 // ── Ticket 4 (BRAI-81): project export (download) ─────────────────────────────
+// Project admins queue an export; the ZIP is downloaded through a signed link (24 h) by its exporter only.
+Route::get('projects/{project}/exports', [ProjectExportController::class, 'index'])->middleware(ReadOnlySession::class)->name('projects.export.index');
+Route::post('projects/{project}/exports', [ProjectExportController::class, 'store'])->middleware('throttle:5,1,projects.export.store')->name('projects.export.store');
+Route::get('exports/{projectExport}/download', [ProjectExportController::class, 'download'])->middleware('throttle:30,1,projects.export.download')->name('projects.export.download');

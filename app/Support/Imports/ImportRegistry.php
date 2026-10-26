@@ -12,7 +12,7 @@ final class ImportRegistry
         'trello' => Trello\TrelloImporter::class,             // BRAI-65
         'jira' => Jira\JiraImporter::class,                   // BRAI-139
         // 'notion' => Notion\NotionImporter::class,          // BRAI-66
-        // 'brainitive' => Archive\ProjectArchiveImporter::class, // BRAI-81 (restore)
+        'brainitive' => Archive\ProjectArchiveImporter::class, // BRAI-81 (restore)
     ];
 
     /** @var array<string, class-string<Importer>> test-only extra sources (ImportRegistry::fake) */

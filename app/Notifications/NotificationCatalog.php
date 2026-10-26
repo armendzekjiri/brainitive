@@ -67,6 +67,7 @@ final class NotificationCatalog
         'sla_warning' => 'helpdesk',
         'sla_breached' => 'helpdesk',
         'automation_notice' => 'status', // BRAI-63: the "Notify" action of an automation rule
+        'export_ready' => 'workspace', // BRAI-81: a project export can be downloaded
     ];
 
     public static function category(string $type): string
