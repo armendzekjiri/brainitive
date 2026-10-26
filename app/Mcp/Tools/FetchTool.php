@@ -3,13 +3,18 @@
 namespace App\Mcp\Tools;
 
 use App\Models\Bookmark;
+use App\Models\Capture;
 use App\Models\Item;
 use App\Models\Page;
+use App\Models\Plan;
 use App\Models\Project;
 use App\Models\SnippetCollection;
+use App\Models\TaskListItem;
+use App\Models\Ticket;
 use App\Models\Workspace;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\Mcp\ResourceLocator;
+use App\Support\Search\SearchText;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -48,6 +53,11 @@ class FetchTool extends Tool
             'workspace' => Workspace::find($id),
             'snippet' => SnippetCollection::with(['workspace', 'snippets'])->find($id),
             'bookmark' => Bookmark::with(['workspace', 'items'])->find($id),
+            // v1.43.0: every handle the search tool returns (BRAI-55)
+            'ticket' => Ticket::with(['helpdesk.project.workspace', 'replies'])->find($id),
+            'plan' => Plan::with('project.workspace')->find($id),
+            'task' => TaskListItem::with('taskList.project.workspace')->find($id),
+            'capture' => Capture::find($id),
             default => null,
         };
 
@@ -57,8 +67,13 @@ class FetchTool extends Tool
 
         // Workspace membership first, then the same policy the app uses (project membership,
         // private bookmark groups, unpublished pages).
-        $policyChecked = in_array($type, ['page', 'item', 'project', 'bookmark'], true);
-        if (! $this->userCanAccess($model, $type, $workspaceIds) || ($policyChecked && $user->cannot('view', $model))) {
+        $policyChecked = in_array($type, ['page', 'item', 'project', 'bookmark', 'ticket', 'plan'], true);
+        $denied = match ($type) {
+            'capture' => $model->user_id !== $user->id, // private to its owner (CapturePolicy)
+            'task' => ! $this->userCanAccess($model, $type, $workspaceIds) || $user->cannot('view', $model->taskList),
+            default => ! $this->userCanAccess($model, $type, $workspaceIds) || ($policyChecked && $user->cannot('view', $model)),
+        };
+        if ($denied) {
             return Response::error('You do not have access to that content.');
         }
 
@@ -68,7 +83,7 @@ class FetchTool extends Tool
             'id' => $validated['id'],
             'title' => $title ?? '',
             'text' => $text ?? '',
-            'url' => ResourceLocator::locate($model)['url'] ?? '',
+            'url' => $type === 'capture' ? route('captures.index') : (ResourceLocator::locate($model)['url'] ?? ''),
             'metadata' => ['type' => $type],
         ]);
     }
@@ -81,6 +96,9 @@ class FetchTool extends Tool
             'project' => $model->workspace_id,
             'workspace' => $model->id,
             'snippet', 'bookmark' => $model->workspace_id,
+            'ticket' => $model->helpdesk?->project?->workspace_id,
+            'plan' => $model->project?->workspace_id,
+            'task' => $model->taskList?->project?->workspace_id,
             default => null,
         };
 
@@ -99,6 +117,10 @@ class FetchTool extends Tool
             'workspace' => [$model->name, (string) $model->description],
             'snippet' => [$model->name, $model->snippets->map(fn ($s) => "## {$s->title} ({$s->language})\n\n{$s->content}")->implode("\n\n")],
             'bookmark' => [$model->name, $model->items->map(fn ($i) => '- '.trim(($i->title ?: '').' '.($i->url ?: '').' '.($i->content ?: '')))->implode("\n")],
+            'ticket' => [$model->subject ?: $model->key, trim($model->key.' — '.strip_tags((string) $model->description)."\n\n".$model->replies->map(fn ($r) => strip_tags((string) $r->body))->implode("\n\n"))],
+            'plan' => [$model->name, trim(((string) $model->description)."\n".collect($model->data['rows'] ?? [])->map(fn ($r) => '- '.($r['name'] ?? ''))->implode("\n"))],
+            'task' => [$model->title, SearchText::fromJson($model->description)],
+            'capture' => [mb_substr((string) strtok((string) $model->text, "\n"), 0, 160), trim($model->text."\n".($model->url ?? ''))],
             default => ['Unknown', ''],
         };
     }

@@ -4,6 +4,7 @@
 .env.*
 !.env.example
 node_modules
+realtime/node_modules
 excalidraw-build/node_modules
 browser-extension
 vendor

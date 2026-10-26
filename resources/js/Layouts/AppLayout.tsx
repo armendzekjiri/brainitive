@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { CommandPalette, CmdIcon, PaletteCommand, useRecentTracking } from '@/components/CommandPalette';
 import { useTimezoneSync } from '@/hooks/useTimezoneSync';
 import WorkTimerPill from '@/components/WorkTimerPill';
+import OfflineIndicator from '@/components/offline/OfflineIndicator';
 import { QuickCreateSnippetModal } from '@/components/QuickCreateSnippetModal';
 import { QuickCreateBookmarkModal } from '@/components/QuickCreateBookmarkModal';
 import { GlobalStickyNotes } from '@/components/GlobalStickyNotes';
@@ -1759,6 +1760,7 @@ function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: 
 
             {/* Utilities */}
             <div className="flex items-center gap-1.5">
+                <OfflineIndicator />
                 <WorkTimerPill />
                 <NotificationsDropdown />
                 <Button

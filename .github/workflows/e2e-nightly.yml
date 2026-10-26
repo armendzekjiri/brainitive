@@ -52,6 +52,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm --prefix realtime ci --omit=dev --no-audit --no-fund
       - run: npm run build
       - name: Prepare environment
         run: |

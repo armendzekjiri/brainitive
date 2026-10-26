@@ -1,0 +1,23 @@
+{
+    "name": "brainitive-realtime",
+    "private": true,
+    "license": "AGPL-3.0-only",
+    "type": "module",
+    "description": "Live co-editing server for Brainitive documents (Hocuspocus / Yjs).",
+    "engines": {
+        "node": ">=20"
+    },
+    "scripts": {
+        "start": "node src/index.js",
+        "test": "node --test --test-force-exit --test-timeout=30000 test/*.test.js"
+    },
+    "dependencies": {
+        "@hocuspocus/server": "3.4.4",
+        "ws": "8.22.0",
+        "y-protocols": "1.0.7",
+        "yjs": "13.6.33"
+    },
+    "devDependencies": {
+        "@hocuspocus/provider": "3.4.4"
+    }
+}

@@ -274,8 +274,8 @@ class SecurityRegressionTest extends TestCase
         Bookmark::create(['workspace_id' => $this->workspace->id, 'name' => 'Layoff links', 'visibility' => 'private', 'created_by' => $this->workspace->owner_id]);
 
         // The editor is a workspace member but not in $hiddenProject.
-        $results = $this->actingAs($this->editor)->getJson(route('search', ['q' => 'Layoff']))->assertOk()->json();
-        $this->assertSame([], $results['items']);
+        $results = $this->actingAs($this->editor)->getJson(route('search.quick', ['q' => 'Layoff']))->assertOk()->json();
+        $this->assertSame([], $results['results']);
         $this->assertSame([], $results['bookmarks']);
 
         BrainitiveServer::actingAs($this->editor)

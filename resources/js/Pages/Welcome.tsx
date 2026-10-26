@@ -73,6 +73,8 @@ import {
     BadgeCheck,
     Video,
     CalendarSync,
+    WifiOff,
+    UsersRound,
     type LucideIcon,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -391,45 +393,45 @@ const SPOTLIGHT: {
     shortcut?: string;
 }[] = [
     {
-        key: 'clients',
-        version: 'v1.42',
-        icon: Briefcase,
+        key: 'search',
+        version: 'v1.43',
+        icon: Search,
         color: '#0E83DC',
-        title: 'Work with your clients',
+        title: 'Find anything',
         description:
-            'A client portal for approvals, a public feedback portal for ideas and votes, and document reviews inside the team — no extra tools, no accounts for outsiders.',
+            'One search across issues, docs, comments, tickets, tasks, plans, snippets and files — ranked, typo tolerant, and only what you’re allowed to see.',
         points: [
-            'Clients approve the exact version they saw',
-            'Customers vote on ideas and follow your roadmap',
-            'Reviewers comment on selected text',
+            'Filters by project, status, assignee and date',
+            '“Phrases”, -exclusions and issue keys like WEB-12',
+            'Right in ⌘K, no extra server',
         ],
     },
     {
-        key: 'calendars-meetings',
-        version: 'v1.42',
-        icon: Video,
+        key: 'live-docs',
+        version: 'v1.43',
+        icon: UsersRound,
         color: '#69A748',
-        title: 'Every calendar, every meeting',
+        title: 'Write together, live',
         description:
-            'Google, Outlook / Microsoft 365, iCloud and any CalDAV or ICS calendar in one view — and a Google Meet or Teams meeting from any card or doc.',
+            'Edit the same document at the same time — see everyone’s cursor and changes as they type, then publish when it’s ready.',
         points: [
-            'Schedule Meet or Teams from a card, doc or the calendar',
-            'Subscribe to your Brainitive dates in any calendar app',
-            'Sign in with Microsoft',
+            'Live cursors with names',
+            'Keeps working offline, syncs when you’re back',
+            'Drafts, reviews and versions stay as they are',
         ],
     },
     {
-        key: 'smart-links',
-        version: 'v1.42',
-        icon: Link2,
+        key: 'offline',
+        version: 'v1.43',
+        icon: WifiOff,
         color: '#0E83DC',
-        title: 'Smart links & sharper automations',
+        title: 'Work offline',
         description:
-            'Paste an issue into a doc and see its live status; build automation conditions like “Labels has none of Bug” or “Priority is any of High, Urgent”.',
+            'On the train or a bad connection, My Day, task lists, issues and quick capture keep working — and sync when you’re back online.',
         points: [
-            'Live chips and cards for issues, docs, tickets and plans',
-            'Field → operator → value, match all or any',
-            'Connect GitHub in one click',
+            'Opt-in per device',
+            'Conflicts are never overwritten: keep mine or theirs',
+            'Cleared when you sign out',
         ],
     },
 ];
@@ -853,6 +855,13 @@ export default function Welcome({
             color: '#0E83DC',
             items: [
                 {
+                    icon: UsersRound,
+                    title: 'Live co-editing',
+                    description:
+                        'Write a document together in real time — everyone’s cursor and changes appear instantly, and it keeps working offline.',
+                    isNew: true,
+                },
+                {
                     icon: FileText,
                     title: 'Wiki & docs',
                     description:
@@ -1139,9 +1148,23 @@ export default function Welcome({
                 },
                 {
                     icon: Search,
-                    title: 'Search & install',
+                    title: 'Find anything',
                     description:
-                        'Search across everything, and install Brainitive as an app on any device.',
+                        'One ranked, typo-tolerant search across issues, docs, comments, tickets, tasks, plans, snippets and files, with filters — also in ⌘K.',
+                    isNew: true,
+                },
+                {
+                    icon: WifiOff,
+                    title: 'Offline mode',
+                    description:
+                        'My Day, task lists, issues and quick capture keep working without internet and sync when you’re back — conflicts shown, never overwritten.',
+                    isNew: true,
+                },
+                {
+                    icon: Download,
+                    title: 'Install as an app',
+                    description:
+                        'Install Brainitive on any device — desktop or phone — straight from the browser.',
                 },
             ],
         },

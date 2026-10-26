@@ -50,7 +50,7 @@ class ExtensionController extends Controller
      */
     public function search(Request $request): JsonResponse
     {
-        return app(SearchController::class)($request);
+        return app(SearchController::class)->extension($request);
     }
 
     /**

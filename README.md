@@ -14,6 +14,33 @@
   <a href="LICENSE">AGPL-3.0</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/armendzekjiri/brainitive/actions/workflows/deploy.yml"><img src="https://github.com/armendzekjiri/brainitive/actions/workflows/deploy.yml/badge.svg?branch=main" alt="Production deploy"></a>
+  <a href="https://github.com/armendzekjiri/brainitive/actions/workflows/pre-release.yml"><img src="https://github.com/armendzekjiri/brainitive/actions/workflows/pre-release.yml/badge.svg?branch=pre-release" alt="Tests + e2e on dev"></a>
+  <a href="https://github.com/armendzekjiri/brainitive/actions/workflows/e2e-nightly.yml"><img src="https://github.com/armendzekjiri/brainitive/actions/workflows/e2e-nightly.yml/badge.svg" alt="Nightly e2e (Firefox, WebKit)"></a>
+  <a href="https://github.com/armendzekjiri/brainitive/releases/latest"><img src="https://img.shields.io/github/v/release/armendzekjiri/brainitive?label=release" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/armendzekjiri/brainitive" alt="License"></a>
+  <a href="https://github.com/armendzekjiri/brainitive/stargazers"><img src="https://img.shields.io/github/stars/armendzekjiri/brainitive?style=flat" alt="GitHub stars"></a>
+</p>
+
+## Get Brainitive
+
+**Brainitive Cloud** — hosted for you, updates and backups included. Free during early
+access; paid plans come later and are announced in advance. →
+[www.brainitive.app](https://www.brainitive.app/#pricing)
+
+**Self-hosted** — free and complete, on your own server. Two files and our ready-made image
+(`ghcr.io/armendzekjiri/brainitive`), nothing to build:
+
+```bash
+mkdir brainitive && cd brainitive
+curl -fsSLO https://raw.githubusercontent.com/armendzekjiri/brainitive/main/compose.yaml
+curl -fsSL https://raw.githubusercontent.com/armendzekjiri/brainitive/main/.env.docker.example -o .env   # then set DB_PASSWORD
+docker compose up -d                           # open http://localhost:8080
+```
+
+HTTPS, backups, updates and optional features: [docs/self-hosting.md](docs/self-hosting.md).
+
 ![Gantt plans in Brainitive](public/images/screenshots/plans.jpg)
 
 ## What's inside
@@ -36,22 +63,6 @@
 | Boards | Docs | Whiteboards |
 |---|---|---|
 | ![Board](public/images/screenshots/board.jpg) | ![Docs](public/images/screenshots/docs.jpg) | ![Whiteboard](public/images/screenshots/whiteboard.jpg) |
-
-## Get Brainitive
-
-**Brainitive Cloud** — hosted for you, updates and backups included. Free during early
-access; paid plans come later and are announced in advance. →
-[www.brainitive.app](https://www.brainitive.app/#pricing)
-
-**Self-hosted** — free and complete, on your own server:
-
-```bash
-git clone https://github.com/armendzekjiri/brainitive.git && cd brainitive
-cp .env.docker.example .env   # then set DB_PASSWORD
-docker compose up -d --build  # open http://localhost:8080
-```
-
-HTTPS, backups, updates and optional features: [docs/self-hosting.md](docs/self-hosting.md).
 
 ## Development
 

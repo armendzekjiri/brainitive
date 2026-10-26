@@ -37,6 +37,12 @@ export const INBOUND_MAIL = { domain: 'inbound.e2e.test', postmarkToken: 'e2e-po
 /** Fake Outlook app registration of the local e2e app (BRAI-140): enables the menu entry only. */
 export const OUTLOOK_E2E = { clientId: 'e2e-outlook-client' } as const;
 
+/**
+ * Live co-editing (BRAI-54): live-docs.spec.ts starts the realtime server on this port and opts in with
+ * the `X-E2E-Collab: 1` header; every other journey keeps the single-user editor (COLLAB_E2E_OPT_IN).
+ */
+export const COLLAB = { port: PORT + 100, secret: 'e2e-collab-secret' } as const;
+
 /** Seeded workspace / project / board (slugs). */
 export const SEED = { workspace: 'e2e-workspace', project: 'website', board: 'main-board', key: 'WEB' } as const;
 
@@ -95,6 +101,10 @@ export function appEnv(): Record<string, string> {
         MICROSOFT_CLIENT_SECRET: 'e2e-outlook-secret',
         MICROSOFT_TENANT: 'common',
         MICROSOFT_REDIRECT_URI: '',
+        // live-docs.spec.ts: the realtime server it starts itself; honoured only with the opt-in header
+        COLLAB_URL: `ws://127.0.0.1:${COLLAB.port}`,
+        COLLAB_SECRET: COLLAB.secret,
+        COLLAB_E2E_OPT_IN: 'true',
         PHP_CLI_SERVER_WORKERS: process.env.E2E_SERVER_WORKERS ?? '4',
     };
 }

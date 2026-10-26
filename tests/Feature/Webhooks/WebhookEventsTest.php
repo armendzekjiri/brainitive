@@ -14,6 +14,7 @@ use App\Support\Boards\ItemComments;
 use App\Support\Boards\SprintLifecycle;
 use App\Support\Events\DomainEvents;
 use App\Support\LeadForms\LeadIntake;
+use App\Support\Search\SearchIndexer;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -225,11 +226,14 @@ class WebhookEventsTest extends TestCase
         Webhook::query()->update(['events' => ['lead.created']]);
         $item = $this->item();
 
+        // the search index writes after the request (BRAI-55), as in production — not counted here
+        app(SearchIndexer::class)->defer();
         DB::flushQueryLog();
         DB::enableQueryLog();
         $item->update(['title' => 'Quiet change']);
         $queries = collect(DB::getQueryLog())->pluck('query');
         DB::disableQueryLog();
+        app(SearchIndexer::class)->release();
 
         $this->assertSame(0, WebhookDelivery::count());
         // one lookup of the workspace + one "is anybody listening" check; no payload queries

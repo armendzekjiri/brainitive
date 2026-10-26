@@ -49,7 +49,7 @@ test.describe('workspaces', () => {
         // (no assertion on the success toast: it is shown only sometimes, see the report)
         const saved = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/workspaces/${workspace.slug}`));
         await page.getByRole('button', { name: 'Save Changes' }).first().click();
-        expect((await saved).ok()).toBe(true);
+        expect((await saved).status(), 'a success or the Inertia redirect after it').toBeLessThan(400);
 
         await page.reload();
         await expect(page.getByLabel('Description')).toHaveValue(description);
@@ -67,7 +67,7 @@ test.describe('workspaces', () => {
 
         const saved = page.waitForResponse((r) => r.request().method() === 'POST' && r.url().endsWith(`/workspaces/${workspace.slug}`));
         await page.getByRole('button', { name: 'Save Changes' }).first().click();
-        expect((await saved).ok()).toBe(true);
+        expect((await saved).status(), 'a success or the Inertia redirect after it').toBeLessThan(400);
 
         await page.reload();
         await expect(page.getByRole('combobox', { name: 'Timezone' })).toHaveText('Pacific/Auckland');

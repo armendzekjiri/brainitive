@@ -380,6 +380,32 @@ Pages work like Confluence. Keep these rules when touching pages:
 - A field's value is read in one place, `ConditionFacts::get()`; evaluation + wording in
   `AutomationConditions` (the client wording in `conditions.ts` mirrors `describe()` — change both).
 
+## Search (v1.43.0, BRAI-55)
+
+- **Every new searchable model gets a Source + observer registration:** a `SearchSource` in
+  `app/Support/Search/Sources/` (query builder only, a fixed number of queries per batch; `documents($ids)`
+  omits anything not indexable — that removes it), listed in `SearchIndexer::sources()`, and the model (plus
+  any container that decides its visibility) in `SearchServiceProvider`'s observed list. Don't edit model
+  files for indexing; don't write to `search_entries` directly.
+- **Visibility mirrors the view policies, in SQL** (`TableSearchEngine::visibleEntries`): a new type adds its
+  rule there, never a PHP filter after the query (counts and pages must agree). Live names / URLs come from
+  `SearchPresenter`, batched per kind of record.
+- Writes that bypass Eloquent call `SearchIndexer::touch*()`; a source change bumps
+  `SearchReindex::VERSION`. Search callers (page, palette, MCP, extension) go through `SearchService`,
+  never a direct `search_entries` query.
+
+## Offline (v1.43.0, BRAI-82)
+
+- **Writes from the offline outbox go through `OfflineSync`:** a new mutation type is an applier method in
+  `app/Support/Offline/Appliers/` + a line in `OfflineSync::TYPES` + an action in `lib/offline/actions.ts`
+  (+ `applyLocally` in `lib/offline/sync.ts`). It carries **base values per field** and checks them with
+  `FieldMerge`, uses the **same policy and validation as the online endpoint**, answers 410 for anything
+  deleted or no longer visible, and reports conflicts per field — never resolved on the server.
+- Offline data is per account and device: IndexedDB `brainitive-offline-<userId>` through `lib/offline/db.ts`,
+  cleared on sign-out / another account. Nothing offline-related is stored on the user row.
+- `public/sw.js` stays network-only for everything except the shell, failed navigations / full Inertia visits
+  and `/build/assets`; documents and live routes are never intercepted.
+
 ## Licence & dependencies
 
 - Brainitive is **AGPL-3.0-only** (`LICENSE`); contributions need the CLA (`CLA.md`, bot in
