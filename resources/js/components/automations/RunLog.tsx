@@ -7,7 +7,8 @@ import type { AutomationRun, AutomationRunResult, AutomationRunStatus } from '@/
 
 /**
  * The automation run history (v1.40.0, BRAI-63): one row per run with its status, the issue or ticket
- * it ran for and, expanded, the result of every action. Used on Automations/Index (all rules) and
+ * it ran for and, expanded, which conditions passed (BRAI-144; runs from before don't have them) and
+ * the result of every action. Used on Automations/Index (all rules) and
  * Automations/Edit (one rule).
  */
 const STATUS: Record<AutomationRunStatus, { label: string; className: string }> = {
@@ -84,6 +85,23 @@ export default function RunLog({ runs, showRule = false }: { runs: AutomationRun
                                         <td />
                                         <td colSpan={showRule ? 5 : 4} className="py-3 pr-3">
                                             {run.message && <p className="mb-2 text-sm">{run.message}</p>}
+                                            {run.conditions && run.conditions.items.length > 0 && (
+                                                <div className="mb-2">
+                                                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                                        Conditions · {run.conditions.match === 'any' ? 'any must match' : 'all must match'}
+                                                    </p>
+                                                    <ul className="space-y-1" aria-label={`Conditions of run ${run.id}`}>
+                                                        {run.conditions.items.map((c, i) => (
+                                                            <li key={i} className="flex items-start gap-2">
+                                                                {c.passed
+                                                                    ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-600" aria-label="Passed" />
+                                                                    : <XCircle className="mt-0.5 size-4 shrink-0 text-red-600" aria-label="Failed" />}
+                                                                <span>{c.label}<span className="sr-only">{c.passed ? ' (passed)' : ' (failed)'}</span></span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
                                             {run.results.length > 0 ? (
                                                 <ul className="space-y-1.5">
                                                     {run.results.map((result, i) => (

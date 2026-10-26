@@ -97,7 +97,7 @@ export default function AutomationsIndex({ workspace, project, rules, runs, maxR
                                             <Link href={route('automations.edit', [...params, rule.id])} className="font-medium hover:underline">{rule.name}</Link>
                                             <p className="text-sm text-muted-foreground">
                                                 <span className="font-semibold text-foreground">When</span> {rule.summary.when}
-                                                {rule.summary.if.length > 0 && <> <span className="font-semibold text-foreground">if</span> {rule.summary.if.join(' and ')}</>}
+                                                {rule.summary.if.length > 0 && <> <span className="font-semibold text-foreground">if</span> {rule.summary.if.join(rule.summary.match === 'any' ? ' or ' : ' and ')}</>}
                                                 {' '}<span className="font-semibold text-foreground">then</span> {rule.summary.then.join(', ')}
                                             </p>
                                             <p className="text-xs text-muted-foreground">Runs as {rule.actor?.name ?? 'nobody'} · version {rule.version}</p>

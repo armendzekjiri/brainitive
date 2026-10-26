@@ -39,10 +39,10 @@ then select one: is then chose ... so we are flexible?"
 ## Doc notes (for ARCHITECTURE / KNOWLEDGE on merge)
 - ARCHITECTURE "Workflow automation": conditions are `{field, operator, value}` + rule
   `condition_match`; matrix in `AutomationCatalog::CONDITION_FIELDS` / `OPERATORS` /
-  `CUSTOM_FIELD_OPERATORS`; UI `components/automations/ConditionRow.tsx`; runs keep `conditions`.
+  `CUSTOM_FIELD_OPERATORS`; values read by `ConditionFacts`; UI `components/automations/ConditionRow.tsx` + `conditions.ts`; runs keep `conditions`.
   Add `AutomationConditionsTest.php` and e2e `automation-conditions.spec.ts` to Tests.
 - ARCHITECTURE "Recipes" row: a new condition field = `CONDITION_FIELDS` entry + a case in
-  `AutomationConditions::actual()` (+ `AutomationOptions` source if it has ids).
+  `ConditionFacts::get()` (+ an `AutomationOptions` source if it has ids).
 - KNOWLEDGE "Workflow automation": legacy `{type, value}` conditions are normalised on read
   (`AutomationDefinition::normalizeCondition`) even after the data migration — keep it; custom
   field conditions fail closed when the field is archived / gone or its type changed; date operators
@@ -50,4 +50,16 @@ then select one: is then chose ... so we are flexible?"
   an empty value.
 
 ## Status
-In progress.
+Done (2026-10-26): backend + builder UI + tests. PHPUnit `tests/Feature/Automation/*` 45 passed
+(17 new in `AutomationConditionsTest`); e2e `automation-conditions.spec.ts` (2), `automations.spec.ts`
+(2, selectors updated to Field / Operator / Value), `recurring-issues.spec.ts` (2) green; pint, tsc,
+build green. Not merged; not pushed.
+
+Notes:
+- Custom fields have no multi-select type (`ItemField::TYPES`), so there is no multi-select custom
+  field family; `CUSTOM_FIELD_OPERATORS` documents where it would go.
+- "Reporter" = `reporter_id`, falling back to `created_by` (as the Assign-to-reporter action).
+- `is_overdue` = open issue (no `completed_at`), due day over or due time today passed — the same
+  rule as `DueDateTrigger`.
+- Index list joins the summary with "or" for any-rules; the builder shows the rule as a sentence
+  ("Rule in words", client-side wording mirrors `AutomationConditions::describe`).
