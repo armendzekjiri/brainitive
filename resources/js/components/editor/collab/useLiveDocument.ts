@@ -60,20 +60,25 @@ interface Options {
     user: { id: number; name: string };
     /** Used when the live document has no title / icon yet. */
     fallback: { name: string; icon: string | null };
+    /** The user's edit right as the page knew it (when the session can't be fetched, e.g. offline). */
+    canUpdate: boolean;
     onDraftState: (state: PageDraftHashState) => void;
 }
 
-export function useLiveDocument({ enabled, collab, routeParams, user, fallback, onDraftState }: Options) {
+export function useLiveDocument({ enabled, collab, routeParams, user, fallback, canUpdate, onDraftState }: Options) {
     const [mode, setMode] = useState<LiveMode>(enabled && collab ? 'connecting' : 'off');
     const [connection, setConnection] = useState<LiveConnection>('connecting');
     const [pending, setPending] = useState(false);
-    const [saveFailed, setSaveFailed] = useState(false);
+    /** Why the draft HTML couldn't be stored (the live document still has the text); null = fine. */
+    const [saveFailed, setSaveFailed] = useState<string | null>(null);
     const [ready, setReady] = useState(false);
     const [canEdit, setCanEdit] = useState(false);
     const [peers, setPeers] = useState<LivePeer[]>([]);
     const [meta, setMetaState] = useState<{ name?: string; icon?: string | null }>({});
     const [binding, setBinding] = useState<LiveEditorBinding | null>(null);
     const [generation, setGeneration] = useState(0);
+    /** the generation the `live` mode belongs to (a reset starts a new one) */
+    const [liveGeneration, setLiveGeneration] = useState(-1);
     const [notice, setNotice] = useState<string | null>(null);
 
     const pageUuid = routeParams[2];
@@ -94,6 +99,22 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
     onDraftStateRef.current = onDraftState;
     const routeParamsRef = useRef(routeParams);
     routeParamsRef.current = routeParams;
+    const canUpdateRef = useRef(canUpdate);
+    canUpdateRef.current = canUpdate;
+
+    /** Title as stored: never empty, never longer than the server accepts. */
+    const metaName = (doc: Y.Doc) => (((doc.getMap('meta').get('name') as string | undefined)?.trim() || fallbackRef.current.name || 'Untitled')).slice(0, 255);
+    const metaIcon = (doc: Y.Doc) => {
+        const docMeta = doc.getMap('meta');
+        return docMeta.has('icon') ? (docMeta.get('icon') as string | null) ?? null : fallbackRef.current.icon;
+    };
+
+    /** The server says this user may not edit any more: stop saving, make the editor read-only. */
+    const loseEditRights = useCallback(() => {
+        if (sessionRef.current) sessionRef.current.edit = false;
+        setCanEdit(false);
+        setNotice('You can no longer edit this page. Reload to see the latest version.');
+    }, []);
 
     const fetchSession = useCallback(async (): Promise<PageCollabSession> =>
         (await window.axios.post<PageCollabSession>(route('pages.collab.session', routeParamsRef.current))).data, []);
@@ -130,29 +151,32 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
             const vector = stateVector(doc);
             if (!options.baseline && !options.force && htmlVectorRef.current && covers(htmlVectorRef.current, vector)) return true;
 
-            const docMeta = doc.getMap('meta');
             try {
                 const { data } = await window.axios.put<PageCollabSaveResponse>(route('pages.collab.save', routeParamsRef.current), {
                     epoch: session.epoch,
                     content: JSON.stringify({ type: 'lexical', html }),
-                    name: (docMeta.get('name') as string | undefined)?.trim() || fallbackRef.current.name || 'Untitled',
-                    icon: docMeta.has('icon') ? docMeta.get('icon') ?? null : fallbackRef.current.icon,
+                    name: metaName(doc),
+                    icon: metaIcon(doc),
                     vector,
                     baseline: !!options.baseline,
                 });
-                if (!(data.status === 'baseline' && htmlVectorRef.current)) htmlVectorRef.current = vector;
+                // 'covered' = the stored HTML isn't ours (newer or concurrent): keep saving until it is
+                if (data.status === 'saved' || data.status === 'unchanged' || (data.status === 'baseline' && !htmlVectorRef.current)) htmlVectorRef.current = vector;
                 if (data.status !== 'baseline') onDraftStateRef.current(data);
-                setSaveFailed(false);
+                setSaveFailed(null);
                 return true;
             } catch (error: any) {
                 const status = error?.response?.status;
                 if (status === 409 && error.response.data?.reset) {
                     resetDocument();
                 } else if (status === 403) {
-                    router.reload();
+                    loseEditRights();
+                } else if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+                    // refused (e.g. too large): retrying the same won't help — say so, the next change tries again
+                    setSaveFailed(error.response.data?.message ?? 'The draft couldn\'t be saved.');
                 } else {
                     // offline / server error: the Y document keeps the text; the HTML follows later
-                    setSaveFailed(true);
+                    setSaveFailed('Not saved yet — retrying');
                     if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
                     retryTimerRef.current = setTimeout(() => { void save(); }, RETRY_SAVE_MS);
                 }
@@ -162,7 +186,7 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
         const next = saveChainRef.current.then(run, run);
         saveChainRef.current = next.catch(() => false);
         return next;
-    }, [resetDocument]);
+    }, [resetDocument, loseEditRights]);
 
     /**
      * Last chance before the tab closes or the editor goes away: unsaved HTML goes out with
@@ -171,18 +195,17 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
     const saveOnExit = useCallback((editor: LexicalEditor | null) => {
         const session = sessionRef.current;
         const doc = docRef.current;
-        if (!session?.edit || !doc || !editor || !readyRef.current || !initialDoneRef.current) return;
+        if (!session?.edit || !doc || !editor || !readyRef.current || !initialDoneRef.current || resettingRef.current) return;
         const html = editor.read(() => $generateHtmlFromNodes(editor));
         const vector = stateVector(doc);
         if (!saveTimerRef.current && htmlVectorRef.current && covers(htmlVectorRef.current, vector)) return;
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current.handle);
         saveTimerRef.current = null;
-        const docMeta = doc.getMap('meta');
         const body = JSON.stringify({
             epoch: session.epoch,
             content: JSON.stringify({ type: 'lexical', html }),
-            name: (docMeta.get('name') as string | undefined)?.trim() || fallbackRef.current.name || 'Untitled',
-            icon: docMeta.has('icon') ? docMeta.get('icon') ?? null : fallbackRef.current.icon,
+            name: metaName(doc),
+            icon: metaIcon(doc),
             vector,
         });
         htmlVectorRef.current = vector;
@@ -190,7 +213,7 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
         fetch(route('pages.collab.save', routeParamsRef.current), {
             method: 'PUT',
             // browsers cap keepalive bodies at 64 KB; bigger documents rely on the next open's catch-up save
-            keepalive: body.length < 60_000,
+            keepalive: new Blob([body]).size < 60_000,
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-XSRF-TOKEN': xsrf, 'X-Requested-With': 'XMLHttpRequest' },
             body,
@@ -237,7 +260,7 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
         setMetaState({});
         setBinding(null);
         setPending(false);
-        setSaveFailed(false);
+        setSaveFailed(null);
         if (!enabled || !collab) {
             setMode('off');
             return;
@@ -263,6 +286,8 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
             } catch (error: any) {
                 const status = error?.response?.status;
                 if (status === 403 || status === 404) {
+                    // no (more) access: don't keep a copy of the draft on this device
+                    try { indexedDB.deleteDatabase(collabDbName(user.id, pageUuid, collab.epoch)); } catch { /* ignore */ }
                     if (alive) setMode('off');
                     return;
                 }
@@ -272,7 +297,7 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
 
             const epoch = first?.epoch ?? collab.epoch;
             const documentName = first?.document ?? `page.${pageUuid}.${epoch}`;
-            const edit = first?.edit ?? true;
+            const edit = first?.edit ?? canUpdateRef.current;
             sessionRef.current = { document: documentName, epoch, edit };
             htmlVectorRef.current = first?.html_vector ?? null;
             setCanEdit(edit);
@@ -301,6 +326,7 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
                         return token;
                     }
                     const session = await fetchSession();
+                    if (!alive) return session.token;
                     if (session.document !== documentName) {
                         resetDocument();
                     } else {
@@ -326,12 +352,14 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
                 if (!alive) return;
                 try {
                     const session = await fetchSession();
+                    if (!alive) return;
                     if (session.document !== documentName) {
                         resetDocument();
                         return;
                     }
                     later(() => { live.detach(); live.attach(); }, 1_000);
                 } catch (error: any) {
+                    if (!alive) return;
                     const status = error?.response?.status;
                     if (status === 403 || status === 404) router.reload();
                     else later(recheck, 5_000);
@@ -351,7 +379,8 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
                     const data = (state as { awarenessData?: CollabAwarenessData }).awarenessData;
                     if (clientId === doc?.clientID || !data || data.userId === user.id || seen.has(data.userId)) return;
                     seen.add(data.userId);
-                    next.push({ clientId, userId: data.userId, name: String((state as { name?: string }).name ?? ''), color: String((state as { color?: string }).color ?? collabColor(data.userId)), edit: !!data.edit });
+                    // our own colour per user id, never what the other browser claims
+                    next.push({ clientId, userId: data.userId, name: String((state as { name?: string }).name ?? '').slice(0, 80), color: collabColor(data.userId), edit: !!data.edit });
                 });
                 setPeers(next);
             };
@@ -422,6 +451,7 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
                 },
                 onChange: notifyChange,
             });
+            setLiveGeneration(generation);
             setMode('live');
 
             // An empty document: one editor loads the stored draft into it, the others wait for it
@@ -436,15 +466,26 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
                             break;
                         }
                     } catch (error: any) {
+                        if (!alive) return;
                         if (error?.response?.status === 409) {
                             resetDocument();
+                            return;
+                        }
+                        if (error?.response?.status === 403) {
+                            loseEditRights();
                             return;
                         }
                     }
                 }
                 await sleep(BOOTSTRAP_RETRY_MS);
             }
+            if (!alive) return;
             initialDoneRef.current = true;
+            // catch-up: text in the live document that the stored draft doesn't have yet (edits made
+            // offline and closed, a keepalive save that was too big, every browser closed at once)
+            if (edit && readyRef.current && htmlVectorRef.current && !covers(htmlVectorRef.current, stateVector(doc))) {
+                scheduleSave(LOCAL_SAVE_MS);
+            }
         })();
 
         return () => {
@@ -469,7 +510,7 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
             editorRef.current = null;
             sessionRef.current = null;
         };
-    }, [enabled, collab?.url, generation, pageUuid, user.id, user.name, fetchSession, notifyChange, resetDocument, save, saveOnExit, scheduleSave]);
+    }, [enabled, collab?.url, generation, pageUuid, user.id, user.name, fetchSession, notifyChange, resetDocument, loseEditRights, save, saveOnExit, scheduleSave]);
 
     /** Store the HTML now (before publish / review / close). False when that failed. */
     const flush = useCallback(async () => {
@@ -501,8 +542,16 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
 
     const hasUnsavedChanges = useCallback(() => !!providerRef.current?.hasUnsyncedChanges || !!saveTimerRef.current, []);
 
+    // Derived right away, not only after the effect ran: the render in which `enabled` flips (or a reset
+    // starts) must neither show an editable single-user editor nor keep the old live one.
+    const effectiveMode: LiveMode = !enabled || !collab
+        ? 'off'
+        : mode === 'off' || (mode === 'live' && liveGeneration !== generation)
+            ? 'connecting'
+            : mode;
+
     return useMemo(() => ({
-        mode,
+        mode: effectiveMode,
         connection,
         /** the server hasn't acknowledged every change yet */
         pending,
@@ -520,5 +569,5 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
         checkEpoch,
         retry,
         hasUnsavedChanges,
-    }), [mode, connection, pending, saveFailed, ready, canEdit, peers, meta, binding, generation, notice, flush, setMeta, checkEpoch, retry, hasUnsavedChanges]);
+    }), [effectiveMode, connection, pending, saveFailed, ready, canEdit, peers, meta, binding, generation, notice, flush, setMeta, checkEpoch, retry, hasUnsavedChanges]);
 }

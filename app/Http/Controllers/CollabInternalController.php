@@ -45,7 +45,7 @@ class CollabInternalController extends Controller
             return response()->json(['message' => 'Document too large.'], 413);
         }
 
-        PageCollab::state($page);
+        PageCollab::ensureState($page);
         $stored = DB::transaction(function () use ($page, $epoch, $validated, $bytes) {
             $state = PageCollabState::where('page_id', $page->id)->lockForUpdate()->firstOrFail(['id', 'epoch']);
             if ($state->epoch !== $epoch) {

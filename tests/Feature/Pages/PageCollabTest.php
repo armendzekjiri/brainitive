@@ -7,6 +7,7 @@ use App\Models\PageCollabState;
 use App\Support\Collab\CollabConfig;
 use App\Support\Collab\CollabDocument;
 use App\Support\Collab\CollabToken;
+use App\Support\Collab\PageCollab;
 use App\Support\Collab\StateVector;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -77,6 +78,10 @@ class PageCollabTest extends TestCase
         $whiteboard = $this->draftPage(['content' => ['type' => 'excalidraw', 'elements' => [], 'appState' => []]]);
         $this->collabSession($whiteboard, $this->author)->assertForbidden();
         $this->collabSession($this->draftPage(['status' => 'archived']), $this->author)->assertForbidden();
+
+        // suspended accounts get nothing (and the server's access check drops them)
+        $this->editor->forceFill(['suspended_at' => now()])->save();
+        $this->assertNull(PageCollab::access($published, $this->editor->fresh()));
     }
 
     public function test_live_editing_is_off_without_url_and_secret(): void
@@ -203,6 +208,11 @@ class PageCollabTest extends TestCase
             ->assertJsonPath("users.{$this->editor->id}", null);
 
         $this->postJson(route('internal.collab.access'), ['document' => $document, 'user_ids' => []], [])->assertUnauthorized();
+
+        // the draft was replaced: the old document is no longer current
+        $this->actingAs($this->admin)->putJson($this->pageRoute('pages.draft.save', $page), ['content' => json_encode($this->html('<p>Replaced</p>'))])->assertOk();
+        $this->postJson(route('internal.collab.access'), ['document' => $document, 'user_ids' => [$this->admin->id]], $this->internal())
+            ->assertOk()->assertJsonPath('current', false)->assertJsonPath("users.{$this->admin->id}", 'edit');
     }
 
     // ── saving the live document as the draft ──────────────────────────────────────────────────
@@ -232,8 +242,14 @@ class PageCollabTest extends TestCase
         $this->collabSave($page, '<p>Older</p>', ['1' => 7, '2' => 4])->assertOk()->assertJsonPath('status', 'covered');
         $this->assertSame('<p>Newest</p>', $page->fresh()->draft_content['html']);
 
-        // concurrent (each has something the other lacks) → saved; the leader's next save follows
-        $this->collabSave($page, '<p>Newest + more</p>', ['1' => 9, '2' => 4, '3' => 1])->assertJsonPath('status', 'saved');
+        // concurrent (each has something the other lacks): not stored either — it would drop the stored
+        // one's newer text; the leader receives both and saves the merged snapshot
+        $this->collabSave($page, '<p>Other branch</p>', ['1' => 8, '2' => 5])->assertJsonPath('status', 'covered');
+        $this->assertSame('<p>Newest</p>', $page->fresh()->draft_content['html']);
+        $this->assertSame([1 => 9, 2 => 4], PageCollabState::where('page_id', $page->id)->first()->html_vector, 'the stored vector never goes back');
+
+        // the merged one (everything of both) is stored
+        $this->collabSave($page, '<p>Newest + more</p>', ['1' => 9, '2' => 5, '3' => 1])->assertJsonPath('status', 'saved');
         $this->assertSame('<p>Newest + more</p>', $page->fresh()->draft_content['html']);
     }
 

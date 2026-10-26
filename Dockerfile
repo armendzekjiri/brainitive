@@ -59,7 +59,8 @@ RUN chmod +x /usr/local/bin/brainitive-entrypoint \
     && rm -rf node_modules excalidraw-build tests .github docs \
     && php artisan package:discover --ansi \
     && mkdir -p storage/app/public storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
-    && chown -R www-data:www-data storage bootstrap/cache /data /config
+    && mkdir -p /collab \
+    && chown -R www-data:www-data storage bootstrap/cache /data /config /collab
 
 USER www-data
 EXPOSE 80 443

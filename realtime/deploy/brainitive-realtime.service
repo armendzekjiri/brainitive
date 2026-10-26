@@ -1,6 +1,6 @@
 # Brainitive realtime server (live co-editing of documents, BRAI-54) — systemd unit example.
 # Install:   sudo cp realtime/deploy/brainitive-realtime.service /etc/systemd/system/
-#            (adjust User / WorkingDirectory / EnvironmentFile to the install)
+#            (adjust User / WorkingDirectory / COLLAB_APP_URL to the install)
 #            cd /var/www/brainitive && npm --prefix realtime ci --omit=dev
 #            sudo systemctl daemon-reload && sudo systemctl enable --now brainitive-realtime
 # Logs:      journalctl -u brainitive-realtime -f
@@ -15,8 +15,10 @@ Type=simple
 User=www-data
 Group=www-data
 WorkingDirectory=/var/www/brainitive
-# Reads COLLAB_SECRET (or APP_KEY), APP_URL from the app's .env; the values below win.
-EnvironmentFile=/var/www/brainitive/.env
+# Its own small env file, NOT the app's .env: this process faces the internet and needs only
+#   COLLAB_SECRET=<the same value as in the app's .env>   (openssl rand -hex 32)
+# sudo install -m 600 -o www-data /dev/null /etc/brainitive/realtime.env, then add that line.
+EnvironmentFile=/etc/brainitive/realtime.env
 Environment=NODE_ENV=production
 Environment=COLLAB_HOST=127.0.0.1
 Environment=COLLAB_PORT=1234

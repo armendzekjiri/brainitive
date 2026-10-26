@@ -1,7 +1,7 @@
 # Live co-editing of documents (BRAI-54)
 
 **Branch:** feat/live-docs
-**Status:** in-progress
+**Status:** done (ready for the lead to merge into release/v1.43.0)
 **Started:** 2026-10-26
 **Board card:** BRAI-54 (board item 156) · release v1.43.0
 
@@ -32,14 +32,18 @@ keep their meaning. Whiteboards (Excalidraw) and issue descriptions are out of s
   epoch, token, edit, html_vector, user}`. **edit** = `update`; **view-only** only on never-published
   pages for people who can `view` them (they already see `content` = the draft). Readers of published
   pages get 403: they keep seeing the published `content`.
-- Token: `base64url(json).base64url(HMAC-SHA256)`, payload `{v, sub, name, doc, edit, exp}`, 5 min.
+- Token: `base64url(json).base64url(HMAC-SHA256)`, payload `{v, sub, name, doc, edit, exp}`, 2 min.
   Keys are derived from `COLLAB_SECRET` with HMAC labels (`collab-token`, `collab-internal`), so a
   browser token can never be used on the internal API. The provider asks for a fresh token on every
   (re)connect.
-- The server verifies the token (signature, expiry, `doc` == requested document), marks view-only
-  connections `readOnly` (Hocuspocus drops their updates) and **re-checks access every 60 s** through
-  `POST /api/internal/collab/access` (lost view → closed, lost edit → read-only, stale epoch → all
-  closed).
+- The server verifies the token (signature, expiry, `doc` == requested document), **asks Brainitive
+  for the user's current access on every connect** (`POST /api/internal/collab/access`; the answer, not
+  the token, decides read-only), marks view-only connections `readOnly` (Hocuspocus drops their
+  updates) and **re-checks access every 60 s** (lost view → closed, lost edit → read-only, stale epoch →
+  all closed). Sockets that don't authenticate within 10 s, or fail to, are closed. Awareness is
+  validated (user id / name = the token's, `edit` only for editors, colour `#rrggbb`) — offenders are
+  disconnected; the browser also only renders plain colours / short names. A document Brainitive
+  refuses as too large (413) is closed instead of retried.
 
 ### Persistence
 - Table `page_collab_states` (page_id unique, `epoch`, `state` = base64 Yjs update, `state_bytes`,
@@ -53,8 +57,9 @@ keep their meaning. Whiteboards (Excalidraw) and issue descriptions are out of s
   - The client that made a change saves (1 s debounce); for remote changes only the "leader"
     (editor with the lowest awareness client id) saves (3 s), so a crashed author still gets saved.
   - **State-vector guard:** each save carries the Yjs state vector the HTML was generated from
-    (taken in the same `editor.read`). The server rejects a save whose vector is covered by the last
-    stored one (`html_vector`), so an older snapshot can never overwrite a newer one.
+    (taken in the same `editor.read`). The server stores it only when it contains everything the last
+    stored one (`html_vector`) has: an older or concurrent snapshot answers `covered` and the leader,
+    which receives every change, saves the merged one. The stored vector never goes back.
   - A save that doesn't change name / icon / content (embeds ignored) writes nothing (no empty
     "unpublished changes", no revision bump, review hash unchanged).
   - It goes through `Page::saveDraft()` (mentions, `draft_updated_*`, `edit_revision`), so readers,
@@ -146,8 +151,9 @@ is missing). Without `COLLAB_URL` the app behaves exactly as before.
 3. `.env`: `COLLAB_URL=wss://brainitive.app/collab`; optionally `COLLAB_SECRET=<openssl rand -hex 32>`
    (else derived from APP_KEY; the service reads the same .env). `php artisan config:cache`.
 4. systemd: `realtime/deploy/brainitive-realtime.service` → `/etc/systemd/system/` (adjust paths, user,
-   `COLLAB_APP_URL`), `systemctl daemon-reload && systemctl enable --now brainitive-realtime`.
-   It listens on 127.0.0.1:1234 only.
+   `COLLAB_APP_URL`). It reads its own `/etc/brainitive/realtime.env` (mode 600) with only
+   `COLLAB_SECRET=<same as the app>` — never the app's `.env`. Then `systemctl daemon-reload &&
+   systemctl enable --now brainitive-realtime`. It listens on 127.0.0.1:1234 only.
 5. nginx: `realtime/deploy/nginx-collab.conf` into the HTTPS `server {}` (WebSocket upgrade for
    `/collab`, `client_max_body_size 25m` for `/api/internal/collab/`), `nginx -t && systemctl reload nginx`.
 6. dev.brainitive.app: same with its own folder / port (e.g. 1235) / `COLLAB_URL`; its basic auth
@@ -159,7 +165,9 @@ is missing). Without `COLLAB_URL` the app behaves exactly as before.
 ### Docker (self-hosting) — included
 `compose.yaml` service `realtime` (same image, `node realtime/src/index.js`, healthcheck), Caddy in the
 app container proxies `/collab` to it and serves the internal API on the unpublished `:8081`;
-`COLLAB_URL` defaults to `/collab`, the secret is derived from `APP_KEY`. Off: `COLLAB_URL=` + remove
+`COLLAB_URL` defaults to `/collab`. The realtime container gets no `.env` and no storage volume: the app
+container writes the secret (COLLAB_SECRET or derived from `APP_KEY`) to the `collab` volume, read-only
+there (`COLLAB_SECRET_FILE`). Off: `COLLAB_URL=` + remove
 the service. The image gains the Node 22 binary (~122 MB uncompressed) + realtime deps (~15 MB).
 Verified with `docker compose build` + `up -d` (ports 8095/8455): two browsers co-editing, caret
 names, draft saved on tab close, fallback notice with the service stopped.
@@ -180,3 +188,8 @@ names, draft saved on tab close, fallback notice with the service stopped.
 - Sticky-note captions sync as a whole (last writer wins per note), not character by character.
 - Whiteboards and issue descriptions are not live (out of scope). Hocuspocus 3.4.4 (4.x needs Node 22).
 - Remote carets are repositioned on awareness updates; after a window resize they move on the next one.
+- Viewers of a never-published page see the stored draft until an editor has opened it live once.
+- IndexedDB copies (`brainitive-docs-*`) are removed when access is lost, not on logout (the offline-mode
+  work owns logout clean-up).
+- `docker compose up --build` builds the same image tag for several services in parallel; on a race
+  ("image already exists") run `docker compose build app` first (also true for queue / scheduler).

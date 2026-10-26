@@ -44,6 +44,23 @@ export interface CollabAwarenessData {
     edit: boolean;
 }
 
+const COLOR = /^#[0-9a-f]{6}$/i;
+
+/**
+ * Awareness states are whatever other browsers send. Lexical writes `color` into style attributes and
+ * `name` into the caret label: only a plain colour (else the user's own) and a short name get through.
+ * The realtime server also disconnects anyone announcing someone else (realtime/src/server.js).
+ */
+function safeAwarenessState(state: Record<string, unknown>): Record<string, unknown> {
+    const data = state.awarenessData as Partial<CollabAwarenessData> | undefined;
+    const userId = typeof data?.userId === 'number' ? data.userId : 0;
+    return {
+        ...state,
+        color: typeof state.color === 'string' && COLOR.test(state.color) ? state.color : collabColor(userId),
+        name: String(state.name ?? '').slice(0, 80),
+    };
+}
+
 const MIRROR_IN = 'brainitive-mirror-in';
 const MIRROR_OUT = 'brainitive-mirror-out';
 
@@ -75,8 +92,20 @@ export function createLexicalBridge(provider: HocuspocusProvider) {
 
     const syncHandlers = new Map<unknown, (data: { state: boolean }) => void>();
     const statusHandlers = new Map<unknown, (arg: { status: string }) => void>();
+    const awareness = provider.awareness!;
     const adapter = {
-        awareness: provider.awareness,
+        awareness: {
+            getLocalState: () => awareness.getLocalState(),
+            setLocalState: (state: Record<string, unknown> | null) => awareness.setLocalState(state),
+            setLocalStateField: (field: string, value: unknown) => awareness.setLocalStateField(field, value),
+            on: (type: 'update', cb: () => void) => awareness.on(type, cb),
+            off: (type: 'update', cb: () => void) => awareness.off(type, cb),
+            getStates: () => {
+                const states = new Map<number, Record<string, unknown>>();
+                awareness.getStates().forEach((state, clientId) => states.set(clientId, safeAwarenessState(state)));
+                return states;
+            },
+        },
         connect: () => undefined,
         disconnect: () => undefined,
         on(type: string, cb: (arg: never) => void) {

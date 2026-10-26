@@ -11,7 +11,7 @@ import {
 } from 'lexical';
 import type { JSX } from 'react';
 import type { SmartLinkView } from '@/types';
-import { isSmartLinkRef, normalizeView } from '../smartLinks/smartLinkRefs';
+import { isSmartLinkRef, normalizeView, safeSmartLinkHref } from '../smartLinks/smartLinkRefs';
 import SmartLinkChip from '../smartLinks/SmartLinkChip';
 
 /**
@@ -30,10 +30,7 @@ export interface SmartLinkPayload {
 export type SerializedSmartLinkNode = Spread<{ ref: string; url: string; text: string; view: SmartLinkView }, SerializedLexicalNode>;
 
 /** Only http(s) or app-relative hrefs are written back. */
-function safeHref(url: string): string {
-    const value = url.trim();
-    return /^https?:\/\//i.test(value) || (value.startsWith('/') && !value.startsWith('//')) ? value : '#';
-}
+const safeHref = safeSmartLinkHref;
 
 function $convertSmartLinkElement(domNode: HTMLElement): DOMConversionOutput | null {
     const ref = domNode.getAttribute('data-smart-link');
@@ -41,7 +38,7 @@ function $convertSmartLinkElement(domNode: HTMLElement): DOMConversionOutput | n
     return {
         node: $createSmartLinkNode({
             ref,
-            url: domNode.getAttribute('href') ?? '',
+            url: safeHref(domNode.getAttribute('href') ?? ''),
             text: (domNode.textContent ?? '').trim(),
             view: normalizeView(domNode.getAttribute('data-smart-link-view')),
         }),

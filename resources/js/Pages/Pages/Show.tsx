@@ -1,7 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { safeHtml } from '@/lib/sanitize';
 import { Head, useForm, router, Link, usePage } from '@inertiajs/react';
-import { PageProps, Workspace, Project, Page as PageType, PageDraftState, PageDraftHashState, PageReviewShowState, PageCollabProps, User } from '@/types';
+import { PageProps, Workspace, Project, Page as PageType, PageDraftState, PageDraftHashState, PageReviewShowState, PageCollabProps, PagePresenceCollabState, User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -306,6 +306,7 @@ function PageTitleInput({
             }}
             className={cn(PAGE_TITLE_CLASS, 'block w-full resize-none overflow-hidden border-none bg-transparent p-0 outline-none placeholder:text-muted-foreground/40 focus:ring-0')}
             placeholder="Untitled"
+            maxLength={255}
             aria-label="Page title"
         />
     );
@@ -773,14 +774,21 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
         routeParams,
         user: { id: currentUser.id, name: currentUser.name },
         fallback: { name: editSource.name, icon: editSource.icon ?? null },
+        canUpdate: can.update,
         onDraftState: (state) => {
             applyDraftState(state);
             setLastSaved(new Date());
         },
     });
-    const isLive = live.mode === 'live';
+    // the shared document is shown once it has content; until then the stored draft, read-only
+    const isLive = live.mode === 'live' && live.ready;
+    const liveBusy = live.mode === 'connecting' || (live.mode === 'live' && !live.ready);
     const liveRef = useRef(live);
     liveRef.current = live;
+    // single-user editing after the draft was replaced while live: start from the stored draft, not the page load's
+    useEffect(() => {
+        if (live.mode === 'fallback' && live.generation > 0) router.reload({ only: ['page'] });
+    }, [live.mode, live.generation]);
 
     // Send queued changes; saves run one after another so revisions stay in order
     const flushSave = useCallback((force = false): Promise<void> => {
@@ -855,7 +863,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
         if (hash && can.update) setDraftHash(hash);
         // live: everyone's changes are in the document already; a newer epoch = the draft was replaced
         if (liveRef.current.mode !== 'off' && liveRef.current.mode !== 'fallback') {
-            liveRef.current.checkEpoch((state as PageDraftState & { collab_epoch?: number | null }).collab_epoch);
+            liveRef.current.checkEpoch((state as PagePresenceCollabState).collab_epoch);
             return;
         }
         const savedByOther = state.draft_updated_by && state.draft_updated_by.id !== currentUser.id;
@@ -940,7 +948,8 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
     // Save what's left when leaving; warn if a save could still be lost
     useEffect(() => {
         const beforeUnload = (event: BeforeUnloadEvent) => {
-            if (liveRef.current.mode === 'live' && liveRef.current.hasUnsavedChanges()) {
+            // offline, the edits are in this browser's IndexedDB: no need to hold the user back
+            if (liveRef.current.mode === 'live' && liveRef.current.connection === 'online' && liveRef.current.hasUnsavedChanges()) {
                 void liveRef.current.flush();
                 event.preventDefault();
                 return;
@@ -1264,8 +1273,10 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
 
                                 {/* Live status (BRAI-54): the shared document's state, not the HTML autosave */}
                                 {isLive && live.canEdit && (
-                                    <span className="text-xs text-muted-foreground flex items-center gap-1 px-1" role="status" aria-live="polite">
-                                        {live.connection === 'offline' ? (
+                                    <span className="text-xs text-muted-foreground flex items-center gap-1 px-1" role="status">
+                                        {live.saveFailed && live.connection !== 'offline' ? (
+                                            <span className="text-destructive flex items-center gap-1" title={live.saveFailed}><AlertTriangle className="size-3" /><span className="max-w-[12rem] truncate">{live.saveFailed}</span></span>
+                                        ) : live.connection === 'offline' ? (
                                             <><CloudOff className="size-3 text-amber-600 dark:text-amber-400" /><span className="hidden sm:inline">Offline — changes kept on this device</span><span className="sm:hidden">Offline</span></>
                                         ) : live.pending || live.connection === 'connecting' ? (
                                             <><Save className="size-3 animate-pulse" />Saving…</>
@@ -1527,10 +1538,16 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
                             {live.mode === 'fallback' && (
                                 <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm" role="status">
                                     <Users className="size-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                                    <span className="flex-1 min-w-[12rem]">
-                                        <strong>Live editing unavailable — editing alone.</strong> Your changes are saved as usual; if someone else saves meanwhile you'll be asked which version to keep.
-                                    </span>
-                                    <Button size="sm" variant="outline" onClick={async () => { await flushSave(); live.retry(); }}>Try again</Button>
+                                    {can.update ? (
+                                        <span className="flex-1 min-w-[12rem]">
+                                            <strong>Live editing unavailable — editing alone.</strong> Your changes are saved as usual; if someone else saves meanwhile you'll be asked which version to keep.
+                                        </span>
+                                    ) : (
+                                        <span className="flex-1 min-w-[12rem]">
+                                            <strong>Live updates unavailable</strong> — showing the last saved draft.
+                                        </span>
+                                    )}
+                                    <Button size="sm" variant="outline" onClick={async () => { if (can.update) await flushSave(); live.retry(); }}>Try again</Button>
                                 </div>
                             )}
                             {live.notice && (
@@ -1591,7 +1608,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
                             {/* Icon, title and meta */}
                             <div className="mb-6">
                                 <div className="mb-3">
-                                    {isEditing && (!isLive || live.canEdit) ? (
+                                    {isEditing && !liveBusy && (!isLive || live.canEdit) ? (
                                         <PageIconPicker value={displayIcon} onChange={handleUpdateIcon} />
                                     ) : (
                                         (displayIcon.startsWith('data:') || displayIcon.startsWith('http') || displayIcon.startsWith('/'))
@@ -1599,7 +1616,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
                                             : <span className="block text-5xl leading-none">{displayIcon}</span>
                                     )}
                                 </div>
-                                {isEditing && (!isLive || live.canEdit) ? (
+                                {isEditing && !liveBusy && (!isLive || live.canEdit) ? (
                                     <PageTitleInput title={displayName} onSave={handleUpdateName} />
                                 ) : (
                                     <h1 className={PAGE_TITLE_CLASS}>{displayName || 'Untitled'}</h1>
@@ -1688,17 +1705,17 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
 
                             {/* Page Content - RichLexicalEditor (documents only; Excalidraw pages use preview above) */}
                             {page.type === 'page' && !isExcalidrawPage(page.content) && (
-                                <div className="relative" aria-busy={live.mode === 'connecting' || (isLive && !live.ready)}>
-                                {(live.mode === 'connecting' || (isLive && !live.ready)) && (
+                                <div className="relative" aria-busy={liveBusy}>
+                                {liveBusy && (
                                     <div className="absolute right-0 -top-7 flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
                                         <Loader2 className="size-3 animate-spin" /> Connecting to live editing…
                                     </div>
                                 )}
                                 <RichLexicalEditor
-                                    key={isLive ? `${page.uuid}-live-${live.generation}` : `${page.uuid}-${isEditing}-${editorKey}-${live.mode}`}
+                                    key={isLive ? `${page.uuid}-live-${live.generation}` : `${page.uuid}-${isEditing}-${editorKey}`}
                                     content={isLive ? null : extractHtmlContent(((isEditing || liveWanted) ? editSource.content : page.content) as any)}
                                     onChange={isLive ? handleLiveHtml : handleUpdateContent}
-                                    editable={isLive ? editorEditable : isEditing && live.mode !== 'connecting'}
+                                    editable={isLive ? editorEditable : isEditing && !liveBusy}
                                     collaboration={isLive ? live.binding : null}
                                     pollScope={{ type: 'page', id: page.uuid }}
                                     smartLinks={smartLinkConfig}

@@ -13,11 +13,11 @@
     },
     "dependencies": {
         "@hocuspocus/server": "3.4.4",
+        "ws": "8.22.0",
         "y-protocols": "1.0.7",
         "yjs": "13.6.33"
     },
     "devDependencies": {
-        "@hocuspocus/provider": "3.4.4",
-        "ws": "8.18.3"
+        "@hocuspocus/provider": "3.4.4"
     }
 }

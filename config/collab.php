@@ -14,8 +14,9 @@ return [
     // derived from APP_KEY (realtime/src/token.js does the same), so Docker needs no extra secret.
     'secret' => env('COLLAB_SECRET') ?: (env('APP_KEY') ? hash_hmac('sha256', 'brainitive-collab', (string) env('APP_KEY')) : null),
 
-    // Lifetime of a connection token (seconds); the browser asks for a new one on every reconnect.
-    'token_ttl' => (int) env('COLLAB_TOKEN_TTL', 300),
+    // Lifetime of a connection token (seconds); the browser asks for a new one on every reconnect, and
+    // the realtime server also asks Brainitive about the user's access when they connect.
+    'token_ttl' => (int) env('COLLAB_TOKEN_TTL', 120),
 
     // Largest Yjs state the realtime server may store for one document (bytes, before base64).
     'max_state_bytes' => (int) env('COLLAB_MAX_STATE_BYTES', 16 * 1024 * 1024),

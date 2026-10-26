@@ -9,6 +9,12 @@ case "$*" in
     *artisan\ key:generate*) exec "$@" ;;
 esac
 
+# The realtime server (live co-editing) gets no .env, no storage, no database: only the shared secret,
+# which the app role writes to the `collab` volume (see below and compose.yaml).
+if [ "${CONTAINER_ROLE:-app}" = "realtime" ]; then
+    exec "$@"
+fi
+
 # A fresh storage volume is empty: recreate Laravel's directory layout
 mkdir -p storage/app/public storage/framework/cache/data storage/framework/sessions \
          storage/framework/views storage/logs
@@ -34,12 +40,6 @@ if [ -z "$APP_KEY" ]; then
     export APP_KEY
 fi
 
-# The realtime server (live co-editing) only needs APP_KEY (its secret is derived from it) — it talks
-# to the app over HTTP, never to the database.
-if [ "${CONTAINER_ROLE:-app}" = "realtime" ]; then
-    exec "$@"
-fi
-
 echo "Waiting for the database…"
 attempts=0
 until php artisan db:show >/dev/null 2>&1; do
@@ -62,6 +62,11 @@ if [ "${CONTAINER_ROLE:-app}" = "app" ]; then
         php artisan passport:keys --force
     fi
     php artisan storage:link >/dev/null 2>&1 || true
+    # Live co-editing: hand the realtime service its secret (COLLAB_SECRET, else derived from APP_KEY)
+    if [ -d /collab ]; then
+        php -r '$s = getenv("COLLAB_SECRET") ?: hash_hmac("sha256", "brainitive-collab", (string) getenv("APP_KEY")); file_put_contents("/collab/secret.tmp", $s);' \
+            && chmod 600 /collab/secret.tmp && mv /collab/secret.tmp /collab/secret
+    fi
     php artisan optimize
 fi
 

@@ -153,7 +153,7 @@ test.describe('live co-editing of documents', () => {
         await expect(liveSaved(page)).toBeVisible();
 
         // and the draft (what Update publishes) has both
-        const closed = page.waitForResponse((r) => r.url().includes('/pages/') && r.request().method() === 'GET');
+        const closed = page.waitForResponse((r) => r.request().method() === 'GET' && new URL(r.url()).pathname === new URL(url).pathname);
         await page.getByRole('button', { name: 'Close', exact: true }).click();
         await closed;
         await page.getByRole('button', { name: 'Continue editing' }).first().click();
@@ -181,23 +181,26 @@ test.describe('live co-editing of documents', () => {
         await optIn(page);
         await page.reload();
         const second = await browser.newContext({ storageState: ownerState, extraHTTPHeaders: { 'X-E2E-Collab': '1' } });
-        const other = await second.newPage();
-        await other.goto(url);
-        for (const view of [page, other]) {
-            const editor = docEditor(view);
-            await expect(editor).toContainText(`@${USERS.member.name}`);
-            await expect(editor.locator(`[data-smart-link-chip="page:${uuid}"]`)).toBeVisible();
-            await expect(editor.getByText('Lunch?')).toBeVisible();
-            await expect(view.locator('.sticky-note-container')).toContainText('Remember the milk');
-        }
+        try {
+            const other = await second.newPage();
+            await other.goto(url);
+            for (const view of [page, other]) {
+                const editor = docEditor(view);
+                await expect(editor).toContainText(`@${USERS.member.name}`);
+                await expect(editor.locator(`[data-smart-link-chip="page:${uuid}"]`)).toBeVisible();
+                await expect(editor.getByText('Lunch?')).toBeVisible();
+                await expect(view.locator('.sticky-note-container')).toContainText('Remember the milk');
+            }
 
-        // a live edit, then publish: the published HTML still has every block
-        const lastLine = docEditor(page).locator('p', { hasText: 'Last line' });
-        const box = (await lastLine.boundingBox())!;
-        await lastLine.click({ position: { x: box.width - 2, y: box.height / 2 } }); // the end of that line
-        await page.keyboard.type(' (edited live)');
-        await expect(docEditor(other)).toContainText('Last line (edited live)');
-        await second.close();
+            // a live edit, then publish: the published HTML still has every block
+            const lastLine = docEditor(page).locator('p', { hasText: 'Last line' });
+            const box = (await lastLine.boundingBox())!;
+            await lastLine.click({ position: { x: box.width - 2, y: box.height / 2 } }); // the end of that line
+            await page.keyboard.type(' (edited live)');
+            await expect(docEditor(other)).toContainText('Last line (edited live)');
+        } finally {
+            await second.close();
+        }
         await publish(page);
 
         const version = await (await page.request.get(`${url}/versions/1`, { headers: { Accept: 'application/json' } })).json();
@@ -209,6 +212,34 @@ test.describe('live co-editing of documents', () => {
         expect(published).toContain('data-lexical-sticky=');
         expect(published).toContain('Remember the milk');
         expect(published).toContain('Last line (edited live)');
+    });
+
+    test('a draft replaced elsewhere (discarded) reopens the live editor on the new draft', async ({ page, memberPage }) => {
+        await optIn(page);
+        await optIn(memberPage);
+
+        await addProjectContent(page, 'Page', uid('Reset doc'));
+        await typeAtEnd(page, 'Published text.');
+        await expect(liveSaved(page)).toBeVisible();
+        await publish(page);
+        const url = page.url();
+
+        // Erin edits the draft live …
+        await page.getByRole('button', { name: 'Edit', exact: true }).click();
+        const draftStored = page.waitForResponse((r) => r.url().endsWith('/collab/draft') && r.ok());
+        await typeAtEnd(page, ' Draft only.');
+        await draftStored;
+
+        // … Max (not editing) throws the unpublished changes away
+        await memberPage.goto(url);
+        await memberPage.getByRole('button', { name: 'Discard', exact: true }).click();
+        await memberPage.getByRole('button', { name: 'Discard changes' }).click();
+        await expect(memberPage.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
+
+        // Erin's editor notices (heartbeat / server) and reopens on the published text
+        await expect(page.getByText(/This draft was replaced/)).toBeVisible({ timeout: 30_000 });
+        await expect(docEditor(page)).toContainText('Published text.');
+        await expect(docEditor(page)).not.toContainText('Draft only.');
     });
 
     test('without the realtime server documents fall back to single-user editing', async ({ page }) => {

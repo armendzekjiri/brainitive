@@ -31,12 +31,12 @@ final class PageCollab
      *
      * @return 'edit'|'view'|null
      */
-    public static function access(Page $page, User $user): ?string
+    public static function access(Page $page, User $user, ?bool $canUpdate = null): ?string
     {
         if (! self::supports($page) || $page->status === 'archived' || $user->isSuspended()) {
             return null;
         }
-        if ($user->can('update', $page)) {
+        if ($canUpdate ?? $user->can('update', $page)) {
             return 'edit';
         }
 
@@ -48,9 +48,9 @@ final class PageCollab
      *
      * @return array{epoch: int, url: string}|null
      */
-    public static function props(Page $page, User $user): ?array
+    public static function props(Page $page, User $user, ?bool $canUpdate = null): ?array
     {
-        if (! CollabConfig::enabled() || self::access($page, $user) === null) {
+        if (! CollabConfig::enabled() || self::access($page, $user, $canUpdate) === null) {
             return null;
         }
 
@@ -58,9 +58,18 @@ final class PageCollab
         return ['epoch' => (int) (PageCollabState::where('page_id', $page->id)->value('epoch') ?? 0), 'url' => CollabConfig::url()];
     }
 
-    public static function state(Page $page): PageCollabState
+    /**
+     * Make sure the page has its row (ON CONFLICT DO NOTHING: no error, no aborted transaction, and
+     * the possibly large Yjs state is never read back).
+     */
+    public static function ensureState(Page $page): void
     {
-        return PageCollabState::createOrFirst(['page_id' => $page->id]);
+        PageCollabState::query()->insertOrIgnore([
+            'page_id' => $page->id,
+            'epoch' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     /**
@@ -71,7 +80,8 @@ final class PageCollab
      */
     public static function session(Page $page, User $user, string $access): array
     {
-        $state = self::state($page);
+        self::ensureState($page);
+        $state = PageCollabState::where('page_id', $page->id)->firstOrFail(['id', 'epoch', 'html_vector']);
         $document = CollabDocument::name($page->uuid, $state->epoch);
         $token = CollabToken::issue($user, $document, $access === 'edit');
 
@@ -94,7 +104,7 @@ final class PageCollab
      */
     public static function claimBootstrap(Page $page, int $epoch, string $claim): array
     {
-        self::state($page);
+        self::ensureState($page);
 
         return DB::transaction(function () use ($page, $epoch, $claim) {
             $state = PageCollabState::where('page_id', $page->id)->lockForUpdate()
@@ -132,7 +142,7 @@ final class PageCollab
      */
     public static function save(Page $page, User $user, int $epoch, array $changes, array $vector, bool $baseline = false): array
     {
-        self::state($page);
+        self::ensureState($page);
 
         return DB::transaction(function () use ($page, $user, $epoch, $changes, $vector, $baseline) {
             // same order as ReviewGate (page row first), so a publish and a save serialize
@@ -150,15 +160,21 @@ final class PageCollab
 
                 return ['status' => 'baseline', 'page' => $locked];
             }
-            if ($state->html_vector !== null && StateVector::covers($state->html_vector, $vector)) {
+            // Only a snapshot that contains everything the stored one has may replace it: an older one
+            // (covered) or a concurrent one (each lacks something) waits for a merged save — the leader
+            // receives every change and saves the union.
+            if ($state->html_vector !== null && (StateVector::covers($state->html_vector, $vector) || ! StateVector::covers($vector, $state->html_vector))) {
                 return ['status' => 'covered', 'page' => $locked];
             }
 
             $status = 'unchanged';
             if ($locked->draftWouldChange($changes)) {
                 $locked->collabWrite = true;
-                $locked->saveDraft($user, $changes);
-                $locked->collabWrite = false;
+                try {
+                    $locked->saveDraft($user, $changes);
+                } finally {
+                    $locked->collabWrite = false;
+                }
                 $status = 'saved';
             }
             $state->update(['html_vector' => $vector]);

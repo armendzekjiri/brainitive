@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\PageUpdatedNotification;
+use App\Support\Collab\CollabConfig;
 use App\Support\Collab\PageCollab;
 use App\Support\PageReviews\ReviewGate;
 use App\Support\PageReviews\ReviewPresenter;
@@ -108,7 +109,7 @@ class PageController extends Controller
             'page' => $page,
             'breadcrumbs' => $page->path,
             'review' => ReviewPresenter::forPage($page, $user, $canUpdate), // BRAI-80
-            'collab' => PageCollab::props($page, $user), // live co-editing (BRAI-54); null = single-user editor
+            'collab' => PageCollab::props($page, $user, $canUpdate), // live co-editing (BRAI-54); null = single-user editor
             'can' => [
                 'update' => $canUpdate,
                 'delete' => $user->can('delete', $page),
@@ -430,7 +431,7 @@ class PageController extends Controller
             'users' => $present->except($user->id)->values()->map(fn (array $entry) => collect($entry)->except('seen'))->all(),
         ] + $this->draftState($page->fresh(), $canUpdate)
           // BRAI-54: live editors notice a replaced draft (discard, restore, …) and reopen it
-          + ($canUpdate ? ['collab_epoch' => PageCollab::epoch($page)] : []));
+          + ($canUpdate && CollabConfig::enabled($request) ? ['collab_epoch' => PageCollab::epoch($page)] : []));
     }
 
     /**

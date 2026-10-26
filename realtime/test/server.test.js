@@ -14,7 +14,7 @@ const DOC = 'page.123e4567-e89b-42d3-a456-426614174000.0';
 const OTHER = 'page.123e4567-e89b-42d3-a456-426614174999.0';
 
 /** Brainitive's internal API, in memory. */
-const laravel = { states: new Map(), stale: new Set(), access: {}, calls: [], bearer: [] };
+const laravel = { states: new Map(), stale: new Set(), tooLarge: new Set(), access: { 1: 'edit', 2: 'edit', 3: 'view', 4: 'edit' }, calls: [], bearer: [] };
 let api;
 let collab;
 let url;
@@ -36,6 +36,7 @@ before(async () => {
             return json(200, { current: !laravel.stale.has(document), users: Object.fromEntries(ids.map((id) => [String(id), laravel.access[id] ?? null])) });
         }
         if (laravel.stale.has(name)) return json(409, { message: 'Stale document.' });
+        if (request.method === 'PUT' && laravel.tooLarge.has(name)) return json(413, { message: 'Document too large.' });
         if (request.method === 'GET') return json(200, { state: laravel.states.get(name) ?? null });
         laravel.states.set(name, JSON.parse(body).state);
         response.writeHead(204).end();
@@ -51,6 +52,7 @@ before(async () => {
         debounce: 50,
         maxDebounce: 200,
         stopOnSignals: false,
+        authDeadlineMs: 300,
         logger: { error() {} },
     });
     await collab.listen();
@@ -138,10 +140,10 @@ test('view-only connections see changes but cannot change the document', async (
 });
 
 test('the access re-check disconnects people who lost access and closes replaced documents', async () => {
-    laravel.access = { 1: 'edit', 4: null };
     const kept = connect(DOC, token(DOC, true, 1));
     const removed = connect(DOC, token(DOC, true, 4));
     await until(() => kept.events.synced && removed.events.synced);
+    laravel.access[4] = null;
 
     await collab.recheckAccess();
     await until(() => removed.events.closed.includes('Forbidden'));
@@ -154,6 +156,55 @@ test('the access re-check disconnects people who lost access and closes replaced
     kept.close();
     removed.close();
     laravel.stale.delete(DOC);
+    laravel.access[4] = 'edit';
+});
+
+test('access is asked from Brainitive on connect: a still-valid token of someone removed gets nothing', async () => {
+    laravel.access[5] = null;
+    const removed = connect(DOC, token(DOC, true, 5));
+    await until(() => removed.events.failed !== null);
+    assert.equal(removed.events.synced, false);
+    removed.close();
+
+    // an edit token of someone who is now only allowed to view: read-only
+    laravel.access[6] = 'view';
+    const editor = connect(DOC, token(DOC, true, 1));
+    const demoted = connect(DOC, token(DOC, true, 6));
+    await until(() => editor.events.synced && demoted.events.synced);
+    demoted.doc.getText('t').insert(0, 'DEMOTED ');
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(editor.doc.getText('t').toString().includes('DEMOTED'), false);
+    editor.close();
+    demoted.close();
+});
+
+test('sockets that never authenticate are closed', async () => {
+    const socket = new WebSocket(url);
+    const [code] = await once(socket, 'close');
+    assert.equal(code, 4401);
+});
+
+test('pretending to be someone else in awareness gets you disconnected', async () => {
+    const honest = connect(DOC, token(DOC, true, 1));
+    const faker = connect(DOC, token(DOC, true, 2));
+    await until(() => honest.events.synced && faker.events.synced);
+    faker.provider.awareness.setLocalState({ name: 'User 1', color: 'red;background:url(https://evil)', awarenessData: { userId: 1, edit: true } });
+    await until(() => faker.events.closed.includes('Forbidden'));
+    honest.provider.awareness.setLocalState({ name: 'User 1', color: '#2563eb', awarenessData: { userId: 1, edit: true } });
+    await new Promise((r) => setTimeout(r, 200));
+    assert.equal(honest.events.closed.length, 0);
+    honest.close();
+    faker.close();
+});
+
+test('a document Brainitive refuses as too large is closed instead of retried forever', async () => {
+    const BIG = 'page.123e4567-e89b-42d3-a456-426614174777.0';
+    laravel.tooLarge.add(BIG);
+    const client = connect(BIG, token(BIG, true, 1));
+    await until(() => client.events.synced);
+    client.doc.getText('t').insert(0, 'too much');
+    await until(() => client.events.closed.includes('Document too large'));
+    client.close();
 });
 
 test('a stale document is not loaded', async () => {

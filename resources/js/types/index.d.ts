@@ -2757,3 +2757,8 @@ export type PageCollabBootstrap =
     | { status: 'granted'; html: string | null; name: string; icon: string | null }
     | { status: 'wait' }
     | { status: 'stale'; epoch: number; reset: true };
+
+/** Presence heartbeat for editors: the live document's epoch (null = never opened live). */
+export interface PagePresenceCollabState extends PageDraftState {
+    collab_epoch?: number | null;
+}

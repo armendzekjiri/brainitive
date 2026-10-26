@@ -50,7 +50,7 @@ final class CollabConfig
 
     public static function tokenTtl(): int
     {
-        return max(30, (int) config('collab.token_ttl', 300));
+        return max(30, (int) config('collab.token_ttl', 120));
     }
 
     public static function maxStateBytes(): int

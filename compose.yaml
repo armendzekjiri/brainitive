@@ -35,6 +35,7 @@ services:
       - storage:/app/storage
       - caddy_data:/data
       - caddy_config:/config
+      - collab:/collab
 
   queue:
     <<: *brainitive
@@ -59,14 +60,21 @@ services:
   # Live co-editing of documents (BRAI-54): several people in one doc, carets, offline merge.
   # Optional: without it documents are edited one person at a time, as before.
   realtime:
-    <<: *brainitive
+    # Same image, but on purpose not the shared settings: this process faces the internet and gets
+    # neither .env (APP_KEY, database, mail …) nor the storage volume — only the secret the app
+    # container writes to the small `collab` volume.
+    image: ${BRAINITIVE_IMAGE:-ghcr.io/armendzekjiri/brainitive:latest}
+    build: .
+    restart: unless-stopped
     environment:
-      <<: *environment
       CONTAINER_ROLE: realtime
       COLLAB_HOST: 0.0.0.0
       COLLAB_PORT: "1234"
       COLLAB_APP_URL: http://app:8081
+      COLLAB_SECRET_FILE: /collab/secret
     command: ["node", "realtime/src/index.js"]
+    volumes:
+      - collab:/collab:ro
     depends_on:
       app:
         condition: service_started
@@ -75,7 +83,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      start_period: 30s
 
   db:
     image: postgres:16-alpine
@@ -106,3 +114,4 @@ volumes:
   redis:
   caddy_data:
   caddy_config:
+  collab:

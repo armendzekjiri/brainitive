@@ -127,8 +127,9 @@ a small Node server (Hocuspocus / Yjs). It's **included and on by default**, wit
 - the browser connects to `/collab` on your Brainitive address; Caddy in the `app` container passes
   it on to the `realtime` service, so there's no extra port and it works behind your own reverse
   proxy too (proxy WebSockets — nginx needs the `Upgrade` / `Connection` headers for `/collab`);
-- the `realtime` service reaches the app on the internal port `8081` (not published) and both sides
-  derive their shared secret from `APP_KEY`. Set `COLLAB_SECRET` in `.env` to use your own instead.
+- the `realtime` service reaches the app on the internal port `8081` (not published). It gets neither
+  your `.env` nor the storage volume: the `app` container hands it the shared secret (derived from
+  `APP_KEY`, or `COLLAB_SECRET` from `.env`) through the small `collab` volume.
 
 The draft → publish workflow doesn't change: people edit the draft together, and **Publish /
 Update** makes it live as before. Readers of a published page keep seeing the published version.

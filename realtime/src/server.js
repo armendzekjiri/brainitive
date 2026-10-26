@@ -5,11 +5,14 @@
 //  - every minute Brainitive re-checks who may still be connected.
 import { Server } from '@hocuspocus/server';
 import * as Y from 'yjs';
+import { removeAwarenessStates } from 'y-protocols/awareness';
 import { DOCUMENT_NAME, deriveKeys, verifyToken } from './token.js';
 import { createLaravelClient } from './laravel.js';
 
 const FORBIDDEN = { code: 4403, reason: 'Forbidden' };
 const RESET = { code: 4409, reason: 'Document replaced' };
+const TOO_LARGE = { code: 4413, reason: 'Document too large' };
+const COLOR = /^#[0-9a-f]{6}$/i;
 
 export function createCollabServer({
     port = 1234,
@@ -23,6 +26,8 @@ export function createCollabServer({
     fetchImpl,
     logger = console,
     stopOnSignals = true,
+    /** a socket must authenticate this quickly, or it is closed (no anonymous sockets holding memory) */
+    authDeadlineMs = 10_000,
 }) {
     if (!secret) throw new Error('COLLAB_SECRET (or APP_KEY) is required');
     if (!appUrl) throw new Error('COLLAB_APP_URL (or APP_URL) is required');
@@ -39,6 +44,16 @@ export function createCollabServer({
     };
 
     const isGone = (error) => error?.status === 409 || error?.status === 404;
+    // over Brainitive's size limit (or rejected): retrying can't help — stop, keep the browsers' copies
+    const isRefused = (error) => error?.status === 413 || error?.status === 422;
+
+    /** request → socket, to close sockets that never authenticate or fail to */
+    const sockets = new WeakMap();
+    const authenticated = new WeakSet();
+    const closeSocket = (request, code, reason) => {
+        const socket = sockets.get(request);
+        if (socket && socket.readyState === socket.OPEN) socket.close(code, reason);
+    };
 
     async function store(documentName, document) {
         try {
@@ -52,6 +67,13 @@ export function createCollabServer({
                 clearTimeout(unsaved.get(documentName));
                 unsaved.delete(documentName);
                 setImmediate(() => closeDocument(documentName, RESET));
+                return true;
+            }
+            if (isRefused(error)) {
+                logger.error(`[realtime] ${documentName} refused by Brainitive (${error.status}): closing it`);
+                clearTimeout(unsaved.get(documentName));
+                unsaved.delete(documentName);
+                setImmediate(() => closeDocument(documentName, TOO_LARGE));
                 return true;
             }
             logger.error(`[realtime] storing ${documentName} failed (${error?.message}); retrying`);
@@ -75,14 +97,53 @@ export function createCollabServer({
         timeout: 30_000,
         stopOnSignals: false, // handled in listen()
 
-        async onAuthenticate({ token, documentName, connectionConfig }) {
-            const payload = DOCUMENT_NAME.test(documentName) ? verifyToken(token, keys.token) : null;
-            if (!payload || payload.doc !== documentName) {
+        async onAuthenticate({ token, documentName, connectionConfig, request }) {
+            const refuse = () => {
+                setImmediate(() => closeSocket(request, 4401, 'Unauthorized'));
                 throw new Error('Not authorized');
+            };
+            const payload = DOCUMENT_NAME.test(documentName) ? verifyToken(token, keys.token) : null;
+            if (!payload || payload.doc !== documentName) refuse();
+            // the token is only a few minutes old at most, but access can change in between: ask Brainitive
+            let access = null;
+            try {
+                const result = await laravel.access(documentName, [payload.sub]);
+                access = result.current ? result.users?.[String(payload.sub)] ?? null : null;
+            } catch {
+                access = null; // Brainitive unreachable or page gone: nobody gets in
             }
+            if (access === null) refuse();
+            const edit = payload.edit && access === 'edit';
             // view-only: Hocuspocus drops this connection's document updates
-            connectionConfig.readOnly = !payload.edit;
-            return { user: { id: payload.sub, name: payload.name }, edit: payload.edit };
+            connectionConfig.readOnly = !edit;
+            authenticated.add(request);
+            return { user: { id: payload.sub, name: payload.name }, edit };
+        },
+
+        // Awareness is client data: everyone must announce themselves as who their token says,
+        // with a plain colour (Lexical writes it into style attributes) — else they're disconnected.
+        async onAwarenessUpdate({ document, added = [], updated = [] }) {
+            const changed = new Set([...added, ...updated]);
+            if (changed.size === 0) return;
+            const states = document.awareness.getStates();
+            document.connections.forEach(({ clients, connection }) => {
+                const context = connection.context ?? {};
+                for (const clientId of clients) {
+                    if (!changed.has(clientId)) continue;
+                    const state = states.get(clientId);
+                    if (!state) continue;
+                    const data = state.awarenessData ?? {};
+                    const valid = data.userId === context.user?.id
+                        && (data.edit !== true || (context.edit && !connection.readOnly))
+                        && (state.color === undefined || (typeof state.color === 'string' && COLOR.test(state.color)))
+                        && (state.name === undefined || state.name === context.user?.name);
+                    if (!valid) {
+                        removeAwarenessStates(document.awareness, [clientId], 'invalid awareness');
+                        connection.close(FORBIDDEN);
+                        return;
+                    }
+                }
+            });
         },
 
         async onLoadDocument({ document, documentName }) {
@@ -98,6 +159,16 @@ export function createCollabServer({
             if (unsaved.has(documentName)) throw new Error('unsaved changes'); // keep it in memory
         },
     }, { maxPayload: 16 * 1024 * 1024 });
+
+    // every socket has authDeadlineMs to authenticate
+    server.webSocketServer.on('connection', (socket, request) => {
+        sockets.set(request, socket);
+        const timer = setTimeout(() => {
+            if (!authenticated.has(request)) closeSocket(request, 4401, 'Unauthorized');
+        }, authDeadlineMs);
+        timer.unref();
+        socket.once('close', () => clearTimeout(timer));
+    });
 
     /** Lost project access → disconnected; lost edit rights → read-only; replaced draft → all out. */
     async function recheckAccess() {

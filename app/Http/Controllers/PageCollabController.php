@@ -37,7 +37,7 @@ class PageCollabController extends Controller
     public function save(Request $request, Workspace $workspace, Project $project, Page $page): JsonResponse
     {
         $this->authorize('update', $page);
-        abort_unless(CollabConfig::enabled($request) && PageCollab::access($page, $request->user()) === 'edit', 403, 'Live editing is not available for this page.');
+        abort_unless(CollabConfig::enabled($request) && PageCollab::access($page, $request->user(), true) === 'edit', 403, 'Live editing is not available for this page.');
 
         $validated = $request->validate([
             'epoch' => 'required|integer|min:0',
@@ -71,7 +71,7 @@ class PageCollabController extends Controller
     public function bootstrap(Request $request, Workspace $workspace, Project $project, Page $page): JsonResponse
     {
         $this->authorize('update', $page);
-        abort_unless(CollabConfig::enabled($request) && PageCollab::access($page, $request->user()) === 'edit', 403, 'Live editing is not available for this page.');
+        abort_unless(CollabConfig::enabled($request) && PageCollab::access($page, $request->user(), true) === 'edit', 403, 'Live editing is not available for this page.');
 
         $validated = $request->validate([
             'epoch' => 'required|integer|min:0',
