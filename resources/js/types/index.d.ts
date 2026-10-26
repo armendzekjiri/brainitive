@@ -2929,3 +2929,46 @@ export type PageCollabBootstrap =
 export interface PagePresenceCollabState extends PageDraftState {
     collab_epoch?: number | null;
 }
+
+// ── Live channels (BRAI-151): resources/js/lib/live, docs/ai/tasks/feat-live-foundation.md ──────
+
+/** Shared prop `live`: null = live channels are off (no socket, no token request). */
+export interface LiveSharedConfig {
+    /** e2e only: the client is exposed as `window.__brainitiveLive`. */
+    debug: boolean;
+}
+
+/** State of one channel subscription in this tab. */
+export type LiveChannelStatus = 'off' | 'connecting' | 'live' | 'offline' | 'forbidden';
+
+/** Someone in a channel (presence). Several tabs of one person = one member. */
+export interface LiveMember {
+    id: number;
+    name: string;
+    avatar: string | null;
+    /** Fixed per user (same palette as the live document carets). */
+    color: string;
+}
+
+/** Who sent a signal — set by the realtime server from the sender's token, never by the sender. */
+export interface LiveSender {
+    id: number;
+    name: string;
+}
+
+/** An event Brainitive published (`Live::publish`): ids and hints only, refetch the data. */
+export interface LiveEvent<P extends Record<string, unknown> = Record<string, unknown>> {
+    channel: string;
+    event: string;
+    payload: P;
+}
+
+/** POST live.token */
+export interface LiveTokenResponse {
+    url: string;
+    token: string;
+    expires_at: number;
+    channels: string[];
+    denied: string[];
+    user: { id: number; name: string; avatar: string | null };
+}

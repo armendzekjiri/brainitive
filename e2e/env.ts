@@ -43,6 +43,13 @@ export const OUTLOOK_E2E = { clientId: 'e2e-outlook-client' } as const;
  */
 export const COLLAB = { port: PORT + 100, secret: 'e2e-collab-secret' } as const;
 
+/**
+ * Live channels (BRAI-151): global-setup starts one realtime server on this port for the whole run
+ * (live-docs.spec.ts keeps its own on COLLAB.port: it stops / restarts it). Specs opt their browser
+ * contexts in with `X-E2E-Live: 1` (e2e/helpers/live.ts); every other journey runs without live.
+ */
+export const LIVE = { port: PORT + 101 } as const;
+
 /** Seeded workspace / project / board (slugs). */
 export const SEED = { workspace: 'e2e-workspace', project: 'website', board: 'main-board', key: 'WEB' } as const;
 
@@ -105,6 +112,9 @@ export function appEnv(): Record<string, string> {
         COLLAB_URL: `ws://127.0.0.1:${COLLAB.port}`,
         COLLAB_SECRET: COLLAB.secret,
         COLLAB_E2E_OPT_IN: 'true',
+        // live channels: the server global-setup starts; browsers only with the `X-E2E-Live: 1` opt-in
+        LIVE_URL: `ws://127.0.0.1:${LIVE.port}/live`,
+        LIVE_PUBLISH_URL: `http://127.0.0.1:${LIVE.port}`,
         PHP_CLI_SERVER_WORKERS: process.env.E2E_SERVER_WORKERS ?? '4',
     };
 }

@@ -1,3 +1,4 @@
+import { useLiveChannel } from '@/lib/live';
 import type { AppNotification, NotificationFeed, NotificationFilter, PageProps } from '@/types';
 import { usePage } from '@inertiajs/react';
 import axios from 'axios';
@@ -9,6 +10,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  */
 
 const UNREAD_EVENT = 'brainitive:notifications-unread';
+/** A notification arrived through the live channel (BRAI-151): open feeds reload. */
+const ARRIVED_EVENT = 'brainitive:notifications-arrived';
 const POLL_MS = 30_000;
 
 /** Tell every listener (the bell badge, the tab title) the new unread count. */
@@ -39,11 +42,13 @@ function useTitleBadge(count: number, enabled: boolean) {
 }
 
 /**
- * The unread count: starts from the shared prop, polls every 30 s, refreshes when the window gets
- * focus, and follows actions taken anywhere in the app. Set `manageTitle` in exactly one place.
+ * The unread count: starts from the shared prop, refreshes at once when a notification is stored
+ * (live channel `user.{id}`, BRAI-151), polls every 30 s as the fallback, refreshes when the window
+ * gets focus, and follows actions taken anywhere in the app. Set `manageTitle` in exactly one place.
  */
 export function useUnreadCount({ manageTitle = false, poll = true }: { manageTitle?: boolean; poll?: boolean } = {}) {
-    const initial = usePage<PageProps>().props.unreadNotificationsCount ?? 0;
+    const { unreadNotificationsCount, auth } = usePage<PageProps>().props;
+    const initial = unreadNotificationsCount ?? 0;
     const [count, setCount] = useState(initial);
 
     useEffect(() => setCount(initial), [initial]);
@@ -56,6 +61,16 @@ export function useUnreadCount({ manageTitle = false, poll = true }: { manageTit
             // offline or signed out: keep the last count
         }
     }, []);
+
+    // the polling owner (the bell) also listens live: only the id arrives, the feed is refetched
+    useLiveChannel(poll && auth?.user ? `user.${auth.user.id}` : null, {
+        onEvent: (e) => {
+            if (e.event !== 'notification.created') return;
+            refresh();
+            window.dispatchEvent(new CustomEvent(ARRIVED_EVENT));
+        },
+        onResync: refresh,
+    });
 
     useEffect(() => {
         const onAnnounce = (e: Event) => setCount((e as CustomEvent<number>).detail);
@@ -139,6 +154,14 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
             if (id === request.current) setLoading(false);
         }
     }, [fetchPage]);
+
+    // a notification arrived live: the inbox (not the archive) shows it without a reload
+    useEffect(() => {
+        if (!enabled || archived) return;
+        const onArrived = () => reload();
+        window.addEventListener(ARRIVED_EVENT, onArrived);
+        return () => window.removeEventListener(ARRIVED_EVENT, onArrived);
+    }, [enabled, archived, reload]);
 
     useEffect(() => {
         if (!enabled) return;

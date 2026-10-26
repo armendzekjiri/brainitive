@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkTimer;
 use App\Support\GithubStars;
+use App\Support\Live\LiveConfig;
 use App\Support\Plans\PlanTemplates;
 use App\Support\Sidebar\SidebarPreferences;
 use Illuminate\Http\Request;
@@ -266,6 +267,8 @@ class HandleInertiaRequests extends Middleware
                 'subscribed' => fn () => $user ? $user->pushSubscriptions()->exists() : false,
             ],
             'onboarding' => fn () => $user ? $this->onboardingProps($user) : null,
+            // Live channels (BRAI-151): null = off (no socket, no token request); see lib/live
+            'live' => fn () => $user && LiveConfig::enabled($request) ? ['debug' => app()->environment('e2e')] : null,
             'flash' => [
                 'success' => fn () => ($request->hasSession() ? $request->session() : null)?->get('success'),
                 'error' => fn () => ($request->hasSession() ? $request->session() : null)?->get('error'),

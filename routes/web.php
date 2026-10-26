@@ -20,6 +20,7 @@ use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\ItemFieldController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LeadFormController;
+use App\Http\Controllers\LiveTokenController;
 use App\Http\Controllers\MeetingController;
 use App\Http\Controllers\MeetingNotesController;
 use App\Http\Controllers\MyDayController;
@@ -192,6 +193,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/search', [SearchController::class, 'page'])->middleware('throttle:120,1,search')->name('search');
     Route::get('/search/quick', [SearchController::class, 'quick'])->middleware([ReadOnlySession::class, 'throttle:240,1,search.quick'])->name('search.quick');
     Route::post('/command-palette/recent', [CommandPaletteController::class, 'recent'])->name('command-palette.recent');
+    // Live channels (BRAI-151): a short-lived token for the realtime server, asked on every (re)connect
+    Route::post('/live/token', LiveTokenController::class)->middleware([ReadOnlySession::class, 'throttle:60,1,live.token'])->name('live.token');
 
     // My Work — assigned items across all workspaces
     Route::get('/my-work', [MyWorkController::class, 'index'])->name('my-work.index');

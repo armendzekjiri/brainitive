@@ -1,5 +1,6 @@
 // Entry point: `npm run collab` (dev, reads .env), `node realtime/src/index.js` (systemd / Docker).
 import fs from 'node:fs';
+import { attachLive } from './live/index.js';
 import { createCollabServer } from './server.js';
 import { resolveSecret } from './token.js';
 
@@ -24,14 +25,16 @@ async function secretFromFile(file) {
 const port = Number(env.COLLAB_PORT ?? 1234);
 const address = env.COLLAB_HOST ?? '127.0.0.1';
 
-const collab = createCollabServer({
-    port,
-    address,
-    secret: env.COLLAB_SECRET_FILE ? await secretFromFile(env.COLLAB_SECRET_FILE) : resolveSecret(env),
-    // where the realtime server reaches Brainitive's internal API (not the browser URL)
-    appUrl: env.COLLAB_APP_URL || env.APP_URL,
-    accessIntervalMs: Number(env.COLLAB_ACCESS_INTERVAL_MS ?? 60_000),
-});
+const secret = env.COLLAB_SECRET_FILE ? await secretFromFile(env.COLLAB_SECRET_FILE) : resolveSecret(env);
+// where the realtime server reaches Brainitive's internal API (not the browser URL)
+const appUrl = env.COLLAB_APP_URL || env.APP_URL;
+const accessIntervalMs = Number(env.COLLAB_ACCESS_INTERVAL_MS ?? 60_000);
+
+const collab = createCollabServer({ port, address, secret, appUrl, accessIntervalMs });
+
+// Live channels (BRAI-151) on the same port: `?live=1` sockets + Brainitive's publish endpoint.
+// LIVE_PUBLISH_FROM=private (Docker): the app container publishes over the private network.
+attachLive(collab.server, { secret, appUrl, accessIntervalMs, publishFrom: env.LIVE_PUBLISH_FROM === 'private' ? 'private' : 'loopback' });
 
 await collab.listen();
-console.log(`[realtime] Brainitive live editing on ${address}:${port} → ${env.COLLAB_APP_URL || env.APP_URL}`);
+console.log(`[realtime] Brainitive live editing + live channels on ${address}:${port} → ${env.COLLAB_APP_URL || env.APP_URL}`);

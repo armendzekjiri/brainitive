@@ -161,6 +161,24 @@ Update** makes it live as before. Readers of a published page keep seeing the pu
 then edited one person at a time, as before. If the service is down while `COLLAB_URL` is set,
 editors see "Live editing unavailable — editing alone" and keep working without it.
 
+### Live updates (bell, presence, typing)
+
+The same `realtime` service also carries **live channels**: the notification bell rings the moment
+something arrives (no reload, no 30-second wait), and later features show who else is on an issue,
+who is typing and changes to boards and plans as they happen. Nothing to set up:
+
+- the browser uses the same `/collab` address with `?live=1` (no extra proxy rule — if you put
+  your own nginx in front, its `/collab` WebSocket location covers it);
+- the app tells the service about changes on the internal Docker network
+  (`LIVE_PUBLISH_URL=http://realtime:1234`, set by `compose.yaml`; the service accepts that only from
+  private networks, without proxy headers and with a key derived from the shared secret — it is never
+  reachable through Caddy);
+- every message only says *what* changed (ids); browsers fetch the content through the normal,
+  permission-checked pages, and access to each channel is re-checked every minute.
+
+**Turn it off** (keeping live co-editing): `LIVE_ENABLED=false` in `.env`. Without the `realtime`
+service everything still works — the bell checks every 30 seconds as before.
+
 ## Email to helpdesk (forwarding addresses)
 
 Every helpdesk can get an address like `support-k3x9q2m7ab@inbound.example.com` (Helpdesk
