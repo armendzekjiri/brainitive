@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\Sprint;
 use App\Models\User;
 use App\Notifications\ItemStatusChangedNotification;
+use App\Support\Live\BoardLive;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -163,6 +164,7 @@ class BulkItemEdit
         if ($detached !== []) {
             $item->labels()->detach($detached);
         }
+        BoardLive::itemIds([$item->id], ['labels'], (int) $item->board_id);
 
         ActivityLog::log($item, 'labels_changed', [
             'labels' => [

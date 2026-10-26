@@ -15,6 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Board, BoardColumn, Item, PageProps, Project, Workspace } from '@/types';
 import { cn } from '@/lib/utils';
+import { useLiveBoardReload } from '@/hooks/useLiveBoard';
 
 interface Sprint {
     id: number;
@@ -69,6 +70,9 @@ export default function BacklogPage({ workspace, project, board, sprints, backlo
     const [startSprint, setStartSprint] = useState<Sprint | null>(null);
     const [editSprint, setEditSprint] = useState<Sprint | null>(null);
     const [deleteSprint, setDeleteSprint] = useState<Sprint | null>(null);
+
+    // Live boards (BRAI-152): others' sprint / ranking / issue changes reload the lists (not mid-drag)
+    useLiveBoardReload(board.id, ['sprints', 'backlogItems', 'completedSprintCount', 'board'], dragged !== null);
 
     const activeSprint = sprints.find((sprint) => sprint.status === 'active');
     const matches = (item: Item) => {

@@ -388,6 +388,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::prefix('projects/{project}')->scopeBindings()->group(function () {
             Route::post('boards', [BoardController::class, 'store'])->name('boards.store');
             Route::get('boards/{board:slug}/items', [BoardController::class, 'rootItemsJson'])->name('boards.root-items');
+            Route::get('boards/{board:slug}/cards', [BoardController::class, 'cards'])->name('boards.cards'); // live boards (BRAI-152)
             Route::get('boards/{board:slug}', [BoardController::class, 'show'])->name('boards.show');
             // Saved views (BRAI-78)
             Route::post('boards/{board:slug}/views', [BoardViewController::class, 'store'])->name('boards.views.store');

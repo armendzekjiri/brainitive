@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Observers\ItemObserver;
+use App\Support\Live\BoardLive;
 use App\Support\References\ContentReferences;
 use App\Support\References\SmartLinks;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
@@ -245,7 +246,9 @@ class Item extends Model
      */
     public function addWatcher(User $user): void
     {
-        $this->watchers()->syncWithoutDetaching([$user->id]);
+        if ($this->watchers()->syncWithoutDetaching([$user->id])['attached'] !== []) {
+            BoardLive::itemIds([$this->id], ['watchers'], (int) $this->board_id);
+        }
     }
 
     /**
@@ -253,7 +256,9 @@ class Item extends Model
      */
     public function removeWatcher(User $user): void
     {
-        $this->watchers()->detach($user->id);
+        if ($this->watchers()->detach($user->id) > 0) {
+            BoardLive::itemIds([$this->id], ['watchers'], (int) $this->board_id);
+        }
     }
 
     /**
@@ -357,7 +362,9 @@ class Item extends Model
         $this->update(['sprint_id' => $targetId, 'backlog_position' => $last + 1]);
 
         // The whole subtree travels with its issue.
-        static::whereIn('id', $this->descendantIds())->update(['sprint_id' => $targetId]);
+        $descendants = $this->descendantIds();
+        static::whereIn('id', $descendants)->update(['sprint_id' => $targetId]);
+        BoardLive::itemIds($descendants, ['sprint_id'], (int) $this->board_id);
     }
 
     /** Working-day / week length used by durations, as in Jira (1d = 8h, 1w = 5d). */
