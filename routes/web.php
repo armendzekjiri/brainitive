@@ -346,6 +346,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('github', [ProjectGithubController::class, 'store'])->name('projects.github.store');
             Route::post('github/rotate', [ProjectGithubController::class, 'rotate'])->name('projects.github.rotate');
             Route::delete('github', [ProjectGithubController::class, 'destroy'])->name('projects.github.destroy');
+            // GitHub App connect + merge transitions (BRAI-61)
+            Route::post('github/app/connect', [ProjectGithubController::class, 'connect'])->middleware('throttle:10,1,projects.github.app.connect')->name('projects.github.app.connect');
+            Route::put('github/repositories', [ProjectGithubController::class, 'repositories'])->name('projects.github.repositories');
+            Route::put('github/transitions', [ProjectGithubController::class, 'transitions'])->name('projects.github.transitions');
+            Route::post('github/refresh', [ProjectGithubController::class, 'refresh'])->middleware('throttle:6,1,projects.github.refresh')->name('projects.github.refresh');
+            Route::patch('boards/{board:slug}/items/{item}/development/primary', [ProjectGithubController::class, 'primary'])->name('boards.items.development.primary');
             Route::get('boards/{board:slug}/backlog', [SprintController::class, 'backlog'])->name('boards.backlog');
             Route::post('boards/{board:slug}/backlog/rank', [SprintController::class, 'rank'])->name('boards.backlog.rank');
             Route::get('boards/{board:slug}/reports', [SprintController::class, 'reports'])->name('boards.reports');
@@ -578,6 +584,9 @@ Route::middleware('auth')->group(function () {
     // Browser push subscriptions
     Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');
     Route::delete('/api/push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push-subscriptions.destroy');
+
+    // GitHub App setup callback (BRAI-61): GitHub returns here after install / repository changes
+    Route::get('/github/app/setup', [ProjectGithubController::class, 'setup'])->middleware('throttle:20,1,github.app.setup')->name('github.app.setup');
 });
 
 // Instance admin console — accounts, workspaces (metadata only) and instance settings
@@ -605,6 +614,12 @@ Route::middleware(['auth', 'verified', 'instance.admin'])->prefix('admin')->name
     Route::get('settings', [Admin\SettingsController::class, 'edit'])->name('settings.edit');
     Route::put('settings', [Admin\SettingsController::class, 'update'])->name('settings.update');
     Route::post('settings/test-email', [Admin\SettingsController::class, 'testEmail'])->name('settings.test-email');
+
+    // GitHub App for repository connections (BRAI-61): created with GitHub's manifest flow
+    Route::get('github-app', [Admin\GithubAppController::class, 'show'])->name('github-app.show');
+    Route::post('github-app/manifest', [Admin\GithubAppController::class, 'manifest'])->middleware('throttle:10,1,admin.github-app.manifest')->name('github-app.manifest');
+    Route::get('github-app/callback', [Admin\GithubAppController::class, 'callback'])->middleware('throttle:10,1,admin.github-app.callback')->name('github-app.callback');
+    Route::delete('github-app', [Admin\GithubAppController::class, 'destroy'])->name('github-app.destroy');
 
     Route::get('audit-log', Admin\AuditLogController::class)->name('audit-log');
 });

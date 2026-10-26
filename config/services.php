@@ -47,6 +47,21 @@ return [
         'redirect' => env('GITHUB_REDIRECT_URI', env('APP_URL').'/login/github/callback'),
     ],
 
+    // The instance's GitHub App (BRAI-61) for repository connections — separate from the social
+    // login above. Normally created in Admin → GitHub App (manifest flow, stored encrypted); these
+    // env vars override the stored app when GITHUB_APP_ID is set. The private key may be the PEM
+    // itself (\n escapes allowed) or a path to the .pem file.
+    'github_app' => [
+        'app_id' => env('GITHUB_APP_ID'),
+        'slug' => env('GITHUB_APP_SLUG'),
+        'client_id' => env('GITHUB_APP_CLIENT_ID'),
+        'client_secret' => env('GITHUB_APP_CLIENT_SECRET'),
+        'private_key' => env('GITHUB_APP_PRIVATE_KEY'),
+        'webhook_secret' => env('GITHUB_APP_WEBHOOK_SECRET'),
+        // e2e only (APP_ENV=e2e): a fake app + faked GitHub API, no network
+        'fake' => (bool) env('GITHUB_APP_FAKE', false),
+    ],
+
     // Workspace AI endpoints on localhost / private networks (e.g. Ollama next to a
     // self-hosted instance). Off by default: a workspace admin could otherwise make the
     // server call internal services.

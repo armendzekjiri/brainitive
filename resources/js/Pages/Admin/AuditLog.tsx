@@ -19,6 +19,8 @@ const ACTIONS: Record<string, string> = {
     'workspace.deleted': 'Deleted workspace',
     'settings.updated': 'Updated settings',
     'settings.test_email_sent': 'Sent test email',
+    'github_app.created': 'Created the GitHub App',
+    'github_app.removed': 'Removed the GitHub App',
 };
 
 function details(meta: AdminAuditEntry['meta']): string {

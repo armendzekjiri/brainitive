@@ -2165,3 +2165,63 @@ export interface PortalIdentityData {
     /** a Brainitive account (signed in to the app) rather than an emailed guest */
     is_member: boolean;
 }
+
+// ── GitHub App connect + merge transitions (v1.42.0, BRAI-61) ─────────────────
+
+/** A repository of the project's GitHub App installation (ProjectGithubController::settingsFor). */
+export interface GithubAvailableRepository {
+    id: number;
+    full_name: string;
+    private: boolean;
+    /** this project follows it */
+    followed: boolean;
+    /** another project follows it (a repository feeds one project) */
+    taken: boolean;
+    /** followed, but the installation no longer shares it */
+    removed: boolean;
+}
+
+export interface GithubConnectionSettings {
+    mode: 'webhook' | 'app';
+    last_delivery_at: string | null;
+    last_event: string | null;
+    last_error: string | null;
+    linked_issues: number;
+    // mode = webhook (legacy)
+    webhook_url?: string;
+    secret?: string;
+    repositories?: string[];
+    // mode = app
+    installation?: { account: string | null; account_type: string | null; suspended: boolean; removed: boolean; manage_url: string | null } | null;
+    available_repositories?: GithubAvailableRepository[];
+    last_refreshed_at?: string | null;
+    rate_limited_until?: string | null;
+}
+
+export interface GithubBoardTransition {
+    id: number;
+    name: string;
+    /** move the card here when its primary PR is merged; null = off */
+    merge_column_id: number | null;
+    columns: { id: number; name: string; is_done_column: boolean }[];
+}
+
+/** Project settings → Integrations → GitHub. */
+export interface GithubSettings {
+    /** the instance's GitHub App, when one is set up */
+    app: { name: string; url: string; can_connect: boolean } | null;
+    connection: GithubConnectionSettings | null;
+    boards: GithubBoardTransition[];
+}
+
+/** Instance admin → GitHub App (Admin\GithubAppController::show). No secrets. */
+export interface AdminGithubApp {
+    source: 'env' | 'stored' | 'fake';
+    app_id: number;
+    slug: string;
+    name: string | null;
+    owner: string | null;
+    url: string;
+    can_verify_installations: boolean;
+    created_at: string | null;
+}

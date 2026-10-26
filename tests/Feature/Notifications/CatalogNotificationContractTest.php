@@ -12,6 +12,7 @@ use App\Models\TicketContact;
 use App\Models\Webhook;
 use App\Notifications\AutomationNoticeNotification;
 use App\Notifications\CatalogNotification;
+use App\Notifications\GithubSyncFailedNotification;
 use App\Notifications\InvitationAcceptedNotification;
 use App\Notifications\ItemCommentedNotification;
 use App\Notifications\ItemDueNotification;
@@ -82,6 +83,7 @@ class CatalogNotificationContractTest extends TestCase
             new TicketSlaBreachedNotification($ticket, 'resolution', now()->subHour()),
             new AutomationNoticeNotification($item, 'Triage', 'Look at {{item.key}}', $this->editor), // BRAI-63
             new AutomationNoticeNotification($ticket, 'Triage', null, null), // BRAI-63
+            new GithubSyncFailedNotification($this->project->githubConnection()->create(['uuid' => (string) Str::uuid(), 'secret' => 's']), 'The GitHub App was uninstalled.'), // BRAI-61
         ];
     }
 
