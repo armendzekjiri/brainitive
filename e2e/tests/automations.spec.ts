@@ -116,7 +116,8 @@ test('a rule that assigns its own author still notifies them, as the automation 
     await page.getByLabel('Rule name').fill(ruleName);
     await page.getByLabel('When', { exact: true }).selectOption({ label: 'Issue created' });
     await page.getByRole('button', { name: 'Add condition' }).click();
-    await page.getByLabel('Condition 1', { exact: true }).selectOption({ label: 'Title contains' });
+    await page.getByLabel('Condition 1 field').selectOption({ label: 'Title' });
+    await page.getByLabel('Condition 1 operator').selectOption({ label: 'contains' });
     await page.getByLabel('Condition 1 value').fill(token);
     await page.getByRole('button', { name: 'Add action' }).click();
     await page.getByLabel('Action 1', { exact: true }).selectOption({ label: 'Assign to' });
