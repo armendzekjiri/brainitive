@@ -123,6 +123,10 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
     const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState(false);
     const request = useRef(0);
+    /** the view (filter + archive) on screen now: a page fetched for another view is never shown */
+    const viewKey = `${filter}|${archived ? 1 : 0}`;
+    const viewRef = useRef(viewKey);
+    viewRef.current = viewKey;
     const loadingRef = useRef(false);
     const itemsRef = useRef(items);
     itemsRef.current = items;
@@ -148,6 +152,7 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
 
     const reload = useCallback(async (fresh = false) => {
         const id = ++request.current;
+        const view = viewKey;
         // another view: never show (and act on) the previous view's rows while the new ones load
         if (fresh) {
             setItems([]);
@@ -157,7 +162,7 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
         setError(false);
         try {
             const feed = await fetchPage(null);
-            if (id !== request.current) return;
+            if (id !== request.current || view !== viewRef.current) return;
             setItems(feed.data);
             setCursor(feed.next_cursor);
         } catch {
@@ -165,7 +170,7 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
         } finally {
             if (id === request.current) setLoading(false);
         }
-    }, [fetchPage]);
+    }, [fetchPage, viewKey]);
 
     /** Rows that arrived live (BRAI-151): they slide in; cleared after a few seconds. */
     const [freshIds, setFreshIds] = useState<Set<string>>(() => new Set());
@@ -180,12 +185,19 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
      * "Load more" stay, the cursor still points behind them, nothing jumps under the pointer.
      */
     const mergeLatest = useCallback(async () => {
-        if (loadingRef.current) return reload();
+        // only the inbox merges arrivals, and only the view this callback was made for
+        if (archived || viewKey !== viewRef.current) return;
+        // a load is running: try again once it's done (never reload with this possibly stale view)
+        if (loadingRef.current) {
+            window.setTimeout(() => void mergeLatestRef.current(), 500);
+            return;
+        }
         const id = request.current;
+        const view = viewKey;
         const acts = actsRef.current;
         try {
             const feed = await fetchPage(null);
-            if (id !== request.current) return;
+            if (id !== request.current || view !== viewRef.current) return;
             // a read / archive happened meanwhile: this page may predate it — ask again in a moment
             if (acts !== actsRef.current || actingRef.current > 0) {
                 window.setTimeout(() => void mergeLatestRef.current(), 500);
@@ -203,7 +215,7 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
         } catch {
             /* the next poll / event tries again */
         }
-    }, [fetchPage, reload]);
+    }, [fetchPage, archived, viewKey]);
     const mergeLatestRef = useRef(mergeLatest);
     mergeLatestRef.current = mergeLatest;
 
