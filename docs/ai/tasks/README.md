@@ -48,6 +48,9 @@ The chosen design; note alternatives if the choice isn't obvious.
 | [Release v1.40.0: automate — automation, recurring issues, email → helpdesk, SLA (BRAI-63/79/123/124/125)](./release-v1.40.0.md) | done |
 | [Release v1.41.0: bring your data — Trello, Jira, Notion imports, project export/restore (BRAI-65/139/66/81)](./release-v1.41.0.md) | done |
 | [Release v1.42.0: work with clients — feedback portal, client portal, document review, GitHub App connect, calendar feed + providers (Outlook, CalDAV / iCloud, ICS), smart links, automation conditions, meetings, Sign in with Microsoft (BRAI-60/73/80/61/142/140/141/143/144/147/148)](./release-v1.42.0.md) | in progress |
+| Release v1.43.0: find anything, write together, work offline — search, live docs, offline mode (BRAI-55/54/82) | in progress |
+| [Find anything: real search on PostgreSQL (BRAI-55)](./feat-search.md) | done |
+| [Offline notes and tasks: opt-in local drafts with explicit sync conflicts (BRAI-82)](./feat-offline.md) | done |
 | [Public feedback portal (BRAI-60)](./feat-feedback-portal.md) | done |
 | [Client portal: deliverables, version-specific approvals (BRAI-73)](./feat-client-portal.md) | done |
 | [Internal document review (BRAI-80)](./feat-document-review.md) | done |

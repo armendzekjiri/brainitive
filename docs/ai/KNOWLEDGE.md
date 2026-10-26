@@ -803,6 +803,11 @@ Details + limits: [`tasks/feat-calendar-caldav.md`](./tasks/feat-calendar-caldav
   guests"); members are sent by id and turned into addresses server-side. An issue moved to another
   project keeps its meetings (`meetings.project_id` = where it was scheduled). The notes doc is created
   once (row lock); an unpublished one gives others a 403, never a second doc.
+- **One host for the issue's Schedule-meeting dialog (v1.42.1):** `schedulingMeeting` lives in the shared
+  `useItemDetail` state, so the "Meeting" quick action and the sidebar open the same dialog. `ItemDetailSidebar`
+  is rendered twice on boards / full issue pages (always-mounted sidebar + phone slide-out copy); only the
+  always-mounted one hosts the dialog — the sheet copy gets `inSheet` (`scheduleOpen={!inSheet && …}`).
+  Without it the dialog opens twice. Same rule for any dialog whose open state moves into `useItemDetail`.
 
 ### Calendar feed: stateless, deterministic, throttled per feed (v1.42.0, BRAI-142)
 - `/calendar/feed/{token}.ics` is in `web.php` but excludes the session / cookie / CSRF / Inertia
@@ -843,6 +848,73 @@ Details + limits: [`tasks/feat-calendar-caldav.md`](./tasks/feat-calendar-caldav
 An uploaded page icon is stored as a long `data:` URL. Always render page icons through
 `components/page/PageIcon.tsx` (`PageIcon` / `isImageIcon`), never as `{page.icon}` text — the workspace
 home and project page printed the base64 across the layout (e2e `page-icons.spec.ts`).
+
+### Search index: hooks touch keys, flush re-reads (v1.43.0, BRAI-55)
+- **Hooks only touch `(type, id)`;** `SearchIndexer::flush()` reads the record again and writes what is true
+  then (a document, or a removal when it is gone / trashed / hidden). Flushes happen after the response, after a
+  queued job, after commit in commands / seeders / tests, and **before every search** (a request finds its own
+  writes). Errors are reported, never thrown.
+- **Writes that bypass models must touch the indexer.** Query-builder bulk updates / raw SQL skip the observer:
+  call `app(SearchIndexer::class)->touch($type, $ids)` (or `touchItems` / `touchTickets` / `touchBoard` /
+  `touchHelpdesk` / `touchWhere`) in the same code path; for one-off data fixes run
+  `php artisan search:reindex --type=…`. Item type names are not indexed.
+- **Bump `SearchReindex::VERSION` whenever a source writes something new** (new field, new type, changed
+  rule) — `search:ensure` (every 5 min + Docker entrypoint) sees the unbuilt version and rebuilds; nobody
+  runs anything by hand on deploy.
+- **Visibility lives in SQL** (`TableSearchEngine::visibleEntries`) and must mirror the view policies (like
+  ContentReferences): counts and pages use the same builder, there is no post-filtering. Drafts are visible
+  only to the author and project admins; never index `draft_content` (docs index the published version).
+- **Extensions are optional.** `pg_trgm` + `unaccent` are created by the migration only when the DB user may
+  (savepoint — a privilege error never aborts it); without them search works without typo tolerance /
+  accent folding, and `search_unaccent()` returns the input unchanged. A superuser can create them later,
+  then `php artisan search:reindex --setup`. SQLite installs use `BasicSearchEngine` (LIKE).
+- **Queries never reach tsquery syntax raw:** `QueryParser` keeps letters / digits only, drops modifier
+  letters (`\p{Lm}\p{Sk}`) that `unaccent` would turn into `'` / `:`; a database error on a query becomes an
+  empty result (reported), never a 500. Highlights use private-use markers U+E000 / U+E001, stripped from
+  indexed text, escaped server-side and filtered again by `onlyMarks()`.
+- **Capture tokens search titles only** (`ext.search`: `ts_filter(tsv, '{a}')`, no comments) — CONVENTIONS →
+  API tokens.
+- `DB::table()->whereKey()` is a dynamic where on a `key` column, not the primary key (found writing the
+  search tests).
+
+### Offline mode: per-field conflicts, idempotency, session-free shell (v1.43.0, BRAI-82)
+- **sw.js never `respondWith`s documents or live routes.** `public/sw.js` handles only same-origin GET
+  navigations, full Inertia visits (not partial reloads / polls / prefetches) and `/build/assets/*`; documents,
+  realtime / co-editing, JSON and every write get no `respondWith`, i.e. behave as without a worker. A feature
+  that needs caching adds its own explicit branch there. Because a fetch handler exists, Playwright
+  `page.route` misses requests of controlled pages — use `test.use({ serviceWorkers: 'block' })`.
+- **The shell is session-free:** `offline.shell` runs `withoutMiddleware` (`EncryptCookies`, `StartSession`,
+  `ShareErrorsFromSession`, `ValidateCsrfToken`) + `Inertia::flushShared()`, so the cached HTML holds no
+  account, workspaces or counters (not even a remember-me sign-in). Never cache a page rendered with the
+  session or shared props.
+- **Conflicts are per field, three-way** (`FieldMerge`): a field the device changed is written only if the
+  server value still equals the device's base (or already equals mine); otherwise `{base, mine, theirs}` →
+  409, with the non-conflicting fields of the same mutation applied (`applied`). Untouched fields are never
+  written; `updated_at` is informational. "Keep mine" is a new mutation based on *theirs*, so a third edit
+  meanwhile is a new conflict, never an overwrite. Reorder has no conflict check. Conflicts are never
+  resolved on the server.
+- **Idempotent per (user, uuid)** in `offline_mutations`: the row is inserted first inside the transaction
+  (a concurrent retry waits on the unique index, then replays the stored answer); same uuid + different
+  payload → 422. Only 200 / 409 are stored; 410 / 424 / 403 / 422 wrote nothing. Offline creates are
+  referenced by uuid (`target.ref`), resolved only against the same user's rows: not there yet → 424 (retry),
+  failed → 410. Deleted *or no longer visible* → 410 either way (no probing). Side effects (watchers,
+  notifications) run in `DB::afterCommit`, so a replay tells nobody twice.
+- **Appliers load the whole parent chain** (`board.project.workspace`, `taskList.project.workspace`) and answer
+  410 when a link is missing or trashed — policies type-hint non-null `Project` / `Workspace`.
+- **`validated()` regroups wildcard keys** (`items.*.id` / `items.*.ref` came back out of order): `ksort`
+  before relying on the index.
+- **Data is cleared on sign-out or another account:** an explicit sign-out (Inertia `before` on
+  `POST /logout`, confirm when changes are waiting), turning the setting off, deleting the account, or
+  another account signing in on the device deletes `brainitive-offline-<userId>` and the shell cache. An
+  *expired* session is not a sign-out (the same person signs in and it syncs). Every read / write checks the
+  device owner (`brainitive-offline:user`) and a `storage` listener drops other tabs' state; a sync with a
+  `user_id` ≠ the session user gets 401 `wrong_account` and is never applied.
+- **Outbox writes count when committed** (IndexedDB `transaction.oncomplete`); actions queue the change
+  before touching the local copy. Coalescing never folds into a change already sent (`enqueue` and the
+  engine's `takeNext` share one Web Lock across tabs).
+- Limits: only what was opened online (My Day, 20 lists, 50 issues); issue description read-only offline;
+  Safari evicts IndexedDB after ~7 days unused; Firefox < 126 can't list databases (the `localStorage`
+  account list covers clearing).
 
 ## Architectural decisions
 
