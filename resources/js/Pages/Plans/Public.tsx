@@ -1,6 +1,6 @@
 import { Head } from '@inertiajs/react';
 import { GanttChart } from 'lucide-react';
-import ApplicationLogo from '@/Components/ApplicationLogo';
+import ApplicationLogo from '@/components/ApplicationLogo';
 import { PlanChart } from '@/components/plan/PlanChart';
 import { PlanData, PlanSettings } from '@/components/plan/types';
 

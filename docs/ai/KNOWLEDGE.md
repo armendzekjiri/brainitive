@@ -769,15 +769,20 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **Tailwind only scans `.tsx` files** (`tailwind.config.js` content). Class names that live in a
   `.ts` file (a style map, a constants file) are never generated — that's why
   `components/notifications/categories.tsx` is a `.tsx`.
-- **New files under `resources/js/components/` on macOS:** git's index has both `Components/` (old
-  Breeze files) and `components/`. A plain `git add` may record a new file under `Components/`,
-  which breaks the `@/components` import on Linux (CI). Add **one explicit lowercase path**
-  (`git add resources/js/components/x/New.tsx`) and check `git ls-files`. Never combine
-  `core.ignorecase=false` with `add -A` / `add .`: git then sees the whole on-disk `Components/` folder
-  as new files and stages ~160 duplicates (happened once, v1.40.0 foundation).
-  A file in a **new sub-folder** (e.g. `components/helpdesk/email/`) can still land as `Components/…`
-  even with the lowercase path (BRAI-124). Then: `git rm --cached <Components path>`, and
-  `git update-index --add --cacheinfo 100644,$(git hash-object -w <file>),resources/js/components/…`.
+- **One folder, lowercase: `resources/js/components/` (v1.40.1).** git used to track the old Breeze
+  files under `Components/` and everything else under `components/`. A fresh clone on macOS (case-
+  insensitive) merged both into one folder named `Components`, and a **Docker build from that Mac
+  checkout** failed with hundreds of `Cannot find module '@/components/…'` (Linux is case-sensitive;
+  CI never saw it because a Linux checkout keeps both). Now git tracks only `components/`, imports use
+  `@/components/…`, the Dockerfile renames a `Components` folder before `npm run build`, and
+  `ImportPathCaseTest` fails if two tracked folders differ only in case.
+  - An existing Mac checkout keeps its on-disk name `Components` (git doesn't rename folders on a
+    case-insensitive disk). That's harmless locally; to match git:
+    `mv resources/js/Components resources/js/components_ && mv resources/js/components_ resources/js/components`.
+  - Adding files: stage **one explicit lowercase path** and check `git ls-files`. A file in a new
+    sub-folder can still land as `Components/…` on a Mac whose folder is named `Components`; fix with
+    `git rm --cached <Components path>` + `git update-index --add --cacheinfo 100644,$(git hash-object -w <file>),resources/js/components/…`.
+    Never combine `core.ignorecase=false` with `add -A` / `add .` (stages the whole on-disk folder as duplicates).
 - **Notification coverage (BRAI-103, v1.39.0): who is told, and never twice.**
   - **Assignments fire from the observers, nowhere else.** `ItemObserver::created/updated` (on an
     `assigned_to` change) → `Support\Notifications\Assignments::item()` sends `ItemAssignedNotification`;

@@ -1,6 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 import { ArrowLeft, Scale, FileText, UserCheck, ShieldAlert, FileCheck, Lock, AlertTriangle, Gavel, XCircle, RefreshCw, Mail, CreditCard, Users } from 'lucide-react';
-import ApplicationLogo from '@/Components/ApplicationLogo';
+import ApplicationLogo from '@/components/ApplicationLogo';
 import { CookieConsent } from '@/components/CookieConsent';
 
 const sections = [
