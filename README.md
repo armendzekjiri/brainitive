@@ -23,6 +23,22 @@
   <a href="https://github.com/armendzekjiri/brainitive/stargazers"><img src="https://img.shields.io/github/stars/armendzekjiri/brainitive?style=flat" alt="GitHub stars"></a>
 </p>
 
+## Get Brainitive
+
+**Brainitive Cloud** — hosted for you, updates and backups included. Free during early
+access; paid plans come later and are announced in advance. →
+[www.brainitive.app](https://www.brainitive.app/#pricing)
+
+**Self-hosted** — free and complete, on your own server:
+
+```bash
+git clone https://github.com/armendzekjiri/brainitive.git && cd brainitive
+cp .env.docker.example .env   # then set DB_PASSWORD
+docker compose up -d --build  # open http://localhost:8080
+```
+
+HTTPS, backups, updates and optional features: [docs/self-hosting.md](docs/self-hosting.md).
+
 ![Gantt plans in Brainitive](public/images/screenshots/plans.jpg)
 
 ## What's inside
@@ -45,22 +61,6 @@
 | Boards | Docs | Whiteboards |
 |---|---|---|
 | ![Board](public/images/screenshots/board.jpg) | ![Docs](public/images/screenshots/docs.jpg) | ![Whiteboard](public/images/screenshots/whiteboard.jpg) |
-
-## Get Brainitive
-
-**Brainitive Cloud** — hosted for you, updates and backups included. Free during early
-access; paid plans come later and are announced in advance. →
-[www.brainitive.app](https://www.brainitive.app/#pricing)
-
-**Self-hosted** — free and complete, on your own server:
-
-```bash
-git clone https://github.com/armendzekjiri/brainitive.git && cd brainitive
-cp .env.docker.example .env   # then set DB_PASSWORD
-docker compose up -d --build  # open http://localhost:8080
-```
-
-HTTPS, backups, updates and optional features: [docs/self-hosting.md](docs/self-hosting.md).
 
 ## Development
 
