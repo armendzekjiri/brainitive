@@ -5,6 +5,9 @@ namespace Tests\Feature\Notifications;
 use App\Models\Comment;
 use App\Models\Helpdesk;
 use App\Models\LeadForm;
+use App\Models\Page;
+use App\Models\PageComment;
+use App\Models\PageReview;
 use App\Models\Sprint;
 use App\Models\TaskList;
 use App\Models\TaskListItem;
@@ -17,6 +20,9 @@ use App\Notifications\ItemCommentedNotification;
 use App\Notifications\ItemDueNotification;
 use App\Notifications\LeadAssignedNotification;
 use App\Notifications\NotificationCatalog;
+use App\Notifications\ReviewCommentedNotification;
+use App\Notifications\ReviewDecidedNotification;
+use App\Notifications\ReviewRequestedNotification;
 use App\Notifications\SprintCompletedNotification;
 use App\Notifications\SprintStartedNotification;
 use App\Notifications\TaskAssignedNotification;
@@ -65,6 +71,10 @@ class CatalogNotificationContractTest extends TestCase
         $contact = TicketContact::create(['email' => 'c@example.com', 'uuid' => (string) Str::uuid()]);
         $ticket = $helpdesk->tickets()->create(['subject' => 'Help', 'column_id' => $helpdesk->columns()->first()->id, 'ticket_contact_id' => $contact->id, 'key' => 'SUP-1', 'position' => 0]);
         $webhook = Webhook::create(['workspace_id' => $this->workspace->id, 'name' => 'Zapier', 'url' => 'https://hooks.example.com/x?token=secret', 'secret' => Webhook::generateSecret(), 'events' => ['*'], 'created_by' => $this->editor->id]);
+        // BRAI-80 document review
+        $page = Page::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->editor->id, 'name' => 'Runbook']);
+        $review = PageReview::create(['page_id' => $page->id, 'requested_by' => $this->editor->id, 'requested_by_name' => $this->editor->name, 'snapshot_name' => 'Runbook', 'snapshot_content' => $page->content, 'content_hash' => $page->draftHash(), 'message' => '<b>Please</b> check']);
+        $pageComment = PageComment::create(['page_id' => $page->id, 'page_review_id' => $review->id, 'user_id' => $this->viewer->id, 'user_name' => $this->viewer->name, 'body' => 'Which Friday?']);
         auth()->logout();
 
         return [
@@ -82,6 +92,9 @@ class CatalogNotificationContractTest extends TestCase
             new TicketSlaBreachedNotification($ticket, 'resolution', now()->subHour()),
             new AutomationNoticeNotification($item, 'Triage', 'Look at {{item.key}}', $this->editor), // BRAI-63
             new AutomationNoticeNotification($ticket, 'Triage', null, null), // BRAI-63
+            new ReviewRequestedNotification($review, $this->editor), // BRAI-80
+            new ReviewDecidedNotification($review, 'changes_requested', 'Shorter please', $this->viewer),
+            new ReviewCommentedNotification($review, $pageComment, $this->viewer),
         ];
     }
 

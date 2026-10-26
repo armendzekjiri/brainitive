@@ -26,6 +26,7 @@ use App\Http\Controllers\MyWorkController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\PageController;
+use App\Http\Controllers\PageReviewController;
 use App\Http\Controllers\PageStickyNoteController;
 use App\Http\Controllers\PageVersionController;
 use App\Http\Controllers\PlanController;
@@ -534,6 +535,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('pages/{page}/unpublish', [PageController::class, 'unpublish'])->name('pages.unpublish');
             Route::post('pages/{page}/archive', [PageController::class, 'archive'])->name('pages.archive');
             Route::delete('pages/{page}', [PageController::class, 'destroy'])->name('pages.destroy');
+            // Document review (BRAI-80): review a draft snapshot, inline comments, "review required" switch
+            Route::get('pages/{page}/reviews/candidates', [PageReviewController::class, 'candidates'])->middleware(ReadOnlySession::class)->name('pages.reviews.candidates');
+            Route::post('pages/{page}/reviews', [PageReviewController::class, 'store'])->middleware('throttle:20,1,pages.reviews.store')->name('pages.reviews.store');
+            Route::get('pages/{page}/reviews/{review}', [PageReviewController::class, 'show'])->whereUuid('review')->name('pages.reviews.show');
+            Route::post('pages/{page}/reviews/{review}/decision', [PageReviewController::class, 'decide'])->whereUuid('review')->middleware('throttle:30,1,pages.reviews.decide')->name('pages.reviews.decide');
+            Route::post('pages/{page}/reviews/{review}/cancel', [PageReviewController::class, 'cancel'])->whereUuid('review')->name('pages.reviews.cancel');
+            Route::post('pages/{page}/reviews/{review}/comments', [PageReviewController::class, 'storeComment'])->whereUuid('review')->middleware('throttle:60,1,pages.reviews.comments.store')->name('pages.reviews.comments.store');
+            Route::patch('pages/{page}/review-threads/{thread}', [PageReviewController::class, 'updateThread'])->whereUuid('thread')->name('pages.reviews.threads.update');
+            Route::put('pages/{page}/review-settings', [PageReviewController::class, 'settings'])->name('pages.reviews.settings');
         });
     });
 });

@@ -7,7 +7,10 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\PageUpdatedNotification;
+use App\Support\PageReviews\ReviewGate;
+use App\Support\PageReviews\ReviewPresenter;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -103,6 +106,7 @@ class PageController extends Controller
             'project' => $project,
             'page' => $page,
             'breadcrumbs' => $page->path,
+            'review' => ReviewPresenter::forPage($page, $user, $canUpdate), // BRAI-80
             'can' => [
                 'update' => $canUpdate,
                 'delete' => $user->can('delete', $page),
@@ -197,6 +201,8 @@ class PageController extends Controller
     public function saveExcalidraw(Request $request, Workspace $workspace, Project $project, Page $page)
     {
         $this->authorize('update', $page);
+        // BRAI-80: a live scene save would replace a "review required" document without a review
+        abort_if($page->review_required && ! $page->is_whiteboard, 422, 'This page needs an approved review before publishing.');
 
         $validated = $request->validate([
             'diagram_data' => 'required',
@@ -325,6 +331,12 @@ class PageController extends Controller
             unset($validated['content']);
         }
 
+        // BRAI-80: on a published "review required" page, title and icon wait in the draft for the review
+        if ($page->isPublished() && $page->review_required && (isset($validated['name']) || array_key_exists('icon', $validated))) {
+            $page->saveDraft($request->user(), array_intersect_key($validated, array_flip(['name', 'icon'])));
+            unset($validated['name'], $validated['icon']);
+        }
+
         // Prevent moving a folder into its own descendant
         if (isset($validated['parent_id']) && $validated['parent_id'] !== $page->parent_id) {
             $newParent = Page::find($validated['parent_id']);
@@ -412,7 +424,7 @@ class PageController extends Controller
 
         return response()->json([
             'users' => $present->except($user->id)->values()->map(fn (array $entry) => collect($entry)->except('seen'))->all(),
-        ] + $this->draftState($page->fresh()));
+        ] + $this->draftState($page->fresh(), $user->can('update', $page)));
     }
 
     /**
@@ -428,7 +440,15 @@ class PageController extends Controller
             return $this->publishChanges($request, $workspace, $project, $page);
         }
 
-        $page->publish($request->user(), $validated['message'] ?? null);
+        // BRAI-80: "review required" pages publish only an approved draft (checked on the locked row)
+        $result = ReviewGate::publishing(
+            $page,
+            fn (Page $locked) => $locked->isPublished() ? 'published' : null,
+            fn (Page $locked) => $locked->publish($request->user(), $validated['message'] ?? null),
+        );
+        if ($result === ReviewGate::REFUSAL) {
+            return $this->reviewRefusal($request);
+        }
 
         return back()->with('success', 'Page published.');
     }
@@ -455,21 +475,36 @@ class PageController extends Controller
             return back()->withErrors(['page' => 'Only published pages can be updated. Publish the page first.']);
         }
 
-        if ($this->draftConflict($page, $validated)) {
-            return back()->withErrors(['page' => 'Someone else changed this page while you were editing. Reload to see their changes.']);
-        }
-
         $user = $request->user();
         $changes = $this->draftChanges($validated);
-        if ($changes !== []) {
-            $page->saveDraft($user, $changes);
-        }
 
-        if (! $page->hasUnpublishedChanges()) {
+        // One transaction on the locked page row: the editor's last changes, the review check
+        // (BRAI-80) and the publish all see the same draft.
+        $result = ReviewGate::publishing(
+            $page,
+            function (Page $locked) use ($validated, $changes, $user) {
+                if ($this->draftConflict($locked, $validated)) {
+                    return 'conflict';
+                }
+                if ($changes !== []) {
+                    $locked->saveDraft($user, $changes);
+                }
+
+                return $locked->hasUnpublishedChanges() ? null : 'unchanged';
+            },
+            fn (Page $locked) => [$locked, $locked->publishChanges($user, $validated['message'] ?? null)],
+        );
+
+        if ($result === 'conflict') {
+            return back()->withErrors(['page' => 'Someone else changed this page while you were editing. Reload to see their changes.']);
+        }
+        if ($result === 'unchanged') {
             return back()->with('success', 'No changes to publish.');
         }
-
-        $version = $page->publishChanges($user, $validated['message'] ?? null);
+        if ($result === ReviewGate::REFUSAL) {
+            return $this->reviewRefusal($request);
+        }
+        [$page, $version] = $result;
 
         if ($validated['notify'] ?? true) {
             $page->load('watchers');
@@ -745,9 +780,9 @@ class PageController extends Controller
     }
 
     /**
-     * @return array{edit_revision: int, has_unpublished_changes: bool, draft_updated_at: string|null, draft_updated_by: array{id: int, name: string}|null}
+     * @return array{edit_revision: int, has_unpublished_changes: bool, draft_updated_at: string|null, draft_updated_by: array{id: int, name: string}|null, draft_hash?: string}
      */
-    private function draftState(Page $page): array
+    private function draftState(Page $page, bool $withHash = true): array
     {
         $editor = $page->isPublished() && ! $page->is_whiteboard ? $page->draftEditor : $page->lastEditor;
 
@@ -756,6 +791,16 @@ class PageController extends Controller
             'has_unpublished_changes' => $page->hasUnpublishedChanges(),
             'draft_updated_at' => ($page->draft_updated_at ?? $page->updated_at)?->toIso8601String(),
             'draft_updated_by' => $editor?->only(['id', 'name']),
-        ];
+        ] + ($withHash ? ['draft_hash' => $page->draftHash()] : []); // BRAI-80: editors compare it with the latest review's snapshot
+    }
+
+    /** Publishing a "review required" page without an approved review of this draft (BRAI-80). */
+    private function reviewRefusal(Request $request): JsonResponse|RedirectResponse
+    {
+        if ($request->wantsJson() && ! $request->header('X-Inertia')) {
+            return response()->json(['message' => ReviewGate::REFUSAL, 'errors' => ['review' => [ReviewGate::REFUSAL]]], 422);
+        }
+
+        return back()->withErrors(['review' => ReviewGate::REFUSAL]);
     }
 }
