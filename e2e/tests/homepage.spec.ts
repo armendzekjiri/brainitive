@@ -110,6 +110,31 @@ test.describe('homepage', () => {
         await context.close();
     });
 
+    test('"Star on GitHub" buttons lead to the repository (top bar, hero, open-source card, footer)', async ({ browser }) => {
+        const { context, page, errors } = await guestPage(browser, { viewport: { width: 1280, height: 900 } });
+        await page.goto('/');
+
+        const stars = page.getByTestId('github-star');
+        await expect(stars).toHaveCount(4);
+        for (const link of await stars.all()) {
+            await expect(link).toHaveAttribute('href', /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/);
+            await expect(link).toHaveAttribute('target', '_blank');
+            await expect(link).toHaveAttribute('aria-label', /Star Brainitive on GitHub/);
+        }
+        await expect(stars.first()).toBeVisible(); // top bar
+
+        expect(errors, 'uncaught errors on the homepage').toEqual([]);
+        await context.close();
+    });
+
+    test('signed in, the account menu has "Star on GitHub" too', async ({ page }) => {
+        await page.goto('/dashboard');
+        await page.getByRole('button', { name: /Erin Owner/ }).last().click();
+        const star = page.getByRole('menuitem', { name: /Star Brainitive on GitHub/ });
+        await expect(star).toBeVisible();
+        await expect(star).toHaveAttribute('href', /^https:\/\/github\.com\//);
+    });
+
     test('fits a 375 px phone in light and dark mode', async ({ browser }) => {
         for (const colorScheme of ['light', 'dark'] as const) {
             const { context, page, errors } = await guestPage(browser, { colorScheme, viewport: { width: 375, height: 812 } });

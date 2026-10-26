@@ -35,5 +35,6 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="GITHUB_STARS" value="false" force="true"/>
     </php>
 </phpunit>

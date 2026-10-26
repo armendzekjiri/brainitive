@@ -579,6 +579,8 @@ export type PageProps<
     };
     /** Current user may open the current workspace's settings (admin). */
     canManageWorkspace?: boolean;
+    /** The open-source repository + cached star count (GithubStars::shared) for the "Star on GitHub" buttons. */
+    githubRepo?: { url: string; stars: number | null };
     /** Running focus timer (BRAI-74), null when none. */
     activeTimer?: ActiveTimer | null;
     // Shared layout data
