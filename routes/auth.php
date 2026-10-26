@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\EmailVerificationPromptController;
 use App\Http\Controllers\Auth\GitHubAuthController;
 use App\Http\Controllers\Auth\GoogleAuthController;
+use App\Http\Controllers\Auth\MicrosoftAuthController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
@@ -35,6 +36,14 @@ Route::middleware('guest')->group(function () {
 
     Route::get('login/github/callback', [GitHubAuthController::class, 'callback'])
         ->name('login.github.callback');
+
+    Route::get('login/microsoft', [MicrosoftAuthController::class, 'redirect'])
+        ->middleware('throttle:30,1,login.microsoft')
+        ->name('login.microsoft');
+
+    Route::get('login/microsoft/callback', [MicrosoftAuthController::class, 'callback'])
+        ->middleware('throttle:30,1,login.microsoft.callback')
+        ->name('login.microsoft.callback');
 
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');

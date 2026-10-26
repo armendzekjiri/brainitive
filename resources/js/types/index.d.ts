@@ -1162,7 +1162,7 @@ export interface AdminUserRow {
     suspended_at: string | null;
     last_login_at: string | null;
     created_at: string | null;
-    sign_in_methods: ('password' | 'google' | 'github')[];
+    sign_in_methods: ('password' | 'google' | 'github' | 'microsoft')[];
     is_instance_admin: boolean;
     workspaces_count: number;
     owned_workspaces_count: number;

@@ -88,7 +88,7 @@ export function appEnv(): Record<string, string> {
         HELPDESK_MAIL_FAKE: 'true',
         // github-app.spec.ts: a fake GitHub App + in-process GitHub API (BRAI-61); honoured only with APP_ENV=e2e
         GITHUB_APP_FAKE: 'true',
-        // calendar-outlook.spec.ts: an Outlook app registration that only has to exist (Microsoft is never called)
+        // calendar-outlook.spec.ts + microsoft-login.spec.ts: a Microsoft app registration that only has to exist (Microsoft is never called)
         MICROSOFT_CLIENT_ID: OUTLOOK_E2E.clientId,
         MICROSOFT_CLIENT_SECRET: 'e2e-outlook-secret',
         MICROSOFT_TENANT: 'common',
