@@ -11,6 +11,7 @@ use App\Models\McpRequest;
 use App\Models\PortalLoginToken;
 use App\Models\ProjectExport;
 use App\Models\WebhookDelivery;
+use App\Support\GithubStars;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -89,3 +90,6 @@ Schedule::command('model:prune', ['--model' => [ProjectExport::class]])->dailyAt
 
 // v1.42.0: spent / expired guest sign-in links
 Schedule::command('model:prune', ['--model' => [PortalLoginToken::class]])->dailyAt('04:30');
+
+// v1.42.0: the repository's star count for the "Star on GitHub" buttons (cache only; pages never call GitHub)
+Schedule::call(fn () => GithubStars::refresh())->hourly()->name('github-stars')->withoutOverlapping();

@@ -45,6 +45,9 @@ return [
         'client_id' => env('GITHUB_CLIENT_ID'),
         'client_secret' => env('GITHUB_CLIENT_SECRET'),
         'redirect' => env('GITHUB_REDIRECT_URI', env('APP_URL').'/login/github/callback'),
+        // the open-source repository behind the "Star on GitHub" buttons (App\Support\GithubStars)
+        'repository' => env('GITHUB_REPOSITORY', 'armendzekjiri/brainitive'),
+        'show_stars' => (bool) env('GITHUB_STARS', true),
     ],
 
     // Workspace AI endpoints on localhost / private networks (e.g. Ollama next to a

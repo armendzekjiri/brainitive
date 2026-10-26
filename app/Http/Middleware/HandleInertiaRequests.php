@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkTimer;
+use App\Support\GithubStars;
 use App\Support\Plans\PlanTemplates;
 use App\Support\Sidebar\SidebarPreferences;
 use Illuminate\Http\Request;
@@ -241,6 +242,8 @@ class HandleInertiaRequests extends Middleware
             ],
             // The running focus timer (BRAI-74), shown as a pill in the top bar on every page.
             'activeTimer' => fn () => $user ? WorkTimer::where('user_id', $user->id)->first()?->payload($user) : null,
+            // "Star on GitHub" buttons (homepage + account menu): repository link and cached star count
+            'githubRepo' => fn () => GithubStars::shared(),
             'workspaces' => $workspaces,
             'currentWorkspace' => $currentWorkspace,
             // workspace settings are admin-only: hide the link for everyone else (it would end in a 403)
