@@ -128,8 +128,55 @@ keep their meaning. Whiteboards (Excalidraw) and issue descriptions are out of s
 ## Docs to update
 Lead updates ARCHITECTURE / CONVENTIONS / KNOWLEDGE from this file (agents only edit their notes).
 
-## Server setup (dev + prod) — for the lead
-See "Setup" at the end of this file (filled in with the final commands).
+## Setup
 
-## Open questions / known limits
-- See "Known limits" at the end (filled in after the build).
+### Dev
+```bash
+npm run collab:install                 # once: realtime/node_modules (its own package.json)
+# .env: COLLAB_URL=ws://127.0.0.1:1234   (COLLAB_SECRET empty = derived from APP_KEY on both sides)
+php artisan config:clear
+npm run collab                          # next to `composer run dev`; reads .env (node --env-file)
+```
+`composer run dev` doesn't start it (it would kill the whole dev stack when `realtime/node_modules`
+is missing). Without `COLLAB_URL` the app behaves exactly as before.
+
+### Production (classic server: nginx + PHP-FPM + systemd) — nothing installed yet, ask the user first
+1. Node ≥ 20 on the server (`node -v`).
+2. `cd /var/www/brainitive && npm --prefix realtime ci --omit=dev` (also after every deploy).
+3. `.env`: `COLLAB_URL=wss://brainitive.app/collab`; optionally `COLLAB_SECRET=<openssl rand -hex 32>`
+   (else derived from APP_KEY; the service reads the same .env). `php artisan config:cache`.
+4. systemd: `realtime/deploy/brainitive-realtime.service` → `/etc/systemd/system/` (adjust paths, user,
+   `COLLAB_APP_URL`), `systemctl daemon-reload && systemctl enable --now brainitive-realtime`.
+   It listens on 127.0.0.1:1234 only.
+5. nginx: `realtime/deploy/nginx-collab.conf` into the HTTPS `server {}` (WebSocket upgrade for
+   `/collab`, `client_max_body_size 25m` for `/api/internal/collab/`), `nginx -t && systemctl reload nginx`.
+6. dev.brainitive.app: same with its own folder / port (e.g. 1235) / `COLLAB_URL`; its basic auth
+   doesn't apply to WebSockets from the browser only if nginx lets `/collab` through — add
+   `auth_basic off;` in that location (the token is the auth) or keep live editing off on dev.
+7. Deploy workflow: add `npm --prefix realtime ci --omit=dev` + `systemctl restart brainitive-realtime`
+   (browsers reconnect by themselves; unsaved changes stay in their IndexedDB).
+
+### Docker (self-hosting) — included
+`compose.yaml` service `realtime` (same image, `node realtime/src/index.js`, healthcheck), Caddy in the
+app container proxies `/collab` to it and serves the internal API on the unpublished `:8081`;
+`COLLAB_URL` defaults to `/collab`, the secret is derived from `APP_KEY`. Off: `COLLAB_URL=` + remove
+the service. The image gains the Node 22 binary (~122 MB uncompressed) + realtime deps (~15 MB).
+Verified with `docker compose build` + `up -d` (ports 8095/8455): two browsers co-editing, caret
+names, draft saved on tab close, fallback notice with the service stopped.
+
+## Known limits
+- **Mixing a single-user (fallback) editor with a live session:** a fallback save replaces the draft →
+  new epoch → live editors reopen on that text; live changes typed within the last ~1 s before it
+  (not yet saved as HTML) are dropped from the draft. The 409 conflict check catches the usual case.
+- **Offline edits on a replaced draft** (someone discarded / restored meanwhile) are not merged into
+  the new draft; the editor says the draft was replaced.
+- **Two browsers bootstrapping the same empty document at once** can't both load it (claim + 20 s
+  lease), but if the realtime server crashes within its store debounce (2 s) right after a bootstrap
+  and another browser bootstraps again, the text can appear twice (rare; fix by hand).
+- **Draft HTML vs live document:** the HTML is saved by the browsers (1 s after own changes, 3 s by the
+  "leader" for remote ones, keepalive on tab close / editor close). If every browser dies at once the
+  Y state is still stored and the HTML catches up the next time someone opens the doc.
+- Mention notifications / `draft_updated_by` name whoever saved the HTML (usually the author).
+- Sticky-note captions sync as a whole (last writer wins per note), not character by character.
+- Whiteboards and issue descriptions are not live (out of scope). Hocuspocus 3.4.4 (4.x needs Node 22).
+- Remote carets are repositioned on awareness updates; after a window resize they move on the next one.
