@@ -3,9 +3,11 @@ import {
     AlarmClock,
     ArrowRightLeft,
     AtSign,
+    BadgeCheck,
     Bell,
     FileText,
     LifeBuoy,
+    Lightbulb,
     Magnet,
     MessageSquare,
     UserPlus,
@@ -37,6 +39,8 @@ const STYLES: Record<NotificationCategoryKey, CategoryStyle> = {
     helpdesk: { label: 'Helpdesk', icon: LifeBuoy, tint: 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-300' },
     leads: { label: 'Lead', icon: Magnet, tint: 'bg-teal-100 text-teal-700 dark:bg-teal-500/20 dark:text-teal-300' },
     workspace: { label: 'Workspace', icon: Users, tint: 'bg-slate-200 text-slate-700 dark:bg-slate-500/25 dark:text-slate-200' },
+    reviews: { label: 'Review', icon: BadgeCheck, tint: 'bg-lime-100 text-lime-700 dark:bg-lime-500/20 dark:text-lime-300' },
+    feedback: { label: 'Feedback', icon: Lightbulb, tint: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-500/20 dark:text-yellow-300' },
 };
 
 const FALLBACK: CategoryStyle = { label: 'Notification', icon: Bell, tint: 'bg-muted text-muted-foreground' };

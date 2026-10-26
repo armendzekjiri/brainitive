@@ -47,6 +47,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 | [Release v1.39.0: notifications, webhooks, insights, custom sidebar (BRAI-102…111)](./release-v1.39.0.md) | done |
 | [Release v1.40.0: automate — automation, recurring issues, email → helpdesk, SLA (BRAI-63/79/123/124/125)](./release-v1.40.0.md) | done |
 | [Release v1.41.0: bring your data — Trello, Jira, Notion imports, project export/restore (BRAI-65/139/66/81)](./release-v1.41.0.md) | done |
+| [Release v1.42.0: work with clients — feedback portal, client portal, document review, GitHub App connect (BRAI-60/73/80/61)](./release-v1.42.0.md) | in progress |
 | [Admin insights (BRAI-105)](./feat-admin-insights.md) | done |
 | [Billing settings + documents: PDF, Excel, email (BRAI-101, part 1)](./feat-billing-documents.md) | done |
 | [Time log: activity on logging, timer, legacy backfill, My timesheet (BRAI-99 part 2)](./feat-time-log.md) | done |

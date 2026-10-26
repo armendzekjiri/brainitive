@@ -8,6 +8,7 @@ use App\Models\ImportRun;
 use App\Models\InboxNotification;
 use App\Models\LeadFormEvent;
 use App\Models\McpRequest;
+use App\Models\PortalLoginToken;
 use App\Models\ProjectExport;
 use App\Models\WebhookDelivery;
 use Illuminate\Foundation\Inspiring;
@@ -85,3 +86,6 @@ Schedule::call(function () {
         ->each(fn (ProjectExport $export) => $export->expire());
 })->name('exports:cleanup')->hourly()->withoutOverlapping();
 Schedule::command('model:prune', ['--model' => [ProjectExport::class]])->dailyAt('04:25');
+
+// v1.42.0: spent / expired guest sign-in links
+Schedule::command('model:prune', ['--model' => [PortalLoginToken::class]])->dailyAt('04:30');

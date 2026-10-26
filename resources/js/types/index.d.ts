@@ -1839,7 +1839,9 @@ export type NotificationCategoryKey =
     | 'sprints'
     | 'helpdesk'
     | 'leads'
-    | 'workspace';
+    | 'workspace'
+    | 'reviews'
+    | 'feedback';
 
 export type NotificationFilter = 'all' | 'unread' | 'mentions' | 'assigned';
 
@@ -2151,4 +2153,15 @@ export interface ProjectArchivePreview {
     people: { ref: string; name: string; email: string | null; member_id: number | null }[];
     members: { id: number; name: string; email: string | null }[];
     omitted: { what: string; count: number | null; why: string }[];
+}
+
+// ── Guest portals (v1.42.0 foundation) ────────────────────────────────────────
+
+/** The viewer of a portal page (PortalIdentity::toPortalArray via PortalAuth::shared). */
+export interface PortalIdentityData {
+    uuid: string;
+    name: string;
+    email: string;
+    /** a Brainitive account (signed in to the app) rather than an emailed guest */
+    is_member: boolean;
 }

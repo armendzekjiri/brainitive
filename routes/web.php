@@ -151,6 +151,9 @@ Route::middleware('cors')->group(function () {
     Route::get('/portal/tickets/{ticket:uuid}/replies', [TicketController::class, 'publicReplies'])->name('helpdesks.tickets.replies.public');
 });
 
+// Feedback + client portals and guest sign-in (v1.42.0) — people outside the workspace
+require __DIR__.'/portal.php';
+
 // Workspace invitation (guest can view; auth user with matching email can accept)
 Route::get('/invite/{token}', [InvitationController::class, 'show'])->name('invitations.show');
 
