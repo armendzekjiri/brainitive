@@ -1,0 +1,3 @@
+# Keep the fixtures byte-exact: CRLF line endings are part of what the ICS reader is tested on.
+*.ics -text
+*.xml -text

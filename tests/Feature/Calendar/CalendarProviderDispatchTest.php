@@ -78,12 +78,12 @@ class CalendarProviderDispatchTest extends TestCase
             ->where('connections.0.read_only', false)
             ->where('connections.0.sync_error', null)
             ->where('filters.sources', ['board', 'list', 'external'])
-            ->has('calendarProviders', 2)
             ->where('calendarProviders.0.key', 'google')
             ->where('calendarProviders.0.connect_mode', 'oauth')
-            ->where('calendarProviders.1.key', 'fake')
-            ->where('calendarProviders.1.connect_mode', 'form')
-            ->where('calendarProviders.1.fields.2.type', 'password')
+            // registry order, then the test-only fakes (other real providers may sit in between)
+            ->where('calendarProviders', fn ($providers) => collect($providers)->last()['key'] === 'fake'
+                && collect($providers)->last()['connect_mode'] === 'form'
+                && collect($providers)->last()['fields'][2]['type'] === 'password')
         );
 
         // The user's own zone is asked for (wall-clock times in it).

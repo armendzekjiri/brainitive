@@ -2005,7 +2005,7 @@ function SyncWarnings({ connections }: { connections: CalendarConnectionRow[] })
 // ── Main page ────────────────────────────────────────────────────────────
 export default function CalendarIndex({ events, view, date, projectsForFilter, accessibleProjects, connections, calendarProviders, filters }: Props) {
     const d = parseISO(date);
-    const { flash } = usePage<PageProps>().props;
+    const { props: { flash }, url: pageUrl } = usePage<PageProps>();
     const [quickCreate, setQuickCreate] = useState<QuickCreateState>(null);
     const [pickerData, setPickerData] = useState<CalendarPickerData | null>(null);
     const [externalEvent, setExternalEvent] = useState<{ id: string; connectionId: number } | null>(null);
@@ -2027,16 +2027,17 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
         router.get(route('calendar.index'), { view: nextView, date, ...filtersToParams(filters) }, { preserveState: true });
     };
 
-    // After connecting (?picking=<provider>), fetch the pending session state and show the picker.
+    // After connecting (?picking=<provider>), fetch the pending session state and show the picker —
+    // on a full page load (OAuth callback) and after an Inertia redirect (CalDAV form, BRAI-141).
     useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
+        const params = new URL(pageUrl, window.location.origin).searchParams;
         if (params.get('picking')) {
             fetch(route('calendar.connections.pending'), { credentials: 'same-origin', headers: { Accept: 'application/json' } })
                 .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
                 .then((data) => { if (data.pending) setPickerData(data.pending); })
                 .catch(() => toast.error('Could not load the calendars to pick from. Please connect again.'));
         }
-    }, []);
+    }, [pageUrl]);
     const headerLabel = view === 'month'
         ? d.toLocaleDateString('en', { month: 'long', year: 'numeric' })
         : view === 'week'
