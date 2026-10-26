@@ -65,6 +65,13 @@ export function useUnreadCount({ manageTitle = false, poll = true }: { manageTit
     // the polling owner (the bell) also listens live: only the id arrives, the feed is refetched
     useLiveChannel(poll && auth?.user ? `user.${auth.user.id}` : null, {
         onEvent: (e) => {
+            // read / archived in another tab (BRAI-151): the badge and the tab title follow at once
+            if (e.event === 'notifications.changed') {
+                const unread = e.payload.unread_count;
+                if (typeof unread === 'number' && unread >= 0) announceUnread(unread);
+                else refresh();
+                return;
+            }
             if (e.event !== 'notification.created') return;
             refresh();
             window.dispatchEvent(new CustomEvent(ARRIVED_EVENT));
@@ -117,6 +124,11 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
     const [error, setError] = useState(false);
     const request = useRef(0);
     const loadingRef = useRef(false);
+    const itemsRef = useRef(items);
+    itemsRef.current = items;
+    /** read / archive actions: started so far, and still on their way (a live merge waits for them) */
+    const actsRef = useRef(0);
+    const actingRef = useRef(0);
     const skipFirst = useRef(!!initial);
 
     const fetchPage = useCallback(
@@ -155,13 +167,53 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
         }
     }, [fetchPage]);
 
+    /** Rows that arrived live (BRAI-151): they slide in; cleared after a few seconds. */
+    const [freshIds, setFreshIds] = useState<Set<string>>(() => new Set());
+    useEffect(() => {
+        if (freshIds.size === 0) return;
+        const timer = window.setTimeout(() => setFreshIds(new Set()), 4_000);
+        return () => window.clearTimeout(timer);
+    }, [freshIds]);
+
+    /**
+     * A notification arrived live: the first page is fetched and merged on top — rows loaded with
+     * "Load more" stay, the cursor still points behind them, nothing jumps under the pointer.
+     */
+    const mergeLatest = useCallback(async () => {
+        if (loadingRef.current) return reload();
+        const id = request.current;
+        const acts = actsRef.current;
+        try {
+            const feed = await fetchPage(null);
+            if (id !== request.current) return;
+            // a read / archive happened meanwhile: this page may predate it — ask again in a moment
+            if (acts !== actsRef.current || actingRef.current > 0) {
+                window.setTimeout(() => void mergeLatestRef.current(), 500);
+                return;
+            }
+            const before = itemsRef.current;
+            const known = new Set(before.map((n) => n.id));
+            const arrived = feed.data.filter((n) => !known.has(n.id)).map((n) => n.id);
+            if (arrived.length > 0 && before.length > 0) setFreshIds(new Set(arrived));
+            const latest = new Set(feed.data.map((n) => n.id));
+            setItems((prev) => [...feed.data, ...prev.filter((n) => !latest.has(n.id))]);
+            // an empty list starts paging from this page; otherwise the cursor still points behind the loaded rows
+            if (before.length === 0) setCursor(feed.next_cursor);
+            setError(false);
+        } catch {
+            /* the next poll / event tries again */
+        }
+    }, [fetchPage, reload]);
+    const mergeLatestRef = useRef(mergeLatest);
+    mergeLatestRef.current = mergeLatest;
+
     // a notification arrived live: the inbox (not the archive) shows it without a reload
     useEffect(() => {
         if (!enabled || archived) return;
-        const onArrived = () => reload();
+        const onArrived = () => void mergeLatest();
         window.addEventListener(ARRIVED_EVENT, onArrived);
         return () => window.removeEventListener(ARRIVED_EVENT, onArrived);
-    }, [enabled, archived, reload]);
+    }, [enabled, archived, mergeLatest]);
 
     useEffect(() => {
         if (!enabled) return;
@@ -215,6 +267,8 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
                                   : n,
                       ),
             );
+            actsRef.current++;
+            actingRef.current++;
             try {
                 const res =
                     ids.length === 1
@@ -226,6 +280,8 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
             } catch {
                 setItems(before);
                 throw new Error('notification action failed');
+            } finally {
+                actingRef.current--;
             }
         },
         [items, archived, reload],
@@ -235,14 +291,18 @@ export function useNotificationFeed({ filter, archived, initial, enabled = true 
         const before = items;
         const now = new Date().toISOString();
         setItems((prev) => prev.map((n) => ({ ...n, read_at: n.read_at ?? now })));
+        actsRef.current++;
+        actingRef.current++;
         try {
             await axios.post(route('notifications.read-all'));
             announceUnread(0);
         } catch {
             setItems(before);
             throw new Error('mark all read failed');
+        } finally {
+            actingRef.current--;
         }
     }, [items]);
 
-    return { items, loading, loadingMore, error, hasMore: !!cursor, reload, loadMore, act, markAllRead };
+    return { items, loading, loadingMore, error, hasMore: !!cursor, reload, loadMore, act, markAllRead, freshIds };
 }

@@ -452,11 +452,20 @@ final class BoardLive
                 ]);
             }
         }
-        // the card's own channel (an open issue page / dialog) — only for a handful of cards
+        // the card's own channel (an open issue page / dialog) — only for a handful of cards. The same
+        // `item.updated` {id, fields} the issue view already handles; title / description are
+        // published there by Item itself (live basics), so only the other fields (+ deleted) go here.
         if (count($items) <= self::ITEM_CHANNEL_LIMIT) {
             foreach ($items as $id => $item) {
-                if ($item['kind'] !== 'created' && $item['kind'] !== 'moved_in') {
-                    Live::publish("item.{$id}", 'item.changed', $base + ['id' => $id, 'kind' => $item['kind'], 'fields' => array_slice(array_keys($item['fields']), 0, 30)]);
+                if ($item['kind'] === 'created' || $item['kind'] === 'moved_in') {
+                    continue;
+                }
+                $fields = array_values(array_diff(array_keys($item['fields']), ['title', 'description', 'comments'])); // those: Item / LiveThreads
+                if (in_array($item['kind'], ['deleted', 'moved_out', 'restored'], true)) {
+                    $fields[] = $item['kind'];
+                }
+                if ($fields !== []) {
+                    Live::publish("item.{$id}", 'item.updated', $base + ['id' => $id, 'fields' => array_slice($fields, 0, 30)]);
                 }
             }
         }

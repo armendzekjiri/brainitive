@@ -109,7 +109,9 @@ class LiveBoardsTest extends TestCase
         $this->assertContains('column_id', $board[0]['payload']['fields']);
 
         // the card's own channel hears it too; nothing anywhere carries the title
-        $this->assertSame(['item.changed'], $this->published("item.{$item->id}")->pluck('event')->all());
+        $own = $this->published("item.{$item->id}");
+        $this->assertSame(['item.updated'], $own->pluck('event')->all(), 'the issue view’s own event');
+        $this->assertContains('column_id', $own[0]['payload']['fields']);
         Http::assertNotSent(fn (Request $request) => str_contains($request->body(), 'Secret launch plan'));
     }
 
@@ -130,6 +132,11 @@ class LiveBoardsTest extends TestCase
         $this->assertSame('item.updated', $updated[0]['event']);
         $this->assertEqualsCanonicalizing(['title', 'story_points'], $updated[0]['payload']['fields']);
         Http::assertNotSent(fn (Request $request) => str_contains($request->body(), 'confidential'));
+        $this->settle();
+
+        // a title-only edit: the item channel hears it once (Item's own item.updated), not twice
+        $this->actingAs($this->editor)->patch($this->itemRoute('boards.items.update', $item), ['title' => 'Renamed again'])->assertSessionHasNoErrors();
+        $this->assertSame([['item.updated', ['title']]], $this->published("item.{$item->id}")->map(fn ($m) => [$m['event'], $m['payload']['fields']])->all());
         $this->settle();
 
         $label = Label::create(['project_id' => $this->project->id, 'name' => 'urgent', 'slug' => 'urgent', 'color' => '#ef4444']);
@@ -167,7 +174,7 @@ class LiveBoardsTest extends TestCase
         $this->assertEqualsCanonicalizing($items->pluck('id')->all(), $board[0]['payload']['ids']);
         $this->assertSame(5, $board[0]['payload']['count']);
         $this->assertContains('column_id', $board[0]['payload']['fields']);
-        $this->assertCount(5, $this->published()->where('event', 'item.changed'), 'a handful of cards still reach their own channels');
+        $this->assertCount(5, $this->published()->filter(fn ($m) => str_starts_with($m['channel'], 'item.')), 'a handful of cards still reach their own channels');
     }
 
     public function test_column_create_rename_reorder_and_delete(): void

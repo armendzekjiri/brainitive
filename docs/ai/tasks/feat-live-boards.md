@@ -51,7 +51,7 @@ without a reload — on top of the live channel contract (`docs/ai/tasks/feat-li
 | | `column.created|updated|deleted`, `columns.reordered`, `columns.changed` | `id` (+`fields`) / `ids[]` |
 | | `sprint.changed` | `id, action (created/updated/active/completed/…), status` |
 | | `board.updated` / `board.deleted` / `board.refreshed` | `fields[]` / – / – |
-| `item.{id}` | `item.changed` (≤ 10 cards per flush, not for created) | `id, kind, fields[]` |
+| `item.{id}` | `item.updated` (the issue view's event; ≤ 10 cards per flush, not for created; title / description stay with Item's own live-basics publish, so no duplicates) | `id, fields[]` (+ `deleted` / `moved_out` / `restored`) |
 | `plan.{id}` | `plan.updated` | `revision, fields[], client_id?` |
 | | `plan.deleted` | – |
 | | `issues.changed` (a linked issue changed a field a plan row shows — title, dates, status, assignee, type, priority, parent, board — or was created / deleted / moved; found via `content_references` plan → item, one query per flush) | `ids[]` |
@@ -134,7 +134,7 @@ it. Eager loads only (query count independent of the number of cards — tested)
 ## Known limits
 - Events of a disconnect gap are lost (foundation): `onResync` reloads the board / plan state.
 - The open issue dialog doesn't update its fields live (only gone → toast); live issue descriptions
-  / comments are the live basics branch (`item.{id}` gets `item.changed` from here for that page).
+  / comments are the live basics branch (`item.{id}` gets `item.updated` for the other fields from here, which the issue view already refetches on).
 - A remote plan change clears the local undo history of an idle editor.
 - `issues.changed` reaches plans through `content_references` (derived rows are rewritten on every
   plan save, so links are current).

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\Helpdesks\Sla\TicketSla;
+use App\Support\Live\LiveThreads;
 use App\Support\SafeHtml;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -51,6 +52,14 @@ class TicketReply extends Model
     {
         // SLA (BRAI-125): the first public agent reply is the ticket's first response, whatever the path
         static::created(fn (TicketReply $reply) => TicketSla::recordReply($reply));
+        // Live replies (BRAI-151): open ticket panels refetch (ids only)
+        static::created(fn (TicketReply $reply) => LiveThreads::ticketReply($reply, 'created'));
+        static::updated(function (TicketReply $reply) {
+            if ($reply->wasChanged(['body', 'is_internal_note', 'email_status'])) {
+                LiveThreads::ticketReply($reply, 'updated');
+            }
+        });
+        static::deleted(fn (TicketReply $reply) => LiveThreads::ticketReply($reply, 'deleted'));
     }
 
     /**

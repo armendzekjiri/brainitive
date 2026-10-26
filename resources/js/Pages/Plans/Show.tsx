@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import RelatedContent from '@/components/references/RelatedContent';
+import { LiveAvatars } from '@/components/live/LiveAvatars';
 import { PlanChart } from '@/components/plan/PlanChart';
 import { PlanHistoryDialog } from '@/components/plan/PlanHistoryDialog';
 import { ImportDialog } from '@/components/plan/ImportDialog';
@@ -296,6 +297,8 @@ export default function PlanShow({ workspace, project, plan, members, issues: in
                             )}
                         </div>
                         <div className="flex items-center gap-1.5">
+                            {/* Who else is on this plan (BRAI-151) */}
+                            <LiveAvatars channel={`plan.${plan.id}`} />
                             {can.update && (
                                 <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={() => editor.saveNow()} title="Save now and keep this state in the history">
                                     <Save className="size-3.5" /><span className="hidden md:inline">Save version</span>

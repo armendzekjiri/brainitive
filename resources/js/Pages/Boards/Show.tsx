@@ -122,6 +122,7 @@ import DuplicateItemDialog from '@/components/item/DuplicateItemDialog';
 import { itemTree } from '@/lib/itemTree';
 import { useItemDetail, ItemDetailMain, ItemDetailSidebar, ItemFilePreviewDialog, type ProjectItemLite } from '@/components/item/ItemDetail';
 import { BoardHeader } from '@/components/board/BoardHeader';
+import { LiveAvatars } from '@/components/live/LiveAvatars';
 import { CustomFieldFilters } from '@/components/board/CustomFieldFilters';
 import {
     compareNullable, compareText, fieldComparator, fieldParam, fieldValue, formatFieldValue, fieldOption,
@@ -1194,6 +1195,8 @@ function ItemEditModal({
                             </Link>
                         </nav>
                         <div className="flex items-center gap-1">
+                            {/* Who else has this issue open (BRAI-151) */}
+                            <LiveAvatars channel={`item.${item.id}`} />
                             <Sheet open={detailsSheetOpen} onOpenChange={setDetailsSheetOpen}>
                                 <SheetTrigger asChild>
                                     <Button variant="ghost" size="icon" className="size-8 lg:hidden">

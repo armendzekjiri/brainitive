@@ -1,14 +1,23 @@
 import { useEffect, useRef } from 'react';
+import type { ExcalidrawStatics, WhiteboardHandle } from '@/lib/whiteboard/live';
 
-type BrainitiveExcalidrawWindow = { BrainitiveExcalidraw?: { init: (id: string, opts: object) => void } };
+type BrainitiveExcalidrawWindow = { BrainitiveExcalidraw?: ExcalidrawStatics & { init: (id: string, opts: object) => WhiteboardHandle } };
 
 /**
  * Read-only Excalidraw canvas (view mode = pan and zoom, no editing). Loads the separate
  * Excalidraw bundle on first use. `id` must be unique per scene — change it (or the React
  * key) to show different content.
  */
-export function ExcalidrawViewMode({ id, content, height = 500 }: { id: string; content: unknown; height?: number | string }) {
+export function ExcalidrawViewMode({ id, content, height = 500, onReady }: {
+    id: string;
+    content: unknown;
+    height?: number | string;
+    /** the canvas + Excalidraw's statics, e.g. to watch the whiteboard live (BRAI-153) */
+    onReady?: (handle: WhiteboardHandle, statics: ExcalidrawStatics) => void;
+}) {
     const initializedRef = useRef(false);
+    const onReadyRef = useRef(onReady);
+    onReadyRef.current = onReady;
 
     useEffect(() => {
         if (initializedRef.current) return;
@@ -21,11 +30,12 @@ export function ExcalidrawViewMode({ id, content, height = 500 }: { id: string; 
         const init = () => {
             if (!w.BrainitiveExcalidraw || initializedRef.current || !document.getElementById(id)) return;
             initializedRef.current = true;
-            w.BrainitiveExcalidraw.init(id, {
+            const handle = w.BrainitiveExcalidraw.init(id, {
                 viewModeEnabled: true,
                 zenModeEnabled: true,
                 initialData: { elements, appState: { ...appState, viewModeEnabled: true }, files },
             });
+            onReadyRef.current?.(handle, w.BrainitiveExcalidraw);
         };
 
         if (w.BrainitiveExcalidraw) {

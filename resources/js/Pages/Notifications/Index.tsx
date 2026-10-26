@@ -293,6 +293,7 @@ export default function NotificationsIndex({ feed: initialFeed, filter: initialF
                                         onSelectedChange={toggleSelected}
                                         active={index === active}
                                         comfortable
+                                        fresh={feed.freshIds.has(n.id)}
                                     />
                                 )}
                             />

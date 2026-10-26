@@ -17,6 +17,7 @@ use App\Http\Controllers\HelpdeskForwardingController;
 use App\Http\Controllers\HelpdeskMailboxController;
 use App\Http\Controllers\HelpdeskWidgetController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\ItemCollabController;
 use App\Http\Controllers\ItemFieldController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LeadFormController;
@@ -54,6 +55,7 @@ use App\Http\Controllers\SnippetController;
 use App\Http\Controllers\SprintController;
 use App\Http\Controllers\TaskListController;
 use App\Http\Controllers\TicketController;
+use App\Http\Controllers\WhiteboardCollabController;
 use App\Http\Controllers\WhiteboardController;
 use App\Http\Controllers\WorkloadController;
 use App\Http\Controllers\WorkspaceController;
@@ -442,6 +444,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::patch('boards/{board:slug}/items/{item}/move-to-board', [BoardController::class, 'moveItemToBoard'])->name('boards.items.move-to-board');
             Route::delete('boards/{board:slug}/items/{item}', [BoardController::class, 'destroyItem'])->name('boards.items.destroy');
             Route::post('boards/{board:slug}/items/{item}/comments', [BoardController::class, 'storeComment'])->name('boards.items.comments.store');
+            // Live issue descriptions (BRAI-151): connection token, HTML save (normal item update), first load
+            Route::post('boards/{board:slug}/items/{item}/collab/session', [ItemCollabController::class, 'session'])->middleware([ReadOnlySession::class, 'throttle:60,1,items.collab.session'])->name('items.collab.session');
+            Route::put('boards/{board:slug}/items/{item}/collab/description', [ItemCollabController::class, 'save'])->middleware([ReadOnlySession::class, 'throttle:180,1,items.collab.save'])->name('items.collab.save');
+            Route::post('boards/{board:slug}/items/{item}/collab/bootstrap', [ItemCollabController::class, 'bootstrap'])->middleware([ReadOnlySession::class, 'throttle:30,1,items.collab.bootstrap'])->name('items.collab.bootstrap');
             Route::post('boards/{board:slug}/items/{item}/attachments', [BoardController::class, 'storeAttachment'])->name('boards.items.attachments.store');
             Route::delete('boards/{board:slug}/items/{item}/attachments/{attachment}', [BoardController::class, 'destroyAttachment'])->name('boards.items.attachments.destroy');
 
@@ -590,6 +596,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('pages/{page}/collab/session', [PageCollabController::class, 'session'])->middleware([ReadOnlySession::class, 'throttle:60,1,pages.collab.session'])->name('pages.collab.session');
             Route::put('pages/{page}/collab/draft', [PageCollabController::class, 'save'])->middleware([ReadOnlySession::class, 'throttle:180,1,pages.collab.save'])->name('pages.collab.save');
             Route::post('pages/{page}/collab/bootstrap', [PageCollabController::class, 'bootstrap'])->middleware([ReadOnlySession::class, 'throttle:30,1,pages.collab.bootstrap'])->name('pages.collab.bootstrap');
+            // Live whiteboards (BRAI-153): same realtime server, own document kind
+            Route::post('pages/{page}/whiteboard/collab/session', [WhiteboardCollabController::class, 'session'])->middleware([ReadOnlySession::class, 'throttle:60,1,pages.whiteboard.collab.session'])->name('pages.whiteboard.collab.session');
+            Route::post('pages/{page}/whiteboard/collab/scene', [WhiteboardCollabController::class, 'save'])->middleware([ReadOnlySession::class, 'throttle:120,1,pages.whiteboard.collab.save'])->name('pages.whiteboard.collab.save');
+            Route::post('pages/{page}/whiteboard/collab/bootstrap', [WhiteboardCollabController::class, 'bootstrap'])->middleware([ReadOnlySession::class, 'throttle:30,1,pages.whiteboard.collab.bootstrap'])->name('pages.whiteboard.collab.bootstrap');
             Route::get('pages/{page}/versions', [PageVersionController::class, 'index'])->name('pages.versions.index');
             Route::get('pages/{page}/versions/{versionNumber}', [PageVersionController::class, 'show'])->whereNumber('versionNumber')->name('pages.versions.show');
             Route::post('pages/{page}/versions/{versionNumber}/restore', [PageVersionController::class, 'restore'])->whereNumber('versionNumber')->name('pages.versions.restore');
