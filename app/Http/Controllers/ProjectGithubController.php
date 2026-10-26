@@ -151,13 +151,16 @@ class ProjectGithubController extends Controller
             if (! in_array($installationId, $api->userInstallationIds($userToken), true)) {
                 return $back('error', 'That GitHub installation isn’t available to your GitHub account.');
             }
+            // only the repositories THIS person can read: an installation is listed for anyone with
+            // access to one of its repositories (e.g. an outside collaborator on an org repository)
+            $allowed = $api->userInstallationRepositoryIds($userToken, $installationId);
             $info = $api->installation($installationId);
             $repositories = $api->installationRepositories($installationId);
         } catch (GithubApiException $e) {
             return $back('error', 'GitHub couldn’t be asked about the installation: '.$e->getMessage());
         }
 
-        DB::transaction(function () use ($project, $installationId, $info, $repositories, $request) {
+        DB::transaction(function () use ($project, $installationId, $info, $repositories, $allowed, $request) {
             $installation = GithubInstallation::lockForUpdate()->firstOrNew(['installation_id' => $installationId]);
             $installation->fill([
                 'account_login' => $info['account_login'] ? Str::limit((string) $info['account_login'], 100, '') : null,
@@ -184,10 +187,13 @@ class ProjectGithubController extends Controller
             $connection->forceFill([
                 'mode' => GithubConnection::MODE_APP,
                 'github_installation_id' => $installation->id,
+                'allowed_repository_ids' => $allowed,
                 'access_lost_at' => null,
                 'last_error' => null,
                 'rate_limited_until' => null,
             ])->save();
+            // repositories this person can't read are no longer followed
+            $connection->followedRepositories()->whereNotIn('repo_id', $allowed === [] ? [0] : $allowed)->delete();
             // repositories the project still follows and the installation still shares are active again
             foreach ($connection->followedRepositories()->get() as $followed) {
                 $followed->update(['removed_at' => $installation->repository($followed->repo_id) ? null : ($followed->removed_at ?? now())]);
@@ -214,13 +220,24 @@ class ProjectGithubController extends Controller
         }
 
         $back = redirect()->to(route('projects.edit', [$connection->project->workspace->slug, $connection->project->slug]).'?tab=integrations');
+        $code = (string) $request->query('code', '');
         try {
             $installation->forceFill(['repositories' => $api->installationRepositories($installation->installation_id), 'refreshed_at' => now()])->save();
+            // with GitHub's authorization code, the repositories this person can read are offered too
+            if ($code !== '' && strlen($code) <= 200) {
+                $userToken = $api->userToken($code);
+                if (in_array($installation->installation_id, $api->userInstallationIds($userToken), true)) {
+                    $allowed = $api->userInstallationRepositoryIds($userToken, $installation->installation_id);
+                    $connection->forceFill(['allowed_repository_ids' => array_values(array_unique([...($connection->allowed_repository_ids ?? []), ...$allowed]))])->save();
+
+                    return $back->with('success', 'The repositories shared with the GitHub App were updated. Tick the ones this project follows.');
+                }
+            }
         } catch (GithubApiException $e) {
             return $back->with('error', 'GitHub couldn’t be asked for the repositories: '.$e->getMessage());
         }
 
-        return $back->with('success', 'The repositories shared with the GitHub App were updated. Tick the ones this project follows.');
+        return $back->with('success', 'The repositories shared with the GitHub App were updated. To follow a newly shared one, use “Connect GitHub” again.');
     }
 
     /** Which of the installation's repositories this project follows (each repository → one project). */
@@ -241,7 +258,7 @@ class ProjectGithubController extends Controller
         $repos = [];
         foreach ($ids as $id) {
             $repo = $installation->repository($id);
-            if (! $repo) {
+            if (! $repo || ! $connection->mayFollow($id)) {
                 return back()->withErrors(['repository_ids' => 'One of the repositories isn’t shared with this GitHub installation. Refresh and try again.']);
             }
             $repos[] = $repo;
@@ -398,14 +415,17 @@ class ProjectGithubController extends Controller
             ? GithubRepository::where('github_installation_id', $installation->id)->where('github_connection_id', '!=', $connection->id)->pluck('repo_id')->all()
             : [];
 
-        $available = collect($installation?->repositories ?? [])->map(fn (array $r) => [
-            'id' => (int) $r['id'],
-            'full_name' => (string) $r['full_name'],
-            'private' => (bool) ($r['private'] ?? false),
-            'followed' => $followed->has((int) $r['id']),
-            'taken' => in_array((int) $r['id'], $taken, true),
-            'removed' => $followed->has((int) $r['id']) && $followed->get((int) $r['id'])->removed_at !== null,
-        ]);
+        // only repositories the person who connected can read on GitHub (plus what is already followed)
+        $available = collect($installation?->repositories ?? [])
+            ->filter(fn (array $r) => $connection->mayFollow((int) $r['id']) || $followed->has((int) $r['id']))
+            ->map(fn (array $r) => [
+                'id' => (int) $r['id'],
+                'full_name' => (string) $r['full_name'],
+                'private' => (bool) ($r['private'] ?? false),
+                'followed' => $followed->has((int) $r['id']),
+                'taken' => in_array((int) $r['id'], $taken, true),
+                'removed' => $followed->has((int) $r['id']) && $followed->get((int) $r['id'])->removed_at !== null,
+            ]);
         // followed repositories the installation no longer shares stay visible, marked removed
         foreach ($followed as $repo) {
             if (! $available->contains('id', $repo->repo_id)) {

@@ -20,7 +20,7 @@ class GithubConnection extends Model
     public const MODE_APP = 'app';
 
     protected $fillable = ['uuid', 'project_id', 'secret', 'created_by', 'repositories', 'deployments', 'last_delivery_at', 'last_event', 'last_error',
-        'mode', 'github_installation_id', 'access_lost_at', 'rate_limited_until', 'last_refreshed_at'];
+        'mode', 'github_installation_id', 'access_lost_at', 'rate_limited_until', 'last_refreshed_at', 'allowed_repository_ids'];
 
     protected $hidden = ['secret'];
 
@@ -34,6 +34,7 @@ class GithubConnection extends Model
             'access_lost_at' => 'datetime',
             'rate_limited_until' => 'datetime',
             'last_refreshed_at' => 'datetime',
+            'allowed_repository_ids' => 'array',
         ];
     }
 
@@ -66,6 +67,12 @@ class GithubConnection extends Model
     public function followedRepositories(): HasMany
     {
         return $this->hasMany(GithubRepository::class);
+    }
+
+    /** May this project follow the repository? Only those the person who connected can read on GitHub. */
+    public function mayFollow(int $repoId): bool
+    {
+        return in_array($repoId, array_map('intval', $this->allowed_repository_ids ?? []), true);
     }
 
     public function usesApp(): bool

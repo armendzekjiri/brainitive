@@ -160,6 +160,30 @@ final class GithubApi
     }
 
     /**
+     * The installation's repositories the signed-in GitHub user can read. /user/installations lists
+     * an installation for anyone with access to ONE of its repositories, so this is what a project
+     * may follow — never the whole installation.
+     *
+     * @return list<int>
+     */
+    public function userInstallationRepositoryIds(string $userToken, int $installationId): array
+    {
+        $ids = [];
+        for ($page = 1; $page <= self::MAX_PAGES; $page++) {
+            $response = $this->send(self::client()->withToken($userToken), 'get', "/user/installations/{$installationId}/repositories", ['per_page' => 100, 'page' => $page]);
+            $repos = (array) $response->json('repositories', []);
+            foreach ($repos as $repo) {
+                $ids[] = (int) data_get($repo, 'id');
+            }
+            if (count($repos) < 100) {
+                break;
+            }
+        }
+
+        return array_values(array_unique(array_filter($ids)));
+    }
+
+    /**
      * The manifest flow's last step: GitHub returns the new app with its secrets (shown only once).
      *
      * @return array<string, mixed>

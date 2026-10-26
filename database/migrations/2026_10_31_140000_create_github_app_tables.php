@@ -48,6 +48,9 @@ return new class extends Migration
             $table->timestamp('access_lost_at')->nullable(); // set once per loss → one notification
             $table->timestamp('rate_limited_until')->nullable();
             $table->timestamp('last_refreshed_at')->nullable();
+            // the installation's repositories the person who connected can read on GitHub: an
+            // installation is listed for anyone with access to ONE of its repositories
+            $table->json('allowed_repository_ids')->nullable();
         });
 
         // Repositories a project follows through the app: a repository maps to one project.
@@ -94,7 +97,7 @@ return new class extends Migration
         Schema::dropIfExists('github_repositories');
         Schema::table('github_connections', function (Blueprint $table) {
             $table->dropConstrainedForeignId('github_installation_id');
-            $table->dropColumn(['mode', 'access_lost_at', 'rate_limited_until', 'last_refreshed_at']);
+            $table->dropColumn(['mode', 'access_lost_at', 'rate_limited_until', 'last_refreshed_at', 'allowed_repository_ids']);
         });
         Schema::dropIfExists('github_installations');
         Schema::dropIfExists('github_apps');

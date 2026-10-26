@@ -73,12 +73,17 @@ class GithubAppTest extends TestCase
         ]]);
     }
 
-    /** @param list<int> $userInstallations */
-    private function fakeGithub(array $userInstallations = [self::INSTALLATION], ?array $repos = null, array $extra = []): void
+    /**
+     * @param  list<int>  $userInstallations  installations the person's GitHub account can see
+     * @param  list<int>|null  $userRepos  repository ids of the installation the person can read (null = all)
+     */
+    private function fakeGithub(array $userInstallations = [self::INSTALLATION], ?array $repos = null, array $extra = [], ?array $userRepos = null): void
     {
         $repos ??= [['id' => 1001, 'full_name' => 'acme/app', 'private' => true], ['id' => 1002, 'full_name' => 'acme/docs', 'private' => false]];
+        $userRepos ??= array_column($repos, 'id');
         Http::fake($extra + [
             'github.com/login/oauth/access_token' => Http::response(['access_token' => 'gho_user', 'token_type' => 'bearer']),
+            'api.github.com/user/installations/*/repositories*' => Http::response(['repositories' => array_values(array_filter($repos, fn ($r) => in_array($r['id'], $userRepos, true)))]),
             'api.github.com/user/installations*' => Http::response(['installations' => array_map(fn ($id) => ['id' => $id], $userInstallations)]),
             'api.github.com/app/installations/*/access_tokens' => Http::response(['token' => 'ghs_installation_token', 'expires_at' => now()->addHour()->toIso8601String()], 201),
             'api.github.com/app/installations/*' => Http::response(['id' => self::INSTALLATION, 'account' => ['login' => 'acme', 'type' => 'Organization'], 'repository_selection' => 'selected', 'suspended_at' => null]),
@@ -109,7 +114,7 @@ class GithubAppTest extends TestCase
     {
         $project ??= $this->project;
         $installation = GithubInstallation::firstOrCreate(['installation_id' => $installationId], ['account_login' => 'acme', 'repositories' => [['id' => $repoId, 'full_name' => $repo, 'private' => true]]]);
-        $connection = $project->githubConnection()->create(['uuid' => (string) Str::uuid(), 'secret' => 'unused', 'mode' => 'app', 'github_installation_id' => $installation->id, 'created_by' => $this->admin->id]);
+        $connection = $project->githubConnection()->create(['uuid' => (string) Str::uuid(), 'secret' => 'unused', 'mode' => 'app', 'github_installation_id' => $installation->id, 'allowed_repository_ids' => [$repoId], 'created_by' => $this->admin->id]);
         GithubRepository::create(['github_connection_id' => $connection->id, 'github_installation_id' => $installation->id, 'repo_id' => $repoId, 'full_name' => $repo, 'private' => true]);
 
         return $connection;
@@ -297,6 +302,25 @@ class GithubAppTest extends TestCase
         $this->assertNull($this->project->githubConnection()->first());
     }
 
+    public function test_only_repositories_the_person_can_read_are_offered(): void
+    {
+        // an outside collaborator on acme/docs sees the org's installation in /user/installations,
+        // but must never see or claim the org's private acme/app
+        $this->configureApp();
+        $this->fakeGithub(userRepos: [1002]);
+        $this->connect()->assertSessionHas('success');
+        $this->assertSame([1002], $this->project->githubConnection->allowed_repository_ids);
+
+        $page = $this->actingAs($this->admin)->get($this->routes('projects.edit'))->getContent();
+        $this->assertStringContainsString('acme\/docs', $page);
+        $this->assertStringNotContainsString('acme\/app', $page);
+
+        $this->actingAs($this->admin)->from($this->routes('projects.edit'))->put($this->routes('projects.github.repositories'), ['repository_ids' => [1001]])
+            ->assertSessionHasErrors('repository_ids');
+        $this->actingAs($this->admin)->put($this->routes('projects.github.repositories'), ['repository_ids' => [1002]])->assertSessionHasNoErrors();
+        $this->assertSame(['acme/docs'], GithubRepository::pluck('full_name')->all());
+    }
+
     public function test_back_from_sharing_more_repositories_on_github_rereads_the_list(): void
     {
         $this->configureApp();
@@ -311,6 +335,11 @@ class GithubAppTest extends TestCase
         $this->actingAs($this->admin)->get(route('github.app.setup', $update))
             ->assertRedirect($this->routes('projects.edit').'?tab=integrations')->assertSessionHas('success');
         $this->assertSame([1001, 1003], array_column(GithubInstallation::sole()->repositories, 'id'));
+        $this->assertSame([1001], $this->project->githubConnection()->sole()->allowed_repository_ids); // no proof yet
+
+        // with GitHub's authorization code, the repositories this person can read are offered too
+        $this->actingAs($this->admin)->get(route('github.app.setup', $update + ['code' => 'oauth-code']))->assertSessionHas('success');
+        $this->assertEqualsCanonicalizing([1001, 1003], $this->project->githubConnection()->sole()->allowed_repository_ids);
     }
 
     public function test_connect_without_an_app_or_client_secret_explains_why(): void

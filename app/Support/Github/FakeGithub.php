@@ -38,6 +38,15 @@ final class FakeGithub
                     ? Http::response(['access_token' => 'gho_e2e_'.$installation, 'token_type' => 'bearer'])
                     : Http::response(['error' => 'bad_verification_code']);
             },
+            'api.github.com/user/installations/*/repositories*' => function (Request $r) {
+                preg_match('#/user/installations/(\d+)/repositories#', $r->url(), $m);
+                $installation = $m[1] ?? '0';
+
+                return Http::response(['total_count' => 2, 'repositories' => [
+                    ['id' => (int) ($installation.'1'), 'full_name' => "e2e-org/site-{$installation}", 'private' => true],
+                    ['id' => (int) ($installation.'2'), 'full_name' => "e2e-org/api-{$installation}", 'private' => false],
+                ]]);
+            },
             'api.github.com/user/installations*' => function (Request $r) use ($id, $bearer) {
                 $installation = $id($bearer($r), 'gho_e2e_');
 

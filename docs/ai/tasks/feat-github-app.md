@@ -114,8 +114,11 @@ URLs shown on Admin → GitHub App, then set the `GITHUB_APP_*` env vars (and `p
 ## Notes for the docs (lead)
 - KNOWLEDGE: two GitHub modes. Manual webhooks (`/api/webhooks/github/{uuid}`, per-project secret) vs
   the GitHub App (`/api/webhooks/github-app`, app secret, routed by installation + repository id;
-  `github_repositories.repo_id` unique = one project per repository). Installation ownership is proven
-  by OAuth during install + `GET /user/installations`; the setup state lives in the session.
+  `github_repositories.repo_id` unique = one project per repository). Installation access is proven
+  by OAuth during install + `GET /user/installations`, and a project may only follow the repositories
+  the connecting person can read (`GET /user/installations/{id}/repositories` →
+  `github_connections.allowed_repository_ids`): GitHub lists an installation for anyone with access
+  to ONE of its repositories (security review finding). The setup state lives in the session.
   The GitHub App is separate from GitHub social login (`services.github`): never widen login scopes.
   Installation tokens are cached encrypted (`github-app:installation-token:*`), never shown.
   `ActivityLog::via('github', fn)` marks history entries made by an integration (`metadata.via`,
