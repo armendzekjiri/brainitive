@@ -2355,3 +2355,62 @@ export interface AdminGithubApp {
     can_verify_installations: boolean;
     created_at: string | null;
 }
+
+// ── Feedback portal (v1.42.0, BRAI-60) ────────────────────────────────────────
+export type FeedbackStatus = 'open' | 'planned' | 'building' | 'released' | 'declined';
+
+/** FeedbackPresenter::portal() — public */
+export interface FeedbackPortalData {
+    slug: string;
+    title: string;
+    intro: string | null;
+    url: string;
+    roadmap_url: string;
+}
+
+/** FeedbackPresenter::post() — public fields only (never the card, ids or emails) */
+export interface FeedbackPostData {
+    number: number;
+    title: string;
+    body: string | null;
+    excerpt: string | null;
+    status: FeedbackStatus;
+    status_label: string;
+    status_note: string | null;
+    votes_count: number;
+    author_name: string | null;
+    created_at: string | null;
+    url: string;
+    is_pending: boolean;
+    is_mine: boolean;
+    has_voted: boolean;
+    is_following: boolean;
+}
+
+/** FeedbackModerationController::presentPost() — team page */
+export interface FeedbackModerationPost {
+    id: number;
+    number: number;
+    title: string;
+    body: string | null;
+    moderation: 'pending' | 'approved' | 'rejected';
+    status: FeedbackStatus;
+    status_note: string | null;
+    votes_count: number;
+    author: { name: string; email: string } | null;
+    created_at: string | null;
+    public_url: string;
+    merged_into: { number: number; title: string } | null;
+    item: { key: string; title: string; url: string } | null;
+}
+
+/** FeedbackEvent (moderator audit) */
+export interface FeedbackEventData {
+    id: number;
+    actor_name: string | null;
+    action: string;
+    label: string;
+    post_number: number | null;
+    changes: Record<string, unknown> | null;
+    created_at: string | null;
+}

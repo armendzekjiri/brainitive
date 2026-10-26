@@ -4,6 +4,7 @@ namespace Tests\Feature\Notifications;
 
 use App\Models\ClientPortal;
 use App\Models\Comment;
+use App\Models\FeedbackPortal;
 use App\Models\Helpdesk;
 use App\Models\LeadForm;
 use App\Models\Sprint;
@@ -16,6 +17,7 @@ use App\Notifications\CatalogNotification;
 use App\Notifications\ClientCommentedNotification;
 use App\Notifications\ClientDecisionNotification;
 use App\Notifications\GithubSyncFailedNotification;
+use App\Notifications\FeedbackSubmittedNotification;
 use App\Notifications\InvitationAcceptedNotification;
 use App\Notifications\ItemCommentedNotification;
 use App\Notifications\ItemDueNotification;
@@ -74,6 +76,8 @@ class CatalogNotificationContractTest extends TestCase
         $deliverable = $portal->deliverables()->create(['kind' => 'page', 'version' => 1, 'title' => 'Spec', 'content' => ['html' => '<p>x</p>'], 'published_by' => $this->editor->id, 'published_at' => now()]);
         $decision = $deliverable->decisions()->create(['identity_name' => 'Clara', 'identity_email' => 'c@client.test', 'decision' => 'approved', 'version' => 1, 'created_at' => now()]);
         $clientComment = $deliverable->comments()->create(['author_name' => 'Clara', 'visibility' => 'client', 'body' => 'Looks good']);
+        $feedbackPortal = FeedbackPortal::create(['project_id' => $this->project->id, 'slug' => 'contract-ideas', 'title' => 'Ideas', 'enabled' => true]); // BRAI-60
+        $feedbackPost = $feedbackPortal->posts()->create(['number' => 1, 'title' => 'Dark mode [x](y)', 'body' => 'Please <b>add</b> it']);
         auth()->logout();
 
         return [
@@ -94,6 +98,7 @@ class CatalogNotificationContractTest extends TestCase
             new ClientDecisionNotification($deliverable, $decision), // BRAI-73
             new ClientCommentedNotification($deliverable, $clientComment),
             new GithubSyncFailedNotification($this->project->githubConnection()->create(['uuid' => (string) Str::uuid(), 'secret' => 's']), 'The GitHub App was uninstalled.'), // BRAI-61
+            new FeedbackSubmittedNotification($feedbackPost), // BRAI-60
         ];
     }
 

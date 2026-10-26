@@ -23,10 +23,10 @@ class PortalAuthTest extends TestCase
         parent::setUp();
         Notification::fake();
 
-        Route::middleware(['web', 'portal.identity'])->get('/feedback/test-only', fn (Request $request) => 'hello '.$request->attributes->get('portalIdentity')->email);
+        Route::middleware(['web', 'portal.identity'])->get('/feedback/test-only/probe', fn (Request $request) => 'hello '.$request->attributes->get('portalIdentity')->email);
     }
 
-    private function requestLink(string $email = 'Jane@Example.com', string $returnTo = '/feedback/test-only'): string
+    private function requestLink(string $email = 'Jane@Example.com', string $returnTo = '/feedback/test-only/probe'): string
     {
         $this->post(route('guest.login.store'), ['email' => $email, 'name' => 'Jane', 'return_to' => $returnTo])
             ->assertRedirect(route('guest.login', ['return_to' => PortalAuth::safeReturnTo($returnTo)]))
@@ -44,7 +44,7 @@ class PortalAuthTest extends TestCase
 
     public function test_a_guest_signs_in_with_the_emailed_link_and_lands_where_they_were(): void
     {
-        $this->get('/feedback/test-only')->assertRedirect(route('guest.login', ['return_to' => '/feedback/test-only']));
+        $this->get('/feedback/test-only/probe')->assertRedirect(route('guest.login', ['return_to' => '/feedback/test-only/probe']));
 
         $token = $this->requestLink();
         $identity = PortalIdentity::findByEmail('jane@example.com');
@@ -61,27 +61,27 @@ class PortalAuthTest extends TestCase
             ->assertInertia(fn ($page) => $page->component('Portal/Login')->where('mode', 'confirm')->where('email', 'jane@example.com'));
         $this->get(route('guest.login.show', $token))->assertInertia(fn ($page) => $page->where('mode', 'confirm'));
 
-        $this->post(route('guest.login.consume', $token))->assertRedirect('/feedback/test-only');
+        $this->post(route('guest.login.consume', $token))->assertRedirect('/feedback/test-only/probe');
         $this->assertTrue($identity->fresh()->isVerified());
-        $this->get('/feedback/test-only')->assertOk()->assertSee('hello jane@example.com');
+        $this->get('/feedback/test-only/probe')->assertOk()->assertSee('hello jane@example.com');
     }
 
     public function test_a_link_works_once_and_not_after_it_expired(): void
     {
         $token = $this->requestLink();
-        $this->post(route('guest.login.consume', $token))->assertRedirect('/feedback/test-only');
+        $this->post(route('guest.login.consume', $token))->assertRedirect('/feedback/test-only/probe');
 
         $this->post(route('guest.logout'))->assertRedirect('/');
-        $this->get('/feedback/test-only')->assertRedirect();
+        $this->get('/feedback/test-only/probe')->assertRedirect();
 
         $this->post(route('guest.login.consume', $token))->assertRedirect(route('guest.login.show', $token));
         $this->get(route('guest.login.show', $token))->assertInertia(fn ($page) => $page->where('mode', 'invalid')->where('token', null));
-        $this->get('/feedback/test-only')->assertRedirect();
+        $this->get('/feedback/test-only/probe')->assertRedirect();
 
         $second = $this->requestLink();
         $this->travel(PortalAuth::LINK_MINUTES + 1)->minutes();
         $this->post(route('guest.login.consume', $second))->assertRedirect(route('guest.login.show', $second));
-        $this->get('/feedback/test-only')->assertRedirect();
+        $this->get('/feedback/test-only/probe')->assertRedirect();
     }
 
     public function test_the_answer_never_reveals_an_address_and_mails_per_address_are_limited(): void
@@ -112,7 +112,7 @@ class PortalAuthTest extends TestCase
         $guest = PortalIdentity::create(['email' => 'member@example.com', 'name' => 'Old guest name', 'email_verified_at' => now()]);
         $user = User::factory()->create(['email' => 'Member@Example.com', 'name' => 'Mia Member']);
 
-        $this->actingAs($user)->get('/feedback/test-only')->assertOk()->assertSee('hello member@example.com');
+        $this->actingAs($user)->get('/feedback/test-only/probe')->assertOk()->assertSee('hello member@example.com');
 
         $this->assertSame($user->id, $guest->fresh()->user_id);
         $this->assertSame(1, PortalIdentity::count());
@@ -124,13 +124,13 @@ class PortalAuthTest extends TestCase
     {
         $user = User::factory()->unverified()->create();
 
-        $this->actingAs($user)->get('/feedback/test-only')->assertRedirect(route('guest.login', ['return_to' => '/feedback/test-only']));
+        $this->actingAs($user)->get('/feedback/test-only/probe')->assertRedirect(route('guest.login', ['return_to' => '/feedback/test-only/probe']));
         $this->assertSame(0, PortalIdentity::count());
     }
 
     public function test_json_calls_without_an_identity_get_401(): void
     {
-        $this->getJson('/feedback/test-only')->assertUnauthorized();
+        $this->getJson('/feedback/test-only/probe')->assertUnauthorized();
     }
 
     public function test_spent_and_expired_links_are_pruned(): void

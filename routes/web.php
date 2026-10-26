@@ -330,6 +330,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::prefix('projects/{project:slug}')->scopeBindings()->group(function () {
             require __DIR__.'/client-portal.php';
         });
+        // Feedback portal moderation (v1.42.0, BRAI-60) — the public side is in portal.php
+        Route::prefix('projects/{project:slug}')->scopeBindings()->group(fn () => require __DIR__.'/feedback.php');
 
         // Project members (assign workspace users to project with role)
         Route::prefix('projects/{project:slug}')->scopeBindings()->group(function () {
