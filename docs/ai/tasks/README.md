@@ -47,7 +47,13 @@ The chosen design; note alternatives if the choice isn't obvious.
 | [Release v1.39.0: notifications, webhooks, insights, custom sidebar (BRAI-102…111)](./release-v1.39.0.md) | done |
 | [Release v1.40.0: automate — automation, recurring issues, email → helpdesk, SLA (BRAI-63/79/123/124/125)](./release-v1.40.0.md) | done |
 | [Release v1.41.0: bring your data — Trello, Jira, Notion imports, project export/restore (BRAI-65/139/66/81)](./release-v1.41.0.md) | done |
-| [Release v1.42.0: work with clients — feedback portal, client portal, document review, GitHub App connect (BRAI-60/73/80/61)](./release-v1.42.0.md) | in progress |
+| [Release v1.42.0: work with clients — feedback portal, client portal, document review, GitHub App connect, calendar feed + providers (BRAI-60/73/80/61/142/140)](./release-v1.42.0.md) | in progress |
+| [Public feedback portal (BRAI-60)](./feat-feedback-portal.md) | done |
+| [Client portal: deliverables, version-specific approvals (BRAI-73)](./feat-client-portal.md) | done |
+| [Internal document review (BRAI-80)](./feat-document-review.md) | done |
+| [GitHub App connect + merge transitions (BRAI-61)](./feat-github-app.md) | done |
+| [Calendar feed: subscribe in other apps (BRAI-142)](./feat-calendar-feed.md) | done |
+| [Calendar provider layer, Google moved onto it (BRAI-140)](./feat-calendar-providers.md) | done |
 | [Admin insights (BRAI-105)](./feat-admin-insights.md) | done |
 | [Billing settings + documents: PDF, Excel, email (BRAI-101, part 1)](./feat-billing-documents.md) | done |
 | [Time log: activity on logging, timer, legacy backfill, My timesheet (BRAI-99 part 2)](./feat-time-log.md) | done |

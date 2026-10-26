@@ -25,6 +25,9 @@ CLI       ──Bearer token────▶ routes/api.php  ──▶ CliControl
 Browser extension ──OAuth2.1 (capture scope)──▶ routes/api.php /api/ext/v1 ──▶ Extension\*Controller
 External site ──▶ routes/web.php (cors, no CSRF) ──▶ Helpdesk widget/portal
 Visitor / iframe ──▶ routes/web.php /f/{slug} (no CSRF) ──▶ PublicLeadFormController
+Guest (email link) ──▶ routes/portal.php /guest/login, /feedback/{slug}, /client/{slug} ──▶ PortalAuth + portal controllers
+Calendar apps ──secret URL──▶ routes/calendar-feed.php /calendar/feed/{token}.ics (stateless) ──▶ CalendarFeedController
+GitHub App ──HMAC──▶ routes/api.php /api/webhooks/github-app ──▶ ProcessGithubAppDelivery
 Other tools ──Bearer inbound token──▶ routes/api.php /api/lead-forms/{uuid}/inbound
 Postmark / Mailgun ──token / HMAC──▶ routes/api.php /api/inbound-mail/{postmark|mailgun} ──▶ InboundMail::receive()
 IMAP mailboxes ◀──app:poll-helpdesk-mailboxes (every minute)── MailboxPoller ──▶ InboundMail::receive()
@@ -46,7 +49,8 @@ IMAP mailboxes ◀──app:poll-helpdesk-mailboxes (every minute)── Mailbox
 | Token scopes | `capture` = browser extension, only `/api/ext/v1` (`CheckToken::using('capture')`) | `RejectCaptureTokens` keeps capture tokens off `/mcp` and `/api/cli/*` |
 | Policy registration | **`app/Providers/AppServiceProvider.php`** | Policies are **explicitly** `Gate::policy(...)`-registered, *not* auto-discovered |
 | Instance admin | `InstanceAdmin` model, `instance.admin` middleware, `/admin/*` | **No content access** — runs the instance from the admin console (see below). Suspended users are signed out by `EnsureUserIsNotSuspended` (web group) |
-| Global Inertia props | `app/Http/Middleware/HandleInertiaRequests.php` | `auth.user`, `flash`, `workspaces`, `currentWorkspace`, `currentPageUuid` |
+| Global Inertia props | `app/Http/Middleware/HandleInertiaRequests.php` | `auth.user`, `flash`, `workspaces`, `currentWorkspace`, `currentPageUuid`, `githubRepo` (`{url, stars}`, v1.42.0) |
+| Guests outside the workspace (v1.42.0) | `App\Models\PortalIdentity`, `App\Support\Portal\PortalAuth`, middleware alias `portal.identity` (`EnsurePortalIdentity`) | Email → one-time link sign-in for the feedback / client portals; proves an email only — each portal checks its own access. See "Guest identities" below |
 
 > Sanctum is still installed but **Passport** is the token mechanism for MCP + CLI. See
 > [`KNOWLEDGE.md`](./KNOWLEDGE.md).
@@ -88,7 +92,18 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Routes:** `pages/...` under `projects/{project}` (`pages.draft.save|discard`, `pages.publish-changes`, `pages.presence`, `pages.versions.*`); sticky notes under `/api/page-sticky-notes`
 - **Workflow:** Confluence-style draft → publish → versions; see [`CONVENTIONS.md`](./CONVENTIONS.md#page-workflow-draft--publish--versions)
 - **Pages (UI):** `Pages/Pages/`
+- **Page icons:** an emoji or an uploaded image stored as a `data:` URL. Render them only through `components/page/PageIcon.tsx` (`PageIcon`, `isImageIcon`), never as text (v1.41.2 fix; e2e `e2e/tests/page-icons.spec.ts`).
 - **Editors:** Editor.js / Tiptap / Lexical / Excalidraw — all in `resources/js/components/editor/`; content stored as JSON in `content`. Whiteboard pages use `excalidraw-editor.blade.php` (autosave, conflict banner, template picker, issues modal) + the `excalidraw-build/` bundle (`src/main.jsx` API, `src/templates.js`, `src/issueCards.js`); read-only canvas = `components/page/ExcalidrawViewMode.tsx`. See [`CONVENTIONS.md`](./CONVENTIONS.md#rich-text-editors--excalidraw).
+
+### Document review (v1.42.0, BRAI-80)
+Plan [`tasks/feat-document-review.md`](./tasks/feat-document-review.md). Ask colleagues to review a page's draft, comment inline, optionally require an approval before publishing.
+- **Models / tables** (migration `2026_10_31_130000_create_page_reviews_tables`): `PageReview` (`page_reviews`: immutable snapshot `snapshot_name` / `snapshot_content`, `content_hash`, `edit_revision`, status pending / approved / changes_requested / cancelled / superseded / published), `PageReviewReviewer` (`page_review_reviewers`, keeps `user_name` after a user is deleted), `PageComment` (`page_comments`: threads + replies, text-quote anchor `quote` / `quote_prefix` / `quote_suffix`, resolve / reopen); `pages.review_required`. `Page::reviews()`, `draftState()`, `draftHash()`.
+- **Support:** `app/Support/PageReviews/` — `PageReviews` (request / decide / cancel / lazy `recompute` / comment), `ReviewGate` (`publishing()` locks the page row for publish, `approved()`), `QuoteAnchor` (anchor matching; mirrored by `components/page-review/anchors.ts`), `ReviewNotifications`, `ReviewPresenter`.
+- **Policy:** `PageReviewPolicy` (registered) — view = can update the page OR active reviewer (the snapshot only, never `PagePolicy::view` on the draft).
+- **Controller / routes:** `PageReviewController` — `pages.reviews.candidates|store|show|decide|cancel|comments.store`, `pages.reviews.threads.update`, `pages.reviews.settings` (under `projects/{project}/pages/{page}` in `web.php`). Publish gating sits in `PageController::publish` / `publishChanges`.
+- **UI:** `Pages/Pages/Review.tsx` (snapshot + threads), `components/page-review/*` (`PageReviewBanner`, `RequestReviewDialog`, `ReviewSnapshot`, `ReviewThreads`, `ReviewStatusBadge`, `anchors.ts`); banner, "Request review", admin toggle and publish gating in `Pages/Pages/Show.tsx`.
+- **Notifications** (category `reviews`): `ReviewRequestedNotification`, `ReviewDecidedNotification`, `ReviewCommentedNotification`.
+- **Tests:** `tests/Feature/Pages/{PageReviewTest,PageReviewGateTest,PageReviewCommentsTest}.php`, e2e `e2e/tests/document-review.spec.ts`.
 
 ### Plans — Tom's Planner–style Gantt
 - **Models:** `Plan` (`slug`-bound, several per project; `data` = rows/bars/dependencies JSON, `settings` = zoom/columns, `edit_revision`, `share_token`; `saveDocument` / `restoreVersion` / `recordVersion`), `PlanVersion` (checkpoints)
@@ -152,9 +167,11 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Policy:** `BookmarkPolicy`
 - **Pages:** `Pages/Bookmarks/`
 
-### Calendar (Google Calendar + Google Tasks)
-- **Model:** `CalendarConnection` (per-user, OAuth via Socialite — *not* workspace-scoped)
-- **Controllers:** `CalendarController` (app view, reschedule), `CalendarConnectionController` (connect/redirect/callback, events & tasks CRUD)
+### Calendar (external calendars via providers, Google Tasks, ICS feed)
+- **Model:** `CalendarConnection` (per-user, *not* workspace-scoped; `provider`, `server_url`, `credentials` encrypted array + hidden, `sync_error` / `sync_error_at`; `upsertFor()`, `recordSyncError()` / `clearSyncError()`)
+- **Controllers:** `CalendarController` (app view, reschedule; events of every active connection as `type: 'external_event'`, prop `calendarProviders`), `CalendarConnectionController` (Google redirect/callback, provider-neutral picker + `store`, `manualStore` = `calendar.connections.manual.store` for form / url providers, events & tasks CRUD)
+- **Provider layer (v1.42.0, BRAI-140):** `app/Support/Calendar/` — `CalendarProvider` (interface; its docblock is the contract), `BaseCalendarProvider`, `CalendarProviders` registry (`PROVIDERS`, `for()`, `make()`, `writable()`, `catalog()`, `fake()`), `NormalizedEvent`, `EventInput`, `PendingConnection` (picker state in the session), `CalendarProviderException` → `CalendarReadOnly` / `CalendarSyncFailed`. Providers in `Providers/`: `GoogleCalendarProvider` (adapts `GoogleCalendarService`), `E2eCalendarProvider` (read-only `url` provider, only with `APP_ENV=e2e`). Google Tasks stay outside the contract. MCP calendar tools and `SendCalendarReminders` go through the registry. How to add a provider: [`tasks/feat-calendar-providers.md`](./tasks/feat-calendar-providers.md#how-to-add-a-provider-contract-for-the-outlook-and-caldav--ics-branches). Tests: `tests/Feature/Calendar/{GoogleCalendarProviderTest,CalendarProvidersTest,CalendarProviderDispatchTest,CalendarProviderToolsTest}.php` (+ `FakeCalendarProvider`), e2e `e2e/tests/calendar-providers.spec.ts`.
+- **Feed (v1.42.0, BRAI-142):** `CalendarFeed` (`calendar_feeds`: sha256 `token_hash` + encrypted `token`, `options`, `content_hash` / `content_changed_at`, `revoked_at`; one active per user), `CalendarFeedController` (`calendar-feed.show|store|update|reset|destroy` JSON; public stateless `calendar-feed.ics` = `/calendar/feed/{token}.ics`), `routes/calendar-feed.php`, `app/Support/CalendarFeed/{Ics,CalendarFeedBuilder}.php`, UI `components/calendar/CalendarFeedDialog.tsx` (toolbar "Subscribe"). Tests `tests/Unit/CalendarFeedIcsTest.php`, `tests/Feature/Calendar/CalendarFeedTest.php`, e2e `e2e/tests/calendar-feed.spec.ts`.
 - **Services:** `app/Services/GoogleCalendarService.php`, `app/Services/GoogleTasksService.php`
 - **Console:** `SendCalendarReminders.php` + `CalendarReminderNotification` (Google events/tasks, push-only);
   `SendItemReminders.php` + `ItemReminderNotification` (bell **+** push: board / task-list items
@@ -169,7 +186,7 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
 - **Routes:** `admin.*` in `web.php` (`/admin`, `users`, `workspaces`, `settings`, `audit-log`), middleware `auth`, `verified`, `instance.admin` (`EnsureInstanceAdmin`)
 - **Controllers:** `app/Http/Controllers/Admin/` — `OverviewController`, `UserController` (reset link / email, verify, suspend, admin role, create, delete), `WorkspaceController` (list, members, transfer, delete; route param `{managedWorkspace:id}`), `SettingsController` (sign-up, verification, SMTP + test email), `AuditLogController`
 - **Models / support:** `InstanceSettings` (singleton row; `allowsRegistration()`, `requiresEmailVerification()`, `mailSettings()` — SMTP password encrypted), `AdminAuditLog::record()`, `app/Support/Admin/UserDeletion` (guards + reassigns created content to the workspace owner before deleting), `InstanceMailConfig` (applies admin SMTP on `mail.manager` resolve + per queued job)
-- **Pages:** `Pages/Admin/{Overview,Users,Workspaces,Settings,AuditLog}.tsx`, shell `components/admin/AdminShell.tsx`; entry in the `AppLayout` user menu when `auth.isInstanceAdmin`
+- **Pages:** `Pages/Admin/{Overview,Users,Workspaces,Settings,AuditLog,GithubApp}.tsx` (GitHub App setup, v1.42.0 — see the GitHub App module), shell `components/admin/AdminShell.tsx`; entry in the `AppLayout` user menu when `auth.isInstanceAdmin`
 - **Metadata only:** names, emails, counts, dates. Never page / board / item content.
 - **Promote via CLI:** `php artisan make:instance-admin <email>` (also verifies the email)
 
@@ -191,7 +208,7 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
     timer`); board items only.
 - **Quick capture (BRAI-70):** private per-user inbox of ideas captured without a project. `Capture` model (`captures`: uuid route key, `text`, `url`, `intended_type`, `source`, `captured_at`, `archived_at`, `processed_at`, `target_type` + `target_id` + `target_location` snapshot), `CapturePolicy` (owner only, others 404), `CaptureInboxController` (`captures.*`: index with Inbox / Processed / Archived + search, store, update, archive / restore, destroy (archived only), `destinations` + `preview` JSON, `convert`). Domain: `app/Support/Captures/` — `ContentCapture` (the shared create path of the extension **and** the conversion: policy per destination type, rules, create), `CaptureDestinations` (writable targets, also `ext.destinations`), `CaptureFields` (preview fields per type), `CaptureConversion` (one transaction on the locked capture row: replay when processed, authorize, validate, create, mark processed), `CaptureAccess` (which created targets the owner can still open, from access sets loaded once — never live details of content they lost access to). Shared prop `captureInboxCount` (sidebar badge). UI: `components/captures/QuickCaptureDialog.tsx` (mounted in `AppLayout`; `openQuickCapture()`, shortcut **C** via `lib/captures.ts` `isCaptureShortcut`, `QuickCaptureFab` on phones), `components/captures/ConvertCaptureDialog.tsx`, `Pages/Captures/Index.tsx`. Tests: `tests/Feature/Captures/`, e2e `e2e/tests/quick-capture.spec.ts`.
 - **Search:** `SearchController` (invokable) → `/search` (workspaces, projects, boards, plans, issues, documents, snippets, bookmarks; optional `project` param ranks that project first)
-- **GitHub development panel (BRAI-61):** per-project webhook (`GithubConnection`, settings in `ProjectGithubController` → Projects/Edit "Integrations", `components/projects/GithubIntegrationCard.tsx`). `POST /api/webhooks/github/{uuid}` (`GithubWebhookController`: HMAC check, `GithubDelivery` dedupe) → `ProcessGithubDelivery` job → `Support/Github/DevelopmentSync` writes `ItemDevLink` rows (branch / commit / pull_request / deployment) for keys found by `IssueKeys`. Shown by `ItemDevelopment` in the item-details JSON and `components/item/DevelopmentPanel.tsx`.
+- **GitHub development panel (BRAI-61):** per-project webhook (`GithubConnection`, settings in `ProjectGithubController` → Projects/Edit "Integrations", `components/projects/GithubIntegrationCard.tsx`). `POST /api/webhooks/github/{uuid}` (`GithubWebhookController`: HMAC check, `GithubDelivery` dedupe) → `ProcessGithubDelivery` job → `Support/Github/DevelopmentSync` writes `ItemDevLink` rows (branch / commit / pull_request / deployment) for keys found by `IssueKeys`. Shown by `ItemDevelopment` in the item-details JSON and `components/item/DevelopmentPanel.tsx`. This is the legacy "manual webhooks" mode (`github_connections.mode = webhook`); the GitHub App mode (v1.42.0) is its own module below.
 - **Swimlanes (BRAI-87):** setup in `board.settings.swimlanes` (validated by `Support/Boards/Swimlanes`, saved via `BoardController@updateSwimlanes`), builder `components/board/SwimlaneSettings.tsx` on Boards/Edit, rules + grouping in `resources/js/lib/swimlanes.ts`, rendering `SwimlaneBoard` in Boards/Show (personal mode in localStorage `board-{id}-lane-mode`).
 - **Custom fields (BRAI-77):** `ItemField` (`item_fields`: project, name, type text/number/date/checkbox/select, `board_ids` null = all boards, position, `archived_at`), `ItemFieldOption` (archived, never deleted), `ItemFieldValue` (`item_field_values`: one typed column per type, unique item + field). Definitions: `ItemFieldController` (`projects.fields.*`, ProjectPolicy::update) → Projects/Edit "Fields" tab (`components/projects/ItemFieldsCard.tsx`). Values: `BoardController@updateItemFields` (`boards.items.fields.update`) → `Support/Boards/ItemFieldValues` (validation per type, writes, `field_changed` history, copy on duplicate). UI: `components/item/ItemFieldsSection.tsx` (issue sidebar), `components/board/CustomFieldFilters.tsx` (Filter popover), list-view columns + sorting in Boards/Show; pure helpers in `resources/js/lib/customFields.ts`. Cards carry `field_values`; `customFields` = `ItemField::forBoard()`.
 - **Saved views (BRAI-78):** `BoardView` (`board_views`: board, user, name, `is_shared`, `config` = `{version, params}`) + `board_view_defaults` (user + board → view). `config.params` are the board's own URL view params (`q`, `assignee`, `status`, `labels`, `priority`, `type`, `quick`, `sort`, `view`, `hide`, `f<id>`), allowlisted by `Support/Boards/BoardViewConfig::normalize()` and reduced to what still exists by `sanitize()` when opened. `BoardViewController` (`boards.views.*`; open = redirect to the board URL + `bv=<id>`, flash `warning` when parts were dropped), `BoardViewPolicy` (personal = owner only; shared = board viewers see, board `update` changes). `BoardController::show` applies the user's default view to the plain board URL in place (`appliedViewParams`, the page writes them into the URL; `bv=0` skips it) and sends the open view's params sanitized. UI: `components/board/SavedViewsMenu.tsx`; Boards/Show builds `currentViewParams` (list sort + hidden list columns are page state now).
@@ -208,6 +225,7 @@ Data spine: `Workspace → Project → {Board, Page, TaskList, Helpdesk}`, plus 
   `ItemObserver` / `TaskListItemObserver`, `ItemCommentNotifications`, `PageMentions` — called by
   `Page::saveDraft`, `SprintNotifications` — called by `SprintLifecycle`, `WorkspaceNotifications`),
   `Support/Boards/ItemMentions` (diffed), `TicketController::move` (`ticket_status_changed`). **Web push requires `VAPID_*` keys in `.env`** — without them the frontend can't subscribe and nothing is ever delivered (see [`KNOWLEDGE.md`](./KNOWLEDGE.md)).
+- **Star on GitHub (v1.42.0):** `App\Support\GithubStars` reads the open-source repo's star count from the cache only (refreshed hourly by the `github-stars` schedule in `routes/console.php`, or once after the response when empty; never in e2e), shared as the `githubRepo` prop (`{url, stars}`). Config `services.github.repository` / `show_stars` (env `GITHUB_REPOSITORY`, `GITHUB_STARS`). UI `components/GitHubStarButton.tsx` (AppLayout menu, Welcome). Starring itself happens on github.com. Test `tests/Feature/GithubStarsTest.php`.
 - **Files:** `FileController` — `/upload/image`, `/upload/document` (public disk, UUID names)
 
 ### AI integrations — MCP server & in-app AI
@@ -367,6 +385,44 @@ Plan [`tasks/feat-project-archive.md`](./tasks/feat-project-archive.md); format 
 - **Restore:** `ProjectArchiveImporter` (registry key `brainitive`, no target project, `ProjectPolicy::create`) → `ProjectArchiveReader` (SafeZip, manifest, version, every checksum, no unlisted files; modules decoded one at a time in the preview) → `ProjectArchiveRestorer` (everything via `ImportMappings::once`, refs remapped, `ArchiveContent::restore*` + `SafeHtml`). Preview UI `components/imports/sources/ArchivePreview.tsx`.
 - **Tests:** `tests/Feature/Imports/ProjectArchiveTest.php`, `e2e/tests/project-archive.spec.ts`.
 
+### Guest identities / portal sign-in (v1.42.0 foundation)
+Contract: [`tasks/release-v1.42.0.md`](./tasks/release-v1.42.0.md) → "Foundation". People outside the workspace, for the feedback and client portals.
+- **Models / tables** (migration `2026_10_31_100000_create_portal_identities_tables`): `PortalIdentity` (`portal_identities`: uuid, lower-case unique email, name, nullable unique `user_id`; Notifiable, mail only), `PortalLoginToken` (`portal_login_tokens`: sha256 `token_hash`, `return_to`, `expires_at`, `used_at`; pruned daily in `routes/console.php`).
+- **Support:** `App\Support\Portal\PortalAuth` — `current()` (a verified Brainitive user is always themselves, linked by email; else the guest from the session), `sendLink()` (30-min one-time link, 5 per address / 15 min, no enumeration), `safeReturnTo()` (only `/feedback/`, `/client/`), `shared()` (the `identity` prop).
+- **Middleware:** alias `portal.identity` (`App\Http\Middleware\EnsurePortalIdentity`) — identity on `$request->attributes->get('portalIdentity')`; pages redirect to sign-in, JSON → 401.
+- **Routes:** `routes/portal.php`, required from `web.php` **outside** the auth group: `guest.login`, `guest.login.store`, `guest.login.show` (confirm page — opening a link never spends it), `guest.login.consume`, `guest.logout` (`PortalLoginController`). The feedback and client portals' public routes live in the same file.
+- **UI:** `Layouts/PortalLayout.tsx`, `Pages/Portal/Login.tsx`; type `PortalIdentityData`.
+- **Tests:** `tests/Feature/Portal/PortalAuthTest.php`; e2e helper `e2e/helpers/portal.ts` (`newGuest()`, `portalSignIn()` follows the real mail).
+
+### Public feedback portal (v1.42.0, BRAI-60)
+Plan [`tasks/feat-feedback-portal.md`](./tasks/feat-feedback-portal.md). Per project, opt-in: visitors read approved ideas; signed-in identities submit, vote, follow; project admins moderate.
+- **Models / tables** (migration `2026_10_31_110000_create_feedback_portal_tables`): `FeedbackPortal` (one per project, public slug), `FeedbackPost` (number per portal, moderation pending / approved / rejected, public status open / planned / building / released / declined, cached `votes_count`, `merged_into_id`, `item_id`), `FeedbackVote` + `FeedbackSubscription` (unique per post + identity), `FeedbackEvent` (moderator audit); `feedback_status_mails` (mail dedup, no model).
+- **Support:** `app/Support/Feedback/` — `FeedbackVotes` (vote / unvote / follow: post row lock + `insertOrIgnore` + counter in one transaction), `FeedbackModeration` (approve, reject, status, merge, create / link card — locked, audited, idempotent), `FeedbackPresenter` (the ONLY public shape), `FeedbackNotifier` (after commit), `FeedbackText` (plain text only).
+- **Controllers / routes:** public `FeedbackPortalController` in `routes/portal.php` (`feedback.portal|roadmap|similar|post|posts.store|vote|unvote|follow|unfollow`, signed `feedback.unsubscribe(.store)`); team `FeedbackModerationController` in `routes/feedback.php` (`projects.feedback.*`, project admins = `ProjectPolicy::update`; no own policy).
+- **UI:** public `Pages/Feedback/{Index,Show,Roadmap,Unsubscribe}.tsx` in `PortalLayout`, team `Pages/Projects/Feedback.tsx`, shared bits `components/feedback/FeedbackBits.tsx`; quick link "Feedback" on the project page (admins).
+- **Notifications:** `FeedbackSubmittedNotification` (catalog, `feedback_submitted`), `FeedbackStatusChangedNotification` (mail-only to follower identities, once per post + status, signed unfollow link).
+- **Tests:** `tests/Feature/Feedback/{FeedbackPortalTest,FeedbackModerationTest}.php`, e2e `e2e/tests/feedback-portal.spec.ts`.
+
+### Client portal (v1.42.0, BRAI-73)
+Plan [`tasks/feat-client-portal.md`](./tasks/feat-client-portal.md). Clients see only what the team explicitly publishes and approve / request changes on that exact version.
+- **Models / tables** (migration `2026_10_31_120000_create_client_portal_tables`): `ClientPortal` (one per project, slug, off by default), `ClientPortalMember` (identity + `invited_by`, `expires_at`, `revoked_at`), `ClientDeliverable` (page version or plan snapshot, frozen `content`, `superseded_at` / `superseded_by_id`), `ClientDeliverableDecision` (identity, decision, note, version, time), `ClientDeliverableComment` (client, or team with `visibility` client / internal).
+- **Support:** `app/Support/ClientPortal/` — `ClientPortalAccess` (portal / membership / deliverable lookups and the 404 vs 403 rules), `Deliverables` (`publishPage` / `publishPlan` with supersede, `planSnapshot`, `withdraw`, `decide`, `clientComment` / `teamComment`, recipients), `DeliverableHtml` (published page version → cleaned HTML), `ClientPortalLinks`.
+- **Policy:** `ClientPortalPolicy` (viewAny / manage / publish), registered.
+- **Controllers / routes:** client side `ClientPortalController` in `routes/portal.php` (`client-portal.show|deliverable|download|decide|comments.store`, all `portal.identity`); team side `ClientPortalTeamController` in `routes/client-portal.php` (`client-portal.manage.*`).
+- **UI:** client `Pages/ClientPortal/{Index,Deliverable,Denied}.tsx`, team `Pages/Projects/{ClientPortal,ClientPortalDeliverable}.tsx`, `components/client-portal/ClientPortalBits.tsx`; quick link "Client portal" on the project page.
+- **Notifications:** `ClientDecisionNotification`, `ClientCommentedNotification` (catalog, publisher + project admins); `ClientPortalGuestNotification` (mail-only to clients: invited / published / replied).
+- **Tests:** `tests/Feature/ClientPortal/{ClientPortalAccessTest,ClientDeliverablesTest}.php`, e2e `e2e/tests/client-portal.spec.ts`.
+
+### GitHub App connect + merge transitions (v1.42.0, BRAI-61)
+Plan + self-hosting setup steps: [`tasks/feat-github-app.md`](./tasks/feat-github-app.md). "Connect GitHub" → GitHub's install screen → pick repositories. Legacy manual webhooks keep working (see the GitHub development panel above).
+- **Models / tables** (migration `2026_10_31_140000_create_github_app_tables`): `GithubApp` (one row, secrets encrypted; `GITHUB_APP_*` env overrides it), `GithubInstallation` (cached repositories, suspended / deleted), `GithubRepository` (`repo_id` unique → one project per repository), `GithubAppDelivery` (dedupe by `X-GitHub-Delivery`); `github_connections` + `mode`, `github_installation_id`, `allowed_repository_ids`, `access_lost_at`, `rate_limited_until`, `last_refreshed_at`; `item_dev_links.primary`.
+- **Support:** `app/Support/Github/` — `GithubAppConfig`, `GithubApi` (RS256 JWT via `openssl_sign` → cached encrypted installation token; `GithubRateLimited`, `GithubApiException`), `AppManifest` (manifest flow), `AppDeliveries` (route by installation + repository → `DevelopmentSync`), `ConnectionAccess`, `ConnectionRefresh`, `MergeTransitions`, `FakeGithub` (e2e, `GITHUB_APP_FAKE` only with `APP_ENV=e2e`). `ActivityLog::via('github', fn)` marks history made by the integration.
+- **Jobs:** `ProcessGithubAppDelivery`, `RefreshGithubConnection`. Notification `GithubSyncFailedNotification` (`github_sync_failed`, once per access loss).
+- **Controllers / routes:** `Admin\GithubAppController` (`admin.github-app.show|manifest|callback|destroy`), `GithubAppWebhookController` (`POST /api/webhooks/github-app`, `webhooks.github.app`, stateless HMAC), `ProjectGithubController` (`github.app.setup` callback + project `github/app/connect`, repositories, transitions, refresh, primary PR).
+- **UI:** `Pages/Admin/GithubApp.tsx` (+ AdminShell tab), `components/projects/GithubIntegrationCard.tsx` (connect, repositories, merge transitions per board, "Switch to the GitHub App"), `components/item/DevelopmentPanel.tsx` (primary PR).
+- **Merge transitions:** `boards.settings.github.merge_column_id` (off by default).
+- **Tests:** `tests/Feature/Github/GithubAppTest.php` (+ `GithubDevelopmentTest`), e2e `e2e/tests/github-app.spec.ts`.
+
 ### Sharing (read-only links)
 - **Docs and issues:** `ShareLink` (morph `shareable`: `Page` / `Item`, random token, `expires_at`, `revoked_at`, views), `ShareLinkController` — manage via `share-links.*` (needs `update` on the item), public view `/s/{token}` → `Pages/Share/Show.tsx` (`noindex`, 410 when revoked / expired / deleted). UI: `components/share/ShareButton.tsx`.
 - **Plans** keep their own `share_token` (`/share/plans/{token}`); bookmarks / snippets have `visibility = public`.
@@ -377,7 +433,7 @@ Plan [`tasks/feat-project-archive.md`](./tasks/feat-project-archive.md); format 
 |---|---|
 | `app.tsx` / `bootstrap.ts` | Inertia entry + Axios setup |
 | `Pages/` | One subdir per module (see rows above); each file = an Inertia page |
-| `Layouts/` | `AppLayout` (sidebar app shell), `GuestLayout` (auth) |
+| `Layouts/` | `AppLayout` (sidebar app shell), `GuestLayout` (auth), `PortalLayout` (guest portals: feedback, client) |
 | `components/` | Custom components; `components/ui/` = shadcn/ui; `components/editor/` = the 4 editors |
 | `Components/` | Legacy Breeze components (PascalCase dir) |
 | `hooks/`, `lib/` | Hooks; `lib/utils.ts` has `cn()`, plus `pageTree` helpers |
@@ -400,6 +456,8 @@ Plan [`tasks/feat-project-archive.md`](./tasks/feat-project-archive.md); format 
 | A server-side request to a user URL | `App\Support\OutboundUrl::options()` (public IPs only, pinned, no auto-redirects) |
 | Something webhooks should hear about | a name in `DomainEvents::EVENTS` + one `DomainEvents::emit()` at the hook point + a builder in `EventPayloads` + a case in `WebhookEventsTest` |
 | A new automation trigger / condition / action | `AutomationCatalog` (+ `EVENT_TRIGGERS` and `subject:` on the hook point's `emit()` for an event trigger) + `AutomationConditions::passes` / `AutomationActions::plan` + a case in `AutomationEngineTest` |
+| A calendar provider (Outlook, CalDAV, ICS…) | a class in `app/Support/Calendar/Providers/` + one line in `CalendarProviders::PROVIDERS` — recipe in [`tasks/feat-calendar-providers.md`](./tasks/feat-calendar-providers.md#how-to-add-a-provider-contract-for-the-outlook-and-caldav--ics-branches) |
+| A page for people outside the workspace | `routes/portal.php` under a `PortalAuth::RETURN_PREFIXES` path (never `/portal/*`), `portal.identity` + the portal's own access check, `PortalLayout` |
 | Rendering stored HTML | `safeHtmlProp()` (`resources/js/lib/sanitize.ts`); server: `App\Support\SafeHtml` |
 
 ## Testing

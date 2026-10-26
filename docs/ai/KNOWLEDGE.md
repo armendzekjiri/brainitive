@@ -27,7 +27,8 @@ page itself crashed with a 500 (fixed with BRAI-76, test in ErrorPagesTest).
 secret (encrypted column) is the only auth, checked with `hash_equals` over the raw body.
 Deployments are matched by window: what reached the deployed ref after the previous successful
 deploy to that environment (`github_connections.deployments`). Keep processing idempotent
-(upserts keyed by item+kind+repo+identifier) — GitHub redelivers.
+(upserts keyed by item+kind+repo+identifier) — GitHub redelivers. Since v1.42.0 this is the legacy
+mode; the GitHub App webhook is `/api/webhooks/github-app` (see "GitHub App vs manual webhooks").
 
 ### E2E suite (Playwright, BRAI-96): how it works and the traps it found
 Details in `e2e/README.md`; this lists what isn't obvious.
@@ -633,6 +634,110 @@ php artisan tinker --execute="\App\Models\User::where('email','...')->update(['e
 - **Download security:** temporary signed *relative* URL (proxies), plus the exporter's session, plus an
   unexpired row with a file. An expired notification link redirects to the settings with a message.
   Files go after 24 h (`exports:cleanup`; dev has no scheduler, so a new export also cleans up).
+
+### Guest identities: not members, and never under `/portal` (v1.42.0)
+Contract: [`tasks/release-v1.42.0.md`](./tasks/release-v1.42.0.md) → "Foundation".
+- **A `PortalIdentity` is an email, not a member.** It gets no workspace / project access and no policy
+  passes for it. A verified Brainitive user is always their own identity (linked by email), so team
+  members can use portals without a second sign-in.
+- **`portal.identity` only proves "this email is theirs".** Every portal checks its own access on top
+  (portal enabled, post visible, active client membership, …). Signing in is open to any email.
+- **Prefixes:** guest sign-in is `/guest/*`; portal pages live under `PortalAuth::RETURN_PREFIXES`
+  (`/feedback/`, `/client/`) or the sign-in link can't return to them. **Never `/portal/*`** — that is
+  the stateless, CSRF-exempt helpdesk ticket portal.
+- Opening a sign-in link shows a confirm page; only the POST spends the token (mail scanners open links).
+- Mails to guests are plain mail-only `Notification`s outside `NotificationCatalog` (guests have no
+  preferences), like `TicketContact` mail.
+
+### Feedback portal: public shape, votes, merges (v1.42.0, BRAI-60)
+- **The public side only sees `FeedbackPresenter` output** — never the linked card, author emails,
+  moderation data or internal ids. Text is plain (`FeedbackText`); no HTML is stored.
+- Disabled / unknown portal → 404. Pending posts are visible only to their author.
+- **Votes count once:** unique (post, identity) + `insertOrIgnore` + `votes_count` changed in the same
+  transaction under a post row lock — so votes and a merge of the same post serialize, no deadlock.
+- **Merge** unions votes and followers without double counting; the old URL 301s to the target only if
+  it was public. Create card / link card are idempotent; link card = same project only.
+- A status change mails each follower once per post + status (`feedback_status_mails`); the unfollow
+  link is a signed URL that works without signing in.
+
+### Client portal: frozen deliverables, 404 vs 403 (v1.42.0, BRAI-73)
+- **Deliverables are frozen at publish** (`client_deliverables.content`): a published page version run
+  through `DeliverableHtml` (internal links / mentions → plain text, stickies and whiteboard embeds
+  dropped, `SafeHtml`), or a plan snapshot without hidden columns and `itemId`. Never drafts, never live
+  content — later edits reach the client only by publishing again.
+- **Approvals never carry over:** publishing the same page / plan again supersedes the current
+  deliverable (its decision stays as history; the new one awaits review). Decisions on superseded /
+  withdrawn deliverables are refused under a row lock (no race with a new publish).
+- **404 vs 403:** unknown / disabled portal, another portal's ids, a withdrawn deliverable and a
+  signed-in but **never invited** identity → 404 (signing in is open to anyone, so "not invited" must not
+  confirm the portal exists to strangers). Revoked / expired membership → 403 (`ClientPortal/Denied`).
+- Team comments reach the client only via "Reply to client" (`visibility = client`); internal notes stay
+  internal.
+
+### Document review: snapshots, anchors and the publish gate (v1.42.0, BRAI-80)
+Plan: [`tasks/feat-document-review.md`](./tasks/feat-document-review.md).
+- **Reviewers see the snapshot through the review** (`PageReviewPolicy`), not the draft — they get no
+  `PagePolicy::view` on an unpublished page.
+- **Stale is computed, never stored:** `review.content_hash !== $page->draftHash()`. The hash covers
+  name + icon + content but **excludes `excalidrawEmbeds`** (embedded scenes change without the text
+  changing; snapshots don't copy them either).
+- Status is recomputed lazily on every read / decision / publish check, so a reviewer who lost project
+  access drops out without hooks; a deleted user keeps `user_name` on the history.
+- **Quote anchors live twice and must stay in sync:** `App\Support\PageReviews\QuoteAnchor` (PHP) and
+  `components/page-review/anchors.ts`. 0 matches → outdated; several → the one whose prefix and suffix
+  match, else outdated — never attach a thread to the wrong text. Saved page HTML never changes.
+- **`ReviewGate` publishing rule:** with `pages.review_required`, publish / publish changes run in a
+  transaction that locks the page row, re-reads it, applies the pending editor changes, and refuse unless
+  an approved, open review has the current draft hash. Requests / decisions / cancels lock the same row.
+  Side doors are closed too: MCP `update-page`, restoring a version, `PageController::update` name / icon
+  (go to the draft), `saveExcalidraw` on non-whiteboards. Any new path that changes a published
+  review-required page must go through the gate.
+
+### GitHub App vs manual webhooks (v1.42.0, BRAI-61)
+Plan + production setup: [`tasks/feat-github-app.md`](./tasks/feat-github-app.md).
+- **Two modes.** Manual webhooks (`/api/webhooks/github/{uuid}`, per-project secret, `mode = webhook`)
+  vs the GitHub App (`/api/webhooks/github-app`, app secret, routed by installation + repository id;
+  `github_repositories.repo_id` unique = one project per repository). Each instance (prod, dev, every
+  self-hosted one) needs its own app — the URLs differ.
+- **Installation access check:** the setup state lives in the session (project + user); ownership is
+  proven by OAuth during install + `GET /user/installations`. GitHub lists an installation for anyone who
+  can read ONE of its repositories, so a project may only follow repositories the connecting person can
+  read (`GET /user/installations/{id}/repositories` → `github_connections.allowed_repository_ids`).
+- The GitHub App is separate from GitHub social login (`services.github`) — never widen login scopes.
+  Installation tokens are cached encrypted (`github-app:installation-token:*`), never shown.
+- **Merge transitions don't notify watchers.** The move is a model save (history via `ItemObserver`
+  marked `ActivityLog::via('github')`, outgoing webhooks, automations), but `item_status_changed` to
+  watchers is sent by `BoardController::move`, which the integration doesn't call. Each merged PR moves
+  the card at most once (`meta.merge_transition`), never out of a done column.
+
+### Calendar providers: normalized events, read-only calendars (v1.42.0, BRAI-140)
+Recipe: [`tasks/feat-calendar-providers.md`](./tasks/feat-calendar-providers.md) → "How to add a provider".
+- **`NormalizedEvent` all-day `end_date` is INCLUSIVE.** iCal `DTEND;VALUE=DATE` and Graph all-day
+  `end` are exclusive → pass end − 1 day. MCP `list_calendar_events` also returns the inclusive last day.
+- **Read-only providers / calendars:** writes go through `CalendarProviders::writable()`; a read-only
+  connection throws `CalendarReadOnly` (422 / "This calendar is read-only." in MCP). Per-calendar
+  read-only = `credentials.read_only` from the picker. The UI never lets read-only events be dragged.
+- A failing provider throws `CalendarSyncFailed` (never returns `[]`); the page stays 200 and shows
+  `sync_error`. Only Google deactivates a connection on a failed token refresh — others must not.
+- Save rotated tokens / `credentials` with `forceFill()->save()` (a query-builder update bypasses the
+  `encrypted` cast). User-supplied URLs (CalDAV, ICS) go through `OutboundUrl::options()`.
+
+### Calendar feed: stateless, deterministic, throttled per feed (v1.42.0, BRAI-142)
+- `/calendar/feed/{token}.ics` is in `web.php` but excludes the session / cookie / CSRF / Inertia
+  middleware with `withoutMiddleware` (no `Set-Cookie`; calendar apps send none). Use the same pattern
+  for any public route that must not touch the session.
+- **Throttle:** per IP is loose (`throttle:600,1`) because Google / Outlook fetch every subscriber from a
+  few shared IPs; the real cap is per feed (`CalendarFeedController::FETCHES_PER_MINUTE` = 30, keyed on
+  the feed id), which also limits a leaked token.
+- **Bodies must stay deterministic** (`DTSTAMP` = `updated_at`, never `now()`), or the ETag changes on
+  every fetch and apps re-download everything. `Last-Modified` = `content_changed_at`, so removals and
+  lost access count as changes. Google ignores the ICS `URL` property — the link is the last line of
+  `DESCRIPTION`.
+
+### Page icons are images too (v1.41.2)
+An uploaded page icon is stored as a long `data:` URL. Always render page icons through
+`components/page/PageIcon.tsx` (`PageIcon` / `isImageIcon`), never as `{page.icon}` text — the workspace
+home and project page printed the base64 across the layout (e2e `page-icons.spec.ts`).
 
 ## Architectural decisions
 
