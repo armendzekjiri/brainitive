@@ -1126,6 +1126,9 @@ export interface CalendarEvent {
     read_only?: boolean;
     all_day?: boolean;
     location?: string | null;
+    /** External events: the event's video call (https), if it has one (BRAI-147). */
+    conference_url?: string | null;
+    conference_provider?: ConferenceProvider | null;
 }
 
 /** One entry of an item's history (activity_logs), see App\Observers\ItemObserver. */
@@ -2562,6 +2565,9 @@ export interface NormalizedCalendarEvent {
     end_time: string | null;
     timezone: string | null;
     external_url: string | null;
+    /** Only present when the event has a video call (BRAI-147). */
+    conference_url?: string;
+    conference_provider?: ConferenceProvider;
 }
 
 /** The picker after connecting (calendar.connections.pending). */
@@ -2572,4 +2578,59 @@ export interface CalendarPickerData {
     account_name: string | null;
     calendars: { id: string; name: string; color: string | null; primary: boolean; read_only: boolean }[];
     task_lists: { id: string; title: string }[];
+}
+
+// ── Online meetings from issues, docs and the calendar (v1.42.0, BRAI-147) ─────────
+
+export type ConferenceProvider = 'google_meet' | 'teams' | 'other';
+
+/** A calendar the user can schedule a meeting in (meetings.options / calendar.meetings.calendars). */
+export interface MeetingCalendar {
+    id: number;
+    provider: string;
+    provider_label: string;
+    name: string;
+    account_email: string;
+    color: string | null;
+    /** Video calls this calendar can add ([] = none, e.g. Teams on a personal Microsoft account). */
+    conference_providers: Exclude<ConferenceProvider, 'other'>[];
+}
+
+export interface MeetingOptions {
+    calendars: MeetingCalendar[];
+    /** Project members (never their emails: the server resolves them). */
+    members: { id: number; name: string; avatar: string | null }[];
+    timezone: string;
+    connect_url: string;
+    max_attendees: number;
+}
+
+/** What a meeting is attached to: an issue (numeric id) or a doc (uuid). */
+export interface MeetingSubject {
+    type: 'item' | 'page';
+    id: string;
+    title: string;
+    /** Absolute link back to the issue / doc (prefilled into the description). */
+    url: string;
+}
+
+export interface Meeting {
+    id: number;
+    title: string;
+    starts_at: string;
+    ends_at: string;
+    timezone: string;
+    conference_provider: ConferenceProvider | null;
+    conference_label: string | null;
+    join_url: string | null;
+    event_url: string | null;
+    provider: string;
+    provider_label: string;
+    /** Emails only for the organiser. */
+    attendees: { name: string | null; email: string | null }[];
+    organizer: { id: number; name: string } | null;
+    notes_page: { uuid: string; name: string; url: string } | null;
+    can_remove: boolean;
+    can_cancel: boolean;
+    can_create_notes: boolean;
 }

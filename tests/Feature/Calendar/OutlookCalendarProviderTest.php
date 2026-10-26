@@ -69,7 +69,7 @@ class OutlookCalendarProviderTest extends TestCase
             'connect_mode' => 'oauth',
             'redirect_url' => route('calendar.connections.outlook.redirect'),
             'fields' => [],
-            'capabilities' => ['write' => true, 'tasks' => false],
+            'capabilities' => ['write' => true, 'tasks' => false, 'conferencing' => true],
         ], $catalog['outlook']);
         $this->assertSame(['google', 'outlook'], array_slice(array_keys(CalendarProviders::PROVIDERS), 0, 2));
         $this->assertInstanceOf(OutlookCalendarProvider::class, CalendarProviders::for($this->connection));

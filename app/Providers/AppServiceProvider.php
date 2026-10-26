@@ -11,6 +11,7 @@ use App\Models\ClientPortal;
 use App\Models\InstanceSettings;
 use App\Models\Item;
 use App\Models\LeadForm;
+use App\Models\Meeting;
 use App\Models\Page;
 use App\Models\PageReview;
 use App\Models\Project;
@@ -30,6 +31,7 @@ use App\Policies\CapturePolicy;
 use App\Policies\ClientPortalPolicy;
 use App\Policies\ItemPolicy;
 use App\Policies\LeadFormPolicy;
+use App\Policies\MeetingPolicy;
 use App\Policies\PagePolicy;
 use App\Policies\PageReviewPolicy;
 use App\Policies\ProjectHealthReportPolicy;
@@ -142,6 +144,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(ProjectHealthReport::class, ProjectHealthReportPolicy::class);
         Gate::policy(WorkloadAllocation::class, WorkloadPolicy::class);
         Gate::policy(ClientPortal::class, ClientPortalPolicy::class); // client portal, team side (v1.42.0, BRAI-73)
+        Gate::policy(Meeting::class, MeetingPolicy::class); // online meetings (v1.42.0, BRAI-147)
         // client billing (v1.38.0): workspace admins only
         Gate::define('manageBilling', [BillingPolicy::class, 'manageBilling']);
 

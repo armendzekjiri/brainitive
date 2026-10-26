@@ -20,7 +20,7 @@ final class NormalizedEvent
      * A timed event from two instants. With $timezone the wall-clock times are converted to
      * it; without, they stay in the instants' own zone (reported as `timezone`).
      *
-     * @param  array{description?: string|null, location?: string|null, external_url?: string|null}  $extra
+     * @param  array{description?: string|null, location?: string|null, external_url?: string|null, conference_url?: string|null, conference_provider?: string|null}  $extra
      */
     public static function timed(string $id, ?string $title, CarbonInterface $start, CarbonInterface $end, ?string $timezone = null, array $extra = []): array
     {
@@ -45,7 +45,7 @@ final class NormalizedEvent
      * An all-day event. $endDateInclusive is the last day it covers (for iCal / Google
      * exclusive ends, pass the end date minus one day). An end before the start is clamped.
      *
-     * @param  array{description?: string|null, location?: string|null, external_url?: string|null}  $extra
+     * @param  array{description?: string|null, location?: string|null, external_url?: string|null, conference_url?: string|null, conference_provider?: string|null}  $extra
      */
     public static function allDay(string $id, ?string $title, string $startDate, ?string $endDateInclusive = null, array $extra = []): array
     {
@@ -83,7 +83,29 @@ final class NormalizedEvent
         $url = is_string($out['external_url']) ? $out['external_url'] : '';
         $out['external_url'] = in_array(strtolower((string) parse_url($url, PHP_URL_SCHEME)), ['http', 'https'], true) ? $url : null;
 
+        // Optional (BRAI-147): the event's video call, only when it has one with an https link.
+        $join = self::conferenceUrl($event['conference_url'] ?? null);
+        if ($join !== null) {
+            $kind = $event['conference_provider'] ?? null;
+            $out['conference_url'] = $join;
+            $out['conference_provider'] = in_array($kind, self::CONFERENCE_PROVIDERS, true) ? $kind : 'other';
+        }
+
         return $out;
+    }
+
+    /** Values of the optional `conference_provider` key. */
+    public const CONFERENCE_PROVIDERS = ['google_meet', 'teams', 'other'];
+
+    /** An https join link (≤ 2048 chars, with a host), else null — it becomes an href. */
+    public static function conferenceUrl(mixed $url): ?string
+    {
+        if (! is_string($url) || strlen($url) > 2048 || preg_match('/\s/', $url)) {
+            return null;
+        }
+        $parts = parse_url($url);
+
+        return is_array($parts) && strtolower($parts['scheme'] ?? '') === 'https' && ! empty($parts['host']) && ! isset($parts['user']) ? $url : null;
     }
 
     /** The instant the event starts (timed events), or null for all-day events. */

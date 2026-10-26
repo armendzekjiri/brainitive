@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\CalendarConnection;
+use App\Models\Meeting;
 use App\Services\GoogleTasksService;
 use App\Support\Calendar\CalendarProviderException;
 use App\Support\Calendar\CalendarProviders;
 use App\Support\Calendar\PendingConnection;
+use App\Support\Meetings\MeetingCalendars;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -410,9 +412,21 @@ class CalendarConnectionController extends Controller
             'description' => 'nullable|string|max:5000',
             'location' => 'nullable|string|max:500',
             'timezone' => 'nullable|string|max:64',
+            // Online meeting + guests (BRAI-147): only kinds this calendar allows
+            'conference' => 'nullable|in:google_meet,teams',
+            'attendees' => 'nullable|array|max:'.Meeting::MAX_ATTENDEES,
+            'attendees.*' => 'string|max:254|email:rfc',
         ]);
 
-        CalendarProviders::writable($connection)->createEvent($connection, [
+        $provider = CalendarProviders::writable($connection);
+        $conference = $validated['conference'] ?? null;
+        if ($conference !== null && ! in_array($conference, MeetingCalendars::conferenceProviders($connection), true)) {
+            throw ValidationException::withMessages(['calendar' => $conference === 'teams'
+                ? 'Teams isn’t available for this account.'
+                : 'Google Meet isn’t available for this calendar.']);
+        }
+
+        $provider->createEvent($connection, [
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
             'location' => $validated['location'] ?? null,
@@ -421,7 +435,10 @@ class CalendarConnectionController extends Controller
             'end_date' => $validated['end_date'] ?? null,
             'end_time' => $validated['end_time'] ?? null,
             'timezone' => $validated['timezone'] ?? null,
-        ]);
+        ] + array_filter([
+            'conference' => $conference,
+            'attendees' => array_map(fn (string $email) => ['email' => trim($email), 'name' => null], $validated['attendees'] ?? []),
+        ]));
 
         return back();
     }

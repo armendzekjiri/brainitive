@@ -112,6 +112,8 @@ import {
 } from '@/components/ui/select';
 import ShareButton from '@/components/share/ShareButton';
 import ExtractActionItemsDialog from '@/components/meetingNotes/ExtractActionItemsDialog';
+import SubjectMeetings from '@/components/meetings/SubjectMeetings';
+import { Video } from 'lucide-react';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -690,6 +692,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
     const [changeNoteDialogOpen, setChangeNoteDialogOpen] = useState(false);
     // ?history=1 comes from the whiteboard editor's History button
     const [actionItemsOpen, setActionItemsOpen] = useState(false);
+    const [meetingOpen, setMeetingOpen] = useState(false); // "Schedule meeting" (BRAI-147)
     const [historyOpen, setHistoryOpen] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('history') === '1');
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
@@ -1362,6 +1365,12 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
                                                 Extract action items
                                             </DropdownMenuItem>
                                         )}
+                                        {page.type === 'page' && can.update && (
+                                            <DropdownMenuItem onClick={() => setMeetingOpen(true)}>
+                                                <Video className="size-4 mr-2" />
+                                                Schedule meeting
+                                            </DropdownMenuItem>
+                                        )}
                                         {can.create && (
                                             <DropdownMenuItem onClick={triggerDuplicate}>
                                                 <Files className="size-4 mr-2" />
@@ -1523,6 +1532,17 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
                                         </>
                                     )}
                                 </div>
+                                {/* Online meetings of this doc (BRAI-147) */}
+                                {page.type === 'page' && (
+                                    <SubjectMeetings
+                                        variant="strip"
+                                        workspace={workspace}
+                                        project={project}
+                                        subject={{ type: 'page', id: page.uuid, title: page.name || 'Untitled', url: route('pages.show', [workspace.slug, project.slug, page.uuid]) }}
+                                        scheduleOpen={meetingOpen}
+                                        onScheduleOpenChange={setMeetingOpen}
+                                    />
+                                )}
                             </div>
 
                             {/* Whiteboard page: embedded view-mode canvas + open editor button */}

@@ -20,6 +20,7 @@ use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\ItemFieldController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LeadFormController;
+use App\Http\Controllers\MeetingController;
 use App\Http\Controllers\MeetingNotesController;
 use App\Http\Controllers\MyDayController;
 use App\Http\Controllers\MyWorkController;
@@ -210,6 +211,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar.index');
     Route::patch('/calendar/view', [CalendarController::class, 'updateView'])->name('calendar.view.update');
     Route::patch('/calendar/reschedule', [CalendarController::class, 'reschedule'])->name('calendar.reschedule');
+    // Calendars that can add a Google Meet / Teams call, for quick create (BRAI-147)
+    Route::get('/calendar/meeting-calendars', [MeetingController::class, 'calendars'])
+        ->middleware(ReadOnlySession::class)->name('calendar.meetings.calendars');
 
     // Calendar connections (external providers through App\Support\Calendar\CalendarProviders)
     Route::prefix('calendar/connections')->controller(CalendarConnectionController::class)->group(function () {
@@ -341,6 +345,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         });
         // Feedback portal moderation (v1.42.0, BRAI-60) — the public side is in portal.php
         Route::prefix('projects/{project:slug}')->scopeBindings()->group(fn () => require __DIR__.'/feedback.php');
+        // Online meetings from issues and docs (v1.42.0, BRAI-147)
+        Route::prefix('projects/{project:slug}')->scopeBindings()->group(fn () => require __DIR__.'/meetings.php');
 
         // Project members (assign workspace users to project with role)
         Route::prefix('projects/{project:slug}')->scopeBindings()->group(function () {

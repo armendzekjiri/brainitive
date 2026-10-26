@@ -52,6 +52,60 @@ abstract class BaseCalendarProvider implements CalendarProvider
         return $this->capabilities()['write'] && empty(((array) $connection->credentials)['read_only']);
     }
 
+    /** No conferencing unless the provider says so (BRAI-147). */
+    public function conferenceProviders(CalendarConnection $connection): array
+    {
+        return [];
+    }
+
+    /**
+     * The `conference` kind a createEvent() call asks for (null = none), refused unless this
+     * calendar allows it.
+     *
+     * @param  array<string, mixed>  $data
+     *
+     * @throws CalendarSyncFailed
+     */
+    protected function requestedConference(CalendarConnection $connection, array $data): ?string
+    {
+        $kind = $data['conference'] ?? null;
+        if ($kind === null || $kind === '' || $kind === 'none') {
+            return null;
+        }
+        if (! in_array($kind, $this->conferenceProviders($connection), true)) {
+            throw new CalendarSyncFailed($kind === 'teams'
+                ? 'Teams isn’t available for this calendar.'
+                : 'This calendar can’t add a video call.');
+        }
+
+        return (string) $kind;
+    }
+
+    /**
+     * The `attendees` of a createEvent() call: valid, de-duplicated emails with optional names.
+     *
+     * @param  array<string, mixed>  $data
+     * @return list<array{email: string, name: string|null}>
+     */
+    protected function requestedAttendees(array $data): array
+    {
+        $out = [];
+        foreach ((array) ($data['attendees'] ?? []) as $attendee) {
+            $email = is_array($attendee) ? ($attendee['email'] ?? null) : $attendee;
+            if (! is_string($email) || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+                continue;
+            }
+            $key = mb_strtolower($email);
+            if (isset($out[$key])) {
+                continue;
+            }
+            $name = is_array($attendee) && is_string($attendee['name'] ?? null) && trim($attendee['name']) !== '' ? trim($attendee['name']) : null;
+            $out[$key] = ['email' => $email, 'name' => $name];
+        }
+
+        return array_values($out);
+    }
+
     public function connectWithForm(User $user, array $input): array|PendingConnection
     {
         throw new CalendarSyncFailed($this->label().' is connected through its sign-in page.');
