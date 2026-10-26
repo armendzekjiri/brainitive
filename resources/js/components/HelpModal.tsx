@@ -83,12 +83,15 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
-        version: 'v1.42.1',
-        title: 'Meetings one click away on every issue',
-        tag: 'Improvement',
-        date: '2026-10-26',
+        version: 'v1.43.0',
+        title: 'Find anything, write together, work offline',
+        tag: 'Feature',
+        date: '2026-10-27',
         items: [
-            'Issues: a "Meeting" button next to Attach, Create subtask and Link issue schedules a Google Meet or Microsoft Teams meeting for the issue right away — whichever your connected calendar offers.',
+            'Find anything: a real search page (/search) and ⌘K results across issues, docs, comments, tickets, tasks, plans, snippets, bookmarks, your captures and file names — ranked, typo tolerant, with "phrases", -exclusions, issue keys, highlights and filters by type, project, status, assignee and date. Runs inside the database; the index builds itself after the update.',
+            'Write together: several people edit the same document at once — everyone\'s cursor with their name, changes appear instantly. Documents keep working offline and sync when you\'re back; if live editing isn\'t reachable you simply edit alone as before. Draft, publish and review stay as they are.',
+            'Offline mode (Profile → Offline, per device): My Day, task lists, issues and quick capture keep working without internet and sync when you\'re back online. If someone else changed the same thing meanwhile, you choose: keep mine, keep theirs or keep both.',
+            'Issues: a "Meeting" button next to Attach, Create subtask and Link issue schedules a Google Meet or Microsoft Teams meeting for the issue right away.',
         ]
     },
     {
