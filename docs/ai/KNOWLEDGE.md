@@ -524,6 +524,34 @@ php artisan tinker --execute="\App\Models\User::where('email','...')->update(['e
   scheduler. Keep `lib/sla.ts` and `TicketSla` in sync. e2e triggers the checker through
   `helpdesks.sla.e2e-check`, which only exists with `APP_ENV=e2e`, so that journey is skipped on dev.
 
+### Trello import: what maps to what (v1.41.0, BRAI-65)
+- **Always a new Kanban board.** `Board::created` adds To Do / In Progress / Done; the importer deletes
+  them in the same transaction and creates one column per **open** list, in list order. Archived lists
+  never become columns; their cards count as archived. Done column: the last open list named "done" /
+  "complete(d)" / "finished" (also "erledigt", "fertig"), else the last open list; the user can change it.
+- **Archived cards** (card closed, or on an archived list) are skipped by default, else they go to the done
+  column. Cards in the done column get `completed_at`.
+- **Order and keys:** cards sorted by list position, then card `pos`; keys come from `getNextItemKey()` in that
+  order. `position` per column and `backlog_position` are derived from that order, so a resumed run writes
+  the same values.
+- **People:** auto-suggested only by email (Trello rarely exports emails); otherwise the user maps each
+  member in the preview. The first mapped member becomes the assignee, the others are named in the
+  description ("Also on this card in Trello: …"). Option values pass `ProjectMember`; `run()` filters them
+  against the current project members again.
+- **Descriptions:** `PageContentConverter::markdownToHtml()` (bare URLs become links first) → `SafeHtml`.
+  Checklists are appended **after** sanitizing, as Lexical check lists built from escaped text
+  (`<li role="checkbox" aria-checked>`): `SafeHtml` strips `aria-checked`, and the issue view toggles by it.
+  Attachment links (http/https only) are added only when the user asks; files are never downloaded.
+- **Subtasks mode:** each checklist item → a subtask (type `subtask`, done items in the done column,
+  "Checklist: item" titles when a card has several checklists); cards with more than 50 items keep a
+  check list instead.
+- **Labels:** only labels the imported cards use. Matched to project labels by name (case-insensitive) or
+  slug, otherwise created with Trello's colour as hex; unnamed Trello labels are named after their colour.
+- **Not imported (counted in the report):** comments (Trello's JSON export only holds the newest 1 000
+  actions anyway), custom field values, attachments, power-ups.
+- **Memory:** a 50 MB JSON file decodes to several hundred MB of PHP arrays, so `TrelloExport` raises
+  `memory_limit` (up to 1 GB, never lowers it) before decoding.
+
 ## Architectural decisions
 
 ### Inline validation over FormRequest classes
