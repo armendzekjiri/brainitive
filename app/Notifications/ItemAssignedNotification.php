@@ -17,7 +17,15 @@ class ItemAssignedNotification extends Notification
     public function __construct(
         public readonly Item $item,
         public readonly User $actor,
+        /** the automation rule that assigned (v1.41.2), shown instead of the person it acts as */
+        public readonly ?string $automation = null,
     ) {}
+
+    /** Who did it, as the text says it. */
+    private function by(): string
+    {
+        return $this->automation !== null ? "Automation “{$this->automation}”" : $this->actor->name;
+    }
 
     /**
      * Get the notification's delivery channels.
@@ -37,7 +45,7 @@ class ItemAssignedNotification extends Notification
             : '/';
 
         return $this->webPush(
-            "{$this->actor->name} assigned you an item",
+            "{$this->by()} assigned you an item",
             "{$this->item->key} · {$this->item->title}",
             $url,
         );
@@ -66,7 +74,7 @@ class ItemAssignedNotification extends Notification
             'item_key' => $this->item->key,
             'item_title' => $this->item->title,
             'item_url' => $url,
-            'actor_name' => $this->actor->name,
+            'actor_name' => $this->by(),
             'actor_avatar' => $this->actor->avatar_display,
         ];
     }
@@ -76,8 +84,8 @@ class ItemAssignedNotification extends Notification
         $title = NewLeadNotification::plain((string) $this->item->title);
 
         return (new MailMessage)
-            ->subject("{$this->actor->name} assigned you to {$this->item->key}: {$title}")
-            ->line("{$this->actor->name} assigned you to {$this->item->key}.")
+            ->subject("{$this->by()} assigned you to {$this->item->key}: {$title}")
+            ->line("{$this->by()} assigned you to {$this->item->key}.")
             ->line($title)
             ->action('Open issue', $this->toDatabase($notifiable)['item_url']);
     }

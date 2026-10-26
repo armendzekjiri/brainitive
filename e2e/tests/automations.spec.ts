@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test, uid, urls } from '../fixtures';
 import { createCard } from '../helpers/boards';
+import { expectNotification } from '../helpers/notifications';
 
 /**
  * BRAI-63 workflow automation: a project admin builds a rule in the WHEN / IF / THEN form, tests it,
@@ -102,4 +103,38 @@ test('validation errors show in the builder, and members cannot open automations
     await expect(memberPage.getByRole('link', { name: 'Open automations' })).toHaveCount(0);
     const response = await memberPage.goto(automationsUrl());
     expect(response?.status()).toBe(403);
+});
+
+test('a rule that assigns its own author still notifies them, as the automation (v1.41.2)', async ({ page }) => {
+    const token = uid('self');
+    const ruleName = `Assign me ${token}`;
+    const title = `Mine ${token}`;
+
+    await page.goto(`${automationsUrl()}/create`);
+    await page.getByLabel('Rule name').fill(ruleName);
+    await page.getByLabel('When', { exact: true }).selectOption({ label: 'Issue created' });
+    await page.getByRole('button', { name: 'Add condition' }).click();
+    await page.getByLabel('Condition 1', { exact: true }).selectOption({ label: 'Title contains' });
+    await page.getByLabel('Condition 1 value').fill(token);
+    await page.getByRole('button', { name: 'Add action' }).click();
+    await page.getByLabel('Action 1', { exact: true }).selectOption({ label: 'Assign to' });
+    await page.getByLabel('Action 1 value').selectOption({ label: 'Erin Owner' });
+    await page.getByRole('button', { name: 'Save rule' }).click();
+    await expect(page).toHaveURL(/\/automations\/\d+$/);
+    await page.getByRole('link', { name: 'Automations', exact: true }).click();
+    await page.getByRole('switch', { name: `${ruleName} on` }).click();
+    await expect(page.getByText(`"${ruleName}" is on.`).first()).toBeVisible();
+
+    await page.goto(urls.board());
+    await createCard(page, title);
+
+    const n = await expectNotification(page, (x) => x.type === 'item_assigned' && (x as { item_title?: string }).item_title === title, 'assigned by the automation');
+    expect(n.actor_name).toBe(`Automation “${ruleName}”`);
+
+    // clean up
+    await page.goto(automationsUrl());
+    await page.getByRole('link', { name: ruleName }).click();
+    await page.getByRole('button', { name: 'Delete rule' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(page).toHaveURL(/\/automations$/);
 });

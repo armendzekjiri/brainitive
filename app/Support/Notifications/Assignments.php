@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Notifications\ItemAssignedNotification;
 use App\Notifications\LeadAssignedNotification;
 use App\Notifications\TaskAssignedNotification;
+use App\Support\Automation\AutomationRunner;
 use App\Support\Imports\ImportScope;
 use Illuminate\Support\Facades\DB;
 
@@ -32,15 +33,17 @@ class Assignments
         }
         $actor = self::actor();
         $assigneeId = (int) $item->assigned_to;
-        if (! $actor || ! $assigneeId || $assigneeId === $actor->id) {
+        // an automation assigns on its own: its rule acting as you still tells you (v1.41.2)
+        $rule = AutomationRunner::ruleName();
+        if (! $actor || ! $assigneeId || ($assigneeId === $actor->id && $rule === null)) {
             return;
         }
 
-        DB::afterCommit(function () use ($item, $actor, $assigneeId) {
+        DB::afterCommit(function () use ($item, $actor, $assigneeId, $rule) {
             $assignee = User::find($assigneeId);
             $project = $item->board?->project;
             if ($assignee && $project && $assignee->hasProjectAccess($project)) {
-                $assignee->notify(new ItemAssignedNotification($item, $actor));
+                $assignee->notify(new ItemAssignedNotification($item, $actor, $rule));
             }
         });
     }

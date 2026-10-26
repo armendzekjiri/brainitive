@@ -91,6 +91,51 @@ class AutomationEngineTest extends TestCase
 
     // ── triggers ─────────────────────────────────────────────────────────────
 
+    public function test_a_rule_assigning_its_own_actor_still_notifies_them_as_the_automation(): void
+    {
+        // v1.41.2: "when moved to Testing and unassigned, assign Armend" — Armend's own rule must tell him
+        Notification::fake();
+        $rule = $this->rule([
+            'name' => 'Testing owner',
+            'actions' => [['type' => 'assign', 'value' => $this->editor->id, 'text' => null]],
+        ]);
+
+        $item = $this->item(['title' => 'Needs a tester']);
+
+        $this->assertSame($this->editor->id, $item->fresh()->assigned_to);
+        Notification::assertSentTo($this->editor, ItemAssignedNotification::class, function (ItemAssignedNotification $n) {
+            $data = $n->toDatabase($this->editor);
+
+            return $n->automation === 'Testing owner'
+                && $data['actor_name'] === 'Automation “Testing owner”'
+                && str_starts_with($n->toMail($this->editor)->subject, 'Automation “Testing owner” assigned you to');
+        });
+
+        // assigning yourself by hand still stays quiet
+        $rule->update(['enabled' => false]);
+        Notification::fake();
+        $this->actingAs($this->editor);
+        $other = $this->item(['title' => 'Mine']);
+        $other->update(['assigned_to' => $this->editor->id]);
+        Notification::assertNotSentTo($this->editor, ItemAssignedNotification::class);
+    }
+
+    public function test_a_rule_assigning_a_ticket_to_its_own_actor_still_notifies_them(): void
+    {
+        Notification::fake();
+        $this->rule([
+            'name' => 'Support owner',
+            'trigger' => 'ticket.created',
+            'actions' => [['type' => 'assign', 'value' => $this->editor->id, 'text' => null]],
+        ]);
+        $ticket = $this->helpdeskTicket();
+
+        DomainEvents::emit($this->workspace, 'ticket.created', fn () => [], subject: $ticket);
+
+        $this->assertSame($this->editor->id, $ticket->fresh()->assigned_to);
+        Notification::assertSentTo($this->editor, TicketAssignedNotification::class, fn (TicketAssignedNotification $n) => $n->automation === 'Support owner');
+    }
+
     public function test_issue_created_rule_assigns_and_sets_priority_once_as_its_actor(): void
     {
         Notification::fake();

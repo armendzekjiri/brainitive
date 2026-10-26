@@ -30,9 +30,17 @@ final class AutomationRunner
 
     private static int $running = 0;
 
+    private static ?string $ruleName = null;
+
     public static function running(): bool
     {
         return self::$running > 0;
+    }
+
+    /** The rule whose actions are executing now ("Automation “X” assigned you"), else null. */
+    public static function ruleName(): ?string
+    {
+        return self::running() ? self::$ruleName : null;
     }
 
     /** @return bool false when another worker holds the run (the job retries later) */
@@ -107,6 +115,8 @@ final class AutomationRunner
         $subjectType = (string) AutomationSubject::type($subject);
 
         self::$running++;
+        $previousRuleName = self::$ruleName;
+        self::$ruleName = $rule->name;
         $previousUser = Auth::user();
         Auth::setUser($actor);
         try {
@@ -136,6 +146,7 @@ final class AutomationRunner
             }
         } finally {
             $previousUser instanceof User ? Auth::setUser($previousUser) : Auth::forgetUser();
+            self::$ruleName = $previousRuleName;
             self::$running--;
         }
 

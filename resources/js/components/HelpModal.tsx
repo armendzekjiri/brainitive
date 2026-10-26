@@ -84,11 +84,12 @@ const WELCOME_FEATURES = [
 const CHANGELOG = [
     {
         version: 'v1.41.2',
-        title: 'Uploaded document icons show as images',
+        title: 'Document icons and automation notifications',
         tag: 'Fix',
         date: '2026-10-26',
         items: [
             'Workspace home, project page and shared docs: a document with an uploaded image as its icon showed a long line of code across the page — it now shows the image.',
+            'Automations: when a rule assigns an issue or ticket to the person it runs as (e.g. "assign me when it moves to Testing"), they now get the "assigned you" notification — from Automation “rule name”.',
         ]
     },
     {
