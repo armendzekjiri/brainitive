@@ -1,7 +1,7 @@
 # Public feedback portal (BRAI-60)
 
 **Branch:** feat/feedback-portal (from `release/v1.42.0`)
-**Status:** in-progress
+**Status:** done
 **Started:** 2026-10-26
 **Board card:** BRAI-60 (item 162) — https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-162
 **Contract:** [release-v1.42.0.md](./release-v1.42.0.md) → "Ticket 1"
