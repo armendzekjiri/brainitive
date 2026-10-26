@@ -2723,3 +2723,209 @@ export interface Meeting {
     can_cancel: boolean;
     can_create_notes: boolean;
 }
+
+// ── Offline mode (BRAI-82) ─────────────────────────────────────────────────────
+/** One change made on this device, queued until it reaches `offline.sync`. */
+export type OfflineMutationType =
+    | 'list_task.create' | 'list_task.update' | 'list_task.reorder'
+    | 'issue.update' | 'issue.comment' | 'issue.create'
+    | 'capture.create' | 'my_day.add' | 'my_day.remove';
+
+export interface OfflineMutation {
+    /** Client uuid = the server's idempotency key; also `target.ref` of later changes. */
+    id: string;
+    /** Outbox order (IndexedDB key). */
+    seq?: number;
+    type: OfflineMutationType;
+    target?: { id?: number | null; ref?: string | null };
+    /** The values the change was made against (per changed field). */
+    base?: { updated_at?: string | null; fields?: Record<string, unknown> };
+    data: Record<string, unknown>;
+    /** What it is about: markers ("not synced yet"), the indicator and the conflicts panel. */
+    entity: { kind: 'list_task' | 'issue' | 'capture' | 'my_day' | 'task_list'; key: string; label: string; parent_id?: number | null; url?: string | null };
+    /** Sent at least once: never coalesced into again (the server may already have it). */
+    sent?: boolean;
+    created_at: string;
+}
+
+export type OfflineConflictStatus = 'conflict' | 'deleted' | 'forbidden' | 'invalid';
+
+/** A change the server didn't take as is: shown in the Sync conflicts panel, never dropped silently. */
+export interface OfflineConflict {
+    id: string;
+    mutation: OfflineMutation;
+    status: OfflineConflictStatus;
+    message: string;
+    fields?: Record<string, { base: unknown; mine: unknown; theirs: unknown }>;
+    entity?: Record<string, unknown> | null;
+    created_at: string;
+}
+
+export interface OfflineTask {
+    id: number | null;
+    /** Uuid of the offline create, until the server answered with an id. */
+    ref?: string | null;
+    title: string;
+    status: 'todo' | 'done';
+    position: number;
+    due_date?: string | null;
+    updated_at?: string | null;
+}
+
+export interface OfflineTaskListSnapshot {
+    id: number;
+    name: string;
+    url: string;
+    workspace: { slug: string; name: string };
+    project: { id: number; slug: string; name: string; key?: string | null };
+    canManage: boolean;
+    tasks: OfflineTask[];
+}
+
+export interface OfflineIssueSnapshot {
+    id: number;
+    key: string;
+    title: string;
+    url: string;
+    board: { id: number; slug: string; name: string };
+    project: { slug: string; name: string };
+    workspace: { slug: string };
+    column_id: number;
+    priority_id: number | null;
+    assigned_to: number | null;
+    due_date: string | null;
+    description_text: string;
+    updated_at: string | null;
+    columns: { id: number; name: string; is_done_column: boolean }[];
+    priorities: { id: number; name: string }[];
+    members: { id: number; name: string }[];
+    comments: { id: number | null; ref?: string | null; author: string; text: string; created_at: string }[];
+    canEdit: boolean;
+}
+
+export interface OfflineMyDayRow {
+    work_type: 'board' | 'list';
+    work_id: number | null;
+    work_ref?: string | null;
+    title: string;
+    key: string;
+    url: string | null;
+    project_name: string;
+    done: boolean;
+    /** board issues: current / done / open column (the circle moves between them) */
+    column_id?: number | null;
+    done_column_id?: number | null;
+    open_column_id?: number | null;
+}
+
+export interface OfflineMyDaySnapshot {
+    date: string;
+    rows: OfflineMyDayRow[];
+}
+
+export interface OfflineSnapshotRecord<T = unknown> {
+    key: string;
+    kind: 'list' | 'issue' | 'myday';
+    data: T;
+    viewedAt: number;
+}
+
+// ── Find anything (BRAI-55, v1.43.0) ─────────────────────────────────────────
+
+/** A content type of the search index (`search_entries.type`). */
+export type SearchType = 'item' | 'comment' | 'page' | 'ticket' | 'plan' | 'task' | 'snippet' | 'bookmark' | 'capture' | 'attachment' | 'ticket_attachment';
+
+/** Filter group / tab of the search page (SearchTypes::GROUPS). */
+export type SearchGroup = 'issues' | 'docs' | 'comments' | 'tickets' | 'tasks' | 'plans' | 'snippets' | 'bookmarks' | 'captures' | 'files';
+
+export interface SearchResult {
+    /** "type:id" */
+    id: string;
+    type: SearchType;
+    group: SearchGroup;
+    /** Issue, Doc, Whiteboard, Comment, Ticket, Plan, Task, Snippet, Bookmark, Capture, File */
+    label: string;
+    source_id: number;
+    container_id: number | null;
+    key: string | null;
+    title: string;
+    /** Escaped text; only <mark> tags around matches. */
+    title_html: string;
+    /** Escaped text; only <mark> tags around matches. */
+    snippet_html: string;
+    url: string;
+    /** A bookmark's own link. */
+    external_url: string | null;
+    /** Where it lives, e.g. "Website · Main Board". */
+    context: string | null;
+    project: { id: number; name: string } | null;
+    workspace: string | null;
+    status: 'open' | 'done' | null;
+    is_draft: boolean;
+    updated_at: string | null;
+}
+
+export interface SearchResponse {
+    results: SearchResult[];
+    total: number;
+    counts: Record<SearchGroup, number>;
+    /** Typo fallback: titles similar to the words were added. */
+    fuzzy: boolean;
+    page: number;
+    per_page: number;
+    has_more: boolean;
+}
+
+export interface SearchFilters {
+    q: string;
+    type: SearchGroup | null;
+    project: number[];
+    status: 'open' | 'done' | null;
+    assignee: string | null;
+    updated: '7d' | '30d' | '90d' | '365d' | null;
+    page: number;
+}
+
+export interface SearchOptions {
+    projects: { id: number; name: string; workspace: string }[];
+    people: { id: number; name: string }[];
+}
+
+// ── Live co-editing of documents (BRAI-54, v1.43.0) ─────────────────────────────────────────
+
+/** `collab` prop of Pages/Show: null = the single-user editor. */
+export interface PageCollabProps {
+    epoch: number;
+    /** wss URL of the realtime server, or a path on this host ("/collab"). */
+    url: string;
+}
+
+/** POST pages.collab.session */
+export interface PageCollabSession {
+    url: string;
+    /** `page.<uuid>.<epoch>` */
+    document: string;
+    epoch: number;
+    token: string;
+    expires_at: number;
+    edit: boolean;
+    /** State vector of the last saved draft HTML; null = nothing saved from this live document yet. */
+    html_vector: Record<string, number> | null;
+    user: { id: number; name: string };
+}
+
+/** PUT pages.collab.save */
+export interface PageCollabSaveResponse extends PageDraftHashState {
+    status: 'saved' | 'unchanged' | 'covered' | 'baseline';
+}
+
+/** POST pages.collab.bootstrap */
+export type PageCollabBootstrap =
+    | { status: 'granted'; html: string | null; name: string; icon: string | null }
+    | { status: 'wait' }
+    | { status: 'stale'; epoch: number; reset: true };
+
+/** Presence heartbeat for editors: the live document's epoch (null = never opened live). */
+export interface PagePresenceCollabState extends PageDraftState {
+    collab_epoch?: number | null;
+}

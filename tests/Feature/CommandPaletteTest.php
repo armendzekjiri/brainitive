@@ -79,11 +79,11 @@ class CommandPaletteTest extends TestCase
         $other->users()->attach($this->editor->id, ['role' => 'editor']);
         $otherBoard = Board::factory()->create(['project_id' => $other->id, 'name' => 'Roadmap other']);
 
-        $res = $this->actingAs($this->editor)->getJson(route('search', ['q' => 'roadmap', 'project' => $other->id]))->assertOk();
+        $res = $this->actingAs($this->editor)->getJson(route('search.quick', ['q' => 'roadmap', 'project' => $other->id]))->assertOk();
         $this->assertSame([$otherBoard->id, $this->board->id], array_column($res->json('boards'), 'id'));
         $res->assertJsonPath('plans.0.title', 'Roadmap plan');
 
         // Outsiders find nothing.
-        $this->actingAs($this->outsider)->getJson(route('search', ['q' => 'roadmap']))->assertJsonCount(0, 'boards')->assertJsonCount(0, 'plans');
+        $this->actingAs($this->outsider)->getJson(route('search.quick', ['q' => 'roadmap']))->assertJsonCount(0, 'boards')->assertJsonCount(0, 'plans');
     }
 }

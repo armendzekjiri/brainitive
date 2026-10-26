@@ -25,8 +25,10 @@ use App\Http\Controllers\MeetingNotesController;
 use App\Http\Controllers\MyDayController;
 use App\Http\Controllers\MyWorkController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\OfflineSyncController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\OutlookCalendarConnectController;
+use App\Http\Controllers\PageCollabController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PageReviewController;
 use App\Http\Controllers\PageStickyNoteController;
@@ -57,7 +59,11 @@ use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkTimerController;
 use App\Http\Middleware\ReadOnlySession;
 use App\Support\Auth\MicrosoftLogin;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Inertia\Inertia;
 
 Route::get('/', function () {
@@ -121,6 +127,14 @@ Route::get('/site.webmanifest', function () {
     ]);
 })->name('manifest');
 
+// Offline mode (BRAI-82): the app shell the service worker serves when a navigation fails offline.
+// Public and session-free on purpose (no session, no shared props): the cached copy holds no account data.
+Route::get('/offline', [OfflineSyncController::class, 'shell'])
+    // no cookies read at all: not even "remember me" may sign anyone in here
+    ->withoutMiddleware([EncryptCookies::class, StartSession::class, ShareErrorsFromSession::class, ValidateCsrfToken::class])
+    ->middleware('throttle:60,1,offline.shell')
+    ->name('offline.shell');
+
 // Public bookmark view (view only, no auth)
 Route::get('/share/bookmarks/{uuid}', [BookmarkController::class, 'showPublic'])->name('bookmarks.public.show');
 
@@ -174,8 +188,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         return redirect()->route('workspaces.index');
     })->name('dashboard');
 
-    // Global search (bookmarks, board items, documents)
-    Route::get('/search', SearchController::class)->name('search');
+    // Find anything (BRAI-55): the search page, and the command palette's JSON
+    Route::get('/search', [SearchController::class, 'page'])->middleware('throttle:120,1,search')->name('search');
+    Route::get('/search/quick', [SearchController::class, 'quick'])->middleware([ReadOnlySession::class, 'throttle:240,1,search.quick'])->name('search.quick');
     Route::post('/command-palette/recent', [CommandPaletteController::class, 'recent'])->name('command-palette.recent');
 
     // My Work — assigned items across all workspaces
@@ -184,6 +199,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/my-day', [MyDayController::class, 'destroy'])->name('my-day.destroy');
     Route::post('/my-day/reorder', [MyDayController::class, 'reorder'])->name('my-day.reorder');
     Route::post('/my-day/carry-over', [MyDayController::class, 'carryOver'])->name('my-day.carry-over');
+    // Offline mode (BRAI-82): one mutation from a device's outbox per request, idempotent per client uuid
+    // background burst when the device is back online: never write the session (a form's flash would be lost)
+    Route::post('/offline/sync', [OfflineSyncController::class, 'store'])->middleware([ReadOnlySession::class, 'throttle:240,1,offline.sync'])->name('offline.sync');
     Route::post('/work-timer', [WorkTimerController::class, 'start'])->name('work-timer.start');
     Route::post('/work-timer/stop', [WorkTimerController::class, 'stop'])->name('work-timer.stop');
     Route::delete('/work-timer', [WorkTimerController::class, 'discard'])->name('work-timer.discard');
@@ -564,6 +582,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('pages/{page}/draft', [PageController::class, 'discardDraft'])->name('pages.draft.discard');
             Route::put('pages/{page}/publish-changes', [PageController::class, 'publishChanges'])->name('pages.publish-changes');
             Route::post('pages/{page}/presence', [PageController::class, 'presence'])->name('pages.presence');
+            // Live co-editing (BRAI-54): background requests, never write the session
+            Route::post('pages/{page}/collab/session', [PageCollabController::class, 'session'])->middleware([ReadOnlySession::class, 'throttle:60,1,pages.collab.session'])->name('pages.collab.session');
+            Route::put('pages/{page}/collab/draft', [PageCollabController::class, 'save'])->middleware([ReadOnlySession::class, 'throttle:180,1,pages.collab.save'])->name('pages.collab.save');
+            Route::post('pages/{page}/collab/bootstrap', [PageCollabController::class, 'bootstrap'])->middleware([ReadOnlySession::class, 'throttle:30,1,pages.collab.bootstrap'])->name('pages.collab.bootstrap');
             Route::get('pages/{page}/versions', [PageVersionController::class, 'index'])->name('pages.versions.index');
             Route::get('pages/{page}/versions/{versionNumber}', [PageVersionController::class, 'show'])->whereNumber('versionNumber')->name('pages.versions.show');
             Route::post('pages/{page}/versions/{versionNumber}/restore', [PageVersionController::class, 'restore'])->whereNumber('versionNumber')->name('pages.versions.restore');

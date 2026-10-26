@@ -82,10 +82,12 @@ function StickyComponent({
     nodeKey,
     color,
     caption,
+    captionState,
     width,
     fontSize,
 }: {
     caption: LexicalEditor;
+    captionState: string;
     color: StickyNoteColor;
     nodeKey: NodeKey;
     x: number;
@@ -270,17 +272,31 @@ function StickyComponent({
     // Propagate nested-editor changes to the outer editor so the outer
     // editor becomes "dirty" and HtmlOnChangePlugin re-exports HTML with
     // the updated caption content via exportDOM.
+    // Live co-editing (BRAI-54): the caption also lives in the node as a JSON string, which Yjs syncs
+    // (the nested editor itself can't travel). Typing updates the string; a remote string is loaded here.
     useEffect(() => {
-        return caption.registerUpdateListener(() => {
+        return caption.registerUpdateListener(({ tags }) => {
+            if (tags.has(STICKY_REMOTE_TAG)) return;
+            const serialized = JSON.stringify(caption.getEditorState().toJSON());
             editor.update(() => {
                 const node = $getNodeByKey(nodeKey);
                 if ($isStickyNoteNode(node)) {
                     // getWritable() marks the node dirty in the outer editor
-                    node.getWritable();
+                    const writable = node.getWritable();
+                    if (writable.__captionState !== serialized) writable.__captionState = serialized;
                 }
             });
         });
     }, [caption, editor, nodeKey]);
+
+    useEffect(() => {
+        if (!captionState || captionState === JSON.stringify(caption.getEditorState().toJSON())) return;
+        try {
+            caption.setEditorState(caption.parseEditorState(captionState), { tag: STICKY_REMOTE_TAG });
+        } catch {
+            /* malformed remote state: keep what we have */
+        }
+    }, [caption, captionState]);
 
     return (
         <div ref={stickyContainerRef} className="sticky-note-container">
@@ -348,7 +364,8 @@ function StickyComponent({
                 <div style={{ position: 'relative' }}>
                 <LexicalNestedComposer
                     initialEditor={caption}
-                    initialTheme={StickyEditorTheme}>
+                    initialTheme={StickyEditorTheme}
+                    skipCollabChecks>
                     <HistoryPlugin externalHistoryState={historyState} />
                     <PlainTextPlugin
                         contentEditable={
@@ -390,12 +407,28 @@ function StickyComponent({
     );
 }
 
+const STICKY_REMOTE_TAG = 'sticky-remote-caption';
+
+/** The caption as stored: the synced JSON string when there is one, else the nested editor. */
+function captionJSON(node: StickyNoteNode): SerializedEditor {
+    if (node.__captionState) {
+        try {
+            return { editorState: JSON.parse(node.__captionState) } as SerializedEditor;
+        } catch {
+            /* fall back to the nested editor */
+        }
+    }
+    return node.__caption.toJSON();
+}
+
 // ─── StickyNoteNode ───────────────────────────────────────────────────────────
 export class StickyNoteNode extends DecoratorNode<JSX.Element> {
     __x: number;
     __y: number;
     __color: StickyNoteColor;
     __caption: LexicalEditor;
+    /** Serialized caption editor state (live co-editing, BRAI-54); '' = not set yet. */
+    __captionState: string;
     __width: number;
     __fontSize: number;
 
@@ -413,6 +446,11 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
             node.__caption,
             node.__key,
         );
+    }
+
+    afterCloneFrom(prevNode: this): void {
+        super.afterCloneFrom(prevNode);
+        this.__captionState = prevNode.__captionState;
     }
 
     static importJSON(serializedNode: SerializedStickyNoteNode): StickyNoteNode {
@@ -433,6 +471,7 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
             const editorState = nestedEditor.parseEditorState(captionData.editorState);
             if (!editorState.isEmpty()) {
                 nestedEditor.setEditorState(editorState);
+                stickyNode.__captionState = JSON.stringify(editorState.toJSON());
             }
         }
         return stickyNode;
@@ -451,6 +490,7 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
         this.__x = x;
         this.__y = y;
         this.__caption = caption || createEditor();
+        this.__captionState = '';
         this.__color = color;
         this.__width = width;
         this.__fontSize = fontSize;
@@ -459,7 +499,7 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
     exportJSON(): SerializedStickyNoteNode {
         return {
             ...super.exportJSON(),
-            caption: this.__caption.toJSON(),
+            caption: captionJSON(this),
             color: this.__color,
             xOffset: this.__x,
             yOffset: this.__y,
@@ -489,7 +529,7 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
             yOffset: this.__y,
             width: this.__width,
             fontSize: this.__fontSize,
-            caption: this.__caption.toJSON(),
+            caption: captionJSON(this),
         }));
         el.style.display = 'none';
         return { element: el };
@@ -522,6 +562,7 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
                                 const editorState = stickyNode.__caption.parseEditorState(parsed.caption.editorState);
                                 if (!editorState.isEmpty()) {
                                     stickyNode.__caption.setEditorState(editorState);
+                                    stickyNode.__captionState = JSON.stringify(editorState.toJSON());
                                 }
                             }
                             return { node: $applyNodeReplacement(stickyNode) };
@@ -568,6 +609,7 @@ export class StickyNoteNode extends DecoratorNode<JSX.Element> {
                     fontSize={this.__fontSize}
                     nodeKey={this.getKey()}
                     caption={this.__caption}
+                    captionState={this.__captionState}
                 />
             </Suspense>,
             document.body,

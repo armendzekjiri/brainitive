@@ -2,7 +2,8 @@
  * CommandPalette — the one launcher (⌘K / Ctrl+K; Ctrl+. opens it in command mode).
  *
  * Empty query: recent destinations, navigation and create commands. Typing: matching
- * commands, then search results (debounced, older requests aborted). A leading ">" shows
+ * commands, the best search results (the search index, BRAI-55) with "See all results" → /search,
+ * then places (boards, plans, projects …) — debounced, older requests aborted. A leading ">" shows
  * commands only. Selecting never changes data by itself: commands navigate or open the
  * existing create forms, which check permissions on submit.
  */
@@ -14,9 +15,10 @@ import { Command as CommandPrimitive } from 'cmdk';
 import { Command, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import {
-    AlertCircle, Bookmark as BookmarkIcon, Building2, Code, FileText, FolderOpen, GanttChart, LayoutGrid, Loader2, Search, SquareKanban, X,
+    AlertCircle, ArrowRight, Bookmark as BookmarkIcon, Building2, Code, FileText, FolderOpen, GanttChart, LayoutGrid, Loader2, Search, SquareKanban, X,
 } from 'lucide-react';
-import type { PageProps } from '@/types';
+import { Highlighted, SearchTypeIcon } from '@/components/search/SearchBits';
+import type { PageProps, SearchResult } from '@/types';
 
 // ── Commands ──────────────────────────────────────────────────────────────────
 export interface PaletteCommand {
@@ -52,17 +54,18 @@ interface Result {
     url: string;
 }
 
-type SearchResponse = Partial<Record<'workspaces' | 'projects' | 'boards' | 'plans' | 'snippets' | 'bookmarks' | 'items' | 'pages', Result[]>>;
+type PlaceGroup = 'workspaces' | 'projects' | 'boards' | 'plans' | 'snippets' | 'bookmarks';
 
-const RESULT_GROUPS: { key: keyof SearchResponse; heading: string }[] = [
-    { key: 'items', heading: 'Issues' },
-    { key: 'pages', heading: 'Documents' },
+/** `search.quick`: the best content results of the search index + places whose name matches. */
+type SearchResponse = Partial<Record<PlaceGroup, Result[]>> & { results?: SearchResult[]; total?: number; fuzzy?: boolean };
+
+const RESULT_GROUPS: { key: PlaceGroup; heading: string }[] = [
     { key: 'boards', heading: 'Boards' },
     { key: 'plans', heading: 'Plans' },
     { key: 'projects', heading: 'Projects' },
     { key: 'workspaces', heading: 'Workspaces' },
-    { key: 'snippets', heading: 'Snippets' },
-    { key: 'bookmarks', heading: 'Bookmarks' },
+    { key: 'snippets', heading: 'Snippet collections' },
+    { key: 'bookmarks', heading: 'Bookmark collections' },
 ];
 
 const RESULT_ICONS: Record<ResultType, { Icon: typeof Search; color: string }> = {
@@ -219,7 +222,7 @@ export function CommandPalette({ open, onOpenChange, initialQuery = '', commands
         const controller = new AbortController();
         setStatus('loading');
         const timer = setTimeout(() => {
-            axios.get(route('search'), { params: { q: searchText, project: currentProjectId ?? undefined }, signal: controller.signal })
+            axios.get(route('search.quick'), { params: { q: searchText, project: currentProjectId ?? undefined }, signal: controller.signal })
                 .then(({ data }) => {
                     if (seq !== requestSeq.current) return;
                     setResults(data);
@@ -255,7 +258,19 @@ export function CommandPalette({ open, onOpenChange, initialQuery = '', commands
         router.visit(result.url);
     };
 
-    const resultCount = RESULT_GROUPS.reduce((n, g) => n + (results[g.key]?.length ?? 0), 0);
+    const openContent = (result: SearchResult) => {
+        if (result.type === 'item' || result.type === 'page') rememberRecent(userId, { type: result.type, id: result.source_id });
+        close();
+        router.visit(result.url);
+    };
+
+    const seeAll = () => {
+        close();
+        router.visit(route('search', { q: searchText }));
+    };
+
+    const contentResults = results.results ?? [];
+    const resultCount = contentResults.length + RESULT_GROUPS.reduce((n, g) => n + (results[g.key]?.length ?? 0), 0);
     const emptyQuery = searchText === '';
     const commandGroups = Array.from(new Set(commands.map((c) => c.group)));
     const nothingFound =
@@ -331,6 +346,27 @@ export function CommandPalette({ open, onOpenChange, initialQuery = '', commands
                                 </CommandGroup>
                             ))
                             : visibleCommands.length > 0 && <CommandGroup heading="Commands">{visibleCommands.map(commandRow)}</CommandGroup>}
+
+                        {!commandMode && !emptyQuery && status === 'done' && contentResults.length > 0 && (
+                            <CommandGroup heading={results.fuzzy ? 'Similar results' : 'Top results'}>
+                                {contentResults.map((r) => (
+                                    <CommandItem key={r.id} value={`content:${r.id}`} onSelect={() => openContent(r)} className="flex items-center gap-3 cursor-pointer rounded-lg px-2 py-2 aria-selected:bg-accent">
+                                        <SearchTypeIcon result={r} />
+                                        <div className="flex min-w-0 flex-col">
+                                            <span className="truncate text-sm font-medium leading-snug">
+                                                {r.key && r.type !== 'comment' && <span className="mr-1.5 font-mono text-xs text-muted-foreground">{r.key}</span>}
+                                                <Highlighted html={r.title_html} />
+                                            </span>
+                                            <span className="truncate text-xs text-muted-foreground">{r.label}{r.context ? ` · ${r.context}` : ''}</span>
+                                        </div>
+                                    </CommandItem>
+                                ))}
+                                <CommandItem value="content:see-all" onSelect={seeAll} className="flex items-center gap-3 cursor-pointer rounded-lg px-2 py-2 text-sm aria-selected:bg-accent">
+                                    <CmdIcon><ArrowRight className="size-4" /></CmdIcon>
+                                    <span className="font-medium">See all {results.total ?? contentResults.length} {(results.total ?? contentResults.length) === 1 ? 'result' : 'results'}</span>
+                                </CommandItem>
+                            </CommandGroup>
+                        )}
 
                         {!commandMode && !emptyQuery && status === 'done' && RESULT_GROUPS.map(({ key, heading }) =>
                             (results[key]?.length ?? 0) > 0 && (

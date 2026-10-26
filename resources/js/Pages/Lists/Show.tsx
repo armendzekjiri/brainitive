@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/Layouts/AppLayout';
+import { taskListSnapshot, useOfflineSnapshot } from '@/lib/offline/snapshots';
 import { cn } from '@/lib/utils';
 import { PageProps, Project, TaskList, TaskListItem, User, Workspace } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
@@ -42,6 +43,11 @@ export default function TaskListShow({ workspace, project, taskList, members, ca
     const [renameOpen, setRenameOpen] = useState(false);
     const [renameVal, setRenameVal] = useState(taskList.name);
     const [descVal, setDescVal] = useState(taskList.description ?? '');
+
+    // Offline mode (BRAI-82): keep a copy of the lists the user opens (a no-op while it's off).
+    useOfflineSnapshot('list', taskList.id, () => taskListSnapshot({
+        workspace, project, taskList, canManage, url: route('task-lists.show', [workspace.slug, project.slug, taskList.slug], false),
+    }), [taskList, canManage]);
 
     // Server state wins after every visit; edits below are optimistic until it answers.
     useEffect(() => setItems(taskList.items ?? []), [taskList.items]);

@@ -30,8 +30,28 @@
 	}
 	header @uploadedMarkup Content-Security-Policy "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox"
 
+	# Live co-editing of documents (BRAI-54): the realtime service's WebSocket on this host, so no
+	# extra port. Without the service this answers 502 and the editor falls back to single-user editing.
+	handle /collab* {
+		reverse_proxy {$COLLAB_UPSTREAM:realtime:1234}
+	}
+
 	{$CADDY_SERVER_EXTRA_DIRECTIVES}
 	php_server {
+	}
+}
+
+# Live co-editing: the realtime service reaches Brainitive's internal API here (plain HTTP inside the
+# Docker network, whatever SERVER_NAME is). compose.yaml doesn't publish this port; the API also needs
+# a key derived from COLLAB_SECRET / APP_KEY.
+http://:{$COLLAB_INTERNAL_PORT:8081} {
+	root {$SERVER_ROOT:public/}
+	@collabInternal path /api/internal/collab/*
+	handle @collabInternal {
+		php_server
+	}
+	handle {
+		respond 404
 	}
 }
 

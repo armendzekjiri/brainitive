@@ -63,7 +63,7 @@ class AdminAccessTest extends TestCase
             ->assertInertia(fn (Assert $p) => $p->where('workspaces', [])->has('auth.isInstanceAdmin'));
 
         $this->actingAs($this->admin)
-            ->getJson(route('search', ['q' => 'Secret']))
+            ->getJson(route('search.quick', ['q' => 'Secret']))
             ->assertOk()
             ->assertDontSee('Secret plans');
     }

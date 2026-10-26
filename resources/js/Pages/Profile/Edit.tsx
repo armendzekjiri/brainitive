@@ -2,6 +2,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import { NotificationCategoryPreference, PageProps } from '@/types';
 import { Head } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import OfflineSettingCard from '@/components/offline/OfflineSettingCard';
 import ConnectedAppsForm, { ConnectedApp } from './Partials/ConnectedAppsForm';
 import DeleteUserForm from './Partials/DeleteUserForm';
 import NotificationPreferencesForm from './Partials/NotificationPreferencesForm';
@@ -49,6 +50,16 @@ export default function Edit({
                         <NotificationPreferencesForm categories={notificationCategories} />
                         <NotificationSettingsForm className="max-w-xl border-t pt-6" />
                         <TaskDigestSetting className="max-w-xl border-t pt-6" />
+                    </CardContent>
+                </Card>
+
+                <Card id="offline" className="scroll-mt-20">
+                    <CardHeader>
+                        <CardTitle>Offline</CardTitle>
+                        <CardDescription>Keep working without internet on this device.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <OfflineSettingCard className="max-w-xl" />
                     </CardContent>
                 </Card>
 

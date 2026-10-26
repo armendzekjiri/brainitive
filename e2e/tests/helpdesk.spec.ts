@@ -154,11 +154,11 @@ test.describe('helpdesk', () => {
         await typeRich(page, dialog.locator('[contenteditable="true"]'), reply);
         const posted = page.waitForResponse((r) => r.url().endsWith('/replies') && r.request().method() === 'POST');
         await dialog.getByRole('button', { name: 'Reply', exact: true }).click();
-        expect((await posted).ok()).toBeTruthy();
+        expect((await posted).status(), 'a success or the Inertia redirect after it').toBeLessThan(400);
 
         const moved = page.waitForResponse((r) => r.url().includes('/move') && r.request().method() === 'PATCH');
         await moveTo(page, dialog, 'In Progress');
-        expect((await moved).ok()).toBeTruthy();
+        expect((await moved).status(), 'a success or the Inertia redirect after it').toBeLessThan(400);
 
         // both survive a reload
         await page.reload();

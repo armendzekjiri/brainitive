@@ -11,6 +11,9 @@ x-brainitive: &brainitive
     DB_CONNECTION: pgsql
     DB_HOST: db
     DB_PORT: "5432"
+    # Live co-editing (BRAI-54): the browser connects to /collab on this host (Caddy → realtime).
+    # COLLAB_URL= (empty) in .env turns it off; then remove the realtime service too.
+    COLLAB_URL: ${COLLAB_URL-/collab}
   volumes:
     - storage:/app/storage
   depends_on:
@@ -32,6 +35,7 @@ services:
       - storage:/app/storage
       - caddy_data:/data
       - caddy_config:/config
+      - collab:/collab
 
   queue:
     <<: *brainitive
@@ -52,6 +56,34 @@ services:
     # The image's healthcheck probes the web server, which only the app container runs
     healthcheck:
       disable: true
+
+  # Live co-editing of documents (BRAI-54): several people in one doc, carets, offline merge.
+  # Optional: without it documents are edited one person at a time, as before.
+  realtime:
+    # Same image, but on purpose not the shared settings: this process faces the internet and gets
+    # neither .env (APP_KEY, database, mail …) nor the storage volume — only the secret the app
+    # container writes to the small `collab` volume.
+    image: ${BRAINITIVE_IMAGE:-ghcr.io/armendzekjiri/brainitive:latest}
+    build: .
+    restart: unless-stopped
+    environment:
+      CONTAINER_ROLE: realtime
+      COLLAB_HOST: 0.0.0.0
+      COLLAB_PORT: "1234"
+      COLLAB_APP_URL: http://app:8081
+      COLLAB_SECRET_FILE: /collab/secret
+    command: ["node", "realtime/src/index.js"]
+    volumes:
+      - collab:/collab:ro
+    depends_on:
+      app:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:1234/').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   db:
     image: postgres:16-alpine
@@ -82,3 +114,4 @@ volumes:
   redis:
   caddy_data:
   caddy_config:
+  collab:

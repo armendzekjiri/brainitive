@@ -1,7 +1,8 @@
 # Self-hosting Brainitive
 
 Brainitive is open source (AGPL-3.0) and runs on any machine with Docker. One image runs the
-web app, the queue worker and the scheduler; PostgreSQL and Redis run next to it.
+web app, the queue worker, the scheduler and the realtime server for live co-editing; PostgreSQL
+and Redis run next to it.
 Don't want to run servers? [Brainitive Cloud](https://www.brainitive.app/#pricing) is the same
 software, hosted and updated for you.
 
@@ -15,14 +16,16 @@ software, hosted and updated for you.
 
 ## Quick start
 
+No clone and no build: `compose.yaml` runs the published image, it only needs a `.env`.
+
 ```bash
-git clone https://github.com/armendzekjiri/brainitive.git
-cd brainitive
-cp .env.docker.example .env
+mkdir brainitive && cd brainitive
+curl -fsSLO https://raw.githubusercontent.com/armendzekjiri/brainitive/main/compose.yaml
+curl -fsSL https://raw.githubusercontent.com/armendzekjiri/brainitive/main/.env.docker.example -o .env
 
 # 1. Edit .env: DB_PASSWORD, APP_URL, MAIL_* (MAIL_MAILER=log until you have SMTP)
 
-# 2. Start
+# 2. Start (downloads the image the first time)
 docker compose up -d
 ```
 
@@ -54,8 +57,8 @@ tags:
 | `1.15.0`, `1.15` | A specific release / newest patch of a minor version — pin one with `BRAINITIVE_IMAGE` in `.env` |
 | `edge` | Latest commit on `main` (may be unreleased) |
 
-Release notes: GitHub → Releases. To build from source instead, set
-`BRAINITIVE_IMAGE=brainitive:local` in `.env` and run `docker compose up -d --build`.
+Release notes: GitHub → Releases. To build from source instead, `git clone` the repository,
+set `BRAINITIVE_IMAGE=brainitive:local` in `.env` and run `docker compose up -d --build`.
 
 ## HTTPS
 
@@ -81,13 +84,33 @@ the proxy — with `*`, any client can fake its IP (and so dodge login rate limi
 ## Updating
 
 ```bash
-git pull                      # or change the image tag
-docker compose pull           # skip when you build yourself
-docker compose up -d --build
+docker compose pull           # the newest image of your tag (latest, or the version you pinned)
+docker compose up -d
 ```
+
+Building from source instead: `git pull && docker compose up -d --build`.
 
 Migrations run automatically when the `app` container starts. Check **Help → Changelog**
 for what changed.
+
+## Search
+
+Search ("Find anything": the search page, ⌘K and the MCP `search` tool) is built in: it runs on
+the PostgreSQL you already have — full text plus `pg_trgm` for typos and `unaccent` for accents.
+There is no extra service to run.
+
+- **Nothing to do after an update.** The first time a version with a new search index starts,
+  the `app` container (and the scheduler, every few minutes) notices that the index was never
+  built and queues the build; the `queue` container fills it in the background. Search shows
+  what is already indexed meanwhile — a few minutes for large instances. New and changed content
+  is indexed as it is saved.
+- **Extensions.** The migration creates `pg_trgm` and `unaccent` itself (the bundled `db`
+  container allows that). On your own PostgreSQL the database user needs to be allowed to create
+  them (owner of the database, PostgreSQL 13+); otherwise search still works, just without typo
+  tolerance / accent folding. After installing them later run
+  `docker compose exec app php artisan search:reindex --setup`.
+- **Rebuild by hand** (never required): `docker compose exec app php artisan search:reindex`
+  (`--queue` to run it on the queue, `--type=item` for one kind of content).
 
 ## Backups
 
@@ -115,6 +138,28 @@ into a fresh `pgdata` volume with `docker compose exec -T db sh -c 'psql -U "$PO
 
 After changing `.env`: `docker compose up -d` (the app container rebuilds its config cache
 on start).
+
+## Live co-editing of documents
+
+Several people can edit the same document at once — everyone sees the others' text appear and
+their named, coloured carets — and documents keep working offline (changes stay in the browser and
+merge when it reconnects). This is the `realtime` service in `compose.yaml`: the same image, running
+a small Node server (Hocuspocus / Yjs). It's **included and on by default**, with nothing to set up:
+
+- the browser connects to `/collab` on your Brainitive address; Caddy in the `app` container passes
+  it on to the `realtime` service, so there's no extra port and it works behind your own reverse
+  proxy too (proxy WebSockets — nginx needs the `Upgrade` / `Connection` headers for `/collab`);
+- the `realtime` service reaches the app on the internal port `8081` (not published). It gets neither
+  your `.env` nor the storage volume: the `app` container hands it the shared secret (derived from
+  `APP_KEY`, or `COLLAB_SECRET` from `.env`) through the small `collab` volume.
+
+The draft → publish workflow doesn't change: people edit the draft together, and **Publish /
+Update** makes it live as before. Readers of a published page keep seeing the published version.
+
+**Turn it off:** set `COLLAB_URL=` (empty) in `.env`, delete the `realtime` service from
+`compose.yaml` (or `docker compose stop realtime`) and run `docker compose up -d`. Documents are
+then edited one person at a time, as before. If the service is down while `COLLAB_URL` is set,
+editors see "Live editing unavailable — editing alone" and keep working without it.
 
 ## Email to helpdesk (forwarding addresses)
 

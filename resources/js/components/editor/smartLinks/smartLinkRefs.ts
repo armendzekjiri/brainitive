@@ -79,3 +79,12 @@ function safeDecode(value: string): string {
 export function smartLinkText(data: { key: string | null; title: string }): string {
     return data.key ? `${data.key} ${data.title}` : data.title;
 }
+
+/**
+ * Only http(s) or app-relative hrefs (never `javascript:` …). Node fields can arrive from anywhere: HTML
+ * import, and with live co-editing (BRAI-54) straight from another browser through Yjs.
+ */
+export function safeSmartLinkHref(url: string | null | undefined): string {
+    const value = String(url ?? '').trim();
+    return /^https?:\/\//i.test(value) || (value.startsWith('/') && !value.startsWith('//')) ? value : '#';
+}

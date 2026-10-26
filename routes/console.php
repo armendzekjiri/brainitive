@@ -9,6 +9,7 @@ use App\Models\ImportRun;
 use App\Models\InboxNotification;
 use App\Models\LeadFormEvent;
 use App\Models\McpRequest;
+use App\Models\OfflineMutation;
 use App\Models\PortalLoginToken;
 use App\Models\ProjectExport;
 use App\Models\WebhookDelivery;
@@ -94,3 +95,9 @@ Schedule::command('model:prune', ['--model' => [PortalLoginToken::class]])->dail
 
 // v1.42.0: the repository's star count for the "Star on GitHub" buttons (cache only; pages never call GitHub)
 Schedule::call(fn () => GithubStars::refresh())->hourly()->name('github-stars')->withoutOverlapping();
+
+// Offline sync (BRAI-82): forget the outcome of a device's change after 30 days.
+Schedule::command('model:prune', ['--model' => [OfflineMutation::class]])->dailyAt('04:35');
+// v1.43.0 (BRAI-55): build the search index in the background when this index version was never
+// built (fresh install, update) — nobody runs search:reindex by hand. One small query otherwise.
+Schedule::command('search:ensure')->everyFiveMinutes()->withoutOverlapping()->runInBackground();
