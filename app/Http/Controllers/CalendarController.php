@@ -83,6 +83,8 @@ class CalendarController extends Controller
             $items = Item::query()
                 ->whereIn('project_id', $projectIds)
                 ->whereNull('parent_id')
+                // Deleting a board soft-deletes only the board, not its items: skip those orphans.
+                ->whereHas('board')
                 ->when($meOnly, fn ($q) => $q->where('assigned_to', $userId))
                 ->when(! $showCompleted, function ($q) {
                     // Hide items that are either marked completed_at OR sitting in a
