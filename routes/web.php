@@ -647,6 +647,11 @@ Route::middleware('auth')->group(function () {
     // Browser push subscriptions
     Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');
     Route::delete('/api/push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push-subscriptions.destroy');
+    // Profile → Notifications device list + test push (BRAI-154); ids are scoped to the user's own subscriptions
+    Route::get('/api/push-subscriptions', [PushSubscriptionController::class, 'index'])->name('push-subscriptions.index');
+    Route::delete('/api/push-subscriptions/{subscription}', [PushSubscriptionController::class, 'remove'])->where('subscription', '[0-9]{1,18}')->name('push-subscriptions.remove');
+    Route::post('/api/push-subscriptions/{subscription}/test', [PushSubscriptionController::class, 'test'])->where('subscription', '[0-9]{1,18}')
+        ->middleware('throttle:10,1,push-subscriptions.test')->name('push-subscriptions.test');
 
     // GitHub App setup callback (BRAI-61): GitHub returns here after install / repository changes
     Route::get('/github/app/setup', [ProjectGithubController::class, 'setup'])->middleware('throttle:20,1,github.app.setup')->name('github.app.setup');

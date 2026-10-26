@@ -1,6 +1,6 @@
 <?php
 
-use NotificationChannels\WebPush\PushSubscription;
+use App\Models\PushSubscription;
 
 return [
 
@@ -36,6 +36,12 @@ return [
      * The Guzzle client options used by Minishlink\WebPush.
      */
     'client_options' => [],
+
+    /**
+     * e2e only (BRAI-154): answer pushes with App\Support\Push\FakePushService instead of the
+     * network. Honoured only with APP_ENV=e2e (App\Support\Push\WebPushClient).
+     */
+    'fake' => env('WEBPUSH_FAKE', false),
 
     /**
      * The automatic padding in bytes used by Minishlink\WebPush.
