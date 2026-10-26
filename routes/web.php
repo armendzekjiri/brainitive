@@ -323,6 +323,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             require __DIR__.'/automation.php';
         });
 
+        // Client portal, team side (v1.42.0, BRAI-73)
+        Route::prefix('projects/{project:slug}')->scopeBindings()->group(function () {
+            require __DIR__.'/client-portal.php';
+        });
+
         // Project members (assign workspace users to project with role)
         Route::prefix('projects/{project:slug}')->scopeBindings()->group(function () {
             Route::get('members/search', [ProjectController::class, 'searchMembers'])->name('projects.members.search');

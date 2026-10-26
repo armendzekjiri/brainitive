@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ClientPortalController;
 use App\Http\Controllers\PortalLoginController;
 use Illuminate\Support\Facades\Route;
 
@@ -19,3 +20,11 @@ Route::post('guest/logout', [PortalLoginController::class, 'destroy'])->name('gu
 // ── Ticket 1 (BRAI-60): public feedback portal — /feedback/{slug}… ─────────────
 
 // ── Ticket 2 (BRAI-73): client portal — /client/{slug}… ─────────────────────────
+// portal.identity = a signed-in email; ClientPortalController adds "active member of THIS portal".
+Route::prefix('client/{slug}')->where(['slug' => '[a-z0-9-]{3,60}'])->middleware('portal.identity')->controller(ClientPortalController::class)->group(function () {
+    Route::get('/', 'show')->middleware('throttle:120,1,client-portal.show')->name('client-portal.show');
+    Route::get('d/{deliverable}', 'deliverable')->whereUuid('deliverable')->middleware('throttle:120,1,client-portal.deliverable')->name('client-portal.deliverable');
+    Route::get('d/{deliverable}/download', 'download')->whereUuid('deliverable')->middleware('throttle:30,1,client-portal.download')->name('client-portal.download');
+    Route::post('d/{deliverable}/decision', 'decide')->whereUuid('deliverable')->middleware('throttle:20,1,client-portal.decide')->name('client-portal.decide');
+    Route::post('d/{deliverable}/comments', 'comment')->whereUuid('deliverable')->middleware('throttle:20,1,client-portal.comments.store')->name('client-portal.comments.store');
+});
