@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Webhook;
 use App\Models\Workspace;
 use App\Support\Automation\AutomationEvents;
+use App\Support\Imports\ImportScope;
 use App\Support\Webhooks\WebhookDispatcher;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
@@ -59,6 +60,9 @@ final class DomainEvents
     public static function dispatch(Workspace $workspace, string $event, array $data, ?User $actor = null): void
     {
         self::assertKnown($event);
+        if (ImportScope::active()) {
+            return; // bulk imports raise no per-record webhooks or automations (v1.41.0)
+        }
 
         try {
             $envelope = self::envelope($workspace, $event, $data, $actor ?? self::currentUser());
@@ -92,6 +96,9 @@ final class DomainEvents
     public static function emit(Workspace|int|null $workspace, string $event, Closure $data, ?User $actor = null, ?Model $subject = null, array $context = []): void
     {
         self::assertKnown($event);
+        if (ImportScope::active()) {
+            return;
+        }
 
         if ($subject !== null) {
             self::guarded(fn () => AutomationEvents::seen($event, $subject, $context));

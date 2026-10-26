@@ -333,6 +333,40 @@ Plan [`tasks/feat-automation.md`](./tasks/feat-automation.md); contract `tasks/r
 - **Notification:** `AutomationNoticeNotification` (`automation_notice`, category status) for the Notify action; assignments / comments / status changes made by rules notify through the usual paths (`ItemObserver` → `Assignments`, `ItemComments`).
 - **Tests:** `tests/Feature/Automation/{AutomationEngineTest,AutomationRulesTest}.php`, e2e `e2e/tests/automations.spec.ts`.
 
+### Trello import (v1.41.0, BRAI-65)
+- `app/Support/Imports/Trello/`: `TrelloImporter` (registry key `trello`), `TrelloExport` (reads +
+  validates the board JSON, limits, normalized lists / cards / checklists / labels / members),
+  `TrelloDescription` (card Markdown → sanitized HTML + check lists / attachment links).
+- Preview + options UI: `components/imports/sources/TrelloPreview.tsx`. Fixture:
+  `tests/Fixtures/imports/trello/board.json`. Tests: `TrelloImporterTest`, `e2e/tests/import-trello.spec.ts`.
+
+### Jira import (v1.41.0, BRAI-139)
+- `app/Support/Imports/Jira/`: `JiraImporter` (registry key `jira`), `JiraExport` (reads the "Export CSV
+  (all fields)" file into issue arrays + statuses / types / priorities / sprints / people tallies,
+  hierarchy, unsupported counts), `CsvReader` (streaming CSV: BOM, `,` `;` tab, repeated column names,
+  multi-line cells, Windows-1252 cells, damaged files; reusable for any CSV import), `JiraMarkup`
+  (Jira wiki markup, or obvious Markdown via `PageContentConverter`, → `SafeHtml`).
+- Preview + mapping UI: `components/imports/sources/JiraPreview.tsx`. Fixtures:
+  `tests/Fixtures/imports/jira/*.csv`. Tests: `JiraImporterTest`, `e2e/tests/import-jira.spec.ts`.
+
+### Notion import (v1.41.0, BRAI-66)
+Plan [`tasks/feat-import-notion.md`](./tasks/feat-import-notion.md).
+- `app/Support/Imports/Notion/`: `NotionImporter` (registry key `notion`, needs `PagePolicy::create`),
+  `NotionArchive` (SafeZip unpack incl. nested `…-Part-N.zip`, `Title <id>` names → `NotionNode` tree,
+  link resolution, limits), `NotionContent` (page / CSV table → sanitized HTML, links + files
+  rewritten; shared by preview and run), `NotionAssets` (archive files → editor uploads).
+- Shared: `app/Support/Imports/Shared/MarkdownHtml` — GFM Markdown → `SafeHtml` HTML with Lexical
+  check lists and code languages; for any importer that needs tables / images / nested lists.
+- Preview + options UI: `components/imports/sources/NotionPreview.tsx`. Fixture:
+  `tests/Fixtures/imports/notion/`. Tests: `NotionImporterTest`, `e2e/tests/import-notion.spec.ts`.
+
+### Project export + restore (v1.41.0, BRAI-81)
+Plan [`tasks/feat-project-archive.md`](./tasks/feat-project-archive.md); format doc in `ProjectArchive`'s docblock + [`docs/project-export.md`](../project-export.md).
+- **Format:** `app/Support/Imports/Archive/ProjectArchive` (format `brainitive-project`, `VERSION` 1, modules, limits, `NEVER` = what is omitted and why). ZIP = `manifest.json` (sha256 per file, counts, omitted) + `project|people|boards|issues|pages|task_lists|plans|helpdesks.json` + `attachments/` + `media/`. Archive-local refs only (`i12`, `slug:<x>` for instance-wide types / priorities), embedded files as `brainitive-media:<ref>`.
+- **Export:** `ProjectExportController` (`projects.export.index` JSON, `.store` (admins = `ProjectPolicy::update`), `.download` (signed relative URL + exporter only + unexpired; an Inertia visit gets `Inertia::location`)) in the ticket 4 section of `routes/imports.php` → model `ProjectExport` (`project_exports`, uuid-bound, `TTL_HOURS` 24, Prunable 30 days) → job `ExportProject` (after the response on the sync queue) → `ProjectArchiveWriter` (only what the exporter may see; `ArchiveContent` strips mentions, bundles `/storage/uploads/…` + `excalidraw-embeds` files, whiteboard issue cards → refs) → `ProjectExportReadyNotification` (`export_ready`, category workspace). Cleanup: `exports:cleanup` hourly in `routes/console.php` + when the next export starts. UI: `components/projects/ExportProjectCard.tsx` (settings → General).
+- **Restore:** `ProjectArchiveImporter` (registry key `brainitive`, no target project, `ProjectPolicy::create`) → `ProjectArchiveReader` (SafeZip, manifest, version, every checksum, no unlisted files; modules decoded one at a time in the preview) → `ProjectArchiveRestorer` (everything via `ImportMappings::once`, refs remapped, `ArchiveContent::restore*` + `SafeHtml`). Preview UI `components/imports/sources/ArchivePreview.tsx`.
+- **Tests:** `tests/Feature/Imports/ProjectArchiveTest.php`, `e2e/tests/project-archive.spec.ts`.
+
 ### Sharing (read-only links)
 - **Docs and issues:** `ShareLink` (morph `shareable`: `Page` / `Item`, random token, `expires_at`, `revoked_at`, views), `ShareLinkController` — manage via `share-links.*` (needs `update` on the item), public view `/s/{token}` → `Pages/Share/Show.tsx` (`noindex`, 410 when revoked / expired / deleted). UI: `components/share/ShareButton.tsx`.
 - **Plans** keep their own `share_token` (`/share/plans/{token}`); bookmarks / snippets have `visibility = public`.

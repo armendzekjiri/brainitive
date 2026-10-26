@@ -2083,3 +2083,72 @@ export interface AutomationPreview {
     conditions: { type: string; label: string; passed: boolean }[];
     actions: { label: string; status: 'ok' | 'skipped' | 'error'; message: string }[];
 }
+
+// ── Bring your data: imports (v1.41.0) ────────────────────────────────────────
+export type ImportSourceKey = 'trello' | 'jira' | 'notion' | 'brainitive' | string;
+export type ImportStatus = 'uploaded' | 'previewed' | 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+export interface ImportSource {
+    key: ImportSourceKey;
+    label: string;
+    description: string;
+    accept: string;
+    needs_project: boolean;
+}
+
+/** ImportRun::report — counts of what was created, warnings, and content that couldn't come over. */
+export interface ImportReport {
+    created?: Record<string, number>;
+    warnings?: string[];
+    unsupported?: Record<string, number>;
+}
+
+export interface ImportRunData {
+    uuid: string;
+    source: ImportSourceKey;
+    status: ImportStatus;
+    file_name: string | null;
+    file_size: number;
+    project: { id: number; name: string; slug: string } | null;
+    user: { id: number; name: string } | null;
+    progress: { done: number; total: number };
+    error: string | null;
+    created_at: string | null;
+    finished_at: string | null;
+    /** links to what was created, importer-defined: {project_id, board_id, page_id, url, …} */
+    result: Record<string, unknown> | null;
+    /** importer-defined dry-run summary (only on the detail payload) */
+    preview?: Record<string, unknown> | null;
+    options?: Record<string, unknown> | null;
+    report?: ImportReport | null;
+}
+
+// ── Project export + restore (BRAI-81) ────────────────────────────────────────
+export type ProjectExportStatus = 'queued' | 'running' | 'ready' | 'failed' | 'expired';
+
+/** ProjectExport::present() */
+export interface ProjectExportData {
+    uuid: string;
+    status: ProjectExportStatus;
+    file_size: number;
+    counts: Record<string, number> | null;
+    error: string | null;
+    created_at: string | null;
+    finished_at: string | null;
+    expires_at: string | null;
+    /** signed, only for the exporter, until expires_at */
+    download_url: string | null;
+}
+
+/** ProjectArchiveImporter::preview() */
+export interface ProjectArchivePreview {
+    format_version: number;
+    app_version: string | null;
+    exported_at: string | null;
+    source: { name: string; key: string };
+    suggested: { name: string; key: string };
+    counts: Record<string, number>;
+    people: { ref: string; name: string; email: string | null; member_id: number | null }[];
+    members: { id: number; name: string; email: string | null }[];
+    omitted: { what: string; count: number | null; why: string }[];
+}

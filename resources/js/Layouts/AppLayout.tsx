@@ -92,6 +92,7 @@ import {
     Gauge,
     Pencil,
     PanelLeft,
+    PackageOpen,
     ArrowRight,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -1648,6 +1649,14 @@ function AppSidebar({
                                 <PanelLeft className="size-4" />
                                 <span className="text-sm">Customize sidebar</span>
                             </DropdownMenuItem>
+                            {currentWorkspace && route().has('imports.index') && (
+                                <DropdownMenuItem asChild className="cursor-pointer">
+                                    <Link href={route('imports.index', currentWorkspace.slug)} className="flex items-center gap-3 p-2">
+                                        <PackageOpen className="size-4" />
+                                        <span className="text-sm">Import data</span>
+                                    </Link>
+                                </DropdownMenuItem>
+                            )}
                             {currentWorkspace && canManageWorkspace && (
                                 <DropdownMenuItem asChild className="cursor-pointer">
                                     <Link href={route('workspaces.edit', currentWorkspace.slug)} className="flex items-center gap-3 p-2">
