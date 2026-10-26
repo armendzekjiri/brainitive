@@ -43,6 +43,9 @@ export const OUTLOOK_E2E = { clientId: 'e2e-outlook-client' } as const;
  */
 export const COLLAB = { port: PORT + 100, secret: 'e2e-collab-secret' } as const;
 
+/** Web push in the local e2e app (BRAI-154): test-only VAPID public key (the private one is in appEnv). */
+export const PUSH_E2E = { vapidPublicKey: 'BDk2GPkD9AFgfvh6G-rXWxZTv1MEdII6HUA_5Eqj9ExwaiTarukhiYVdWBaHOKwLYMEVVid2DA5o7jg3q1gIxKY' } as const;
+
 /** Seeded workspace / project / board (slugs). */
 export const SEED = { workspace: 'e2e-workspace', project: 'website', board: 'main-board', key: 'WEB' } as const;
 
@@ -105,6 +108,12 @@ export function appEnv(): Record<string, string> {
         COLLAB_URL: `ws://127.0.0.1:${COLLAB.port}`,
         COLLAB_SECRET: COLLAB.secret,
         COLLAB_E2E_OPT_IN: 'true',
+        // push-devices.spec.ts (BRAI-154): a test-only VAPID pair (signs nothing real) + the fake push service;
+        // WEBPUSH_FAKE is honoured only with APP_ENV=e2e
+        VAPID_SUBJECT: 'mailto:e2e@example.test',
+        VAPID_PUBLIC_KEY: PUSH_E2E.vapidPublicKey,
+        VAPID_PRIVATE_KEY: 'icnBIwSAna7_jPM3xbRAe9fYjkjZUzGkdb-gzFfHMQA',
+        WEBPUSH_FAKE: 'true',
         PHP_CLI_SERVER_WORKERS: process.env.E2E_SERVER_WORKERS ?? '4',
     };
 }

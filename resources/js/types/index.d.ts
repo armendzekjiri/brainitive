@@ -2929,3 +2929,30 @@ export type PageCollabBootstrap =
 export interface PagePresenceCollabState extends PageDraftState {
     collab_epoch?: number | null;
 }
+
+/** GET push-subscriptions.index — one registered browser (BRAI-154). Endpoints never reach the page. */
+export interface PushDevice {
+    id: number;
+    /** SHA-256 hex of the endpoint: matches `endpointHash()` of this browser's subscription → "This device". */
+    endpoint_hash: string;
+    label: string;
+    browser: string | null;
+    os: string | null;
+    platform: 'windows' | 'macos' | 'ios' | 'android' | 'linux' | 'chromeos' | 'other';
+    /** "Chrome/Edge (Google push)", "Firefox", "Safari / iPhone", … */
+    service: string;
+    service_host: string;
+    created_at: string | null;
+    last_success_at: string | null;
+    last_error: string | null;
+    last_error_at: string | null;
+    /** The push service answered 404 / 410: no more pushes go there. */
+    expired_at: string | null;
+}
+
+/** POST push-subscriptions.test — what the push service answered. */
+export interface PushTestResult {
+    status: 'delivered' | 'expired' | 'rejected' | 'network' | 'unconfigured' | 'invalid';
+    http_status: number | null;
+    reason: string | null;
+}
