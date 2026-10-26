@@ -14,6 +14,9 @@ x-brainitive: &brainitive
     # Live co-editing (BRAI-54): the browser connects to /collab on this host (Caddy → realtime).
     # COLLAB_URL= (empty) in .env turns it off; then remove the realtime service too.
     COLLAB_URL: ${COLLAB_URL-/collab}
+    # Live channels (BRAI-151): the app / queue / scheduler publish to the realtime service directly
+    # (internal network, never through Caddy). The browser uses /collab?live=1 — no extra route.
+    LIVE_PUBLISH_URL: ${LIVE_PUBLISH_URL-http://realtime:1234}
   volumes:
     - storage:/app/storage
   depends_on:
@@ -72,6 +75,8 @@ services:
       COLLAB_PORT: "1234"
       COLLAB_APP_URL: http://app:8081
       COLLAB_SECRET_FILE: /collab/secret
+      # live channels: accept publishes from the app containers (private network, key-protected)
+      LIVE_PUBLISH_FROM: private
     command: ["node", "realtime/src/index.js"]
     volumes:
       - collab:/collab:ro
