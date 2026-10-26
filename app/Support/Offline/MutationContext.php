@@ -57,6 +57,33 @@ final class MutationContext
     }
 
     /**
+     * Resolve several refs in one query (reorder); every ref must exist, as in resolveRef().
+     *
+     * @param  list<string>  $refs
+     * @return array<string, int>
+     */
+    public function resolveRefs(array $refs, string $entityType): array
+    {
+        if ($refs === []) {
+            return [];
+        }
+        $rows = OfflineMutation::where('user_id', $this->user->id)->whereIn('client_id', $refs)->get()->keyBy('client_id');
+        $ids = [];
+        foreach ($refs as $ref) {
+            $created = $rows->get($ref);
+            if (! $created) {
+                throw new SyncAbort(SyncOutcome::waiting('Waiting for an earlier offline change to arrive first.'));
+            }
+            if ($created->status !== 200 || $created->entity_type !== $entityType || ! $created->entity_id) {
+                throw new SyncAbort(SyncOutcome::deleted($entityType, 'The item this change was made on was never created.'));
+            }
+            $ids[$ref] = $created->entity_id;
+        }
+
+        return $ids;
+    }
+
+    /**
      * Validate the data of this mutation; only the validated keys come back.
      *
      * @param  array<string, mixed>  $rules

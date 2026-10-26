@@ -10,12 +10,21 @@ import { Button } from '@/components/ui/button';
 import { isSupported } from '@/lib/offline/db';
 import { clearOfflineData, disableOffline, enableOffline } from '@/lib/offline/session';
 import { isOfflineEnabled } from '@/lib/offline/settings';
-import { cacheSupported, isShellCached } from '@/lib/offline/shell';
+import { cacheShell, cacheSupported, isShellCached } from '@/lib/offline/shell';
 import { useOfflineState } from '@/lib/offline/store';
 import { cn } from '@/lib/utils';
 import type { PageProps } from '@/types';
 
-type Status = 'off' | 'preparing' | 'ready' | 'error';
+type Status = 'off' | 'checking' | 'preparing' | 'ready' | 'error';
+
+/** The service worker controls the page soon after registering; never wait forever for it. */
+function workerReady(ms = 8000): Promise<boolean> {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return Promise.resolve(false);
+    return Promise.race([
+        navigator.serviceWorker.ready.then(() => true),
+        new Promise<boolean>((resolve) => window.setTimeout(() => resolve(false), ms)),
+    ]);
+}
 
 /**
  * "Work offline on this device" (BRAI-82): opt-in per device and account, off by default. Says
@@ -25,7 +34,7 @@ export default function OfflineSettingCard({ className = '' }: { className?: str
     const user = usePage<PageProps>().props.auth.user;
     const { outbox, conflicts } = useOfflineState();
     const [enabled, setEnabled] = useState(() => isOfflineEnabled(user.id));
-    const [status, setStatus] = useState<Status>(enabled ? 'preparing' : 'off');
+    const [status, setStatus] = useState<Status>(enabled ? 'checking' : 'off');
     const [error, setError] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<null | 'off' | 'clear'>(null);
     const supported = isSupported() && cacheSupported() && typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
@@ -34,8 +43,10 @@ export default function OfflineSettingCard({ className = '' }: { className?: str
     useEffect(() => {
         if (!enabled) return;
         let cancelled = false;
-        void Promise.all([isShellCached(), navigator.serviceWorker?.ready]).then(([cached]) => {
-            if (!cancelled) setStatus(cached ? 'ready' : 'preparing');
+        void Promise.all([isShellCached(), workerReady()]).then(([cached, worker]) => {
+            if (cancelled) return;
+            setStatus(cached && worker ? 'ready' : 'error');
+            if (!cached || !worker) setError('This device isn’t ready to open the app offline yet.');
         });
         return () => { cancelled = true; };
     }, [enabled]);
@@ -46,9 +57,22 @@ export default function OfflineSettingCard({ className = '' }: { className?: str
         setError(null);
         try {
             await enableOffline(user.id);
-            await navigator.serviceWorker?.ready;
+            if (!(await workerReady())) throw new Error('The app couldn’t install its offline helper in this browser.');
             setStatus('ready');
             toast.success('This device is ready to work offline');
+        } catch (e) {
+            setStatus('error');
+            setError(e instanceof Error ? e.message : 'Could not prepare offline mode.');
+        }
+    };
+
+    const retry = async () => {
+        setStatus('preparing');
+        setError(null);
+        try {
+            await cacheShell(true);
+            if (!(await workerReady())) throw new Error('The app couldn’t install its offline helper in this browser.');
+            setStatus('ready');
         } catch (e) {
             setStatus('error');
             setError(e instanceof Error ? e.message : 'Could not prepare offline mode.');
@@ -84,7 +108,8 @@ export default function OfflineSettingCard({ className = '' }: { className?: str
                     role="switch"
                     aria-checked={enabled}
                     aria-labelledby="offline-setting-label"
-                    disabled={!supported || status === 'preparing'}
+                    // turning it off (the privacy control) is always possible
+                    disabled={!enabled && (!supported || status === 'preparing')}
                     onClick={() => (enabled ? (waiting > 0 ? setConfirm('off') : void turnOff()) : void turnOn())}
                     className={cn(
                         'relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50',
@@ -99,9 +124,14 @@ export default function OfflineSettingCard({ className = '' }: { className?: str
 
             {enabled && (
                 <p className="flex items-center gap-2 text-sm" role="status">
-                    {status === 'preparing' && <><Loader2 className="h-4 w-4 animate-spin" /> Preparing this device…</>}
+                    {(status === 'preparing' || status === 'checking') && <><Loader2 className="h-4 w-4 animate-spin" /> Preparing this device…</>}
                     {status === 'ready' && <><CheckCircle2 className="h-4 w-4 text-brand-green" /> Ready to work offline on this device</>}
-                    {status === 'error' && <span className="text-destructive">{error}</span>}
+                    {status === 'error' && (
+                        <>
+                            <span className="text-destructive">{error}</span>
+                            <Button variant="link" size="sm" className="h-auto p-0" onClick={() => void retry()}>Try again</Button>
+                        </>
+                    )}
                 </p>
             )}
 

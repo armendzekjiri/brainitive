@@ -15,6 +15,7 @@ use App\Support\Offline\FieldMerge;
 use App\Support\Offline\MutationContext;
 use App\Support\Offline\SyncAbort;
 use App\Support\Offline\SyncOutcome;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -79,6 +80,8 @@ final class IssueMutations
         Gate::forUser($ctx->user)->authorize('update', $item); // as BoardController::storeComment
 
         $html = '<p>'.nl2br(e(trim($data['body'])), false).'</p>';
+        // Last step before the commit (only the outcome row is written after it), like storeComment:
+        // mention / comment notifications go out from ItemComments, as for any other comment.
         $comment = ItemComments::add($item, $ctx->user, $html);
 
         return SyncOutcome::applied('comment', [
@@ -93,8 +96,8 @@ final class IssueMutations
     public static function create(MutationContext $ctx): SyncOutcome
     {
         $data = $ctx->validate(['board_id' => 'required|integer']);
-        $board = Board::with('project')->find($data['board_id']);
-        if (! $board || ! $board->project || ! $ctx->user->hasProjectAccess($board->project)) {
+        $board = Board::with('project.workspace')->find($data['board_id']);
+        if (! $board?->project?->workspace || ! $ctx->user->hasProjectAccess($board->project)) {
             throw new SyncAbort(SyncOutcome::deleted('board', 'This board was deleted while you were offline.'));
         }
         Gate::forUser($ctx->user)->authorize('createItems', $board);
@@ -113,12 +116,10 @@ final class IssueMutations
                 'title' => $data['title'],
                 'due_date' => $data['due_date'] ?? null,
                 'assigned_to' => $data['assigned_to'] ?? null,
+                'priority_id' => $data['priority_id'] ?? null,
             ]], isset($data['column_id']) ? BoardColumn::find($data['column_id']) : null)->first();
         } catch (\DomainException $e) {
             throw ValidationException::withMessages(['board_id' => $e->getMessage()]);
-        }
-        if (! empty($data['priority_id'])) {
-            $item->update(['priority_id' => $data['priority_id']]);
         }
 
         return SyncOutcome::applied(self::ENTITY, self::snapshot($item->refresh()), $item->id);
@@ -145,7 +146,8 @@ final class IssueMutations
     private static function item(MutationContext $ctx, bool $lock = false): Item
     {
         $item = Item::with('board.project.workspace')->when($lock, fn ($q) => $q->lockForUpdate())->find($ctx->targetId(self::ENTITY));
-        if (! $item || ! $item->board || ! $item->board->project || ! $ctx->user->can('view', $item)) {
+        // a trashed board / project / workspace counts as deleted (and must never reach a policy with null)
+        if (! $item?->board?->project?->workspace || ! $ctx->user->can('view', $item)) {
             throw new SyncAbort(SyncOutcome::deleted(self::ENTITY, 'This issue was deleted while you were offline.'));
         }
 
@@ -168,17 +170,21 @@ final class IssueMutations
     private static function moveTo(Item $item, BoardColumn $column, User $actor): void
     {
         $old = $item->column;
-        $item->moveToColumn($column, 0);
+        // at the end of the column, so it never ties with the card on top
+        $item->moveToColumn($column, (int) Item::where('column_id', $column->id)->max('position') + 1);
 
         if (! $old || $old->id === $column->id) {
             return;
         }
-        $project = $item->board->project;
-        $item->load('watchers');
-        foreach ($item->watchers as $watcher) {
-            if ($watcher->id !== $actor->id && $watcher->hasProjectAccess($project)) {
-                $watcher->notify(new ItemStatusChangedNotification(item: $item, oldColumn: $old, newColumn: $column, actor: $actor));
+        // after commit: a rolled-back sync (or its retry) never tells anyone about a move twice
+        DB::afterCommit(function () use ($item, $old, $column, $actor) {
+            $project = $item->board->project;
+            $item->load('watchers');
+            foreach ($item->watchers as $watcher) {
+                if ($watcher->id !== $actor->id && $watcher->hasProjectAccess($project)) {
+                    $watcher->notify(new ItemStatusChangedNotification(item: $item, oldColumn: $old, newColumn: $column, actor: $actor));
+                }
             }
-        }
+        });
     }
 }

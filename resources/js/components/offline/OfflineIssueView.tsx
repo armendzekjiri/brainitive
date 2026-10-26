@@ -43,10 +43,10 @@ export default function OfflineIssueView({ issue }: { issue: OfflineIssueSnapsho
         const text = comment.trim();
         if (!text) return;
         setComment('');
-        await commentOnIssue(issue, text);
+        if (!(await commentOnIssue(issue, text))) setComment(text);
     };
     const plan = async () => {
-        await addToMyDay({
+        const added = await addToMyDay({
             work_type: 'board',
             work_id: issue.id,
             title: issue.title,
@@ -58,7 +58,7 @@ export default function OfflineIssueView({ issue }: { issue: OfflineIssueSnapsho
             done_column_id: issue.columns.find((c) => c.is_done_column)?.id ?? null,
             open_column_id: issue.columns.find((c) => !c.is_done_column)?.id ?? null,
         });
-        toast.success('Added to My Day');
+        if (added) toast.success('Added to My Day');
     };
 
     return (

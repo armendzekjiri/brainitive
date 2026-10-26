@@ -106,7 +106,14 @@ export function watchOfflineSession(): void {
 
     router.on('before', (event) => {
         const visit = event.detail.visit;
-        if (visit.method !== 'post' || new URL(visit.url.toString(), window.location.origin).pathname !== '/logout') return;
+        const path = new URL(visit.url.toString(), window.location.origin).pathname;
+        const signingOut = visit.method === 'post' && path === pathOf('logout');
+        // deleting the account signs out too (its own confirmation already asked)
+        if (visit.method === 'delete' && path === pathOf('profile.destroy')) {
+            void clearAllOfflineData();
+            return;
+        }
+        if (!signingOut) return;
         const { outbox, conflicts } = getOfflineState();
         const waiting = outbox.length + conflicts.length;
         if (waiting > 0 && !window.confirm(`${waiting === 1 ? '1 change hasn’t' : `${waiting} changes haven’t`} synced yet. Signing out deletes ${waiting === 1 ? 'it' : 'them'} from this device. Sign out anyway?`)) {
@@ -115,6 +122,14 @@ export function watchOfflineSession(): void {
         }
         void clearAllOfflineData();
     });
+}
+
+function pathOf(name: string): string | null {
+    try {
+        return new URL(route(name), window.location.origin).pathname;
+    } catch {
+        return null;
+    }
 }
 
 export { syncNow };

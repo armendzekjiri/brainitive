@@ -50,7 +50,7 @@ export async function keepMine(c: OfflineConflict): Promise<void> {
         base: { updated_at: (c.entity?.updated_at as string | undefined) ?? null, fields: base },
         data,
         entity: c.mutation.entity,
-    });
+    }, { rebase: true });
     await removeConflict(c.id);
     kick();
 }

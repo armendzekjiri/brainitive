@@ -13,6 +13,7 @@ export function useSnapshot<T>(key: string | null): { data: T | null; loading: b
             return;
         }
         let active = true;
+        setState({ data: null, loading: true });
         const load = () => void getSnapshot<T>(key).then((data) => active && setState({ data, loading: false }));
         load();
         const off = onSnapshotChange((changed) => {

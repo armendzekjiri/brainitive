@@ -283,13 +283,6 @@ export function useItemDetail(args: UseItemDetailArgs) {
     const [dueDate, setDueDate] = useState(item?.due_date?.toString().split('T')[0] || '');
     const [dueTime, setDueTime] = useState(item?.due_time?.substring(0, 5) || '');
 
-    // Offline mode (BRAI-82): keep a copy of the issues the user opens (a no-op while it's off).
-    useOfflineSnapshot('issue', item?.id ?? null, () => issueSnapshot({
-        item: { ...(item as Item), comments: localComments },
-        workspace, project, board, columns, priorities, members: projectUsers, canEdit: canEditItems,
-        url: route('boards.items.show', [workspace.slug, project.slug, board.slug, (item as Item).id], false),
-    }), [item, localComments, canEditItems, columns]);
-
     // Linked issues
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [linkType, setLinkType] = useState('relates_to');
@@ -350,6 +343,15 @@ export function useItemDetail(args: UseItemDetailArgs) {
     // `live` = freshest copy from the reactive columns prop (links/watchers refresh
     // after mutation even though `item` may be a state snapshot in the popup).
     const live = allBoardItems.find((i) => i.id === item?.id) ?? item;
+
+    // Offline mode (BRAI-82): keep a copy of the issues the user opens (a no-op while it's off).
+    // From `live` (the popup's `item` is a state copy that isn't refreshed after an edit) and the
+    // parsed description, so the device's base values are what the server has.
+    useOfflineSnapshot('issue', item?.id ?? null, () => issueSnapshot({
+        item: { ...(item as Item), ...(live as Item), comments: localComments, description: savedDescription },
+        workspace, project, board, columns, priorities, members: projectUsers, canEdit: canEditItems,
+        url: route('boards.items.show', [workspace.slug, project.slug, board.slug, (item as Item).id], false),
+    }), [item, live, localComments, savedDescription, canEditItems]);
     const subtasks = useMemo(
         () => allBoardItems.filter((i) => i.parent_id === item?.id),
         [allBoardItems, item?.id],

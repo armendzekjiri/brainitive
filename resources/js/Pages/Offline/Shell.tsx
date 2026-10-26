@@ -22,7 +22,10 @@ type OfflineRoute =
     | { view: 'issue'; id: number }
     | { view: 'home'; missing: boolean };
 
-/** Which offline view answers the address the user opened (pure, exported for reuse). */
+/**
+ * Which offline view answers the address the user opened (pure, exported for reuse). The patterns
+ * mirror the routes `my-work.index`, `captures.index`, `task-lists.show`, `boards.items.show`.
+ */
 export function offlineRoute(url: string): OfflineRoute {
     const parsed = new URL(url, 'http://offline.invalid');
     const path = parsed.pathname.replace(/\/+$/, '') || '/';
@@ -43,7 +46,7 @@ export function offlineRoute(url: string): OfflineRoute {
  * Rendered without a session: the account is the one that turned offline mode on here.
  */
 export default function OfflineShell() {
-    const route = useMemo(() => offlineRoute(bootUrl), []);
+    const view = useMemo(() => offlineRoute(bootUrl), []);
     const [userId] = useState(() => activeOfflineUser());
     const enabled = isOfflineEnabled(userId);
     const state = useOfflineState();
@@ -60,13 +63,13 @@ export default function OfflineShell() {
         <div className="flex min-h-screen flex-col bg-muted/30 text-foreground">
             <Head title="Offline" />
             <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-2 border-b bg-background/95 px-3 backdrop-blur sm:gap-3 sm:px-4">
-                <a href="/offline" className="flex items-center gap-1.5 font-semibold" aria-label="Offline home">
+                <a href={route('offline.shell', {}, false)} className="flex items-center gap-1.5 font-semibold" aria-label="Offline home">
                     <Brain className="h-5 w-5 text-primary" /> <span className="hidden sm:inline">Brainitive</span>
                 </a>
                 {enabled && (
                     <nav className="flex min-w-0 items-center gap-1 text-sm" aria-label="Offline">
-                        <NavLink href="/my-work" active={route.view === 'myday'} icon={<Sun className="h-4 w-4" />}>My Day</NavLink>
-                        <NavLink href="/captures" active={route.view === 'capture'} icon={<Lightbulb className="h-4 w-4" />}>Capture</NavLink>
+                        <NavLink href={route('my-work.index', {}, false)} active={view.view === 'myday'} icon={<Sun className="h-4 w-4" />}>My Day</NavLink>
+                        <NavLink href={route('captures.index', {}, false)} active={view.view === 'capture'} icon={<Lightbulb className="h-4 w-4" />}>Capture</NavLink>
                     </nav>
                 )}
                 <div className="flex-1" />
@@ -77,12 +80,12 @@ export default function OfflineShell() {
                 <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b bg-primary/5 px-4 py-2 text-sm" role="status">
                     <Wifi className="h-4 w-4 text-primary" aria-hidden />
                     <span>You’re back online.{state.outbox.length > 0 ? ' Sending your changes…' : ''}</span>
-                    <a href={route.view === 'home' ? '/my-work' : bootUrl} className="font-medium text-primary hover:underline">Open the live page</a>
+                    <a href={view.view === 'home' ? route('my-work.index', {}, false) : bootUrl} className="font-medium text-primary hover:underline">Open the live page</a>
                 </div>
             )}
 
             <main className="flex-1">
-                {!enabled || !userId ? <NotEnabled /> : <View route={route} />}
+                {!enabled || !userId ? <NotEnabled /> : <View route={view} />}
             </main>
             <Toaster richColors position="bottom-right" closeButton />
         </div>
@@ -93,6 +96,7 @@ function NavLink({ href, active, icon, children }: { href: string; active: boole
     return (
         <a
             href={href}
+            aria-label={typeof children === 'string' ? children : undefined}
             aria-current={active ? 'page' : undefined}
             className={cn('flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-muted-foreground hover:bg-muted hover:text-foreground', active && 'bg-muted font-medium text-foreground')}
         >
@@ -142,10 +146,10 @@ function OfflineHome({ missing }: { missing: boolean }) {
             </div>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <a href="/my-work" className="flex items-center gap-3 rounded-2xl border bg-card p-4 hover:border-primary/40">
+                <a href={route('my-work.index', {}, false)} className="flex items-center gap-3 rounded-2xl border bg-card p-4 hover:border-primary/40">
                     <Sun className="h-5 w-5 text-amber-500" /> <span className="font-medium">My Day</span>
                 </a>
-                <a href="/captures" className="flex items-center gap-3 rounded-2xl border bg-card p-4 hover:border-primary/40">
+                <a href={route('captures.index', {}, false)} className="flex items-center gap-3 rounded-2xl border bg-card p-4 hover:border-primary/40">
                     <Lightbulb className="h-5 w-5 text-amber-500" /> <span className="font-medium">Quick capture</span>
                 </a>
             </div>

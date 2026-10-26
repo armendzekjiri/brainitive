@@ -79,9 +79,15 @@ final class OfflineSync
             });
         } catch (SyncAbort $abort) {
             return $abort->outcome;
-        } catch (UniqueConstraintViolationException) {
-            // A concurrent retry of the same mutation won the race; answer with its outcome.
-            return self::replay(OfflineMutation::where($key)->firstOrFail(), $hash);
+        } catch (UniqueConstraintViolationException $e) {
+            // A concurrent retry of the same mutation won the race: answer with its outcome.
+            // Any other unique violation (inside an applier) is a real error.
+            $existing = OfflineMutation::where($key)->first();
+            if (! $existing) {
+                throw $e;
+            }
+
+            return self::replay($existing, $hash);
         }
     }
 

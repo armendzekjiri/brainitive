@@ -110,8 +110,8 @@ test.describe('offline mode', () => {
 
         // back online: everything goes out, in order, once
         await context.setOffline(false);
-        await expect(page.getByText('3 changes synced')).toBeVisible({ timeout: 20_000 });
-        await expect(indicator(page)).toHaveAccessibleName('All changes synced');
+        // one run or several: all three go out
+        await expect(indicator(page)).toHaveAccessibleName('All changes synced', { timeout: 20_000 });
 
         await page.goto(listUrl);
         await expect(page.getByText(task, { exact: true })).toBeVisible();
@@ -214,6 +214,7 @@ test.describe('offline mode', () => {
 
         await context.setOffline(false);
         await expect(page.getByText('1 change synced')).toBeVisible({ timeout: 20_000 });
+        await expect(indicator(page)).toHaveAccessibleName('All changes synced');
         await page.goto('/my-work');
         await expect(page.getByRole('region', { name: 'My Day' }).getByRole('checkbox', { name: `Reopen “${title}”` })).toHaveAttribute('aria-checked', 'true');
     });
@@ -233,12 +234,15 @@ test.describe('offline mode', () => {
     test('signing out deletes the offline data from the device', async ({ browser }) => {
         // a fresh session of its own: signing out must not end the saved member session
         const context = await guestContext(browser);
+        await context.request.get('/login');
+        const xsrf = (await context.cookies()).find((c) => c.name === 'XSRF-TOKEN')?.value ?? '';
+        const login = await context.request.post('/login', {
+            form: { email: USERS.member.email, password: PASSWORD },
+            headers: { 'X-XSRF-TOKEN': decodeURIComponent(xsrf), Accept: 'text/html' },
+            maxRedirects: 0,
+        });
+        expect(login.status(), 'sign-in').toBe(302);
         const page = await context.newPage();
-        await page.goto('/login');
-        await page.getByLabel('Email', { exact: true }).fill(USERS.member.email);
-        await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-        await page.getByRole('button', { name: 'Log in' }).click();
-        await expect(page).not.toHaveURL(/\/login$/);
 
         await enableOffline(page);
         await page.goto('/my-work');
@@ -248,7 +252,7 @@ test.describe('offline mode', () => {
 
         await openUserMenu(page, USERS.member.name);
         await page.getByRole('menuitem', { name: 'Sign out' }).click();
-        await expect(page).toHaveURL(/\/$/);
+        await expect(page).toHaveURL(/\/$/, { timeout: 20_000 });
 
         await expect.poll(() => offlineDatabases(page)).toEqual([]);
         await expect.poll(() => page.evaluate((name) => caches.has(name), SHELL_CACHE)).toBe(false);

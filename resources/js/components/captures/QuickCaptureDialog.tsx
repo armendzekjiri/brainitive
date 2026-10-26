@@ -57,7 +57,7 @@ export function QuickCaptureDialog() {
         // Offline mode (BRAI-82): no connection → saved on this device, synced later.
         if (!navigator.onLine && getOfflineState().userId) {
             void captureOffline(form.data).then((saved) => {
-                if (!saved) return toast.error('Could not save the capture on this device.');
+                if (!saved) return; // captureOffline already said why
                 form.reset();
                 setOpen(false);
                 toast.success('Saved on this device — it syncs when you’re back online');

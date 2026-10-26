@@ -6,6 +6,7 @@
 import { useSyncExternalStore } from 'react';
 import type { OfflineConflict, OfflineMutation, OfflineSnapshotRecord } from '@/types';
 import { idbAll, idbDelete, idbGet, idbPut, isSupported } from './db';
+import { activeOfflineUser } from './settings';
 
 export interface OfflineState {
     /** Signed-in account with offline mode on (this device), or null. */
@@ -51,11 +52,22 @@ export function useOfflineState(): OfflineState {
 if (typeof window !== 'undefined') {
     window.addEventListener('online', () => setOfflineState({ online: true }));
     window.addEventListener('offline', () => setOfflineState({ online: false }));
+    // signed out / another account in another tab: this tab lets go of the data at once
+    window.addEventListener('storage', (event) => {
+        if (event.key !== null && event.key !== 'brainitive-offline:user') return;
+        if (state.userId && activeOfflineUser() !== state.userId) {
+            setOfflineState({ userId: null, outbox: [], conflicts: [], syncing: false, needsSignIn: false });
+        }
+    });
 }
 
-/** The user whose data we may read / write right now, or null (offline mode off). */
+/**
+ * The user whose data we may read / write right now, or null (offline mode off). Also checks the
+ * device-wide owner (localStorage, shared by all tabs), so a tab that missed a sign-out elsewhere
+ * never recreates the deleted database.
+ */
 function uid(): number | null {
-    return state.userId && isSupported() ? state.userId : null;
+    return state.userId && isSupported() && activeOfflineUser() === state.userId ? state.userId : null;
 }
 
 /** Reload outbox + conflicts into the store. */
@@ -160,23 +172,31 @@ export type NewMutation = Omit<OfflineMutation, 'id' | 'created_at' | 'seq' | 's
  * change that was already sent — the server may have it): a rename of a task created offline
  * becomes part of the create, two renames become one, keeping the oldest base value per field.
  */
-export function enqueue(mutation: NewMutation): Promise<OfflineMutation | null> {
-    return withOutboxLock(() => enqueueLocked(mutation));
+export function enqueue(mutation: NewMutation, options: { rebase?: boolean } = {}): Promise<OfflineMutation | null> {
+    return withOutboxLock(() => enqueueLocked(mutation, options.rebase ?? false));
 }
 
 let outboxLock: Promise<unknown> = Promise.resolve();
 
 /**
- * Serialise outbox writes with the sync engine picking the next change: a change is either folded
- * in before it is sent, or sent first and then never touched again.
+ * Serialise outbox writes with the sync engine picking the next change — across tabs too (Web
+ * Locks; a per-tab queue where the browser has none): a change is either folded in before it is
+ * sent, or sent first and then never touched again.
  */
 export function withOutboxLock<T>(run: () => Promise<T>): Promise<T> {
-    const next = outboxLock.then(run, run);
+    const locked = () => (typeof navigator !== 'undefined' && navigator.locks
+        ? navigator.locks.request('brainitive-offline-outbox', run) as Promise<T>
+        : run());
+    const next = outboxLock.then(locked, locked);
     outboxLock = next.catch(() => undefined);
     return next;
 }
 
-async function enqueueLocked(mutation: NewMutation): Promise<OfflineMutation | null> {
+/**
+ * `rebase` ("keep mine" after a conflict): a newer pending edit of the same field wins over the
+ * resolution, and every field is now based on the server's value (theirs).
+ */
+async function enqueueLocked(mutation: NewMutation, rebase: boolean): Promise<OfflineMutation | null> {
     const userId = uid();
     if (!userId) return null;
     const pending = (await idbAll<OfflineMutation>(userId, 'outbox')).filter((m) => !m.sent);
@@ -194,12 +214,18 @@ async function enqueueLocked(mutation: NewMutation): Promise<OfflineMutation | n
     if (mutation.type === 'list_task.update' || mutation.type === 'issue.update') {
         const earlier = pending.find((m) => m.type === mutation.type && sameTarget(m.target, mutation.target));
         if (earlier) {
-            const merged: OfflineMutation = {
-                ...earlier,
-                data: { ...earlier.data, ...mutation.data },
-                base: { ...earlier.base, fields: { ...(mutation.base?.fields ?? {}), ...(earlier.base?.fields ?? {}) } },
-                entity: { ...earlier.entity, label: mutation.entity.label },
-            };
+            const merged: OfflineMutation = rebase
+                ? {
+                    ...earlier,
+                    data: { ...mutation.data, ...earlier.data },
+                    base: { ...earlier.base, fields: { ...(earlier.base?.fields ?? {}), ...(mutation.base?.fields ?? {}) } },
+                }
+                : {
+                    ...earlier,
+                    data: { ...earlier.data, ...mutation.data },
+                    base: { ...earlier.base, fields: { ...(mutation.base?.fields ?? {}), ...(earlier.base?.fields ?? {}) } },
+                    entity: { ...earlier.entity, label: mutation.entity.label },
+                };
             await idbPut(userId, 'outbox', merged);
             await refreshOffline();
             return merged;
@@ -207,13 +233,10 @@ async function enqueueLocked(mutation: NewMutation): Promise<OfflineMutation | n
     }
 
     if (mutation.type === 'list_task.reorder') {
+        // the newest order replaces an unsent older one, at the end of the line (it may name tasks
+        // created after the older one)
         const earlier = pending.find((m) => m.type === 'list_task.reorder' && m.data.task_list_id === mutation.data.task_list_id);
-        if (earlier) {
-            const merged = { ...earlier, data: mutation.data };
-            await idbPut(userId, 'outbox', merged);
-            await refreshOffline();
-            return merged;
-        }
+        if (earlier?.seq !== undefined) await idbDelete(userId, 'outbox', earlier.seq);
     }
 
     if (mutation.type === 'my_day.remove') {

@@ -8,6 +8,7 @@
  */
 
 export const SHELL_CACHE = 'brainitive-offline-shell-v1';
+const STAGING_CACHE = `${SHELL_CACHE}-next`;
 const SHELL_URL = '/offline';
 const MANIFEST_URL = '/build/manifest.json';
 const MANIFEST_MARK = '/__offline-manifest';
@@ -60,35 +61,40 @@ export async function cacheShell(force = false): Promise<void> {
     const manifestText = await manifestResponse.text();
     const manifest = JSON.parse(manifestText) as Record<string, ManifestChunk>;
 
+    const version = manifestText.length + ':' + hash(manifestText);
     const cache = await caches.open(SHELL_CACHE);
     const mark = await cache.match(MANIFEST_MARK);
-    const unchanged = mark && (await mark.text()) === manifestText.length + ':' + hash(manifestText);
-    if (unchanged && !force && (await cache.match(SHELL_URL))) return;
+    if (mark && (await mark.text()) === version && !force && (await cache.match(SHELL_URL))) return;
 
-    // a new build: start from an empty cache so old chunks don't pile up
-    if (mark) {
+    // Download into a staging cache: the working shell stays until the new one is complete
+    // (a connection that drops halfway must not leave the device without an offline app).
+    await caches.delete(STAGING_CACHE);
+    const staging = await caches.open(STAGING_CACHE);
+    try {
+        // the shell renders without a session (see OfflineSyncController::shell)
+        const shell = await fetch(SHELL_URL, { cache: 'no-store', credentials: 'same-origin', headers: { Accept: 'text/html' } });
+        if (!shell.ok) throw new Error('Could not download the offline app.');
+        await staging.put(SHELL_URL, shell);
+        const results = await Promise.allSettled(shellFiles(manifest).map((url) => staging.add(url)));
+        if (results.some((r) => r.status === 'rejected')) throw new Error('Could not download all app files.');
+        await staging.put(MANIFEST_MARK, new Response(version));
+
+        // swap: a new build replaces the old files (so old chunks don't pile up)
         await caches.delete(SHELL_CACHE);
+        const live = await caches.open(SHELL_CACHE);
+        for (const request of await staging.keys()) {
+            const response = await staging.match(request);
+            if (response) await live.put(request, response);
+        }
+    } finally {
+        await caches.delete(STAGING_CACHE);
     }
-    const fresh = await caches.open(SHELL_CACHE);
-
-    // the shell renders without a session (see OfflineSyncController::shell)
-    const shell = await fetch(SHELL_URL, { cache: 'no-store', credentials: 'same-origin', headers: { Accept: 'text/html' } });
-    if (!shell.ok) throw new Error('Could not download the offline app.');
-    await fresh.put(SHELL_URL, shell);
-
-    const files = shellFiles(manifest);
-    const results = await Promise.allSettled(files.map((url) => fresh.add(url)));
-    if (results.some((r) => r.status === 'rejected')) {
-        await caches.delete(SHELL_CACHE);
-        throw new Error('Could not download all app files.');
-    }
-    await fresh.put(MANIFEST_MARK, new Response(manifestText.length + ':' + hash(manifestText)));
 }
 
 export async function dropShell(): Promise<void> {
     if (!cacheSupported()) return;
     try {
-        await caches.delete(SHELL_CACHE);
+        await Promise.all([caches.delete(SHELL_CACHE), caches.delete(STAGING_CACHE)]);
     } catch {
         // nothing cached
     }

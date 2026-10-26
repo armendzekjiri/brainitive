@@ -58,7 +58,15 @@ export function openDb(userId: number): Promise<IDBDatabase> {
 
 async function tx<T>(userId: number, store: StoreName, mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
     const db = await openDb(userId);
-    return request(run(db.transaction(store, mode).objectStore(store)));
+    const transaction = db.transaction(store, mode);
+    const req = run(transaction.objectStore(store));
+    if (mode === 'readonly') return request(req);
+    // a write counts only once it is committed (a quota error aborts the transaction after onsuccess)
+    return new Promise<T>((resolve, reject) => {
+        transaction.oncomplete = () => resolve(req.result);
+        transaction.onabort = () => reject(transaction.error ?? req.error);
+        transaction.onerror = () => reject(transaction.error ?? req.error);
+    });
 }
 
 export const idbGet = <T>(userId: number, store: StoreName, key: IDBValidKey) =>

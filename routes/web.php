@@ -58,6 +58,7 @@ use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkTimerController;
 use App\Http\Middleware\ReadOnlySession;
 use App\Support\Auth\MicrosoftLogin;
+use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
@@ -128,7 +129,9 @@ Route::get('/site.webmanifest', function () {
 // Offline mode (BRAI-82): the app shell the service worker serves when a navigation fails offline.
 // Public and session-free on purpose (no session, no shared props): the cached copy holds no account data.
 Route::get('/offline', [OfflineSyncController::class, 'shell'])
-    ->withoutMiddleware([StartSession::class, ShareErrorsFromSession::class, ValidateCsrfToken::class])
+    // no cookies read at all: not even "remember me" may sign anyone in here
+    ->withoutMiddleware([EncryptCookies::class, StartSession::class, ShareErrorsFromSession::class, ValidateCsrfToken::class])
+    ->middleware('throttle:60,1,offline.shell')
     ->name('offline.shell');
 
 // Public bookmark view (view only, no auth)
@@ -195,7 +198,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/my-day/reorder', [MyDayController::class, 'reorder'])->name('my-day.reorder');
     Route::post('/my-day/carry-over', [MyDayController::class, 'carryOver'])->name('my-day.carry-over');
     // Offline mode (BRAI-82): one mutation from a device's outbox per request, idempotent per client uuid
-    Route::post('/offline/sync', [OfflineSyncController::class, 'store'])->middleware('throttle:240,1,offline.sync')->name('offline.sync');
+    // background burst when the device is back online: never write the session (a form's flash would be lost)
+    Route::post('/offline/sync', [OfflineSyncController::class, 'store'])->middleware([ReadOnlySession::class, 'throttle:240,1,offline.sync'])->name('offline.sync');
     Route::post('/work-timer', [WorkTimerController::class, 'start'])->name('work-timer.start');
     Route::post('/work-timer/stop', [WorkTimerController::class, 'stop'])->name('work-timer.stop');
     Route::delete('/work-timer', [WorkTimerController::class, 'discard'])->name('work-timer.discard');

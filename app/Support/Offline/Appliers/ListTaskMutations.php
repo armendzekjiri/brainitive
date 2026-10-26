@@ -47,8 +47,9 @@ final class ListTaskMutations
         ]);
         $base = $ctx->baseFor($changes);
 
-        $task = TaskListItem::with('taskList.project')->lockForUpdate()->find($ctx->targetId(self::ENTITY));
-        if (! $task || ! $task->taskList || ! $ctx->user->can('view', $task->taskList)) {
+        $task = TaskListItem::with('taskList.project.workspace')->lockForUpdate()->find($ctx->targetId(self::ENTITY));
+        // a trashed list / project / workspace counts as deleted (and must never reach a policy with null)
+        if (! $task?->taskList?->project?->workspace || ! $ctx->user->can('view', $task->taskList)) {
             throw new SyncAbort(SyncOutcome::deleted(self::ENTITY, 'This task was deleted while you were offline.'));
         }
         Gate::forUser($ctx->user)->authorize('manageItems', $task->taskList);
@@ -79,9 +80,10 @@ final class ListTaskMutations
         $items = $data['items'];
         ksort($items); // validated() regroups wildcard keys; the index is the order
 
+        $refs = $ctx->resolveRefs(array_values(array_filter(array_column($items, 'ref'))), self::ENTITY);
         $ids = [];
         foreach ($items as $entry) {
-            $ids[] = ! empty($entry['id']) ? (int) $entry['id'] : (! empty($entry['ref']) ? $ctx->resolveRef($entry['ref'], self::ENTITY) : null);
+            $ids[] = ! empty($entry['id']) ? (int) $entry['id'] : (! empty($entry['ref']) ? $refs[$entry['ref']] : null);
         }
         $ids = array_values(array_filter($ids));
         $existing = $list->items()->whereIn('id', $ids)->pluck('id')->all();
@@ -113,8 +115,8 @@ final class ListTaskMutations
 
     private static function list(MutationContext $ctx, int $id): TaskList
     {
-        $list = TaskList::with('project')->find($id);
-        if (! $list || ! $ctx->user->can('view', $list)) {
+        $list = TaskList::with('project.workspace')->find($id);
+        if (! $list?->project?->workspace || ! $ctx->user->can('view', $list)) {
             throw new SyncAbort(SyncOutcome::deleted('task_list', 'This list was deleted while you were offline.'));
         }
         Gate::forUser($ctx->user)->authorize('manageItems', $list);

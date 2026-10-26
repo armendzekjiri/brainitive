@@ -91,9 +91,9 @@ export function myDaySnapshot(plan: MyDayPlan): OfflineMyDaySnapshot {
             title: item.title,
             key: item.key,
             url: item.work_type === 'board' && item.board && project.workspace
-                ? `/workspaces/${project.workspace.slug}/projects/${project.slug}/boards/${item.board.slug}/items/${item.id}`
+                ? route('boards.items.show', [project.workspace.slug, project.slug, item.board.slug, item.id], false)
                 : item.task_list && project.workspace
-                    ? `/workspaces/${project.workspace.slug}/projects/${project.slug}/task-lists/${item.task_list.slug}`
+                    ? route('task-lists.show', [project.workspace.slug, project.slug, item.task_list.slug], false)
                     : null,
             project_name: project.name,
             done: !!(item.completed_at || item.column?.is_done_column || item.status === 'done'),

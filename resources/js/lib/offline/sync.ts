@@ -53,7 +53,7 @@ export function syncNow(): Promise<void> {
         again = true;
         return running;
     }
-    running = run().finally(() => {
+    running = run().catch(() => undefined).finally(() => {
         running = null;
         if (again) {
             again = false;
@@ -69,6 +69,7 @@ async function run(): Promise<void> {
 
     setOfflineState({ syncing: true });
     let synced = 0;
+    let conflicted = 0;
     let needsSignIn = false;
     try {
         for (;;) {
@@ -79,7 +80,7 @@ async function run(): Promise<void> {
             let status: number;
             let body: SyncBody;
             try {
-                const response = await axios.post(route('offline.sync'), payload(next), {
+                const response = await axios.post(route('offline.sync'), { ...payload(next), user_id: userId }, {
                     validateStatus: () => true,
                     timeout: 20_000,
                     headers: { Accept: 'application/json' },
@@ -101,15 +102,21 @@ async function run(): Promise<void> {
                 break;
             }
             if (status === 424) {
-                const ref = next.target?.ref ?? (next.data.work_ref as string | undefined);
+                const refs = [
+                    next.target?.ref,
+                    next.data.work_ref as string | undefined,
+                    ...((next.data.items as { ref?: string }[] | undefined) ?? []).map((i) => i.ref),
+                ].filter((r): r is string => !!r);
                 const outbox = await readOutbox();
-                if (ref && outbox.some((m) => m.id === ref)) break; // its create is still on the way
+                if (outbox.some((m) => refs.includes(m.id))) break; // its create is still on the way
                 await toConflict(next, 'deleted', 'It was made on something that couldn’t be created.');
+                conflicted++;
                 continue;
             }
             const kind = conflictKind(status);
             if (!kind) break; // 429 / 5xx: later
             await toConflict(next, kind, messageFor(kind, body), body);
+            conflicted++;
         }
     } finally {
         setOfflineState({ needsSignIn });
@@ -118,9 +125,8 @@ async function run(): Promise<void> {
         if (synced > 0) {
             toast.success(synced === 1 ? '1 change synced' : `${synced} changes synced`);
         }
-        const conflicts = getOfflineState().conflicts.length;
-        if (conflicts > 0 && synced > 0) {
-            toast.warning(conflicts === 1 ? '1 change needs your decision' : `${conflicts} changes need your decision`);
+        if (conflicted > 0) {
+            toast.warning(conflicted === 1 ? '1 change needs your decision' : `${conflicted} changes need your decision`);
         }
     }
 }

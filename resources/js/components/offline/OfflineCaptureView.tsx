@@ -19,11 +19,7 @@ export default function OfflineCaptureView() {
     const save = async (e: FormEvent) => {
         e.preventDefault();
         if (!text.trim()) return;
-        const ok = await captureOffline({ text: text.trim(), url: url.trim() || null });
-        if (!ok) {
-            toast.error('Could not save the capture on this device.');
-            return;
-        }
+        if (!(await captureOffline({ text: text.trim(), url: url.trim() || null }))) return;
         setText('');
         setUrl('');
         toast.success('Saved on this device — it syncs when you’re back online');

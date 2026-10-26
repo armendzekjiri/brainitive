@@ -9,12 +9,16 @@ use App\Models\Item;
 use App\Models\ItemPriority;
 use App\Models\MyDayEntry;
 use App\Models\OfflineMutation;
+use App\Models\Project;
 use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\User;
+use App\Notifications\ItemStatusChangedNotification;
 use App\Support\MyDay\MyDayPlan;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia;
@@ -434,6 +438,120 @@ class OfflineSyncTest extends TestCase
 
         $task = $this->list->items()->where('title', 'Plan it')->firstOrFail();
         $this->assertTrue(MyDayEntry::where(['user_id' => $this->editor->id, 'work_type' => 'list', 'work_id' => $task->id])->exists());
+    }
+
+    // ── Review follow-ups ───────────────────────────────────────────────────
+
+    public function test_remember_me_does_not_sign_anyone_in_on_the_shell(): void
+    {
+        $this->editor->forceFill(['remember_token' => 'remember-me-token', 'last_login_at' => null])->save();
+        $recaller = $this->editor->id.'|remember-me-token|'.$this->editor->getAuthPassword();
+
+        $this->withCookie(Auth::guard('web')->getRecallerName(), $recaller)
+            ->get(route('offline.shell'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->missing('auth'));
+
+        $this->assertNull($this->editor->fresh()->last_login_at);
+    }
+
+    public function test_a_change_from_another_accounts_outbox_is_never_applied(): void
+    {
+        $this->actingAs($this->editor)->postJson(route('offline.sync'), [
+            'id' => (string) Str::uuid(), 'type' => 'capture.create', 'user_id' => $this->viewer->id, 'data' => ['text' => 'Not mine'],
+        ])->assertUnauthorized()->assertJsonPath('status', 'wrong_account');
+
+        $this->sync($this->editor, 'capture.create', ['user_id' => $this->editor->id, 'data' => ['text' => 'Mine']])->assertOk();
+        $this->assertSame(['Mine'], Capture::pluck('text')->all());
+    }
+
+    public function test_offline_captures_share_the_capture_rate_limit(): void
+    {
+        RateLimiter::clear('offline-capture:'.$this->viewer->id);
+        for ($i = 0; $i < 60; $i++) {
+            $this->sync($this->viewer, 'capture.create', ['data' => ['text' => "Idea {$i}"]])->assertOk();
+        }
+        $this->sync($this->viewer, 'capture.create', ['data' => ['text' => 'One too many']])->assertStatus(429);
+        $this->assertSame(60, Capture::where('user_id', $this->viewer->id)->count());
+    }
+
+    public function test_a_trashed_project_or_workspace_answers_gone_for_every_change(): void
+    {
+        $task = $this->task();
+        $item = $this->item(['title' => 'In a trashed project']);
+        $changes = [
+            ['list_task.update', ['target' => ['id' => $task->id], 'base' => ['fields' => ['title' => 'Buy milk']], 'data' => ['title' => 'x']]],
+            ['list_task.create', ['data' => ['task_list_id' => $this->list->id, 'title' => 'x']]],
+            ['issue.update', ['target' => ['id' => $item->id], 'base' => ['fields' => ['title' => 'In a trashed project']], 'data' => ['title' => 'x']]],
+            ['issue.comment', ['target' => ['id' => $item->id], 'data' => ['body' => 'x']]],
+            ['issue.create', ['data' => ['board_id' => $this->board->id, 'title' => 'x']]],
+            ['my_day.add', ['data' => ['work_type' => 'board', 'work_id' => $item->id]]],
+            ['my_day.add', ['data' => ['work_type' => 'list', 'work_id' => $task->id]]],
+        ];
+
+        $this->project->delete();
+        foreach ($changes as [$type, $mutation]) {
+            $this->sync($this->editor, $type, $mutation)->assertStatus(410);
+        }
+
+        $this->project->restore();
+        $this->workspace->delete();
+        foreach ($changes as [$type, $mutation]) {
+            $this->sync($this->editor, $type, $mutation)->assertStatus(410);
+        }
+
+        $this->assertSame('Buy milk', $task->fresh()->title);
+        $this->assertSame(0, OfflineMutation::count());
+    }
+
+    public function test_watchers_hear_about_an_offline_move_once_after_commit(): void
+    {
+        $item = $this->item(['column_id' => $this->column('to-do')]);
+        $item->addWatcher($this->viewer);
+        $id = (string) Str::uuid();
+        $move = ['target' => ['id' => $item->id], 'base' => ['fields' => ['column_id' => $this->column('to-do')]], 'data' => ['column_id' => $this->column('done')]];
+
+        $this->sync($this->editor, 'issue.update', $move, $id)->assertOk();
+        $this->sync($this->editor, 'issue.update', $move, $id)->assertOk()->assertJsonPath('replayed', true);
+
+        Notification::assertSentToTimes($this->viewer, ItemStatusChangedNotification::class, 1);
+        Notification::assertNotSentTo($this->editor, ItemStatusChangedNotification::class);
+    }
+
+    public function test_recreate_and_reorder_follow_the_board_and_list_policies(): void
+    {
+        $otherBoard = Board::factory()->create(['project_id' => $this->project->id]);
+        $foreignPriority = ItemPriority::create(['name' => 'Elsewhere', 'slug' => 'elsewhere-'.Str::random(4), 'order' => 99, 'project_id' => Project::factory()->create()->id]);
+
+        $this->sync($this->outsider, 'issue.create', ['data' => ['board_id' => $this->board->id, 'title' => 'x']])->assertStatus(410);
+        $this->sync($this->editor, 'issue.create', ['data' => ['board_id' => 999999, 'title' => 'x']])->assertStatus(410);
+        $this->sync($this->editor, 'issue.create', ['data' => ['board_id' => $this->board->id, 'title' => 'x', 'column_id' => $otherBoard->columns()->value('id')]])
+            ->assertUnprocessable()->assertJsonValidationErrors('column_id');
+        $this->sync($this->editor, 'issue.create', ['data' => ['board_id' => $this->board->id, 'title' => 'x', 'priority_id' => $foreignPriority->id]])
+            ->assertUnprocessable()->assertJsonValidationErrors('priority_id');
+
+        $task = $this->task();
+        $otherList = TaskList::factory()->create(['project_id' => $this->project->id]);
+        $foreign = TaskListItem::factory()->create(['task_list_id' => $otherList->id, 'position' => 7]);
+        $reorder = ['data' => ['task_list_id' => $this->list->id, 'items' => [['id' => $foreign->id], ['id' => $task->id]]]];
+        $this->sync($this->viewer, 'list_task.reorder', $reorder)->assertForbidden();
+        $this->sync($this->outsider, 'list_task.reorder', $reorder)->assertStatus(410);
+        $this->sync($this->editor, 'list_task.reorder', $reorder)->assertOk()->assertJsonPath('entity.order', [$task->id]);
+        $this->assertSame(7, $foreign->fresh()->position);
+
+        $this->sync($this->outsider, 'my_day.add', ['data' => ['work_type' => 'list', 'work_id' => $task->id]])->assertStatus(410);
+    }
+
+    public function test_a_recreated_issue_gets_its_priority_in_one_write(): void
+    {
+        $priority = ItemPriority::forProject($this->project)->where('is_default', false)->firstOrFail();
+
+        $id = $this->sync($this->editor, 'issue.create', ['data' => ['board_id' => $this->board->id, 'title' => 'Again', 'priority_id' => $priority->id]])
+            ->assertOk()->json('entity.id');
+
+        $item = Item::findOrFail($id);
+        $this->assertSame($priority->id, $item->priority_id);
+        $this->assertSame(0, $item->activities()->where('action', 'updated')->count());
     }
 
     public function test_old_outcomes_are_pruned_after_30_days(): void

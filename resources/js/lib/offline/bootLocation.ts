@@ -5,7 +5,10 @@
  * - on the shell, forget the history entry's Inertia state, so Back / Forward render the shell
  *   instead of an online page from history (whose code and data may not be on the device).
  */
-export const bootUrl: string = typeof window === 'undefined' ? '/' : window.location.pathname + window.location.search + window.location.hash;
+export const bootUrl: string = typeof window === 'undefined'
+    ? '/'
+    // one leading slash: "//evil.example/x" must stay a path on this site
+    : '/' + window.location.pathname.replace(/^\/+/, '') + window.location.search + window.location.hash;
 
 function servedShell(): boolean {
     try {

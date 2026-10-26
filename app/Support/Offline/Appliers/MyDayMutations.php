@@ -25,10 +25,11 @@ final class MyDayMutations
         [$type, $id] = self::work($ctx);
 
         // Only work the user can open can go on their plan.
-        $work = $type === 'board' ? Item::with('board.project')->find($id) : TaskListItem::with('taskList.project')->find($id);
+        $work = $type === 'board' ? Item::with('board.project.workspace')->find($id) : TaskListItem::with('taskList.project.workspace')->find($id);
+        // a trashed parent counts as deleted (and must never reach a policy with null)
         $visible = $work instanceof Item
-            ? $work->board && $ctx->user->can('view', $work)
-            : $work && $work->taskList && $ctx->user->can('view', $work->taskList);
+            ? $work->board?->project?->workspace && $ctx->user->can('view', $work)
+            : $work?->taskList?->project?->workspace && $ctx->user->can('view', $work->taskList);
         if (! $visible) {
             throw new SyncAbort(SyncOutcome::deleted($type === 'board' ? IssueMutations::ENTITY : ListTaskMutations::ENTITY, 'This task was deleted while you were offline.'));
         }

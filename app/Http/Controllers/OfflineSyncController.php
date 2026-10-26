@@ -36,7 +36,14 @@ class OfflineSyncController extends Controller
             'base.updated_at' => 'nullable|string|max:40',
             'base.fields' => 'nullable|array|max:10',
             'data' => 'present|array|max:20',
+            // the account whose outbox this is: never applied as someone else
+            'user_id' => 'nullable|integer',
         ]);
+
+        if (isset($mutation['user_id']) && (int) $mutation['user_id'] !== $request->user()->id) {
+            return response()->json(['status' => 'wrong_account', 'message' => 'This change was made by another account on this device.'], 401);
+        }
+        unset($mutation['user_id']);
 
         $outcome = OfflineSync::handle($request->user(), $mutation + ['data' => []]);
 

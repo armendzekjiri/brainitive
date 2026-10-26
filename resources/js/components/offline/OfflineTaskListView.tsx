@@ -26,11 +26,11 @@ export default function OfflineTaskListView({ list }: { list: OfflineTaskListSna
         const value = title.trim();
         if (!value) return;
         setTitle('');
-        await createTask(list, value);
+        if (!(await createTask(list, value))) setTitle(value);
     };
 
     const plan = async (task: OfflineTask) => {
-        await addToMyDay({
+        const added = await addToMyDay({
             work_type: 'list',
             work_id: task.id,
             work_ref: task.id ? null : task.ref ?? null,
@@ -40,7 +40,7 @@ export default function OfflineTaskListView({ list }: { list: OfflineTaskListSna
             project_name: list.project.name,
             done: task.status === 'done',
         });
-        toast.success('Added to My Day');
+        if (added) toast.success('Added to My Day');
     };
 
     const row = (task: OfflineTask, index: number) => (
