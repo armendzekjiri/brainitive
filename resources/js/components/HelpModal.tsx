@@ -83,6 +83,15 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.41.1',
+        title: 'Calendar opens again after deleting a board',
+        tag: 'Fix',
+        date: '2026-10-26',
+        items: [
+            'Calendar: no more “Something went wrong” (error 500) after a board with dated issues was deleted — the issues of deleted boards are simply left out.',
+        ]
+    },
+    {
         version: 'v1.41.0',
         title: 'Bring your data: Trello, Jira and Notion imports, project export',
         tag: 'Feature',
