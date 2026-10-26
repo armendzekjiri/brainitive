@@ -34,7 +34,7 @@ export default function Subprocessors({ legal }: { legal: LegalPageData }) {
                     rows={[
                         [
                             p.hosting ?? 'OVHcloud',
-                            'Servers: application, database, file storage; backups on a separate server; our self-hosted analytics (Umami)',
+                            'Servers: application, database, file storage; backups on a separate server; our self-hosted analytics (Umami, only with the visitor’s consent)',
                             at(p.hosting_location, 'EU data centre'),
                             p.hosting_location ? 'Processing in the location named' : <ToConfirm>safeguard</ToConfirm>,
                         ],

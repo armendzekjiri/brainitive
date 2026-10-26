@@ -125,6 +125,9 @@ export function appEnv(): Record<string, string> {
         LIVE_PUBLISH_URL: `http://127.0.0.1:${LIVE.port}`,
         // legal.spec.ts (BRAI-156): Brainitive Cloud's legal pages (imprint, DPA, sub-processors) like production
         LEGAL_CLOUD: 'true',
+        // analytics-consent.spec.ts: requests with `X-E2E-Analytics: 1` count as brainitive.app for analytics (consent
+        // notice + Umami config); honoured only with APP_ENV=e2e. The spec intercepts the stats host: nothing leaves.
+        ANALYTICS_E2E_OPT_IN: 'true',
         PHP_CLI_SERVER_WORKERS: process.env.E2E_SERVER_WORKERS ?? '4',
     };
 }

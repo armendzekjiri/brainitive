@@ -101,20 +101,32 @@ realtime server; nginx access logs: see logs).
 
 Cookies: `<slug(APP_NAME)>-session` (120 min), `XSRF-TOKEN`, `remember_web_*`, `sidebar_state` (7 d).
 localStorage / sessionStorage / IndexedDB / Cache Storage: full list on `/cookies` (Cookies.tsx).
-New keys: `brainitive-embeds-allowed` (two-click embeds), `umami.disabled` (analytics opt-out).
+New keys: `brainitive-embeds-allowed` (two-click embeds), `brainitive:analytics-consent` (the visitor's
+statistics answer: `{choice: granted|denied, version, at}` — strictly necessary to remember the choice).
+`umami.disabled` (the short-lived opt-out before consent) is no longer written; if present it counts as
+"denied" and is removed when the visitor answers.
 The old cookie banner and its `brainitive_cookie_consent` key were removed (they asked consent for
 analytics/marketing cookies that never existed and named Google Analytics, which isn't used).
 
-## 11. Analytics — C, (f)
+## 11. Analytics — C, **(a) consent** + § 25 (1) TDDDG
 
-Self-hosted Umami at stats.novabrainhub.de (operator's own OVH server). Loaded only on
-brainitive.app/www (`App\Support\Legal\Analytics`), **new:** never on customer pages or secret-bearing
-paths (`/f`, `/support`, `/widget`, `/portal`, `/feedback`, `/client`, `/guest`, `/s`, `/r`,
-`/changelog`, `/share`, `/invite`, `/reset-password`, `/verify-email`, `/calendar/feed`, `/oauth`,
-`/offline`), checked server-side and in a `data-before-send` filter for client-side navigation;
-`data-do-not-track`, `data-exclude-search`, `data-exclude-hash`; opt-out on `/cookies`.
-Umami by design: no cookies, no IP stored, daily-salted session hash, geo from IP. **To verify on the
-running instance:** Umami version (before-send support), web-server log settings, data retention.
+Self-hosted Umami at stats.novabrainhub.de (operator's own OVH server). **Runs only with the visitor's
+consent** (follow-up to BRAI-156, `feat/analytics-consent`): the server renders no tracker, only a
+config object (`window.brainitiveAnalytics`) where analytics may run — brainitive.app/www
+(`App\Support\Legal\Analytics`), never on customer pages or secret-bearing paths (`/f`, `/support`,
+`/widget`, `/portal`, `/feedback`, `/client`, `/guest`, `/s`, `/r`, `/changelog`, `/share`, `/invite`,
+`/reset-password`, `/verify-email`, `/calendar/feed`, `/oauth`, `/offline`). The browser shows a small
+notice ("Allow" / "No thanks", equal buttons, non-blocking) and loads the script only after "Allow";
+no answer or "No thanks" = no script, no request to the stats host. Global Privacy Control / Do Not
+Track = "no" without asking. The answer is kept in localStorage `brainitive:analytics-consent`
+(version 1; a new version asks again); changed / withdrawn on `/cookies`, which removes the script at
+once. Umami's auto-track is off (`data-auto-track="false"`); `resources/js/lib/analytics/tracker.ts`
+sends page views itself on load and on Inertia navigations: **path only** (no query string, no hash,
+**no page title** — titles can name private documents), referrer = previous path or the external
+referrer's origin + path; excluded paths are skipped and also dropped by the `data-before-send`
+filter. Umami by design: no cookies, no IP stored, daily-salted session hash, geo from IP. **To verify
+on the running instance:** Umami version (≥ 2.13 for before-send / exclude-hash / track(fn)), web-server
+log settings, data retention.
 
 ## 12. Logs, errors, backups, hosting
 

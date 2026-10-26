@@ -53,30 +53,19 @@
         <!-- Excalidraw fonts from our own build, not its third-party CDN fallback (BRAI-156, vite.config.js) -->
         <script>window.EXCALIDRAW_ASSET_PATH = @json(asset('build/excalidraw-assets').'/');</script>
 
+        <!-- Analytics: the operator's self-hosted, cookieless Umami — ONLY with the visitor's consent (§ 25 (1) TDDDG).
+             No tracker here: where analytics may run (brainitive.app, never dev / e2e / local / self-hosted installs,
+             customers' public pages or token links — Analytics::enabledFor) the browser gets this config, asks
+             (components/legal/AnalyticsConsentNotice) and loads the script only after "Allow" (lib/analytics). -->
+        @if (\App\Support\Legal\Analytics::enabledFor(request()))
+            <script>window.brainitiveAnalytics = @json(\App\Support\Legal\Analytics::clientConfig());</script>
+        @endif
+
         <!-- Scripts -->
         @routes
         @viteReactRefresh
         @vite(['resources/js/app.tsx', "resources/js/Pages/{$page['component']}.tsx"])
         @inertiaHead
-
-        <!-- Analytics: the operator's self-hosted, cookieless Umami. brainitive.app only (never dev / e2e /
-             local / self-hosted installs), never on customers' public pages or token links, no query strings
-             (BRAI-156, docs/legal/data-inventory.md). Honours Do Not Track and the opt-out on /cookies. -->
-        @if (\App\Support\Legal\Analytics::enabledFor(request()))
-            <script>
-                window.brainitiveAnalyticsFilter = function (type, payload) {
-                    var skip = @json(\App\Support\Legal\Analytics::excludedPrefixes());
-                    var url = payload && typeof payload.url === 'string' ? payload.url : window.location.pathname;
-                    for (var i = 0; i < skip.length; i++) {
-                        if (url === skip[i] || url.indexOf(skip[i] + '/') === 0) return false;
-                    }
-                    return payload;
-                };
-            </script>
-            <script defer src="{{ config('legal.analytics.script') }}" data-website-id="{{ config('legal.analytics.website_id') }}"
-                data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"
-                data-before-send="brainitiveAnalyticsFilter"></script>
-        @endif
     </head>
     <body class="font-sans antialiased">
         @inertia

@@ -15,7 +15,7 @@ BRAI-156 (release v1.44.0). Inventory of every personal-data flow: [data-invento
 |---|---|---|
 | `/privacy` | `Pages/Privacy.tsx` | rewritten from the inventory: controller, roles (C vs P), every purpose + legal basis, Umami, recipients, transfers, retention table from the code, rights, children |
 | `/terms` | `Pages/Terms.tsx` | rewritten: parties, early access/free, acceptable use, content licence, customer as controller + DPA, AI disclaimer, German-style liability, termination/export/deletion, consumer withdrawal, changes with consent, law/jurisdiction |
-| `/cookies` | `Pages/Cookies.tsx` | real list of cookies, local/session storage, IndexedDB, Cache Storage; analytics opt-out; embeds |
+| `/cookies` | `Pages/Cookies.tsx` | real list of cookies, local/session storage, IndexedDB, Cache Storage; the statistics consent (see / change / withdraw); embeds |
 | `/imprint` (new) | `Pages/Legal/Imprint.tsx` | § 5 DDG fields from config; only rows with a value |
 | `/legal/subprocessors` (new) | `Pages/Legal/Subprocessors.tsx` | OVHcloud, MXroute + "only if you use it" services |
 | `/legal/dpa` (new) | `Pages/Legal/Dpa.tsx` | Art. 28 DPA template + TOMs annex derived from the code |
@@ -30,10 +30,19 @@ prop `legalLinks`).
 Vite plugin, `EXCALIDRAW_ASSET_PATH`); KaTeX CSS bundled instead of jsDelivr; unused Quill-CDN blade
 deleted; Google favicon service removed; YouTube / Figma / X embeds two-click (`ExternalEmbedGate`);
 cookie banner removed (it asked consent for cookies that don't exist and named Google Analytics);
-Umami restricted (no customer pages, no secret URLs, no query strings, DNT, opt-out); lead-form visit
+Umami restricted (no customer pages, no secret URLs, no query strings) and **only with consent** (see
+below); lead-form visit
 id memory-only; Terms acceptance stored at sign-up (`users.terms_accepted_at`, `terms_version`);
 self-service account deletion no longer deletes other people's work (`UserDeletion`); retention jobs
 `auth:clear-resets`, `passport:purge`, `queue:prune-failed --hours=720`.
+
+**Statistics with consent (`feat/analytics-consent`):** `app.blade.php` renders no Umami tag, only
+`window.brainitiveAnalytics` (`Analytics::clientConfig()`) where `Analytics::enabledFor` allows it.
+`resources/js/lib/analytics/consent.ts` (answer in localStorage `brainitive:analytics-consent`, GPC / DNT,
+legacy `umami.disabled` = no), `tracker.ts` (loads the script after "Allow", `data-auto-track="false"`,
+page views on load + Inertia `navigate`, path only, no titles; unloads on withdrawal),
+`components/legal/AnalyticsConsent.tsx` (`AnalyticsConsentNotice` at the app root, `AnalyticsConsentSetting`
+on `/cookies`). e2e: `ANALYTICS_E2E_OPT_IN` + header `X-E2E-Analytics: 1` (APP_ENV=e2e only).
 
 **Customers' public pages:** Workspace settings → **Legal** (legal name, https privacy-policy URL,
 https imprint URL; `workspaces.legal_*`). Support page + widget, ticket portal, lead forms, feedback
@@ -90,11 +99,12 @@ sub-processor list, the retention table and the DPA annex. The imprint never sho
 
 ## What a lawyer must confirm
 
-- **Umami without consent** (§ 25 TDDDG): the script runs JavaScript in the browser that reads screen
-  size and language. The texts rely on "no storage / no access beyond what is needed" + Art. 6 (1) (f)
-  with an opt-out; German authorities (DSK guidance) consider reading device information via script as
-  access under § 25 (1). If the lawyer disagrees, gate Umami behind consent (the banner code is in git
-  history) or switch to server-side counting.
+- ~~**Umami without consent** (§ 25 TDDDG)~~ — **resolved** (`feat/analytics-consent`): the operator
+  decided to ask. Umami now loads only after the visitor clicks "Allow" in a small notice (equal
+  "Allow" / "No thanks" buttons, nothing pre-selected, no "accept by scrolling", not shown again after
+  an answer); GPC / Do Not Track = no; withdrawal on `/cookies` stops it at once. Legal basis in the
+  privacy policy: Art. 6 (1) (a) GDPR + § 25 (1) TDDDG. Still for the lawyer: the notice wording and
+  whether storing the answer itself (`brainitive:analytics-consent`) is fine under § 25 (2) no. 2.
 - The imprint without name/address (see question 1).
 - Liability clause (§§ 307, 309 no. 7 BGB; the free-service limitation to intent/gross negligence,
   analogous §§ 521, 599 BGB), the consumer withdrawal text (§ 312 (1a) BGB — personal data as
