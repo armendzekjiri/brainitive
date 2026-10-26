@@ -9,7 +9,7 @@ final class ImportRegistry
 {
     /** @var array<string, class-string<Importer>> */
     public const SOURCES = [
-        // 'trello' => Trello\TrelloImporter::class,          // BRAI-65
+        'trello' => Trello\TrelloImporter::class,             // BRAI-65
         'jira' => Jira\JiraImporter::class,                   // BRAI-139
         // 'notion' => Notion\NotionImporter::class,          // BRAI-66
         // 'brainitive' => Archive\ProjectArchiveImporter::class, // BRAI-81 (restore)
