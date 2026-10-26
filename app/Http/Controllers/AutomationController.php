@@ -84,7 +84,7 @@ class AutomationController extends Controller
         $this->authorize('update', $project);
 
         $definition = AutomationDefinition::validate($request->all(), new AutomationOptions($project));
-        $changed = collect(['trigger', 'trigger_config', 'conditions', 'actions'])
+        $changed = collect(['trigger', 'trigger_config', 'condition_match', 'conditions', 'actions'])
             ->contains(fn (string $key) => $definition[$key] != ($automationRule->definition()[$key] ?? null));
 
         $automationRule->update($definition + [
@@ -171,11 +171,13 @@ class AutomationController extends Controller
             'version' => $rule->version,
             'trigger' => $rule->trigger,
             'trigger_config' => (object) ($rule->trigger_config ?? []),
-            'conditions' => $rule->conditions ?? [],
+            'condition_match' => $rule->conditionMatch(),
+            'conditions' => $rule->normalizedConditions(),
             'actions' => $rule->actions ?? [],
             'summary' => [
                 'when' => $when,
-                'if' => array_map(fn (array $c) => AutomationConditions::describe($c, $options, $subject), $rule->conditions ?? []),
+                'match' => $rule->conditionMatch(),
+                'if' => array_map(fn (array $c) => AutomationConditions::describe($c, $options, $subject), $rule->normalizedConditions()),
                 'then' => array_map(fn (array $a) => AutomationActions::describe($a, $options, $subject), $rule->actions ?? []),
             ],
             'actor' => $actor ? ['id' => $actor->id, 'name' => $actor->name] : null,
@@ -209,6 +211,7 @@ class AutomationController extends Controller
             'status' => $run->status,
             'message' => $run->message,
             'results' => array_values($results),
+            'conditions' => $run->conditions,
             'created_at' => $run->created_at?->toIso8601String(),
             'finished_at' => $run->finished_at?->toIso8601String(),
         ];

@@ -17,7 +17,8 @@ use Throwable;
  *
  * - The rule must still be enabled and at the run's version; its actor must exist, not be suspended
  *   and still open the project — otherwise the run is "skipped" with the reason.
- * - Conditions are checked again against the subject's current state.
+ * - Conditions are checked again against the subject's current state (all or any, dates in the
+ *   actor's time zone); the result is kept on the run for the history.
  * - Each action runs in its own transaction together with saving its result, as the actor
  *   (Auth::setUser, so history and "assigned you" name them). A retried run (worker crash) skips the
  *   actions that already finished; nothing is done twice.
@@ -102,8 +103,10 @@ final class AutomationRunner
         }
 
         $options = new AutomationOptions($project);
-        $checked = AutomationConditions::check($rule->conditions ?? [], $subject, $options);
-        if (! AutomationConditions::allPassed($checked)) {
+        $match = $rule->conditionMatch();
+        $checked = AutomationConditions::check($rule->conditions ?? [], $subject, $options, AutomationConditions::timezoneOf($actor));
+        $run->forceFill(['conditions' => AutomationConditions::summary($checked, $match)]);
+        if (! AutomationConditions::matches($checked, $match)) {
             $failed = collect($checked)->where('passed', false)->pluck('label')->implode('; ');
             self::finish($run, AutomationRun::SKIPPED, "The conditions no longer match ({$failed}).");
 
@@ -167,13 +170,14 @@ final class AutomationRunner
     /**
      * "Test on an issue": what the rule would do for this subject, as $actor, right now. Reads only.
      *
-     * @param  array{trigger: string, trigger_config: array, conditions: list<array>, actions: list<array>}  $definition
+     * @param  array{trigger: string, trigger_config: array, condition_match?: string, conditions: list<array>, actions: list<array>}  $definition
      */
     public static function preview(array $definition, Project $project, User $actor, Item|Ticket $subject): array
     {
         $options = new AutomationOptions($project);
         $subjectType = (string) AutomationSubject::type($subject);
-        $conditions = AutomationConditions::check($definition['conditions'], $subject, $options);
+        $conditions = AutomationConditions::check($definition['conditions'], $subject, $options, AutomationConditions::timezoneOf($actor));
+        $match = AutomationDefinition::normalizeMatch($definition['condition_match'] ?? null);
 
         $actions = array_map(function (array $action) use ($subject, $actor, $project, $options, $subjectType) {
             $plan = AutomationActions::plan($action, $subject, $actor, $project, 'Test');
@@ -187,7 +191,8 @@ final class AutomationRunner
 
         return [
             'subject' => AutomationSubject::label($subject),
-            'matches' => AutomationConditions::allPassed($conditions),
+            'matches' => AutomationConditions::matches($conditions, $match),
+            'match' => $match,
             'conditions' => $conditions,
             'actions' => $actions,
         ];

@@ -2013,9 +2013,12 @@ export interface RecentContentEntry {
 export type AutomationSubject = 'item' | 'ticket';
 export type AutomationValue = number | string | null;
 
+/** A condition (BRAI-144): field × operator × value. Legacy {type, value} rules are sent normalised. */
 export interface AutomationCondition {
-    type: string;
-    value: AutomationValue;
+    /** A CONDITION_FIELDS key, or "custom:<item field id>". */
+    field: string;
+    operator: string;
+    value: AutomationConditionValue;
 }
 
 export interface AutomationAction {
@@ -2031,10 +2034,11 @@ export interface AutomationRule {
     version: number;
     trigger: string;
     trigger_config: { column_id?: number | null };
+    condition_match: AutomationMatch;
     conditions: AutomationCondition[];
     actions: AutomationAction[];
     /** The rule in words ("Issue created" / "Board is Main Board" / "Assign to Max Member"). */
-    summary: { when: string; if: string[]; then: string[] };
+    summary: { when: string; match: AutomationMatch; if: string[]; then: string[] };
     /** The person the rule runs as (whoever saved it last). */
     actor: { id: number; name: string } | null;
     actor_problem: string | null;
@@ -2060,6 +2064,8 @@ export interface AutomationRun {
     status: AutomationRunStatus;
     message: string | null;
     results: AutomationRunResult[];
+    /** The conditions as checked for this run (null on runs from before BRAI-144). */
+    conditions: AutomationRunConditions | null;
     created_at: string | null;
     finished_at: string | null;
 }
@@ -2077,9 +2083,13 @@ export interface AutomationCatalogEntry {
 
 export interface AutomationCatalog {
     triggers: AutomationCatalogEntry[];
-    conditions: AutomationCatalogEntry[];
+    conditionFields: AutomationConditionField[];
+    operators: AutomationOperator[];
+    /** Custom field type → operator keys. */
+    customFieldOperators: Record<string, string[]>;
     actions: AutomationCatalogEntry[];
     maxConditions: number;
+    maxList: number;
     maxActions: number;
 }
 
@@ -2096,13 +2106,16 @@ export interface AutomationOptions {
     priorities: { id: number; name: string }[];
     labels: { id: number; name: string; color?: string | null }[];
     members: { id: number; name: string }[];
+    /** Active custom fields of the project's issues (BRAI-144). */
+    customFields: AutomationCustomField[];
 }
 
 /** "Test on an issue" (automations.preview). */
 export interface AutomationPreview {
     subject: string;
     matches: boolean;
-    conditions: { type: string; label: string; passed: boolean }[];
+    match: AutomationMatch;
+    conditions: { field: string; operator: string; label: string; passed: boolean }[];
     actions: { label: string; status: 'ok' | 'skipped' | 'error'; message: string }[];
 }
 
@@ -2572,4 +2585,40 @@ export interface CalendarPickerData {
     account_name: string | null;
     calendars: { id: string; name: string; color: string | null; primary: boolean; read_only: boolean }[];
     task_lists: { id: string; title: string }[];
+}
+
+// ── Automation condition builder (BRAI-144; AutomationCatalog / AutomationConditions) ──
+export type AutomationMatch = 'all' | 'any';
+
+/** null (empty-type operators), an id / text / number, a list of ids, {days: n} or a Y-m-d date. */
+export type AutomationConditionValue = number | string | number[] | { days: number } | null;
+
+/** What an operator's value holds: none, one id, many ids, text, number, date (Y-m-d), days ({days: n}). */
+export type AutomationOperatorValue = 'one' | 'many' | 'text' | 'number' | 'date' | 'days' | null;
+
+export interface AutomationOperator {
+    key: string;
+    label: string;
+    value: AutomationOperatorValue;
+}
+
+export interface AutomationConditionField {
+    key: string;
+    label: string;
+    /** Where ids come from (board, helpdesk, column, item_type, priority, label, member), null = free value. */
+    source: string | null;
+    operators: string[];
+    subjects: AutomationSubject[];
+}
+
+export interface AutomationCustomField {
+    id: number;
+    name: string;
+    type: 'text' | 'number' | 'date' | 'checkbox' | 'select' | string;
+    options: { id: number; name: string }[];
+}
+
+export interface AutomationRunConditions {
+    match: AutomationMatch;
+    items: { label: string; passed: boolean }[];
 }

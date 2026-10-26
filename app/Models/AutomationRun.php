@@ -11,7 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * One execution of an automation rule for one event (v1.40.0, BRAI-63). Unique per rule, rule
  * version and event id, so a duplicate delivery never runs twice. `results` holds one entry per
  * action ({action, label, status ok|skipped|error, message}); a retried run skips the actions that
- * already succeeded.
+ * already succeeded. `conditions` = the rule's conditions as last checked for it ({match, items:
+ * [{label, passed}]}, BRAI-144; null on older runs).
  */
 class AutomationRun extends Model
 {
@@ -41,6 +42,7 @@ class AutomationRun extends Model
         'subject_id',
         'subject_label',
         'context',
+        'conditions',
         'status',
         'message',
         'results',
@@ -53,6 +55,7 @@ class AutomationRun extends Model
     {
         return [
             'context' => 'array',
+            'conditions' => 'array',
             'results' => 'array',
             'rule_version' => 'integer',
             'subject_id' => 'integer',

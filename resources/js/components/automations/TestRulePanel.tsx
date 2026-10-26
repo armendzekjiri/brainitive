@@ -4,7 +4,7 @@ import { CheckCircle2, CircleSlash, FlaskConical, Loader2, XCircle } from 'lucid
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { AutomationAction, AutomationCondition, AutomationPreview, AutomationSubject } from '@/types';
+import type { AutomationAction, AutomationCondition, AutomationMatch, AutomationPreview, AutomationSubject } from '@/types';
 
 /**
  * "Test on an issue" (v1.40.0, BRAI-63): runs the rule as it is in the form (saved or not) against
@@ -13,7 +13,7 @@ import type { AutomationAction, AutomationCondition, AutomationPreview, Automati
 interface Props {
     url: string;
     subject: AutomationSubject;
-    definition: { name: string; trigger: string; trigger_config: { column_id?: number | null }; conditions: AutomationCondition[]; actions: AutomationAction[] };
+    definition: { name: string; trigger: string; trigger_config: { column_id?: number | null }; condition_match: AutomationMatch; conditions: AutomationCondition[]; actions: AutomationAction[] };
 }
 
 export default function TestRulePanel({ url, subject, definition }: Props) {
@@ -57,6 +57,9 @@ export default function TestRulePanel({ url, subject, definition }: Props) {
                     <p className="text-sm font-medium">
                         {result.subject}: {result.matches ? 'the conditions match, the rule would run.' : 'the conditions don’t match, the rule would do nothing.'}
                     </p>
+                    {result.conditions.length > 1 && (
+                        <p className="text-xs text-muted-foreground">{result.match === 'any' ? 'Any condition may match.' : 'All conditions must match.'}</p>
+                    )}
                     {result.conditions.length > 0 && (
                         <ul className="space-y-1">
                             {result.conditions.map((c, i) => (

@@ -22,10 +22,12 @@ async function buildRule(page: Page, name: string, token: string) {
     await page.getByLabel('When', { exact: true }).selectOption({ label: 'Issue created' });
 
     await page.getByRole('button', { name: 'Add condition' }).click();
-    await page.getByLabel('Condition 1', { exact: true }).selectOption({ label: 'Board is' });
+    await page.getByLabel('Condition 1 field').selectOption({ label: 'Board' });
+    await page.getByLabel('Condition 1 operator').selectOption({ label: 'is' });
     await page.getByLabel('Condition 1 value').selectOption({ label: 'Main Board' });
     await page.getByRole('button', { name: 'Add condition' }).click();
-    await page.getByLabel('Condition 2', { exact: true }).selectOption({ label: 'Title contains' });
+    await page.getByLabel('Condition 2 field').selectOption({ label: 'Title' });
+    await page.getByLabel('Condition 2 operator').selectOption({ label: 'contains' });
     await page.getByLabel('Condition 2 value').fill(token);
 
     await page.getByRole('button', { name: 'Add action' }).click();
