@@ -154,7 +154,7 @@ class JiraImporterTest extends TestCase
         $board = Board::findOrFail($run->result['board_id']);
         $this->assertSame('scrum', $board->type); // sprints exist and were chosen
         $this->assertStringStartsWith('Jira import ', $board->name);
-        $this->assertSame(route('boards.show', [$this->workspace->slug, $this->project->slug, $board->slug]), $run->result['url']);
+        $this->assertSame(route('boards.backlog', [$this->workspace->slug, $this->project->slug, $board->slug]), $run->result['url']);
         $columns = $board->columns()->get();
         $this->assertSame(['To Do', 'In Progress', 'Code Review', 'Done'], $columns->pluck('name')->all());
         $this->assertSame(['Done'], $columns->where('is_done_column', true)->pluck('name')->values()->all());
@@ -266,6 +266,7 @@ class JiraImporterTest extends TestCase
 
         $board = Board::findOrFail($run->result['board_id']);
         $this->assertSame(['Atlas from Jira', 'atlas-from-jira', 'kanban'], [$board->name, $board->slug, $board->type]);
+        $this->assertStringEndsWith('/boards/atlas-from-jira', $run->result['url']); // Kanban: the board itself
         $this->assertSame(['Backlog', 'Doing', 'Shipped'], $board->columns()->pluck('name')->all());
         $this->assertTrue((bool) $board->columns()->where('name', 'Shipped')->value('is_done_column'));
         $this->assertSame($this->columnId($board, 'Doing'), $this->issue('ATL-3')->column_id);

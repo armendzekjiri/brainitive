@@ -340,6 +340,15 @@ Plan [`tasks/feat-automation.md`](./tasks/feat-automation.md); contract `tasks/r
 - Preview + options UI: `components/imports/sources/TrelloPreview.tsx`. Fixture:
   `tests/Fixtures/imports/trello/board.json`. Tests: `TrelloImporterTest`, `e2e/tests/import-trello.spec.ts`.
 
+### Jira import (v1.41.0, BRAI-139)
+- `app/Support/Imports/Jira/`: `JiraImporter` (registry key `jira`), `JiraExport` (reads the "Export CSV
+  (all fields)" file into issue arrays + statuses / types / priorities / sprints / people tallies,
+  hierarchy, unsupported counts), `CsvReader` (streaming CSV: BOM, `,` `;` tab, repeated column names,
+  multi-line cells, Windows-1252 cells, damaged files; reusable for any CSV import), `JiraMarkup`
+  (Jira wiki markup, or obvious Markdown via `PageContentConverter`, → `SafeHtml`).
+- Preview + mapping UI: `components/imports/sources/JiraPreview.tsx`. Fixtures:
+  `tests/Fixtures/imports/jira/*.csv`. Tests: `JiraImporterTest`, `e2e/tests/import-jira.spec.ts`.
+
 ### Sharing (read-only links)
 - **Docs and issues:** `ShareLink` (morph `shareable`: `Page` / `Item`, random token, `expires_at`, `revoked_at`, views), `ShareLinkController` — manage via `share-links.*` (needs `update` on the item), public view `/s/{token}` → `Pages/Share/Show.tsx` (`noindex`, 410 when revoked / expired / deleted). UI: `components/share/ShareButton.tsx`.
 - **Plans** keep their own `share_token` (`/share/plans/{token}`); bookmarks / snippets have `visibility = public`.

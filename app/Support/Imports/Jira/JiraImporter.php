@@ -311,7 +311,8 @@ class JiraImporter implements Importer
         return [
             'project_id' => $project->id,
             'board_id' => $board->id,
-            'url' => route('boards.show', [$project->workspace->slug, $project->slug, $board->slug]),
+            // a Scrum board shows the active sprint only, and imported sprints are planned: open the backlog
+            'url' => route($board->isScrum() ? 'boards.backlog' : 'boards.show', [$project->workspace->slug, $project->slug, $board->slug]),
         ];
     }
 
