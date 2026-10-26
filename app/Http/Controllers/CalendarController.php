@@ -6,17 +6,24 @@ use App\Models\CalendarConnection;
 use App\Models\Item;
 use App\Models\Project;
 use App\Models\TaskListItem;
-use App\Services\GoogleCalendarService;
 use App\Services\GoogleTasksService;
+use App\Support\Calendar\CalendarProvider;
+use App\Support\Calendar\CalendarProviderException;
+use App\Support\Calendar\CalendarProviders;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class CalendarController extends Controller
 {
     private const CALENDAR_VIEWS = ['month', 'week', 'day'];
+
+    /** Source filter keys; 'external' = every connected calendar (any provider). */
+    private const SOURCES = ['board', 'list', 'external'];
 
     private function accessibleProjectIds(Request $request): array
     {
@@ -54,7 +61,24 @@ class CalendarController extends Controller
         return 'month';
     }
 
-    public function index(Request $request, GoogleCalendarService $googleService, GoogleTasksService $tasksService): Response
+    /**
+     * The source filter from the URL. Links saved before BRAI-140 say 'google' for what is
+     * now 'external' (every connected calendar), so map it.
+     *
+     * @return list<string>
+     */
+    private function resolveSources(Request $request): array
+    {
+        $sources = array_map(
+            fn ($s) => $s === 'google' ? 'external' : $s,
+            array_filter((array) $request->get('sources', self::SOURCES), 'is_string'),
+        );
+        $sources = array_values(array_unique(array_intersect($sources, self::SOURCES)));
+
+        return $sources ?: self::SOURCES;
+    }
+
+    public function index(Request $request, GoogleTasksService $tasksService): Response
     {
         $view = $this->resolveView($request);
         $date = Carbon::parse($request->get('date', now()->toDateString()));
@@ -63,7 +87,7 @@ class CalendarController extends Controller
         $projectFilter = array_filter(array_map('intval', (array) $request->get('projects', [])));
         $meOnly = $request->boolean('me_only');
         $showCompleted = $request->boolean('show_completed', true);
-        $sourceFilter = (array) $request->get('sources', ['board', 'list', 'google']);
+        $sourceFilter = $this->resolveSources($request);
         $connectionFilter = array_filter(array_map('intval', (array) $request->get('connections', [])));
         $userId = $request->user()->id;
 
@@ -251,31 +275,28 @@ class CalendarController extends Controller
             }
         }
 
-        // ── External calendars (Google) ─────────────────────────────────
+        // ── External calendars (every provider) ──────────────────────────
+        // Active connections, plus ones switched off because their access failed (expired Google
+        // token): those keep showing their sync_error ("Reconnect …") but aren't asked for events.
         $connections = CalendarConnection::query()
             ->where('user_id', $userId)
-            ->where('is_active', true)
+            ->where(fn ($q) => $q->where('is_active', true)->orWhereNotNull('sync_error'))
             ->orderBy('account_email')
             ->orderBy('external_calendar_name')
             ->get();
 
-        $activeConnections = $connectionFilter
-            ? $connections->whereIn('id', $connectionFilter)
-            : $connections;
+        $activeConnections = $connections->where('is_active', true);
+        if ($connectionFilter) {
+            $activeConnections = $activeConnections->whereIn('id', $connectionFilter);
+        }
 
-        if (in_array('google', $sourceFilter, true)) {
-            foreach ($activeConnections->where('provider', 'google') as $conn) {
-                if ($conn->kind === 'tasks') {
-                    $googleTasks = $tasksService->listTasks($conn, $rangeStart, $rangeEnd);
-                    foreach ($googleTasks as $gt) {
-                        $events[] = $this->mapGoogleTask($conn, $gt);
-                    }
-                } else {
-                    $googleEvents = $googleService->listEvents($conn, $rangeStart, $rangeEnd);
-                    foreach ($googleEvents as $ge) {
-                        $events[] = $this->mapGoogleEvent($conn, $ge);
-                    }
-                }
+        // Timed events are shown in the user's own zone (kept in step with the browser);
+        // without one, each provider's own wall-clock (what Google showed before).
+        $displayTimezone = $request->user()->timezone ? $request->user()->localTimezone() : null;
+
+        if (in_array('external', $sourceFilter, true)) {
+            foreach ($activeConnections as $conn) {
+                array_push($events, ...$this->externalEvents($conn, $tasksService, $rangeStart, $rangeEnd, $displayTimezone));
             }
         }
 
@@ -333,17 +354,8 @@ class CalendarController extends Controller
             'date' => $date->toDateString(),
             'projectsForFilter' => $projectsForFilter,
             'accessibleProjects' => $accessibleProjects,
-            'connections' => $connections->map(fn ($c) => [
-                'id' => $c->id,
-                'provider' => $c->provider,
-                'kind' => $c->kind,
-                'account_email' => $c->account_email,
-                'account_name' => $c->account_name,
-                'external_calendar_id' => $c->external_calendar_id,
-                'external_calendar_name' => $c->external_calendar_name,
-                'external_calendar_color' => $c->external_calendar_color,
-                'is_active' => $c->is_active,
-            ]),
+            'connections' => $connections->map(fn ($c) => $this->connectionRow($c))->values(),
+            'calendarProviders' => CalendarProviders::catalog(),
             'filters' => [
                 'projects' => $projectFilter,
                 'me_only' => $meOnly,
@@ -381,7 +393,7 @@ class CalendarController extends Controller
             $startDate = $dt->toDateString();
             // Heuristic: tasks set without a time-of-day get sent as UTC midnight
             // by our buildDueField. Anything else is a real time.
-            if (! ($dt->format('H:i:s') === '00:00:00' && $dt->timezoneName === 'UTC')) {
+            if (! ($dt->format('H:i:s') === '00:00:00' && $dt->utcOffset() === 0)) {
                 $startTime = $dt->format('H:i');
             }
         }
@@ -400,7 +412,7 @@ class CalendarController extends Controller
             'assignee' => null,
             'project' => null,
             'source' => [
-                'type' => 'google',
+                'type' => 'external',
                 'id' => $conn->id,
                 'name' => $conn->external_calendar_name,
                 'slug' => $conn->external_calendar_id,
@@ -411,38 +423,106 @@ class CalendarController extends Controller
             'external_url' => $gt['selfLink'] ?? null,
             'connection_id' => $conn->id,
             'account_email' => $conn->account_email,
+            'provider' => 'google',
+            'provider_label' => 'Google Tasks',
+            'provider_badge' => '✓',
+            'read_only' => false,
         ];
     }
 
-    /** Convert a Google Calendar API event into our normalized CalendarEvent shape. */
-    private function mapGoogleEvent(CalendarConnection $conn, array $ge): array
+    /**
+     * One connection's events for the page. A failing provider never breaks the page: the
+     * error is stored on the connection (sync_error, shown as a warning) and it shows nothing.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function externalEvents(CalendarConnection $conn, GoogleTasksService $tasksService, Carbon $rangeStart, Carbon $rangeEnd, ?string $timezone): array
     {
-        $allDay = isset($ge['start']['date']);
-        $startDate = $allDay ? $ge['start']['date'] : substr($ge['start']['dateTime'] ?? '', 0, 10);
-        $startTime = $allDay ? null : substr($ge['start']['dateTime'] ?? '', 11, 5);
-        $endRaw = $ge['end']['date'] ?? $ge['end']['dateTime'] ?? null;
-        $endDate = $allDay
-            ? ($endRaw ? Carbon::parse($endRaw)->subDay()->toDateString() : $startDate)
-            : substr($endRaw ?? '', 0, 10);
-        $endTime = $allDay ? null : substr($endRaw ?? '', 11, 5);
+        try {
+            if ($conn->kind === 'tasks') {
+                // Google Tasks stay Google-only (not part of the provider contract).
+                $events = $conn->provider === 'google'
+                    ? array_map(fn ($gt) => $this->mapGoogleTask($conn, $gt), $tasksService->listTasks($conn, $rangeStart, $rangeEnd))
+                    : [];
+            } else {
+                $provider = CalendarProviders::for($conn);
+                $readOnly = ! $provider->isWritable($conn);
+                $events = array_map(
+                    fn (array $event) => $this->mapExternalEvent($conn, $provider, $event, $readOnly),
+                    $provider->listEvents($conn, $rangeStart, $rangeEnd, $timezone),
+                );
+            }
+            $conn->clearSyncError();
 
-        $color = $conn->external_calendar_color ?: '#4285F4';
+            return $events;
+        } catch (Throwable $e) {
+            if (! $e instanceof CalendarProviderException) {
+                Log::warning('Calendar provider failed', [
+                    'connection_id' => $conn->id,
+                    'provider' => $conn->provider,
+                    'error' => get_class($e), // never the message: transport errors carry URLs with secrets
+                ]);
+            }
+            $conn->recordSyncError($e instanceof CalendarProviderException
+                ? $e->getMessage()
+                : 'Couldn’t load this calendar. Try again later, or reconnect it.');
+
+            return [];
+        }
+    }
+
+    /**
+     * A connection for the page (filter list, quick create, manage dialog). Never secrets.
+     *
+     * @return array<string, mixed>
+     */
+    private function connectionRow(CalendarConnection $c): array
+    {
+        $provider = CalendarProviders::has($c->provider) ? CalendarProviders::for($c) : null;
+        $isTasks = $c->kind === 'tasks';
 
         return [
-            'id' => $ge['id'],
-            'type' => 'google_event',
+            'id' => $c->id,
+            'provider' => $c->provider,
+            'provider_label' => $isTasks ? 'Google Tasks' : ($provider?->label() ?? $c->provider),
+            'provider_badge' => $provider?->badge() ?? '?',
+            'kind' => $c->kind,
+            'account_email' => $c->account_email,
+            'account_name' => $c->account_name,
+            'external_calendar_id' => $c->external_calendar_id,
+            'external_calendar_name' => $c->external_calendar_name,
+            'external_calendar_color' => $c->external_calendar_color ?: $provider?->defaultColor(),
+            'server_url' => $c->server_url,
+            'is_active' => $c->is_active,
+            'read_only' => $isTasks ? false : ! ($provider?->isWritable($c) ?? false),
+            'sync_error' => $c->sync_error,
+            'sync_error_at' => $c->sync_error_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * A normalized provider event (NormalizedEvent) → the page's CalendarEvent shape.
+     *
+     * @param  array<string, mixed>  $event
+     * @return array<string, mixed>
+     */
+    private function mapExternalEvent(CalendarConnection $conn, CalendarProvider $provider, array $event, bool $readOnly): array
+    {
+        return [
+            'id' => $event['id'],
+            'type' => 'external_event',
             'key' => '',
-            'title' => $ge['summary'] ?? '(untitled)',
-            'start_date' => $startDate ?: null,
-            'start_time' => $startTime ?: null,
-            'due_date' => $endDate ?: $startDate,
-            'due_time' => $endTime ?: null,
+            'title' => $event['title'],
+            'start_date' => $event['start_date'] ?: null,
+            'start_time' => $event['start_time'] ?: null,
+            'due_date' => ($event['end_date'] ?? null) ?: ($event['start_date'] ?: null),
+            'due_time' => $event['end_time'] ?: null,
             'is_completed' => false,
-            'color' => $color,
+            'color' => $conn->external_calendar_color ?: $provider->defaultColor(),
             'assignee' => null,
             'project' => null,
             'source' => [
-                'type' => 'google',
+                'type' => 'external',
                 'id' => $conn->id,
                 'name' => $conn->external_calendar_name,
                 'slug' => $conn->external_calendar_id,
@@ -450,9 +530,15 @@ class CalendarController extends Controller
             'href_params' => [],
             'item_type' => null,
             'priority' => null,
-            'external_url' => $ge['htmlLink'] ?? null,
+            'external_url' => $event['external_url'] ?? null,
             'connection_id' => $conn->id,
             'account_email' => $conn->account_email,
+            'provider' => $conn->provider,
+            'provider_label' => $provider->label(),
+            'provider_badge' => $provider->badge(),
+            'read_only' => $readOnly,
+            'all_day' => (bool) $event['all_day'],
+            'location' => $event['location'] ?? null,
         ];
     }
 
@@ -515,12 +601,13 @@ class CalendarController extends Controller
         return $dates;
     }
 
-    public function reschedule(Request $request, GoogleCalendarService $googleService)
+    public function reschedule(Request $request)
     {
         $validated = $request->validate([
-            'type' => 'required|in:board_item,task_list_item,google_event',
+            // 'google_event' = the pre-BRAI-140 name of 'external_event' (open tabs).
+            'type' => 'required|in:board_item,task_list_item,external_event,google_event',
             'id' => 'required',
-            'connection_id' => 'required_if:type,google_event|nullable|integer|exists:calendar_connections,id',
+            'connection_id' => 'required_if:type,external_event,google_event|nullable|integer',
             'due_date' => 'nullable|date',
             'due_time' => 'nullable|date_format:H:i',
             'start_date' => 'nullable|date',
@@ -528,11 +615,12 @@ class CalendarController extends Controller
             'timezone' => 'nullable|string|max:64',
         ]);
 
-        if ($validated['type'] === 'google_event') {
+        if (in_array($validated['type'], ['external_event', 'google_event'], true)) {
             $connection = CalendarConnection::where('user_id', $request->user()->id)
                 ->findOrFail($validated['connection_id']);
 
-            $googleService->updateEvent($connection, (string) $validated['id'], [
+            // Read-only provider → CalendarReadOnly → 422 / errors.calendar.
+            CalendarProviders::writable($connection)->updateEvent($connection, (string) $validated['id'], [
                 'start_date' => $validated['start_date'] ?? $validated['due_date'] ?? null,
                 'start_time' => $validated['start_time'] ?? null,
                 'end_date' => $validated['due_date'] ?? $validated['start_date'] ?? null,

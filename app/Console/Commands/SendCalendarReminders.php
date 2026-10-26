@@ -4,39 +4,50 @@ namespace App\Console\Commands;
 
 use App\Models\CalendarConnection;
 use App\Notifications\CalendarReminderNotification;
-use App\Services\GoogleCalendarService;
 use App\Services\GoogleTasksService;
+use App\Support\Calendar\CalendarProviders;
+use App\Support\Calendar\NormalizedEvent;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class SendCalendarReminders extends Command
 {
     protected $signature = 'app:send-calendar-reminders {--lead=15 : Minutes before start/due to remind}';
 
-    protected $description = 'Push browser reminders for upcoming Google Calendar events and Google Tasks';
+    protected $description = 'Push browser reminders for upcoming events of connected calendars (any provider) and Google Tasks';
 
-    public function handle(GoogleCalendarService $calendarService, GoogleTasksService $tasksService): int
+    public function handle(GoogleTasksService $tasksService): int
     {
         $lead = max(1, (int) $this->option('lead'));
         $now = now();
         $windowEnd = $now->copy()->addMinutes($lead);
 
-        $connections = CalendarConnection::where('provider', 'google')
-            ->where('is_active', true)
-            ->whereNotNull('access_token')
+        $connections = CalendarConnection::where('is_active', true)
             ->with('user')
             ->get();
 
         $sent = 0;
         foreach ($connections as $connection) {
-            if (! $connection->user) {
+            if (! $connection->user || ($connection->provider === 'google' && ! $connection->access_token)) {
                 continue;
             }
 
-            $reminders = $connection->kind === 'tasks'
-                ? $this->taskReminders($connection, $tasksService, $now, $windowEnd)
-                : $this->eventReminders($connection, $calendarService, $now, $windowEnd);
+            try {
+                $reminders = match (true) {
+                    $connection->kind === 'tasks' && $connection->provider === 'google' => $this->taskReminders($connection, $tasksService, $now, $windowEnd),
+                    $connection->kind === 'calendar' => $this->eventReminders($connection, $now, $windowEnd),
+                    default => [],
+                };
+            } catch (Throwable $e) {
+                // One broken calendar must not stop everyone else's reminders; the calendar
+                // page shows the error (sync_error) the next time its owner opens it.
+                Log::info('Calendar reminders skipped a connection', ['connection_id' => $connection->id, 'error' => get_class($e)]);
+
+                continue;
+            }
 
             foreach ($reminders as $reminder) {
                 if ($this->alreadySent($connection, $reminder['key'])) {
@@ -57,22 +68,18 @@ class SendCalendarReminders extends Command
         return self::SUCCESS;
     }
 
-    /** Build reminders for timed calendar events starting within the window. */
-    private function eventReminders(CalendarConnection $connection, GoogleCalendarService $service, Carbon $now, Carbon $windowEnd): array
+    /** Build reminders for timed calendar events starting within the window (any provider). */
+    private function eventReminders(CalendarConnection $connection, Carbon $now, Carbon $windowEnd): array
     {
         $out = [];
-        foreach ($service->listEvents($connection, $now, $windowEnd) as $event) {
-            $startRaw = $event['start']['dateTime'] ?? null; // skip all-day (date only)
-            if (! $startRaw) {
-                continue;
-            }
-            $start = Carbon::parse($startRaw);
-            if ($start->lte($now) || $start->gt($windowEnd)) {
+        foreach (CalendarProviders::for($connection)->listEvents($connection, $now, $windowEnd) as $event) {
+            $start = NormalizedEvent::startsAt($event); // null for all-day events
+            if (! $start || $start->lte($now) || $start->gt($windowEnd)) {
                 continue;
             }
             $out[] = [
-                'key' => 'event:'.($event['id'] ?? $startRaw).':'.$start->timestamp,
-                'title' => $event['summary'] ?? '(untitled event)',
+                'key' => 'event:'.$event['id'].':'.$start->timestamp,
+                'title' => $event['title'] ?: '(untitled event)',
                 'when' => 'Starts in '.$this->minutesLabel($now, $start),
             ];
         }
@@ -95,7 +102,7 @@ class SendCalendarReminders extends Command
             $due = Carbon::parse($dueRaw);
             // Google Tasks stores time-less due dates as UTC midnight — skip those
             // (no meaningful reminder time).
-            if ($due->format('H:i:s') === '00:00:00' && $due->timezoneName === 'UTC') {
+            if ($due->format('H:i:s') === '00:00:00' && $due->utcOffset() === 0) {
                 continue;
             }
             if ($due->lte($now) || $due->gt($windowEnd)) {

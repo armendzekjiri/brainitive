@@ -91,14 +91,15 @@ tool returns a `location` object (workspace, project, breadcrumb, url) — alway
 tell the user WHERE the content was created and share the url. You can only see
 and change what the signed-in user has access to.
 
-Calendar / planning the week: the user can connect Google Calendar and Google
-Tasks (personal, not workspace-scoped). Call list_calendar_connections first to
-get connection_ids, then list_calendar_events to read their schedule and
-create_calendar_event / update_calendar_event to add or move time blocks. Use
-the Google Tasks tools (list/create/update) for to-dos. Always pass the user's
-IANA timezone (e.g. Europe/Zurich) on writes so times land correctly, and
-confirm before deleting. If list_calendar_connections is empty, tell the user to
-connect Google under Calendar in Brainitive.
+Calendar / planning the week: the user can connect calendars (Google Calendar
+and other providers) and Google Tasks (personal, not workspace-scoped). Call
+list_calendar_connections first to get connection_ids, then list_calendar_events
+to read their schedule and create_calendar_event / update_calendar_event to add
+or move time blocks (only on calendars with writable = true). Use the Google
+Tasks tools (list/create/update) for to-dos. Always pass the user's IANA
+timezone (e.g. Europe/Zurich) on writes so times land correctly, and confirm
+before deleting. If list_calendar_connections is empty, tell the user to
+connect a calendar under Calendar in Brainitive.
 TXT)]
 class BrainitiveServer extends Server
 {
@@ -159,7 +160,7 @@ class BrainitiveServer extends Server
         ListBookmarksTool::class,
         CreateBookmarkTool::class,
         CreateBookmarkItemTool::class,
-        // Google Calendar + Google Tasks (personal; for planning the week)
+        // Calendars (any provider) + Google Tasks (personal; for planning the week)
         ListCalendarConnectionsTool::class,
         ListCalendarEventsTool::class,
         CreateCalendarEventTool::class,
