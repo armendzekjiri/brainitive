@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Sun } from 'lucide-react';
 import { ProjectIcon } from '@/components/ProjectIcon';
 import { Badge } from '@/components/ui/badge';
+import { myDaySnapshot, useOfflineSnapshot } from '@/lib/offline/snapshots';
 import { cn } from '@/lib/utils';
 import {
     ListTodo,
@@ -239,6 +240,8 @@ function ItemRow({
 
 export default function MyWorkIndex({ auth, scope, filter, projects, counts, scopeCounts, myDay }: Props) {
     const plannedKeys = new Set(myDay.keys);
+    // Offline mode (BRAI-82): today's plan, for My Day without internet (a no-op while it's off).
+    useOfflineSnapshot('myday', 'today', () => myDaySnapshot(myDay), [myDay]);
     const totalItems = projects.reduce((acc, p) => acc + p.items.length, 0);
     const visibleDone = projects.reduce((acc, p) => acc + p.items.filter((item) => item.completed_at).length, 0);
     const firstName = auth.user.name?.split(' ')[0] || 'there';

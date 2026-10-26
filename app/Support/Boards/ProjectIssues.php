@@ -124,7 +124,7 @@ class ProjectIssues
      * Create issues in the given column — default the board's first — (and the backlog on
      * Scrum boards).
      *
-     * @param  list<array{title: string, description?: string|null, start_date?: string|null, due_date?: string|null, assigned_to?: int|null}>  $issues
+     * @param  list<array{title: string, description?: string|null, start_date?: string|null, due_date?: string|null, assigned_to?: int|null, priority_id?: int|null}>  $issues
      * @return Collection<int, Item> in the given order
      */
     public static function create(Board $board, Project $project, User $user, array $issues, ?BoardColumn $column = null): Collection
@@ -149,7 +149,7 @@ class ProjectIssues
                     'project_id' => $project->id,
                     'column_id' => $column->id,
                     'item_type_id' => $typeId,
-                    'priority_id' => $priorityId,
+                    'priority_id' => $issue['priority_id'] ?? $priorityId,
                     'key' => $project->getNextItemKey(),
                     'start_date' => $issue['start_date'] ?? null,
                     'due_date' => $issue['due_date'] ?? null,

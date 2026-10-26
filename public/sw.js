@@ -1,28 +1,95 @@
 /**
- * Minimal service worker for PWA install support.
- * Browsers (e.g. Chrome) require a registered service worker to show "Install app".
+ * Brainitive service worker: PWA install, web push, and offline mode (BRAI-82).
+ *
+ * Offline mode is opt-in per device ("Work offline on this device"). The page caches the app
+ * shell (`/offline` + the built files it needs) in SHELL_CACHE; this worker only reads it:
+ * - a navigation that fails (no network) gets the cached shell, which renders My Day, recently
+ *   opened task lists / issues and quick capture from IndexedDB — or a plain "you're offline" page;
+ * - an Inertia visit that fails gets `409 + X-Inertia-Location`, so Inertia does a full navigation
+ *   (→ the shell) instead of showing an error;
+ * - built assets come from the shell cache first (hashed, immutable).
+ * Everything else — documents, live co-editing, API calls, POST/PUT — goes straight to the network:
+ * no respondWith, so those requests behave exactly as without a service worker.
  */
-const CACHE_NAME = 'brainitive-v1';
+const SHELL_CACHE = 'brainitive-offline-shell-v1';
+const SHELL_URL = '/offline';
+// caches of earlier versions of this worker (other features keep their own caches untouched)
+const OLD_CACHES = ['brainitive-v1'];
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(
-        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
-      )
-    )
+      Promise.all(keys.filter((k) => OLD_CACHES.includes(k)).map((k) => caches.delete(k)))
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network-first: always try the network, no offline cache for now
-  event.respondWith(fetch(event.request));
+  const request = event.request;
+  if (request.method !== 'GET') return;
+
+  let url;
+  try {
+    url = new URL(request.url);
+  } catch (e) {
+    return;
+  }
+  if (url.origin !== self.location.origin) return;
+
+  if (url.pathname.startsWith('/build/assets/')) {
+    event.respondWith(asset(request));
+    return;
+  }
+  if (request.mode === 'navigate') {
+    event.respondWith(navigation(request));
+    return;
+  }
+  // A full Inertia visit (not a partial reload / prefetch / poll): offline → hard navigation.
+  if (request.headers.get('X-Inertia') && !request.headers.get('X-Inertia-Partial-Component') && request.headers.get('Purpose') !== 'prefetch') {
+    event.respondWith(inertiaVisit(request));
+  }
 });
+
+async function asset(request) {
+  const cached = await caches.match(request, { cacheName: SHELL_CACHE });
+  if (cached) return cached;
+  return fetch(request);
+}
+
+async function navigation(request) {
+  try {
+    return await fetch(request);
+  } catch (error) {
+    const shell = await caches.match(SHELL_URL, { cacheName: SHELL_CACHE });
+    return shell || offlinePage();
+  }
+}
+
+async function inertiaVisit(request) {
+  try {
+    return await fetch(request);
+  } catch (error) {
+    return new Response('', { status: 409, headers: { 'X-Inertia-Location': request.url } });
+  }
+}
+
+/** Offline mode is off on this device: a friendly page instead of the browser's error. */
+function offlinePage() {
+  const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+    + '<title>You\'re offline - Brainitive</title><style>'
+    + 'body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;background:#F4F6F8;color:#485E72;padding:16px;box-sizing:border-box}'
+    + 'main{max-width:420px;text-align:center}h1{font-size:1.4rem;color:#1f2937;margin:0 0 .5rem}p{line-height:1.5;margin:.5rem 0}'
+    + 'a{display:inline-block;margin-top:1rem;background:#0E83DC;color:#fff;text-decoration:none;padding:.6rem 1.1rem;border-radius:.75rem}'
+    + '@media (prefers-color-scheme:dark){body{background:#0f172a;color:#cbd5e1}h1{color:#f1f5f9}}</style></head><body><main>'
+    + '<h1>You\'re offline</h1><p>Brainitive needs a connection for this page.</p>'
+    + '<p>Turn on <strong>Work offline on this device</strong> in your profile to keep using My Day, your task lists, issues and quick capture without internet.</p>'
+    + '<a href="">Try again</a></main></body></html>';
+  return new Response(html, { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
 
 // ── Web Push ──────────────────────────────────────────────────────────────
 // Payload is the JSON produced by WebPushMessage on the server:

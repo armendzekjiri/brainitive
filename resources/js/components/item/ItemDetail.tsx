@@ -8,6 +8,7 @@ import ShareButton from '@/components/share/ShareButton';
 import SubjectMeetings from '@/components/meetings/SubjectMeetings';
 import { Video } from 'lucide-react';
 import { itemTree, MAX_ITEM_DEPTH } from '@/lib/itemTree';
+import { issueSnapshot, useOfflineSnapshot } from '@/lib/offline/snapshots';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -344,6 +345,15 @@ export function useItemDetail(args: UseItemDetailArgs) {
     // `live` = freshest copy from the reactive columns prop (links/watchers refresh
     // after mutation even though `item` may be a state snapshot in the popup).
     const live = allBoardItems.find((i) => i.id === item?.id) ?? item;
+
+    // Offline mode (BRAI-82): keep a copy of the issues the user opens (a no-op while it's off).
+    // From `live` (the popup's `item` is a state copy that isn't refreshed after an edit) and the
+    // parsed description, so the device's base values are what the server has.
+    useOfflineSnapshot('issue', item?.id ?? null, () => issueSnapshot({
+        item: { ...(item as Item), ...(live as Item), comments: localComments, description: savedDescription },
+        workspace, project, board, columns, priorities, members: projectUsers, canEdit: canEditItems,
+        url: route('boards.items.show', [workspace.slug, project.slug, board.slug, (item as Item).id], false),
+    }), [item, live, localComments, savedDescription, canEditItems]);
     const subtasks = useMemo(
         () => allBoardItems.filter((i) => i.parent_id === item?.id),
         [allBoardItems, item?.id],
