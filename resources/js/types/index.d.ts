@@ -2929,3 +2929,12 @@ export type PageCollabBootstrap =
 export interface PagePresenceCollabState extends PageDraftState {
     collab_epoch?: number | null;
 }
+
+// ── Live whiteboards (BRAI-153, v1.44.0) ────────────────────────────────────────────────────
+
+/** `whiteboardCollab` prop of Pages/Show: the preview watches the live whiteboard; null = static. */
+export interface WhiteboardCollabProps {
+    epoch: number;
+    /** wss URL of the realtime server, or a path on this host ("/collab"). */
+    url: string;
+}

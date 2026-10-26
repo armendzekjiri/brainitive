@@ -19,8 +19,8 @@ export function deriveKeys(secret) {
 
 const base64url = (buffer) => Buffer.from(buffer).toString('base64url');
 
-/** `page.<uuid>.<epoch>` — the only documents this server opens. */
-export const DOCUMENT_NAME = /^page\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.\d{1,9}$/;
+/** `page.<uuid>.<epoch>` (documents) and `whiteboard.<uuid>.<epoch>` (BRAI-153) — the only documents this server opens. */
+export const DOCUMENT_NAME = /^(?:page|whiteboard)\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.\d{1,9}$/;
 
 /**
  * The payload of a valid, unexpired token, else null.

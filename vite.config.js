@@ -15,7 +15,8 @@ export default defineConfig({
     },
     plugins: [
         laravel({
-            input: 'resources/js/app.tsx',
+            // whiteboard-live: the whiteboard editor's live drawing (BRAI-153, excalidraw-editor.blade.php)
+            input: ['resources/js/app.tsx', 'resources/js/whiteboard-live.ts'],
             refresh: true,
         }),
         react(),

@@ -53,6 +53,7 @@ use App\Http\Controllers\SnippetController;
 use App\Http\Controllers\SprintController;
 use App\Http\Controllers\TaskListController;
 use App\Http\Controllers\TicketController;
+use App\Http\Controllers\WhiteboardCollabController;
 use App\Http\Controllers\WhiteboardController;
 use App\Http\Controllers\WorkloadController;
 use App\Http\Controllers\WorkspaceController;
@@ -586,6 +587,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('pages/{page}/collab/session', [PageCollabController::class, 'session'])->middleware([ReadOnlySession::class, 'throttle:60,1,pages.collab.session'])->name('pages.collab.session');
             Route::put('pages/{page}/collab/draft', [PageCollabController::class, 'save'])->middleware([ReadOnlySession::class, 'throttle:180,1,pages.collab.save'])->name('pages.collab.save');
             Route::post('pages/{page}/collab/bootstrap', [PageCollabController::class, 'bootstrap'])->middleware([ReadOnlySession::class, 'throttle:30,1,pages.collab.bootstrap'])->name('pages.collab.bootstrap');
+            // Live whiteboards (BRAI-153): same realtime server, own document kind
+            Route::post('pages/{page}/whiteboard/collab/session', [WhiteboardCollabController::class, 'session'])->middleware([ReadOnlySession::class, 'throttle:60,1,pages.whiteboard.collab.session'])->name('pages.whiteboard.collab.session');
+            Route::post('pages/{page}/whiteboard/collab/scene', [WhiteboardCollabController::class, 'save'])->middleware([ReadOnlySession::class, 'throttle:120,1,pages.whiteboard.collab.save'])->name('pages.whiteboard.collab.save');
+            Route::post('pages/{page}/whiteboard/collab/bootstrap', [WhiteboardCollabController::class, 'bootstrap'])->middleware([ReadOnlySession::class, 'throttle:30,1,pages.whiteboard.collab.bootstrap'])->name('pages.whiteboard.collab.bootstrap');
             Route::get('pages/{page}/versions', [PageVersionController::class, 'index'])->name('pages.versions.index');
             Route::get('pages/{page}/versions/{versionNumber}', [PageVersionController::class, 'show'])->whereNumber('versionNumber')->name('pages.versions.show');
             Route::post('pages/{page}/versions/{versionNumber}/restore', [PageVersionController::class, 'restore'])->whereNumber('versionNumber')->name('pages.versions.restore');
