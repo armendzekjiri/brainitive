@@ -127,8 +127,8 @@ helper that doesn't exist (e.g. HTML → editor JSON), check first whether one a
 
 ### 2. BRAI-139 Jira (CSV export, all fields) — see the card
 - **Input:** Jira Cloud/Server "Export issues → CSV (all fields)". Duplicate column names repeat for
-  multi-values (`Labels`, `Comment`, `Sprint`, `Attachment`), so read them positionally. Limits: about
-  50 MB, 10 000 issues. Detect `;` / `,` delimiters and UTF-8 with or without BOM.
+  multi-values (`Labels`, `Comment`, `Sprint`, `Attachment`), so read them positionally. Limits: 25 MB (streamed; the preview runs in the web request),
+  10 000 issues. Detect `;` / `,` delimiters and UTF-8 with or without BOM.
 - **Preview:**
   - issue count, Jira projects, statuses, issue types, priorities, sprints and people;
   - mappings: status → column (default: one column per status in status-category order, done

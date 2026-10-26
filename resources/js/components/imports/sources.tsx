@@ -1,3 +1,4 @@
+import JiraPreview from '@/components/imports/sources/JiraPreview';
 import type { ImportRunData } from '@/types';
 import type { ComponentType } from 'react';
 import TrelloPreview from '@/components/imports/sources/TrelloPreview';
@@ -17,7 +18,7 @@ export interface SourcePreviewProps {
 
 export const SOURCE_PREVIEWS: Record<string, ComponentType<SourcePreviewProps>> = {
     trello: TrelloPreview,            // BRAI-65
-    // jira: JiraPreview,              // BRAI-139
+    jira: JiraPreview,                 // BRAI-139
     // notion: NotionPreview,          // BRAI-66
     // brainitive: ArchivePreview,     // BRAI-81 (restore)
 };
