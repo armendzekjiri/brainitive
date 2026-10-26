@@ -7,9 +7,12 @@ import { expect, test, uid } from '../fixtures';
 import { BASE_URL, COLLAB, REMOTE, ROOT, USERS } from '../env';
 import { addProjectContent } from '../helpers/content';
 
+/** Its own realtime server (live-docs.spec.ts owns COLLAB.port and stops / restarts it in parallel). */
+const WB_PORT = COLLAB.port + 3;
+
 /**
  * Live whiteboards (BRAI-153): two people draw on the same Excalidraw scene through the realtime
- * server (realtime/, started here on COLLAB.port like live-docs.spec.ts) and see each other's shapes
+ * server (realtime/, started here on WB_PORT like live-docs.spec.ts) and see each other's shapes
  * and named cursors. Contexts opt in with `X-E2E-Collab: 1`; every other whiteboard journey keeps the
  * single-user editor. Serial: one server, and two tests stop / restart it.
  */
@@ -22,7 +25,7 @@ async function startRealtime() {
         cwd: ROOT,
         env: {
             ...process.env,
-            COLLAB_PORT: String(COLLAB.port),
+            COLLAB_PORT: String(WB_PORT),
             COLLAB_HOST: '127.0.0.1',
             COLLAB_SECRET: COLLAB.secret,
             COLLAB_APP_URL: BASE_URL,
@@ -32,7 +35,7 @@ async function startRealtime() {
     const end = Date.now() + 15_000;
     while (Date.now() < end) {
         try {
-            if ((await fetch(`http://127.0.0.1:${COLLAB.port}/`)).ok) return;
+            if ((await fetch(`http://127.0.0.1:${WB_PORT}/`)).ok) return;
         } catch {
             /* not up yet */
         }
@@ -49,7 +52,7 @@ async function stopRealtime() {
     server = null;
 }
 
-const optIn = (page: Page) => page.context().setExtraHTTPHeaders({ 'X-E2E-Collab': '1' });
+const optIn = (page: Page) => page.context().setExtraHTTPHeaders({ 'X-E2E-Collab': '1', 'X-E2E-Collab-Port': String(WB_PORT) });
 
 type Probe = { types: string[]; texts: string[]; cards: number; collaborators: { username: string; pointer: boolean }[]; mode: string | null };
 
