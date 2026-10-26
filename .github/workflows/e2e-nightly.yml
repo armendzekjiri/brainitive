@@ -57,7 +57,8 @@ jobs:
         run: |
           cp .env.example .env
           php artisan key:generate
-      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      # the login setup project (auth.setup.ts) always runs in Chromium
+      - run: npx playwright install --with-deps chromium ${{ matrix.browser }}
       - run: npx playwright test -c e2e --project=${{ matrix.browser }}
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
