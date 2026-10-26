@@ -69,6 +69,10 @@ import {
     Clock,
     FileSpreadsheet,
     ReceiptText,
+    Lightbulb,
+    BadgeCheck,
+    Video,
+    CalendarSync,
     type LucideIcon,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -387,45 +391,45 @@ const SPOTLIGHT: {
     shortcut?: string;
 }[] = [
     {
-        key: 'import',
-        version: 'v1.41',
-        icon: PackageOpen,
+        key: 'clients',
+        version: 'v1.42',
+        icon: Briefcase,
         color: '#0E83DC',
-        title: 'Bring your data',
+        title: 'Work with your clients',
         description:
-            'Move in from Trello, Jira or Notion in minutes — boards, issues, epics, comments and docs — with a preview before anything is created.',
+            'A client portal for approvals, a public feedback portal for ideas and votes, and document reviews inside the team — no extra tools, no accounts for outsiders.',
         points: [
-            'Trello boards, Jira CSV exports, Notion workspaces',
-            'Map statuses, types and people yourself',
-            'Export any project and restore it anywhere',
+            'Clients approve the exact version they saw',
+            'Customers vote on ideas and follow your roadmap',
+            'Reviewers comment on selected text',
         ],
     },
     {
-        key: 'automation',
-        version: 'v1.40',
-        icon: Workflow,
-        color: '#0E83DC',
-        title: 'Automations that do the busywork',
-        description:
-            'When an issue is created, moved or overdue, let Brainitive assign it, set the priority, comment or notify — rules you build in a minute.',
-        points: [
-            'When → if → then, no code',
-            'Test a rule on a real issue before switching it on',
-            'A run log for every rule',
-        ],
-    },
-    {
-        key: 'email-helpdesk',
-        version: 'v1.40',
-        icon: MailOpen,
+        key: 'calendars-meetings',
+        version: 'v1.42',
+        icon: Video,
         color: '#69A748',
-        title: 'Email into your helpdesk',
+        title: 'Every calendar, every meeting',
         description:
-            'Customers just write to support@ — every email becomes a ticket, your answers go back in the same thread, with SLAs that warn before a deadline slips.',
+            'Google, Outlook / Microsoft 365, iCloud and any CalDAV or ICS calendar in one view — and a Google Meet or Teams meeting from any card or doc.',
         points: [
-            'Connect your mailbox or use a forwarding address',
-            'Replies stay in one email thread',
-            'Response and resolution targets per priority',
+            'Schedule Meet or Teams from a card, doc or the calendar',
+            'Subscribe to your Brainitive dates in any calendar app',
+            'Sign in with Microsoft',
+        ],
+    },
+    {
+        key: 'smart-links',
+        version: 'v1.42',
+        icon: Link2,
+        color: '#0E83DC',
+        title: 'Smart links & sharper automations',
+        description:
+            'Paste an issue into a doc and see its live status; build automation conditions like “Labels has none of Bug” or “Priority is any of High, Urgent”.',
+        points: [
+            'Live chips and cards for issues, docs, tickets and plans',
+            'Field → operator → value, match all or any',
+            'Connect GitHub in one click',
         ],
     },
 ];
@@ -823,7 +827,15 @@ export default function Welcome({
                     icon: CalendarDays,
                     title: 'Calendar sync',
                     description:
-                        'Connect Google Calendar and Tasks, see your schedule, and reschedule in place.',
+                        'Google, Outlook / Microsoft 365, iCloud and any CalDAV calendar — or a read-only ICS link — next to your work; reschedule in place.',
+                    isNew: true,
+                },
+                {
+                    icon: CalendarSync,
+                    title: 'Calendar feed',
+                    description:
+                        'Your due dates, tasks, My Day and focus sessions in Apple Calendar, Google Calendar or Outlook through a private link.',
+                    isNew: true,
                 },
                 {
                     icon: Command,
@@ -857,6 +869,20 @@ export default function Welcome({
                     title: 'Whiteboards',
                     description:
                         'Excalidraw with templates, autosave and history — turn sticky notes into board issues.',
+                },
+                {
+                    icon: Link2,
+                    title: 'Smart links',
+                    description:
+                        'Paste a link to an issue, doc, ticket or plan and it shows live — status, due date and assignee — as a chip or a card.',
+                    isNew: true,
+                },
+                {
+                    icon: BadgeCheck,
+                    title: 'Document review',
+                    description:
+                        'Ask teammates to review a draft: comments on selected text, approve or request changes, and optional review before publish.',
+                    isNew: true,
                 },
                 {
                     icon: Network,
@@ -910,6 +936,13 @@ export default function Welcome({
                         'Keep content internal or generate public links for pages, snippets, and bookmarks.',
                 },
                 {
+                    icon: Video,
+                    title: 'Meetings: Google Meet & Teams',
+                    description:
+                        'Schedule a meeting from a card, doc or the calendar — invitations from your own calendar, Join right on the card, notes in one click.',
+                    isNew: true,
+                },
+                {
                     icon: Link2,
                     title: 'Share links',
                     description:
@@ -930,6 +963,20 @@ export default function Welcome({
             icon: Headset,
             color: '#0E83DC',
             items: [
+                {
+                    icon: Briefcase,
+                    title: 'Client portal',
+                    description:
+                        'Share chosen doc versions and plan snapshots with clients; they approve or request changes on the exact version and comment.',
+                    isNew: true,
+                },
+                {
+                    icon: Lightbulb,
+                    title: 'Feedback portal',
+                    description:
+                        'A public page where customers post ideas, vote and follow your roadmap — you moderate, merge duplicates and turn ideas into cards.',
+                    isNew: true,
+                },
                 {
                     icon: LifeBuoy,
                     title: 'Helpdesk portal',
@@ -1045,7 +1092,7 @@ export default function Welcome({
                     icon: GitBranch,
                     title: 'GitHub development',
                     description:
-                        'Branches, commits, pull requests and deployments show up on the issue they mention.',
+                        'Connect GitHub in one click; branches, commits, pull requests and deployments show up on the issue — and a merge can move the card.',
                     isNew: true,
                 },
                 {
@@ -1087,7 +1134,8 @@ export default function Welcome({
                     icon: KeyRound,
                     title: 'Social login',
                     description:
-                        'Sign in with email, Google, or GitHub — whatever your team prefers.',
+                        'Sign in with email, Google, GitHub or Microsoft — whatever your team prefers.',
+                    isNew: true,
                 },
                 {
                     icon: Search,

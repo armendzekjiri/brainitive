@@ -5,7 +5,7 @@ import { expect, test } from '../fixtures';
  * The public homepage (Pages/Welcome.tsx) shows what the latest releases shipped (BRAI-98).
  * When a release adds feature cards to the homepage, add their titles here.
  */
-const SPOTLIGHT = ['Bring your data', 'Automations that do the busywork', 'Email into your helpdesk'];
+const SPOTLIGHT = ['Work with your clients', 'Every calendar, every meeting', 'Smart links & sharper automations'];
 const NEW_FEATURES = [
     'Project templates',
     'Saved board views',
@@ -36,6 +36,14 @@ const NEW_FEATURES = [
     'Workflow automation',
     'Import from Trello, Jira & Notion',
     'Project export & restore',
+    'Calendar sync',
+    'Calendar feed',
+    'Smart links',
+    'Document review',
+    'Meetings: Google Meet & Teams',
+    'Client portal',
+    'Feedback portal',
+    'Social login',
 ];
 const GROUPS = ['Plan & organize', 'Capture & focus', 'Create & write', 'Collaborate & share', 'Customers, leads & billing', 'Insight & planning', 'Connect & automate'];
 
