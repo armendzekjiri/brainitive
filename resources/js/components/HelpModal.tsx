@@ -83,6 +83,15 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.40.1',
+        title: 'Docker builds on a Mac',
+        tag: 'Fix',
+        date: '2026-10-26',
+        items: [
+            'Self-hosting: building the Docker image from a checkout on macOS (or Windows) no longer fails with “Cannot find module @/components/…”.',
+        ]
+    },
+    {
         version: 'v1.40.0',
         title: 'Automations, email to helpdesk, SLAs and recurring issues',
         tag: 'Feature',

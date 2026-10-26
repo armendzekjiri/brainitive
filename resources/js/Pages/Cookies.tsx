@@ -1,6 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 import { ArrowLeft, Cookie, ShieldCheck, BarChart3, Megaphone, Settings, Clock, Globe } from 'lucide-react';
-import ApplicationLogo from '@/Components/ApplicationLogo';
+import ApplicationLogo from '@/components/ApplicationLogo';
 import { CookieConsent } from '@/components/CookieConsent';
 
 const cookieTypes = [
