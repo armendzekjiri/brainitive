@@ -14,6 +14,15 @@
   <a href="LICENSE">AGPL-3.0</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/armendzekjiri/brainitive/actions/workflows/deploy.yml"><img src="https://github.com/armendzekjiri/brainitive/actions/workflows/deploy.yml/badge.svg?branch=main" alt="Production deploy"></a>
+  <a href="https://github.com/armendzekjiri/brainitive/actions/workflows/pre-release.yml"><img src="https://github.com/armendzekjiri/brainitive/actions/workflows/pre-release.yml/badge.svg?branch=pre-release" alt="Tests + e2e on dev"></a>
+  <a href="https://github.com/armendzekjiri/brainitive/actions/workflows/e2e-nightly.yml"><img src="https://github.com/armendzekjiri/brainitive/actions/workflows/e2e-nightly.yml/badge.svg" alt="Nightly e2e (Firefox, WebKit)"></a>
+  <a href="https://github.com/armendzekjiri/brainitive/releases/latest"><img src="https://img.shields.io/github/v/release/armendzekjiri/brainitive?label=release" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/armendzekjiri/brainitive" alt="License"></a>
+  <a href="https://github.com/armendzekjiri/brainitive/stargazers"><img src="https://img.shields.io/github/stars/armendzekjiri/brainitive?style=flat" alt="GitHub stars"></a>
+</p>
+
 ![Gantt plans in Brainitive](public/images/screenshots/plans.jpg)
 
 ## What's inside
