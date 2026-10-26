@@ -696,8 +696,9 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
     const [isPublishing, setIsPublishing] = useState(false);
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
     const [headings, setHeadings] = useState<TocHeading[]>([]);
+    // Full width by default (v1.42.0); a document remembers "Exit full width" per browser
     const [isFullWidth, setIsFullWidth] = useState(() => {
-        try { return localStorage.getItem(`page-full-width-${page.uuid}`) === 'true'; } catch { return false; }
+        try { return localStorage.getItem(`page-full-width-${page.uuid}`) !== 'false'; } catch { return true; }
     });
     // Classic formatting toolbar is opt-in; the floating selection toolbar covers everyday formatting
     const [showFormattingToolbar, setShowFormattingToolbar] = useState(() => {
