@@ -24,6 +24,8 @@ final class QueryParser
 
     private const MAX_INPUT = 300;
 
+    private const MIN_PREFIX = 2;
+
     private const KEY_PATTERN = '/^[A-Za-z][A-Za-z0-9]{0,15}-\d{1,9}$/';
 
     /**
@@ -63,10 +65,10 @@ final class QueryParser
             $terms[] = ['words' => $words, 'phrase' => count($words) > 1, 'quoted' => false, 'negated' => $negated, 'prefix' => false];
         }
 
-        // the last word someone typed may be unfinished
+        // the last word someone typed may be unfinished (a prefix of one letter would match nearly everything)
         for ($i = count($terms) - 1; $i >= 0; $i--) {
             if (! $terms[$i]['negated']) {
-                if (! str_ends_with($text, '"')) {
+                if (! str_ends_with($text, '"') && mb_strlen((string) end($terms[$i]['words'])) >= self::MIN_PREFIX) {
                     $terms[$i]['prefix'] = true;
                 }
                 break;
@@ -111,6 +113,9 @@ final class QueryParser
     /** @return list<string> */
     private static function words(string $value): array
     {
+        // modifier letters (ʻ ʼ ˈ ː …) and ŉ: unaccent() turns them into ' or : — which would be
+        // query syntax; the index drops them as punctuation anyway
+        $value = preg_replace(['/\x{0149}/u', '/[\p{Lm}\p{Sk}]+/u'], ['n', ' '], $value) ?? '';
         $parts = preg_split('/[^\p{L}\p{N}]+/u', mb_strtolower($value), -1, PREG_SPLIT_NO_EMPTY) ?: [];
 
         return array_slice(array_map(fn (string $w) => mb_substr($w, 0, self::MAX_WORD), $parts), 0, self::MAX_PARTS);

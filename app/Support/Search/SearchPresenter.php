@@ -65,7 +65,13 @@ final class SearchPresenter
             ->whereIn('snippets.id', $in)->get(['snippets.id', 'c.slug as collection_slug', 'c.name as collection_name', 'w.slug as workspace_slug', 'w.name as workspace_name']));
         $bookmarks = self::rows($of(SearchTypes::BOOKMARK), fn ($in) => DB::table('bookmark_items')->join('bookmarks as b', 'b.id', '=', 'bookmark_items.bookmark_id')->join('workspaces as w', 'w.id', '=', 'b.workspace_id')
             ->whereIn('bookmark_items.id', $in)->get(['bookmark_items.id', 'bookmark_items.url', 'b.slug as bookmark_slug', 'b.name as bookmark_name', 'w.slug as workspace_slug', 'w.name as workspace_name']));
-        $captures = self::rows($of(SearchTypes::CAPTURE), fn ($in) => DB::table('captures')->whereIn('id', $in)->get(['id', 'text', 'archived_at', 'processed_at']));
+        $captures = self::rows($of(SearchTypes::CAPTURE), fn ($in) => DB::table('captures')->whereIn('id', $in)->get(['id', 'archived_at', 'processed_at']));
+        // comments and files are shown through their issue / ticket: make sure they still exist
+        // themselves (the database may have deleted them with their author, without any hook)
+        $comments = self::rows($of(SearchTypes::COMMENT), fn ($in) => DB::table('comments')->whereIn('id', $in)->whereNull('deleted_at')->get(['id']));
+        $files = self::rows($of(SearchTypes::ATTACHMENT), fn ($in) => DB::table('attachments')->whereIn('id', $in)->get(['id']));
+        $ticketFiles = self::rows($of(SearchTypes::TICKET_ATTACHMENT), fn ($in) => DB::table('ticket_attachments')->whereIn('id', $in)->get(['id']));
+        $gone = [];
 
         $projectIds = array_values(array_unique(array_filter(array_column($hits, 'project_id'))));
         $projects = self::rows($projectIds, fn ($in) => DB::table('projects')->join('workspaces as w', 'w.id', '=', 'projects.workspace_id')
@@ -85,10 +91,10 @@ final class SearchPresenter
 
             [$url, $context, $fallbackTitle, $external] = match ($type) {
                 SearchTypes::ITEM => ($i = $issue($id)) ? [$issueUrl($i), $project->name.' · '.$i->board_name, null, null] : [null, null, null, null],
-                SearchTypes::COMMENT => ($i = $issue($parentOf(SearchTypes::COMMENT, $id))) ? [$issueUrl($i), $project->name.' · '.$i->key, 'Comment on '.$i->key.' · '.$i->title, null] : [null, null, null, null],
-                SearchTypes::ATTACHMENT => ($i = $issue($parentOf(SearchTypes::ATTACHMENT, $id))) ? [$issueUrl($i), $project->name.' · '.$i->key.' · '.$i->title, null, null] : [null, null, null, null],
+                SearchTypes::COMMENT => isset($comments[$id]) && ($i = $issue($parentOf(SearchTypes::COMMENT, $id))) ? [$issueUrl($i), $project->name.' · '.$i->key, 'Comment on '.$i->key.' · '.$i->title, null] : [null, null, null, null],
+                SearchTypes::ATTACHMENT => isset($files[$id]) && ($i = $issue($parentOf(SearchTypes::ATTACHMENT, $id))) ? [$issueUrl($i), $project->name.' · '.$i->key.' · '.$i->title, null, null] : [null, null, null, null],
                 SearchTypes::TICKET => ($t = $ticket($id)) ? [$ticketUrl($t), $project->name.' · '.$t->helpdesk_name, null, null] : [null, null, null, null],
-                SearchTypes::TICKET_ATTACHMENT => ($t = $ticket($parentOf(SearchTypes::TICKET_ATTACHMENT, $id))) ? [$ticketUrl($t), $project->name.' · '.$t->key.' · '.$t->subject, null, null] : [null, null, null, null],
+                SearchTypes::TICKET_ATTACHMENT => isset($ticketFiles[$id]) && ($t = $ticket($parentOf(SearchTypes::TICKET_ATTACHMENT, $id))) ? [$ticketUrl($t), $project->name.' · '.$t->key.' · '.$t->subject, null, null] : [null, null, null, null],
                 SearchTypes::PAGE => $p && isset($pages[$id]) ? [route('pages.show', [...$p, $pages[$id]->uuid]), $project->name, null, null] : [null, null, null, null],
                 SearchTypes::PLAN => $p && isset($plans[$id]) ? [route('plans.show', [...$p, $plans[$id]->slug]), $project->name, null, null] : [null, null, null, null],
                 SearchTypes::TASK => $p && isset($tasks[$id]) ? [route('task-lists.show', [...$p, $tasks[$id]->list_slug]), $project->name.' · '.$tasks[$id]->list_name, null, null] : [null, null, null, null],
@@ -100,13 +106,16 @@ final class SearchPresenter
                     is_string($bookmarks[$id]->url) && preg_match('~^https?://~i', $bookmarks[$id]->url) ? $bookmarks[$id]->url : null,
                 ] : [null, null, null, null],
                 SearchTypes::CAPTURE => isset($captures[$id]) ? [
-                    route('captures.index', ['state' => self::captureState($captures[$id]), 'q' => mb_substr(SearchText::plain($captures[$id]->text), 0, 40)]),
+                    // no capture text in the URL (logs, history): the inbox tab it is in
+                    route('captures.index', ['state' => self::captureState($captures[$id])]).'#capture-'.$id,
                     'Your captures (private)', null, null,
                 ] : [null, null, null, null],
                 default => [null, null, null, null],
             };
             if ($url === null) {
-                continue; // gone since it was indexed
+                $gone[$type][] = $id; // gone since it was indexed
+
+                continue;
             }
 
             $label = self::LABELS[$type];
@@ -135,6 +144,11 @@ final class SearchPresenter
                 'is_draft' => $hit['is_draft'],
                 'updated_at' => $hit['updated_at'] ? CarbonImmutable::parse($hit['updated_at'])->toIso8601String() : null,
             ];
+        }
+
+        // let the index catch up with records that vanished without a hook
+        foreach ($gone as $type => $ids) {
+            app(SearchIndexer::class)->touch($type, $ids);
         }
 
         return $results;

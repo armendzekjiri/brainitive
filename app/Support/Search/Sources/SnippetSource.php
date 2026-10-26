@@ -20,7 +20,7 @@ class SnippetSource extends Source
         return SearchTypes::SNIPPET;
     }
 
-    protected function idColumn(): string
+    public function idColumn(): string
     {
         return 'snippets.id';
     }

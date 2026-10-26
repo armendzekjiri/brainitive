@@ -20,7 +20,7 @@ class BookmarkSource extends Source
         return SearchTypes::BOOKMARK;
     }
 
-    protected function idColumn(): string
+    public function idColumn(): string
     {
         return 'bookmark_items.id';
     }

@@ -17,7 +17,7 @@ class CaptureSource extends Source
         return SearchTypes::CAPTURE;
     }
 
-    protected function idColumn(): string
+    public function idColumn(): string
     {
         return 'captures.id';
     }

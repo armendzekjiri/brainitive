@@ -14,6 +14,9 @@ interface SearchSource
 {
     public function type(): string;
 
+    /** The id column of the source query, e.g. `items.id`. */
+    public function idColumn(): string;
+
     /** Query over the ids of indexable records (one `id` column), for a full reindex. */
     public function ids(): Builder;
 

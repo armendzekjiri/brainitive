@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Highlighted, SearchTypeIcon } from '@/components/search/SearchBits';
+import { safeExternalHref } from '@/lib/sanitize';
 import { cn } from '@/lib/utils';
 import type { PageProps, SearchFilters, SearchGroup, SearchOptions, SearchResponse, SearchResult } from '@/types';
 
@@ -234,9 +235,9 @@ function ResultRow({ result, index, active, onHover }: { result: SearchResult; i
                     </div>
                 </div>
             </Link>
-            {result.external_url && (
+            {safeExternalHref(result.external_url) && (
                 <a
-                    href={result.external_url}
+                    href={safeExternalHref(result.external_url)}
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={`Open ${result.title} in a new tab`}

@@ -16,7 +16,7 @@ class TicketAttachmentSource extends Source
         return SearchTypes::TICKET_ATTACHMENT;
     }
 
-    protected function idColumn(): string
+    public function idColumn(): string
     {
         return 'ticket_attachments.id';
     }
@@ -45,7 +45,6 @@ class TicketAttachmentSource extends Source
                 sourceId: $id,
                 title: (string) ($row->original_filename ?: $row->filename),
                 projectId: (int) $row->project_id,
-                workspaceId: (int) $row->workspace_id,
                 containerId: (int) $row->ticket_id,
                 keywords: $row->mime_type,
                 updatedAt: self::time($row->updated_at),

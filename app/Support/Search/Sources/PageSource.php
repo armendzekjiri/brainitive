@@ -29,7 +29,7 @@ class PageSource extends Source
         return SearchTypes::PAGE;
     }
 
-    protected function idColumn(): string
+    public function idColumn(): string
     {
         return 'pages.id';
     }
@@ -56,7 +56,6 @@ class PageSource extends Source
                 sourceId: $id,
                 title: (string) $row->name,
                 projectId: (int) $row->project_id,
-                workspaceId: (int) $row->workspace_id,
                 authorId: self::int($row->created_by),
                 isDraft: $row->status === 'draft',
                 subtype: $whiteboard ? 'whiteboard' : 'doc',

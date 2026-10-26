@@ -5,6 +5,7 @@
 import {
     Bookmark as BookmarkIcon, CheckSquare, Code, FileText, GanttChart, LayoutGrid, LifeBuoy, Lightbulb, MessageSquare, Paperclip, PenTool,
 } from 'lucide-react';
+import { safeHtmlProp } from '@/lib/sanitize';
 import { cn } from '@/lib/utils';
 import type { SearchResult, SearchType } from '@/types';
 
@@ -45,7 +46,7 @@ export function Highlighted({ html, className }: { html: string; className?: str
     return (
         <span
             className={cn('[&_mark]:rounded-sm [&_mark]:bg-yellow-200 [&_mark]:px-0.5 [&_mark]:text-foreground dark:[&_mark]:bg-yellow-500/30', className)}
-            dangerouslySetInnerHTML={{ __html: onlyMarks(html) }}
+            dangerouslySetInnerHTML={safeHtmlProp(onlyMarks(html))}
         />
     );
 }

@@ -17,7 +17,7 @@ class ItemSource extends Source
         return SearchTypes::ITEM;
     }
 
-    protected function idColumn(): string
+    public function idColumn(): string
     {
         return 'items.id';
     }
@@ -62,7 +62,6 @@ class ItemSource extends Source
                 sourceId: $id,
                 title: (string) ($row->title ?: $row->key),
                 projectId: (int) $row->project_id,
-                workspaceId: (int) $row->workspace_id,
                 containerId: (int) $row->board_id,
                 authorId: self::int($row->created_by),
                 key: $row->key,

@@ -25,19 +25,23 @@ use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
+use App\Models\TicketContact;
 use App\Models\TicketReply;
+use App\Models\User;
 use App\Observers\SearchIndexObserver;
 use App\Support\Search\Engines\BasicSearchEngine;
 use App\Support\Search\Engines\PostgresSearchEngine;
 use App\Support\Search\SearchEngine;
 use App\Support\Search\SearchIndexer;
+use Illuminate\Routing\Events\RouteMatched;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\ServiceProvider;
 
 /**
  * "Find anything" (BRAI-55): the search engine binding, the index hooks and when pending index
- * writes are flushed (after the response, after each queued job, at the end of a command).
+ * writes are flushed (after the response, after each queued job, otherwise after the commit).
  */
 class SearchServiceProvider extends ServiceProvider
 {
@@ -47,7 +51,7 @@ class SearchServiceProvider extends ServiceProvider
         Snippet::class, BookmarkItem::class, Capture::class, Attachment::class, TicketAttachment::class,
         Board::class, BoardColumn::class, Helpdesk::class, HelpdeskColumn::class, TaskList::class,
         SnippetCollection::class, Bookmark::class, Label::class, ItemField::class, ItemFieldOption::class,
-        ItemFieldValue::class, ActivityLog::class,
+        ItemFieldValue::class, ActivityLog::class, TicketContact::class, User::class,
     ];
 
     public function register(): void
@@ -65,12 +69,16 @@ class SearchServiceProvider extends ServiceProvider
             $model::observe(SearchIndexObserver::class);
         }
 
-        $flush = function () {
+        // requests and queued jobs write their index changes once, at the end (after the response)
+        $indexer = fn () => $this->app->make(SearchIndexer::class);
+        Event::listen(RouteMatched::class, fn () => $indexer()->defer());
+        $this->app->terminating(function () {
             if ($this->app->resolved(SearchIndexer::class)) {
-                $this->app->make(SearchIndexer::class)->flush();
+                $this->app->make(SearchIndexer::class)->release(all: true);
             }
-        };
-        $this->app->terminating($flush);
-        Queue::after($flush);
+        });
+        Queue::before(fn () => $indexer()->defer());
+        Queue::after(fn () => $indexer()->release());
+        Queue::failing(fn () => $indexer()->release());
     }
 }

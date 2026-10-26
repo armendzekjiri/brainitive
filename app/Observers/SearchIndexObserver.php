@@ -25,7 +25,9 @@ use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
+use App\Models\TicketContact;
 use App\Models\TicketReply;
+use App\Models\User;
 use App\Support\Search\SearchIndexer;
 use App\Support\Search\SearchTypes;
 use Illuminate\Database\Eloquent\Model;
@@ -34,8 +36,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * Search index hooks (BRAI-55), registered for every indexed model and the containers whose state
  * decides visibility (SearchServiceProvider). They only mark records as changed; SearchIndexer
- * reads them again after the request. `deleting` runs before the row (and what the database
- * cascades with it) is gone, so those ids are still known.
+ * reads them again later. `deleting` runs before the row (and what the database cascades with it)
+ * is gone, so those ids are still known; they are written after `deleted`.
  */
 class SearchIndexObserver
 {
@@ -63,12 +65,14 @@ class SearchIndexObserver
 
     public function deleting(Model $model): void
     {
-        $this->changed($model, true);
+        // collect now (what the database deletes with it is still there), write after the delete
+        $this->indexer->hold(fn () => $this->changed($model, true));
     }
 
     public function deleted(Model $model): void
     {
         $this->changed($model, false);
+        $this->indexer->schedule();
     }
 
     public function restored(Model $model): void
@@ -79,7 +83,7 @@ class SearchIndexObserver
     public function created(Model $model): void
     {
         // labels added or removed anywhere (board, bulk edit, automations) are logged like this
-        if ($model instanceof ActivityLog && $model->action === 'labels_changed' && $model->loggable_type === (new Item)->getMorphClass()) {
+        if ($model instanceof ActivityLog && $model->action === 'labels_changed' && in_array($model->loggable_type, [Item::class, (new Item)->getMorphClass()], true)) {
             $this->indexer->touch(SearchTypes::ITEM, (int) $model->loggable_id);
         }
     }
@@ -97,7 +101,10 @@ class SearchIndexObserver
             $model instanceof Ticket => $moved('helpdesk_id', 'deleted_at')
                 ? $this->indexer->touchTickets([$id])
                 : $this->indexer->touch(SearchTypes::TICKET, $id),
-            $model instanceof Page => $this->page($model, $moved('project_id')),
+            // autosaves only change draft_* columns, which are never indexed (an insert has no "changes")
+            $model instanceof Page => $everything || ($model->wasRecentlyCreated && $model->getChanges() === []) || $model->wasChanged(['name', 'content', 'status', 'type', 'project_id', 'created_by'])
+                ? $this->page($model, $moved('project_id'))
+                : null,
             isset(self::SELF[$model::class]) => $this->indexer->touch(self::SELF[$model::class], $id),
             $model instanceof TicketReply => $this->indexer->touch(SearchTypes::TICKET, (int) $model->ticket_id),
             $model instanceof ItemFieldValue => $this->indexer->touch(SearchTypes::ITEM, (int) $model->item_id),
@@ -111,8 +118,18 @@ class SearchIndexObserver
             $model instanceof Label => $moved('name') ? $this->indexer->touch(SearchTypes::ITEM, DB::table('item_label')->where('label_id', $id)->pluck('item_id')) : null,
             $model instanceof ItemField => $moved('archived_at') ? $this->indexer->touch(SearchTypes::ITEM, DB::table('item_field_values')->where('item_field_id', $id)->pluck('item_id')) : null,
             $model instanceof ItemFieldOption => $moved('label') ? $this->indexer->touch(SearchTypes::ITEM, DB::table('item_field_values')->where('option_id', $id)->pluck('item_id')) : null,
+            $model instanceof TicketContact => $moved('name', 'email') ? $this->indexer->touchWhere(SearchTypes::TICKET, 'tickets', 'ticket_contact_id', $id) : null,
+            // deleting an account: the database deletes its comments and files with it
+            $model instanceof User => $everything ? $this->user($id) : null,
             default => null,
         };
+    }
+
+    private function user(int $id): void
+    {
+        $this->indexer->touch(SearchTypes::COMMENT, DB::table('comments')->where('user_id', $id)->pluck('id'));
+        $this->indexer->touch(SearchTypes::ATTACHMENT, DB::table('attachments')->where('user_id', $id)->pluck('id'));
+        $this->indexer->touchItems(DB::table('items')->where('created_by', $id)->pluck('id')->map(fn ($v) => (int) $v)->all());
     }
 
     /** A doc, plus its sub-pages when the database deletes them with it or it changes project. */

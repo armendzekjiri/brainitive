@@ -175,7 +175,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     })->name('dashboard');
 
     // Find anything (BRAI-55): the search page, and the command palette's JSON
-    Route::get('/search', [SearchController::class, 'page'])->name('search');
+    Route::get('/search', [SearchController::class, 'page'])->middleware('throttle:120,1,search')->name('search');
     Route::get('/search/quick', [SearchController::class, 'quick'])->middleware([ReadOnlySession::class, 'throttle:240,1,search.quick'])->name('search.quick');
     Route::post('/command-palette/recent', [CommandPaletteController::class, 'recent'])->name('command-palette.recent');
 

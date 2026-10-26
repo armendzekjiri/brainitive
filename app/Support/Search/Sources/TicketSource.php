@@ -18,12 +18,16 @@ class TicketSource extends Source
     /** Replies are read in full only up to this much text per ticket. */
     private const REPLIES_LIMIT = 40000;
 
+    private const MAX_REPLIES = 200;
+
+    private const REPLY_LIMIT = 4000;
+
     public function type(): string
     {
         return SearchTypes::TICKET;
     }
 
-    protected function idColumn(): string
+    public function idColumn(): string
     {
         return 'tickets.id';
     }
@@ -46,8 +50,15 @@ class TicketSource extends Source
 
     protected function build(Collection $rows, array $ids): array
     {
-        $replies = DB::table('ticket_replies')
-            ->whereIn('ticket_id', $ids)
+        // the newest MAX_REPLIES replies per ticket, each cut to REPLY_LIMIT characters: a long
+        // thread (inbound mail, the portal) never makes one re-index read everything
+        $replies = DB::query()
+            ->fromSub(DB::table('ticket_replies')
+                ->whereIn('ticket_id', $ids)
+                ->select('ticket_id', 'id')
+                ->selectRaw('substr(body, 1, ?) as body', [self::REPLY_LIMIT])
+                ->selectRaw('row_number() over (partition by ticket_id order by id desc) as n'), 'r')
+            ->where('n', '<=', self::MAX_REPLIES)
             ->orderBy('id')
             ->get(['ticket_id', 'body'])
             ->groupBy('ticket_id');
@@ -67,7 +78,6 @@ class TicketSource extends Source
                 sourceId: $id,
                 title: (string) ($row->subject ?: $row->key),
                 projectId: (int) $row->project_id,
-                workspaceId: (int) $row->workspace_id,
                 containerId: (int) $row->helpdesk_id,
                 key: $row->key,
                 keywords: self::join([$row->key, $row->contact_name, $row->contact_email]),

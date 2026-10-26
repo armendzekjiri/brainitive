@@ -34,13 +34,16 @@ final class SearchQuery
         public readonly int $perPage = 20,
         public readonly ?int $contextProjectId = null,
         public readonly bool $withCounts = true,
+        // titles and keys only (the browser extension's capture token may search titles only)
+        public readonly bool $titlesOnly = false,
     ) {}
 
     /** Something to find: at least one word that isn't excluded. */
     public function isSearchable(): bool
     {
         foreach ($this->terms as $term) {
-            if (! $term['negated'] && $term['words'] !== []) {
+            // one letter alone would match nearly everything
+            if (! $term['negated'] && max(array_map('mb_strlen', $term['words'] ?: [''])) >= 2) {
                 return true;
             }
         }

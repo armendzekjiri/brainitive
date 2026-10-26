@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Support\Search\PlaceSearch;
 use App\Support\Search\SearchQuery;
 use App\Support\Search\SearchService;
 use App\Support\Search\SearchTypes;
@@ -23,7 +24,7 @@ use Laravel\Mcp\Server\Tool;
  * regardless of this one.
  */
 #[Name('search')]
-#[Description('Search everything the user can open in Brainitive — issues (by key, title, description, labels), docs, comments, helpdesk tickets, plans, tasks, snippets, bookmarks, their private captures and file names — ranked, typo tolerant. Supports "exact phrases" and -excluded words, and optional filters. Returns matches with a "type:id" handle you can pass to the fetch tool to read the full content.')]
+#[Description('Search everything the user can open in Brainitive — issues (by key, title, description, labels), docs, comments, helpdesk tickets, plans, tasks, snippets, bookmarks, their private captures, file names, projects and workspaces — ranked, typo tolerant. Supports "exact phrases" and -excluded words, and optional filters. Returns matches with a "type:id" handle you can pass to the fetch tool to read the full content.')]
 class SearchTool extends Tool
 {
     /** The fetch tool reads comments / files through their issue or ticket, snippets and bookmarks through their collection. */
@@ -67,6 +68,20 @@ class SearchTool extends Tool
                 'subtitle' => trim($row['label'].($row['context'] ? ' · '.$row['context'] : '')),
                 'snippet' => html_entity_decode(strip_tags((string) $row['snippet_html']), ENT_QUOTES | ENT_HTML5, 'UTF-8'),
             ];
+        }
+
+        // workspaces and projects by name (fetchable as workspace:<id> / project:<id>)
+        if (empty($validated['type']) && empty($validated['status']) && empty($validated['assigned_to_me']) && mb_strlen(trim($validated['query'])) >= 2) {
+            $places = PlaceSearch::find($user, trim($validated['query']), 0);
+            foreach ([...$places['projects'], ...$places['workspaces']] as $place) {
+                $results[] = [
+                    'id' => $place['type'].':'.$place['id'],
+                    'title' => $place['title'],
+                    'url' => $place['url'],
+                    'subtitle' => ucfirst($place['type']).($place['subtitle'] ? ' · '.$place['subtitle'] : ''),
+                    'snippet' => '',
+                ];
+            }
         }
 
         return Response::structured(['results' => $results]);

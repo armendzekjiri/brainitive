@@ -20,7 +20,7 @@ abstract class Source implements SearchSource
     abstract protected function build(Collection $rows, array $ids): array;
 
     /** The id column of base(), e.g. `items.id`. */
-    abstract protected function idColumn(): string;
+    abstract public function idColumn(): string;
 
     public function ids(): Builder
     {

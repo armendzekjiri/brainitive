@@ -2,6 +2,7 @@
 
 namespace App\Support\Search;
 
+use App\Jobs\SyncSearchEntries;
 use App\Support\Search\Sources\AttachmentSource;
 use App\Support\Search\Sources\BookmarkSource;
 use App\Support\Search\Sources\CaptureSource;
@@ -22,18 +23,31 @@ use Illuminate\Support\Facades\DB;
  * Model hooks only *touch* keys (type + id); flush() later reads those records again and writes
  * what is true then — a document, or a removal when the record is gone, trashed or hidden. So it
  * doesn't matter which write path changed a record, how often, or whether labels were synced
- * after the issue was saved. flush() runs after the response / queued job / command (provider),
- * and before every search, so a search always sees the writes of its own request.
+ * after the issue was saved.
+ *
+ * When: during an HTTP request or a queued job (defer() … release(), SearchServiceProvider) the
+ * keys collect and are written once at the end — after the response is sent. Anywhere else
+ * (commands, seeders, tests) they are written right after the surrounding transaction commits.
+ * Every search flushes first, so it always sees the writes of its own request.
  */
 class SearchIndexer
 {
     /** Records read per sync batch. */
     public const CHUNK = 500;
 
+    /** More keys of one type than this are synced on the queue, not at the end of the request. */
+    public const INLINE_LIMIT = 2000;
+
     /** @var array<string, array<int, true>> */
     private array $pending = [];
 
     private bool $flushing = false;
+
+    /** Open requests / jobs that write at their end. */
+    private int $deferring = 0;
+
+    /** Inside hold(): touches wait for a later flush (a row about to be deleted). */
+    private bool $holding = false;
 
     /** @var array<string, SearchSource>|null */
     private ?array $sources = null;
@@ -60,6 +74,45 @@ class SearchIndexer
         foreach (is_int($ids) ? [$ids] : $ids as $id) {
             $this->pending[$type][(int) $id] = true;
         }
+        $this->schedule();
+    }
+
+    /** Write pending keys after the current transaction commits — unless a request / job is running. */
+    public function schedule(): void
+    {
+        if ($this->deferring > 0 || $this->holding || $this->pending === []) {
+            return;
+        }
+        // runs at once without a transaction; a rolled back transaction drops the callback, and
+        // the keys wait for the next flush
+        DB::afterCommit(fn () => $this->flush());
+    }
+
+    /** Touches inside $callback are written later (on `deleting`: the rows still exist now). */
+    public function hold(\Closure $callback): void
+    {
+        $previous = $this->holding;
+        $this->holding = true;
+        try {
+            $callback();
+        } finally {
+            $this->holding = $previous;
+        }
+    }
+
+    /** A request or job starts: collect, write at its end. */
+    public function defer(): void
+    {
+        $this->deferring++;
+    }
+
+    /** A request or job ended; the last one out writes. */
+    public function release(bool $all = false): void
+    {
+        $this->deferring = $all ? 0 : max(0, $this->deferring - 1);
+        if ($this->deferring === 0) {
+            $this->flush();
+        }
     }
 
     public function hasPending(): bool
@@ -67,7 +120,11 @@ class SearchIndexer
         return $this->pending !== [];
     }
 
-    /** Write what is pending. Never throws: a broken index must not break the request. */
+    /**
+     * Write what is pending. Never throws: a broken index must not break the request. A batch
+     * that fails is retried on the queue; very large sets (a trashed board with thousands of
+     * issues) go to the queue right away instead of holding up the request / job.
+     */
     public function flush(): void
     {
         if ($this->flushing || $this->pending === []) {
@@ -79,15 +136,33 @@ class SearchIndexer
                 $type = array_key_first($this->pending);
                 $ids = array_keys($this->pending[$type]);
                 unset($this->pending[$type]);
+                $inline = count($ids) <= self::INLINE_LIMIT;
                 foreach (array_chunk($ids, self::CHUNK) as $chunk) {
-                    $this->sync($type, $chunk);
+                    if (! $inline) {
+                        $this->later($type, $chunk);
+
+                        continue;
+                    }
+                    try {
+                        $this->sync($type, $chunk);
+                    } catch (\Throwable $e) {
+                        report($e);
+                        $this->later($type, $chunk);
+                    }
                 }
             }
-        } catch (\Throwable $e) {
-            $this->pending = [];
-            report($e);
         } finally {
             $this->flushing = false;
+        }
+    }
+
+    /** @param  list<int>  $ids */
+    private function later(string $type, array $ids): void
+    {
+        try {
+            SyncSearchEntries::dispatch($type, $ids);
+        } catch (\Throwable $e) {
+            report($e); // the next full rebuild repairs it
         }
     }
 

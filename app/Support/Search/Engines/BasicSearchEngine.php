@@ -24,7 +24,12 @@ class BasicSearchEngine extends TableSearchEngine
         $matching = $this->visibleEntries($query, $viewer);
         foreach ($query->terms as $term) {
             $like = '%'.implode('%', $term['words']).'%';
-            $any = fn (Builder $q) => $q->whereLike('e.title', $like)->orWhereLike('e.keywords', $like)->orWhereLike('e.body', $like);
+            // NULL keywords / body must count as "doesn't contain" (NOT (false OR NULL) is NULL)
+            $any = $query->titlesOnly
+                ? fn (Builder $q) => $q->whereLike('e.title', $like)->orWhere(fn (Builder $k) => $k->whereNotNull('e.key')->whereLike('e.key', $like))
+                : fn (Builder $q) => $q->whereLike('e.title', $like)
+                    ->orWhere(fn (Builder $k) => $k->whereNotNull('e.keywords')->whereLike('e.keywords', $like))
+                    ->orWhere(fn (Builder $b) => $b->whereNotNull('e.body')->whereLike('e.body', $like));
             $term['negated'] ? $matching->whereNot($any) : $matching->where($any);
         }
 

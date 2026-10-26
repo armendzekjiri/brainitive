@@ -44,6 +44,7 @@ return new class extends Migration
             $table->unsignedBigInteger('source_id');
             // project content: visible to people who can open the project
             $table->foreignId('project_id')->nullable()->constrained()->cascadeOnDelete();
+            // snippets and bookmarks only (project content follows its project, which can change workspace)
             $table->foreignId('workspace_id')->nullable()->constrained()->cascadeOnDelete();
             // the record it lives in: board, helpdesk, task list, issue (comments / files), ticket
             // (its files), snippet collection, bookmark collection

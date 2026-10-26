@@ -86,7 +86,10 @@ class PostgresSearchEngine extends TableSearchEngine
         $excluded = $query->excluded() === [] ? '' : QueryParser::toAnyTsQuery($query->excluded());
 
         return $this->visibleEntries($query, $viewer)->where(function (Builder $match) use ($query, $tsQuery, $fuzzyWords, $excluded) {
-            $match->whereRaw('e.tsv @@ '.self::TS_QUERY, [$tsQuery]);
+            $query->titlesOnly
+                // the title's words only (weight A); the GIN index still narrows first
+                ? $match->whereRaw('(e.tsv @@ '.self::TS_QUERY.' and ts_filter(e.tsv, \'{a}\') @@ '.self::TS_QUERY.')', [$tsQuery, $tsQuery])
+                : $match->whereRaw('e.tsv @@ '.self::TS_QUERY, [$tsQuery]);
             if ($query->keys !== []) {
                 // an exact key always finds its issue / ticket (index on upper(key))
                 $match->orWhereRaw('upper(e.key) = any(?::text[])', [self::pgArray($query->keys)]);

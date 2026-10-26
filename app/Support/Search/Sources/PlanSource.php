@@ -17,7 +17,7 @@ class PlanSource extends Source
         return SearchTypes::PLAN;
     }
 
-    protected function idColumn(): string
+    public function idColumn(): string
     {
         return 'plans.id';
     }
@@ -45,7 +45,6 @@ class PlanSource extends Source
                 sourceId: $id,
                 title: (string) $row->name,
                 projectId: (int) $row->project_id,
-                workspaceId: (int) $row->workspace_id,
                 authorId: self::int($row->created_by),
                 body: self::join([SearchText::plain($row->description), ...$rowNames]),
                 updatedAt: self::time($row->updated_at),

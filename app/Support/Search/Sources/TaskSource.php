@@ -17,7 +17,7 @@ class TaskSource extends Source
         return SearchTypes::TASK;
     }
 
-    protected function idColumn(): string
+    public function idColumn(): string
     {
         return 'task_list_items.id';
     }
@@ -46,7 +46,6 @@ class TaskSource extends Source
                 sourceId: $id,
                 title: (string) $row->title,
                 projectId: (int) $row->project_id,
-                workspaceId: (int) $row->workspace_id,
                 containerId: (int) $row->task_list_id,
                 authorId: self::int($row->created_by),
                 body: SearchText::fromJson($row->description),

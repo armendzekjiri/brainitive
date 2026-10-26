@@ -4,6 +4,7 @@ namespace App\Support\Search;
 
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
 
 /**
  * "Find anything" (BRAI-55) for one person: request input → SearchQuery, pending index writes
@@ -26,7 +27,13 @@ class SearchService
     {
         $this->indexer->flush();
 
-        $results = $query->isSearchable() ? $this->engine->search($query, SearchViewer::for($user)) : SearchResults::empty();
+        try {
+            $results = $query->isSearchable() ? $this->engine->search($query, SearchViewer::for($user)) : SearchResults::empty();
+        } catch (QueryException $e) {
+            // never a 500 for what someone typed; the report shows what the engine didn't accept
+            report($e);
+            $results = SearchResults::empty();
+        }
         $presented = SearchPresenter::present($results->hits);
 
         return [
@@ -47,7 +54,7 @@ class SearchService
      *
      * @param  array<string, mixed>  $input
      */
-    public static function queryFrom(array $input, User $user, int $perPage = 20, bool $withCounts = true): SearchQuery
+    public static function queryFrom(array $input, User $user, int $perPage = 20, bool $withCounts = true, bool $titlesOnly = false): SearchQuery
     {
         $parsed = QueryParser::parse(is_string($input['q'] ?? null) ? $input['q'] : '');
 
@@ -62,7 +69,7 @@ class SearchService
 
         $from = self::date($input['from'] ?? null);
         $to = self::date($input['to'] ?? null)?->endOfDay();
-        if ($from === null && isset(self::UPDATED_PRESETS[$input['updated'] ?? ''])) {
+        if ($from === null && is_string($input['updated'] ?? null) && isset(self::UPDATED_PRESETS[$input['updated']])) {
             $from = CarbonImmutable::now()->subDays(self::UPDATED_PRESETS[$input['updated']])->startOfDay();
         }
 
@@ -80,6 +87,7 @@ class SearchService
             perPage: max(1, min(SearchQuery::MAX_PER_PAGE, $perPage)),
             contextProjectId: is_numeric($input['context_project'] ?? null) ? (int) $input['context_project'] : null,
             withCounts: $withCounts,
+            titlesOnly: $titlesOnly,
         );
     }
 

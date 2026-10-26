@@ -13,6 +13,7 @@ use App\Support\Search\Engines\BasicSearchEngine;
 use App\Support\Search\QueryParser;
 use App\Support\Search\SearchEngine;
 use App\Support\Search\SearchIndexer;
+use App\Support\Search\SearchService;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -186,6 +187,36 @@ class SearchQueryTest extends SearchTestCase
         $this->assertCount(2, $this->ids($this->owner, 'badger'));
         $this->assertSame(0, $this->search($this->outsider, 'badger')['total']);
         $this->assertStringContainsString('<mark>', $this->search($this->editor, 'badger')['results'][0]['title_html']);
+    }
+
+    public function test_letters_that_unaccent_turns_into_quotes_are_harmless(): void
+    {
+        $item = $this->item(['title' => 'Oʻzbek tili kursi']);
+
+        foreach (['aʼ', 'okʼːAʼ', 'ŉ', 'ʻokina', 'oʻzbek'] as $q) {
+            $this->search($this->editor, $q); // no exception
+        }
+        $this->assertSame(["item:{$item->id}"], $this->ids($this->editor, 'oʻzbek'));
+        $this->actingAs($this->editor)->get(route('search', ['q' => 'aʼ']))->assertOk();
+    }
+
+    public function test_one_letter_and_odd_parameters_are_handled(): void
+    {
+        $this->item(['title' => 'A apple']);
+
+        $this->assertSame(0, $this->search($this->editor, 'a')['total']);
+        $this->assertFalse(SearchService::queryFrom(['q' => 'a'], $this->editor)->isSearchable());
+        $this->actingAs($this->editor)->get('/search?q=apple&updated[]=1&type[]=x&status[]=open&assignee[]=1&page[]=2&from[]=1')
+            ->assertOk()->assertInertia(fn ($page) => $page->where('search.total', 1));
+    }
+
+    public function test_exclusions_on_the_basic_engine_keep_rows_without_keywords(): void
+    {
+        $this->app->singleton(SearchEngine::class, fn () => new BasicSearchEngine);
+        $this->app->forgetInstance(SearchIndexer::class);
+
+        $comment = Comment::create(['item_id' => $this->item(['title' => 'Holder'])->id, 'user_id' => $this->editor->id, 'body' => 'basic beaver note']);
+        $this->assertSame(["comment:{$comment->id}"], $this->ids($this->editor, 'beaver -otter'));
     }
 
     public function test_the_parser_never_passes_query_syntax_through(): void

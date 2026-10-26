@@ -30,15 +30,17 @@ Non-goals (v1.43.0): semantic / vector search, AI calls, attachment *contents*, 
   first. Accents, case and punctuation don't matter (`grosse` = Größe, `invoice` finds
   `invoice-2024.pdf`).
 - **MCP `search`** (same service, same visibility) with optional `type`, `status`,
-  `assigned_to_me`, `limit`; returns `snippet` too. Handles stay fetchable: `item`, `page`,
+  `assigned_to_me`, `limit`; returns `snippet` too, plus projects / workspaces by name
+  (`PlaceSearch`, also used by the palette and the extension). Handles stay fetchable: `item`, `page`,
   `ticket`, `plan`, `task`, `capture`; comments / issue files → `item:<issue>`, ticket files →
   `ticket:<ticket>`, snippets / bookmarks → their collection. `fetch` learned ticket / plan /
   task / capture (policies: TicketPolicy, PlanPolicy, TaskListPolicy, owner only).
 
 ## Index design
 - **One table `search_entries`** (migration `2026_11_01_100000`): one row per searchable record,
-  stable key `(type, source_id)` unique. Columns: `project_id` / `workspace_id` (FK cascade —
-  hard-deleting a project / workspace drops its entries), `container_id` (board, helpdesk, task
+  stable key `(type, source_id)` unique. Columns: `project_id` (FK cascade — hard-deleting a
+  project drops its entries), `workspace_id` (snippets and bookmarks only, FK cascade; project
+  content never stores it — projects can move between workspaces, KNOWLEDGE), `container_id` (board, helpdesk, task
   list, issue for comments & files, ticket for ticket files, snippet / bookmark collection),
   `owner_id` (captures, FK cascade), `author_id`, `is_draft`, `subtype` (doc / whiteboard,
   snippet language, bookmark kind), `key`, `title`, `keywords`, `body` (plain text, ≤ 60 000
@@ -65,9 +67,16 @@ Non-goals (v1.43.0): semantic / vector search, AI calls, attachment *contents*, 
   issue + ticket attachment file names.
 - **Index maintenance**: `SearchIndexObserver` (registered in `SearchServiceProvider` for the
   indexed models and the containers that decide visibility; no model file edited) only *touches*
-  `(type, id)` keys; `SearchIndexer::flush()` re-reads them and upserts / deletes. Flush runs after
-  the response (`terminating`), after each queued job (`Queue::after`), at the end of a command,
-  and **before every search** (a request always finds its own writes). Cascades: an issue's move /
+  `(type, id)` keys; `SearchIndexer::flush()` re-reads them and upserts / deletes. Inside an HTTP
+  request (from `RouteMatched`) or a queued job the keys collect and are written once at the end
+  (`terminating` — after the response — / `Queue::after`); anywhere else (commands, seeders,
+  tests) right after the surrounding transaction commits (`DB::afterCommit`); and **before every
+  search** (a request always finds its own writes). `deleting` collects ids inside `hold()` and
+  they are written after `deleted`. More than 2 000 keys of a type, or a batch that throws, go to
+  the queue (`SyncSearchEntries`, 3 tries) instead of being dropped. Doc autosaves (draft_*
+  columns only) don't re-index. Deleting an account touches its comments / files / issues (the
+  database cascades them); the presenter also drops — and re-touches — hits whose own record is
+  gone. Cascades: an issue's move /
   trash / restore / hard delete touches its subtree + comments + files; board / helpdesk / task
   list / bookmark collection trash / restore / move touches their content; done-column flag,
   label rename / delete, custom field archive / option rename touch the issues; a doc's deletion
@@ -79,6 +88,10 @@ Non-goals (v1.43.0): semantic / vector search, AI calls, attachment *contents*, 
 ## Query (PostgresSearchEngine)
 - `QueryParser` turns input into terms of letters / digits only (nothing reaches tsquery syntax),
   `toTsQuery()` builds `'a' & ('web' <-> '12':*) & !'x'`.
+- **Not searchable**: queries without a word of 2+ letters; one-letter last words are not
+  prefixes. Modifier letters (ʻ ʼ ː …, `\p{Lm}\p{Sk}`) and ŉ are dropped / mapped before quoting —
+  `unaccent` turns them into `'` / `:`; a database error on a query becomes an empty result
+  (reported), never a 500. `/search` `throttle:120,1`, `/search/quick` `throttle:240,1`.
 - **Visibility in SQL** (`TableSearchEngine::visibleEntries`, `SearchViewer` loaded in ~6 queries):
   project content → `project_id ∈ accessibleProjectIds()` and (not draft, or author, or
   `adminProjectIds()`); snippets → workspace member; bookmarks → `Bookmark::visibleTo` collection
@@ -102,11 +115,19 @@ Non-goals (v1.43.0): semantic / vector search, AI calls, attachment *contents*, 
 - **`BasicSearchEngine`** (SQLite self-hosted installs): LIKE per word, same visibility / filters,
   PHP highlighting. Bound by driver in `SearchServiceProvider`.
 
+- **Browser extension** (`ext.search`, capture token): same old response shape (`items`, `pages`,
+  `projects`, … of `{id, type, title, subtitle, url, workspace}`), now from the index but **titles
+  and keys only** (`titlesOnly`: `ts_filter(tsv, '{a}')`), no comments — a capture token may only
+  search titles (CONVENTIONS, API tokens).
+- **Captures** link to their inbox tab (`captures.index?state=…#capture-<id>`), never with their
+  text in the URL.
+
 ## Deploy / backfill
 - **Nobody has to run anything.** `search:ensure` (scheduled every 5 minutes, and run by
   `docker/entrypoint.sh` right after `migrate`) sees that `SearchReindex::VERSION` was never built
-  and queues the full rebuild (`Bus::chain` of `ReindexSearchChunk` jobs per id range of 500 +
-  `FinishSearchReindex`, which prunes what the pass didn't see and marks the version ready). A
+  and queues the full rebuild (a `Bus::batch` of `ReindexSearchChunk` jobs per id range of 500,
+  keyset-paged ranges, `allowFailures`, then `FinishSearchReindex`, which prunes what the pass
+  didn't see and marks the version ready). A
   build that died is retried after 6 h. Production (`deploy.yml` runs migrate, the scheduler and
   queue workers already run) is covered by the schedule — no workflow change; first build within
   ~5 minutes of the deploy.
@@ -142,9 +163,21 @@ Non-goals (v1.43.0): semantic / vector search, AI calls, attachment *contents*, 
 - `resources/js/Pages/Search/Index.tsx`, `resources/js/components/search/SearchBits.tsx`,
   `resources/js/components/CommandPalette.tsx`, types at the end of `types/index.d.ts`
 - `docs/self-hosting.md` ("Search")
-- Tests `tests/Feature/Search/*` (32), e2e `e2e/tests/search.spec.ts`; adjusted
+- `app/Support/Search/PlaceSearch.php`, `app/Jobs/SyncSearchEntries.php`,
+  `app/Http/Controllers/Extension/ExtensionController.php` (`search` → `SearchController::extension`)
+- Tests `tests/Feature/Search/*`, e2e `e2e/tests/search.spec.ts`; adjusted
   `CommandPaletteTest`, `AdminAccessTest`, `SecurityRegressionTest`, `leads-plans-search.spec.ts`
-  (`/search` JSON → `/search/quick`)
+  (`/search` JSON → `/search/quick`), `WebhookEventsTest` (the "no payload queries" count defers the
+  index writes like a request does)
+
+## Known limits
+- Writes that bypass models (query-builder bulk updates, e.g. subtasks moved with their parent are
+  covered; other bulk SQL is not) need `search:reindex --type=…`. Ticket contact renames,
+  label / field renames are followed; item type names are not indexed.
+- Deleting many subtasks one by one (`->each->delete()`) does a few small queries per subtask in
+  the request; trashing a big board queues the re-sync.
+- A palette prefix like "de" ranks every match in SQL; fine at thousands of rows (measured), watch
+  it on very large instances (cap candidates / `statement_timeout` if needed).
 
 ## For the lead: doc updates (not done here — docs/ai is yours)
 - **ARCHITECTURE** → "MyWork, Search …": replace the Search bullet with: `SearchController`

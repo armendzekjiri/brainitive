@@ -16,7 +16,7 @@ class AttachmentSource extends Source
         return SearchTypes::ATTACHMENT;
     }
 
-    protected function idColumn(): string
+    public function idColumn(): string
     {
         return 'attachments.id';
     }
@@ -45,7 +45,6 @@ class AttachmentSource extends Source
                 sourceId: $id,
                 title: (string) ($row->original_filename ?: $row->filename),
                 projectId: (int) $row->project_id,
-                workspaceId: (int) $row->workspace_id,
                 containerId: (int) $row->item_id,
                 authorId: self::int($row->user_id),
                 keywords: $row->mime_type,

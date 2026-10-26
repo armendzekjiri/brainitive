@@ -2,20 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Board;
-use App\Models\Bookmark;
-use App\Models\Plan;
 use App\Models\Project;
-use App\Models\SnippetCollection;
 use App\Models\User;
-use App\Models\Workspace;
+use App\Support\Search\PlaceSearch;
 use App\Support\Search\SearchService;
 use App\Support\Search\SearchTypes;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -64,7 +58,7 @@ class SearchController extends Controller
         $user = $request->user();
         $text = trim((string) $request->input('q', ''));
         if (mb_strlen($text) < 2) {
-            return response()->json(['results' => [], 'total' => 0, 'fuzzy' => false, ...$this->emptyNavigation()]);
+            return response()->json(['results' => [], 'total' => 0, 'fuzzy' => false, ...PlaceSearch::none()]);
         }
 
         $context = (int) $request->integer('project');
@@ -74,8 +68,42 @@ class SearchController extends Controller
             'results' => $found['results'],
             'total' => $found['total'],
             'fuzzy' => $found['fuzzy'],
-            ...$this->navigation($user, $text, $context),
+            ...PlaceSearch::find($user, $text, $context),
         ]);
+    }
+
+    /**
+     * The browser extension's search (`ext.search`): the shape installed extensions read —
+     * `items`, `pages`, `projects`, `bookmarks`, `snippets`, `workspaces` lists of
+     * `{id, type, title, subtitle, url, workspace}`. Content comes from the search index — titles
+     * and keys only, as a capture token may only search titles (CONVENTIONS, API tokens): docs in
+     * `pages`, issues, tickets, tasks, plans … in `items`.
+     */
+    public function extension(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $text = trim((string) $request->input('q', ''));
+        if (mb_strlen($text) < 2) {
+            return response()->json(['items' => [], 'pages' => [], ...PlaceSearch::none()]);
+        }
+
+        $found = app(SearchService::class)->search($user, SearchService::queryFrom(['q' => $text], $user, 12, titlesOnly: true));
+        $hits = ['items' => [], 'pages' => []];
+        foreach ($found['results'] as $result) {
+            if ($result['type'] === SearchTypes::COMMENT) {
+                continue; // comments have no title of their own
+            }
+            $hits[$result['type'] === SearchTypes::PAGE ? 'pages' : 'items'][] = PlaceSearch::row(
+                $result['type'],
+                $result['source_id'],
+                $result['title'] !== '' ? $result['title'] : $result['label'],
+                trim(($result['key'] ? $result['key'].' · ' : '').$result['label'].($result['context'] ? ' · '.$result['context'] : '')),
+                $result['url'],
+                $result['workspace'],
+            );
+        }
+
+        return response()->json([...$hits, ...PlaceSearch::find($user, $text, 0)]);
     }
 
     /**
@@ -105,73 +133,5 @@ class SearchController extends Controller
             ->all();
 
         return ['projects' => $projects, 'people' => $people];
-    }
-
-    /** @return array<string, list<mixed>> */
-    private function emptyNavigation(): array
-    {
-        return ['workspaces' => [], 'projects' => [], 'boards' => [], 'plans' => [], 'snippets' => [], 'bookmarks' => []];
-    }
-
-    /**
-     * Places matching the name: workspaces, projects (name, key), boards, plans, snippet and
-     * bookmark collections — only what the user can open, the project being viewed first.
-     *
-     * @return array<string, list<array<string, mixed>>>
-     */
-    private function navigation(User $user, string $text, int $contextProject): array
-    {
-        $term = '%'.preg_replace('/\s+/', '%', addcslashes($text, '%_\\')).'%';
-        $workspaceIds = $user->workspaces()->pluck('workspaces.id')->all();
-        if ($workspaceIds === []) {
-            return $this->emptyNavigation();
-        }
-        $projectIds = $user->accessibleProjectIds();
-        $contextFirst = 'case when project_id = '.$contextProject.' then 0 else 1 end';
-
-        $workspaces = Workspace::query()->whereKey($workspaceIds)
-            ->where(fn (Builder $q) => $q->whereLike('name', $term)->orWhereLike('description', $term))
-            ->limit(5)->get(['id', 'name', 'slug', 'description'])
-            ->map(fn (Workspace $ws) => $this->row('workspace', $ws->id, $ws->name, $ws->description ? Str::limit($ws->description, 60) : 'Workspace', route('workspaces.show', $ws->slug), $ws->name));
-
-        $projects = Project::query()->whereKey($projectIds)->with('workspace:id,slug,name')
-            ->where(fn (Builder $q) => $q->whereLike('name', $term)->orWhereLike('description', $term)->orWhereLike('key', $term))
-            ->limit(8)->get(['id', 'workspace_id', 'name', 'slug', 'key', 'description'])
-            ->map(fn (Project $p) => $this->row('project', $p->id, $p->name, $p->key.($p->description ? ' · '.Str::limit($p->description, 50) : ''), route('projects.show', [$p->workspace->slug, $p->slug]), $p->workspace->name));
-
-        // boards and plans of projects the user can open are viewable (BoardPolicy / PlanPolicy::view)
-        $boards = Board::query()->whereIn('project_id', $projectIds)->with('project:id,workspace_id,name,slug', 'project.workspace:id,slug,name')
-            ->whereLike('name', $term)->orderByRaw($contextFirst)->orderBy('name')->limit(6)->get()
-            ->map(fn (Board $b) => $this->row('board', $b->id, $b->name, $b->project->name.' · Board', route('boards.show', [$b->project->workspace->slug, $b->project->slug, $b->slug]), $b->project->workspace->name));
-
-        $plans = Plan::query()->whereIn('project_id', $projectIds)->with('project:id,workspace_id,name,slug', 'project.workspace:id,slug,name')
-            ->whereLike('name', $term)->orderByRaw($contextFirst)->orderBy('name')->limit(6)->get()
-            ->map(fn (Plan $p) => $this->row('plan', $p->id, $p->name, $p->project->name.' · Plan', route('plans.show', [$p->project->workspace->slug, $p->project->slug, $p->slug]), $p->project->workspace->name));
-
-        $snippets = SnippetCollection::query()->whereIn('workspace_id', $workspaceIds)->with('workspace:id,slug,name')
-            ->where(fn (Builder $q) => $q->whereLike('name', $term)->orWhereLike('description', $term))
-            ->limit(6)->get(['id', 'workspace_id', 'name', 'slug', 'description'])
-            ->map(fn (SnippetCollection $c) => $this->row('snippet', $c->id, $c->name, $c->description ? Str::limit($c->description, 60) : $c->workspace->name.' · Snippets', route('snippets.show', [$c->workspace->slug, $c->slug]), $c->workspace->name));
-
-        // private collections stay private (BookmarkPolicy::view)
-        $bookmarks = Bookmark::query()->whereIn('workspace_id', $workspaceIds)->visibleTo($user)->with('workspace:id,slug,name')
-            ->where(fn (Builder $q) => $q->whereLike('name', $term)->orWhereLike('description', $term))
-            ->limit(6)->get(['id', 'workspace_id', 'name', 'slug', 'description'])
-            ->map(fn (Bookmark $b) => $this->row('bookmark', $b->id, $b->name, $b->description ? Str::limit($b->description, 60) : $b->workspace->name, route('bookmarks.show', [$b->workspace->slug, $b->slug]), $b->workspace->name));
-
-        return [
-            'workspaces' => $workspaces->values()->all(),
-            'projects' => $projects->values()->all(),
-            'boards' => $boards->values()->all(),
-            'plans' => $plans->values()->all(),
-            'snippets' => $snippets->values()->all(),
-            'bookmarks' => $bookmarks->values()->all(),
-        ];
-    }
-
-    /** @return array<string, mixed> */
-    private function row(string $type, int $id, string $title, ?string $subtitle, string $url, ?string $workspace): array
-    {
-        return ['id' => $id, 'type' => $type, 'title' => $title, 'subtitle' => $subtitle, 'url' => $url, 'workspace' => $workspace];
     }
 }

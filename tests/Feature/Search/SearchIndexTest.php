@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Search;
 
+use App\Jobs\SyncSearchEntries;
 use App\Models\Attachment;
 use App\Models\Board;
 use App\Models\Comment;
@@ -12,9 +13,13 @@ use App\Models\Page;
 use App\Models\Project;
 use App\Models\TicketAttachment;
 use App\Models\TicketReply;
+use App\Models\Workspace;
+use App\Support\Admin\UserDeletion;
+use App\Support\Projects\ProjectTransfer;
 use App\Support\Search\SearchIndexer;
 use App\Support\Search\SearchReindex;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
 
 /**
@@ -31,7 +36,7 @@ class SearchIndexTest extends SearchTestCase
         $this->assertSame('Body text', $entry->body);
         $this->assertSame($item->key, $entry->key);
         $this->assertSame($this->project->id, (int) $entry->project_id);
-        $this->assertSame($this->workspace->id, (int) $entry->workspace_id);
+        $this->assertNull($entry->workspace_id); // project content: visibility goes by project
         $this->assertSame('open', $entry->status);
 
         $item->update(['title' => 'Jaguar', 'assigned_to' => $this->editor->id]);
@@ -117,6 +122,68 @@ class SearchIndexTest extends SearchTestCase
         $this->assertNull($this->entry('ticket_attachment', $file->id));
         $ticket->restore();
         $this->assertNotNull($this->entry('ticket_attachment', $file->id));
+    }
+
+    public function test_a_project_moved_to_another_workspace_stays_findable_after_the_old_one_is_deleted(): void
+    {
+        $item = $this->item(['title' => 'Wandering yak']);
+        $target = Workspace::factory()->create(['owner_id' => $this->owner->id]);
+        $target->addUser($this->owner, 'admin');
+
+        ProjectTransfer::move($this->project, $target);
+        $this->workspace->delete();
+
+        $this->assertSame(["item:{$item->id}"], $this->ids($this->owner, 'yak'));
+    }
+
+    public function test_comments_and_files_deleted_with_their_author_disappear(): void
+    {
+        $item = $this->item(['title' => 'Host issue']);
+        $author = $this->member('editor');
+        Comment::create(['item_id' => $item->id, 'user_id' => $author->id, 'body' => 'confidential walrus remark']);
+        Attachment::create(['item_id' => $item->id, 'user_id' => $author->id, 'filename' => 'w.pdf', 'original_filename' => 'walrus.pdf', 'path' => 'x/w.pdf', 'mime_type' => 'application/pdf', 'size' => 1]);
+        $this->assertSame(2, $this->search($this->viewer, 'walrus')['total']);
+
+        // the database deletes the comment with its author; the file is handed to the workspace owner
+        UserDeletion::delete($author);
+
+        $this->assertSame(['attachment'], array_column($this->search($this->viewer, 'walrus')['results'], 'type'));
+        $this->assertSame(0, DB::table('search_entries')->where('type', 'comment')->count());
+    }
+
+    public function test_hits_whose_record_vanished_without_a_hook_are_not_shown_and_get_cleaned_up(): void
+    {
+        $item = $this->item(['title' => 'Ghost host']);
+        $comment = Comment::create(['item_id' => $item->id, 'user_id' => $this->editor->id, 'body' => 'spectral narwhal']);
+        $this->flush();
+        DB::table('comments')->where('id', $comment->id)->delete(); // no model event
+
+        $this->assertSame([], $this->search($this->viewer, 'spectral')['results']);
+        $this->assertNull($this->entry('comment', $comment->id));
+    }
+
+    public function test_large_cascades_go_to_the_queue(): void
+    {
+        Queue::fake();
+        $indexer = app(SearchIndexer::class);
+        $indexer->defer();
+        $indexer->touch('item', range(1, SearchIndexer::INLINE_LIMIT + 1));
+        $indexer->release();
+
+        Queue::assertPushed(SyncSearchEntries::class, 5);
+    }
+
+    public function test_doc_autosaves_do_not_reindex(): void
+    {
+        $page = Page::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->owner->id, 'name' => 'Stable', 'status' => 'published']);
+        $this->flush();
+        DB::table('search_entries')->where('type', 'page')->update(['title' => 'Marker']);
+
+        $page->update(['draft_content' => ['type' => 'lexical', 'html' => '<p>x</p>'], 'draft_updated_at' => now()]);
+        $this->assertSame('Marker', $this->entry('page', $page->id)->title);
+
+        $page->update(['name' => 'Renamed']);
+        $this->assertSame('Renamed', $this->entry('page', $page->id)->title);
     }
 
     public function test_the_done_column_decides_the_status(): void

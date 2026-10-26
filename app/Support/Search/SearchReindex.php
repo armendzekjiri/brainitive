@@ -32,12 +32,13 @@ final class SearchReindex
     public static function ranges(string $type, int $chunk): array
     {
         $ranges = [];
-        app(SearchIndexer::class)->source($type)->ids()->reorder()->orderBy('id')
-            ->chunk(max(1, $chunk) * 10, function ($rows) use (&$ranges, $chunk) {
-                foreach (array_chunk($rows->pluck('id')->map(fn ($id) => (int) $id)->all(), max(1, $chunk)) as $ids) {
-                    $ranges[] = [$ids[0], $ids[count($ids) - 1]];
-                }
-            });
+        $source = app(SearchIndexer::class)->source($type);
+        // keyset pagination over the id column (no OFFSET rescans on big tables)
+        $source->ids()->chunkById(max(1, $chunk) * 10, function ($rows) use (&$ranges, $chunk) {
+            foreach (array_chunk($rows->pluck('id')->map(fn ($id) => (int) $id)->all(), max(1, $chunk)) as $ids) {
+                $ranges[] = [$ids[0], $ids[count($ids) - 1]];
+            }
+        }, $source->idColumn(), 'id');
 
         return $ranges;
     }
@@ -75,24 +76,37 @@ final class SearchReindex
     }
 
     /**
-     * Queue a rebuild: one job per id range, then the prune + "ready" job, in one chain.
+     * Queue a rebuild: one job per id range in a batch (jobs run in parallel on several workers,
+     * a failed range doesn't stop the others), then the prune + "ready" job.
      *
      * @param  list<string>  $types
      * @return int jobs queued
      */
     public static function dispatch(array $types, int $chunk, bool $markReady): int
     {
-        $startedAt = CarbonImmutable::now();
+        $startedAt = CarbonImmutable::now()->toIso8601String();
         $jobs = [];
         foreach ($types as $type) {
             foreach (self::ranges($type, $chunk) as [$from, $to]) {
                 $jobs[] = new ReindexSearchChunk($type, $from, $to);
             }
         }
-        $jobs[] = new FinishSearchReindex($types, $startedAt->toIso8601String(), $markReady ? self::VERSION : null);
-        Bus::chain($jobs)->dispatch();
+        $version = $markReady ? self::VERSION : null;
+        $finish = new FinishSearchReindex($types, $startedAt, $version);
 
-        return count($jobs);
+        if ($jobs === []) {
+            dispatch($finish);
+        } else {
+            // finally, not then: a range that failed three times must not keep the index "building"
+            // forever — it is synced again by its records' next change or the next rebuild
+            Bus::batch($jobs)
+                ->name('search:reindex')
+                ->allowFailures()
+                ->finally(fn () => dispatch(new FinishSearchReindex($types, $startedAt, $version)))
+                ->dispatch();
+        }
+
+        return count($jobs) + 1;
     }
 
     // ── Index state (search_index_state, one row) ─────────────────────────────

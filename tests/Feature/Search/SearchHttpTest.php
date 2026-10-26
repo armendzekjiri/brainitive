@@ -13,12 +13,16 @@ use App\Models\TaskList;
 use App\Models\TaskListItem;
 use Illuminate\Testing\Fluent\AssertableJson;
 use Inertia\Testing\AssertableInertia as Assert;
+use Laravel\Passport\Passport;
+use Tests\Feature\Concerns\UsesPassportKeys;
 
 /**
  * The search page, the command palette endpoint and the MCP `search` / `fetch` tools (BRAI-55).
  */
 class SearchHttpTest extends SearchTestCase
 {
+    use UsesPassportKeys;
+
     public function test_the_search_page_renders_results_counts_and_filter_choices(): void
     {
         $item = $this->item(['title' => 'Gecko launch']);
@@ -69,6 +73,22 @@ class SearchHttpTest extends SearchTestCase
             ->assertOk()->assertJsonPath('results', [])->assertJsonPath('boards', []);
         $this->actingAs($this->outsider)->getJson(route('search.quick', ['q' => 'koala']))
             ->assertOk()->assertJsonPath('total', 0)->assertJsonPath('boards', []);
+    }
+
+    public function test_the_browser_extension_searches_titles_only_in_its_old_shape(): void
+    {
+        $item = $this->item(['title' => 'Capybara rollout', 'description' => '<p>secret budget numbers</p>']);
+        Page::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->owner->id, 'name' => 'Capybara doc', 'status' => 'published', 'content' => ['type' => 'lexical', 'html' => '<p>secret budget numbers</p>']]);
+        $this->usePassportKeys();
+        Passport::actingAs($this->editor, ['capture']);
+
+        $res = $this->getJson(route('ext.search', ['q' => 'capybara']))->assertOk();
+        $this->assertSame([$item->id], array_column($res->json('items'), 'id'));
+        $this->assertCount(1, $res->json('pages'));
+        $res->assertJsonStructure(['items', 'pages', 'projects', 'bookmarks', 'snippets', 'workspaces']);
+
+        // body text is not searchable with a capture token
+        $this->getJson(route('ext.search', ['q' => 'budget']))->assertOk()->assertJsonPath('items', [])->assertJsonPath('pages', []);
     }
 
     public function test_the_mcp_search_tool_uses_the_index_and_its_handles_are_fetchable(): void

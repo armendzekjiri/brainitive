@@ -20,7 +20,7 @@ class CommentSource extends Source
         return SearchTypes::COMMENT;
     }
 
-    protected function idColumn(): string
+    public function idColumn(): string
     {
         return 'comments.id';
     }
@@ -50,7 +50,6 @@ class CommentSource extends Source
                 sourceId: $id,
                 title: '',
                 projectId: (int) $row->project_id,
-                workspaceId: (int) $row->workspace_id,
                 containerId: (int) $row->item_id,
                 authorId: self::int($row->user_id),
                 body: SearchText::fromHtml($row->body),
