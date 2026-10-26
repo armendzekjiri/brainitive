@@ -3,13 +3,18 @@
 namespace App\Http\Controllers;
 
 use App\Models\CalendarConnection;
-use App\Services\GoogleCalendarService;
+use App\Models\Meeting;
 use App\Services\GoogleTasksService;
+use App\Support\Calendar\CalendarProviderException;
+use App\Support\Calendar\CalendarProviders;
+use App\Support\Calendar\PendingConnection;
+use App\Support\Meetings\MeetingCalendars;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Validation\ValidationException;
 use Laravel\Socialite\Facades\Socialite;
 
 class CalendarConnectionController extends Controller
@@ -51,7 +56,7 @@ class CalendarConnectionController extends Controller
     public function googleCallback(Request $request): RedirectResponse
     {
         if ($request->has('error')) {
-            return redirect()->route('calendar.index')->with('status', 'Connecting your Google calendar was cancelled.');
+            return redirect()->route('calendar.index')->with('error', 'Connecting your Google calendar was cancelled.');
         }
 
         $googleUser = Socialite::driver('google')
@@ -68,31 +73,25 @@ class CalendarConnectionController extends Controller
             // an hour. Most likely the user has previously authorised; we need
             // them to revoke + re-authorise. The `prompt=consent` above usually
             // avoids this, but as a safety net:
-            return redirect()->route('calendar.index')->with('status', 'Google didn\'t return a refresh token. Try again.');
+            return redirect()->route('calendar.index')->with('error', 'Google didn\'t return a refresh token. Try again.');
         }
 
-        // Fetch this account's calendar list and store on the session for the
-        // picker. We don't create the connection yet — that happens after the
-        // user picks which calendar(s) to add.
-        $resp = Http::withToken($accessToken)
-            ->acceptJson()
-            ->get('https://www.googleapis.com/calendar/v3/users/me/calendarList');
-
-        if (! $resp->successful()) {
-            return redirect()->route('calendar.index')->with('status', 'Could not load your Google calendars.');
+        // Fetch this account's calendar list for the picker. We don't create the connection
+        // yet — that happens after the user picks which calendar(s) to add.
+        $probe = new CalendarConnection([
+            'provider' => 'google',
+            'kind' => 'calendar',
+            'account_email' => (string) $googleUser->getEmail(),
+            'access_token' => $accessToken,
+            'refresh_token' => $refreshToken,
+            'token_expires_at' => now()->addSeconds(max(60, $expiresIn - 60)),
+            'is_active' => true,
+        ]);
+        try {
+            $calendars = CalendarProviders::make('google')->listCalendars($probe);
+        } catch (CalendarProviderException $e) {
+            return redirect()->route('calendar.index')->with('error', $e->getMessage());
         }
-
-        $calendars = collect($resp->json('items', []))
-            ->map(fn ($c) => [
-                'id' => $c['id'],
-                'summary' => $c['summary'] ?? $c['id'],
-                'backgroundColor' => $c['backgroundColor'] ?? null,
-                'primary' => $c['primary'] ?? false,
-                'access_role' => $c['accessRole'] ?? null,
-            ])
-            ->filter(fn ($c) => in_array($c['access_role'], ['owner', 'writer', 'reader']))
-            ->values()
-            ->all();
 
         // Same token also gives us the user's Google Tasks lists.
         $taskLists = [];
@@ -109,40 +108,35 @@ class CalendarConnectionController extends Controller
                 ->all();
         }
 
-        $request->session()->put('calendar_connect_pending', [
-            'provider' => 'google',
-            'account_email' => $googleUser->getEmail(),
-            'account_name' => $googleUser->getName(),
-            'access_token' => $accessToken,
-            'refresh_token' => $refreshToken,
-            'expires_in' => $expiresIn,
-            'calendars' => $calendars,
-            'task_lists' => $taskLists,
-        ]);
+        (new PendingConnection(
+            provider: 'google',
+            accountEmail: (string) $googleUser->getEmail(),
+            accountName: $googleUser->getName(),
+            calendars: $calendars,
+            taskLists: $taskLists,
+            secrets: ['access_token' => $accessToken, 'refresh_token' => $refreshToken, 'expires_in' => $expiresIn],
+        ))->put();
 
         return redirect()->route('calendar.index', ['picking' => 'google']);
     }
 
-    /** Return the pending picker state (calendars + task lists) for the UI. */
+    /** Return the pending picker state (calendars + task lists) for the UI. Never secrets. */
     public function pendingPicker(Request $request): JsonResponse
     {
-        $pending = $request->session()->get('calendar_connect_pending');
-        if (! $pending) {
+        $pending = PendingConnection::current();
+        if (! $pending || ! CalendarProviders::has($pending->provider)) {
             return response()->json(['pending' => null]);
         }
 
         return response()->json([
-            'pending' => [
-                'provider' => $pending['provider'],
-                'account_email' => $pending['account_email'],
-                'account_name' => $pending['account_name'],
-                'calendars' => $pending['calendars'] ?? [],
-                'task_lists' => $pending['task_lists'] ?? [],
-            ],
+            'pending' => $pending->forPicker(CalendarProviders::make($pending->provider)->label()),
         ]);
     }
 
-    /** Create CalendarConnection rows for each chosen calendar AND task list. */
+    /**
+     * Create CalendarConnection rows for each calendar (and Google Tasks list) chosen in the
+     * picker, for any provider: the pending flow says which provider and carries the secrets.
+     */
     public function store(Request $request): RedirectResponse
     {
         $validated = $request->validate([
@@ -152,86 +146,131 @@ class CalendarConnectionController extends Controller
             'external_task_list_ids.*' => 'string',
         ]);
 
-        $pending = $request->session()->get('calendar_connect_pending');
-        if (! $pending) {
-            return redirect()->route('calendar.index')->with('status', 'Connection state expired. Please connect again.');
+        $pending = PendingConnection::current();
+        if (! $pending || ! CalendarProviders::has($pending->provider)) {
+            return redirect()->route('calendar.index')->with('error', 'Connection state expired. Please connect again.');
         }
 
-        $tokenFields = [
-            'account_name' => $pending['account_name'],
-            'access_token' => $pending['access_token'],
-            'refresh_token' => $pending['refresh_token'],
-            'token_expires_at' => now()->addSeconds($pending['expires_in'] - 60),
-            'is_active' => true,
-        ];
+        $userId = (int) Auth::id();
+        $shared = $pending->connectionAttributes() + ['sync_error' => null, 'sync_error_at' => null];
 
-        $calendarsById = collect($pending['calendars'] ?? [])->keyBy('id');
+        $calendarsById = collect($pending->calendars)->keyBy('id');
         foreach ((array) ($validated['external_calendar_ids'] ?? []) as $calId) {
             $cal = $calendarsById->get($calId);
             if (! $cal) {
                 continue;
             }
-            $this->upsertConnection($pending, 'calendar', $cal['id'], array_merge($tokenFields, [
-                'external_calendar_name' => $cal['summary'],
-                'external_calendar_color' => $cal['backgroundColor'],
+            // A calendar the account may only read (Google "reader", a read-only CalDAV
+            // collection) is marked in credentials; BaseCalendarProvider::isWritable() reads it.
+            $credentials = ($shared['credentials'] ?? []) + (! empty($cal['read_only']) ? ['read_only' => true] : []);
+            CalendarConnection::upsertFor($userId, $pending->provider, 'calendar', $pending->accountEmail, (string) $cal['id'], array_merge($shared, [
+                'external_calendar_name' => $cal['name'],
+                'external_calendar_color' => $cal['color'] ?? null,
+                'credentials' => $credentials ?: null,
             ]));
         }
 
-        $tasksById = collect($pending['task_lists'] ?? [])->keyBy('id');
+        // Google Tasks lists (only the Google flow offers any).
+        $tasksById = collect($pending->taskLists)->keyBy('id');
         foreach ((array) ($validated['external_task_list_ids'] ?? []) as $listId) {
             $list = $tasksById->get($listId);
-            if (! $list) {
+            if (! $list || $pending->provider !== 'google') {
                 continue;
             }
-            $this->upsertConnection($pending, 'tasks', $list['id'], array_merge($tokenFields, [
+            CalendarConnection::upsertFor($userId, $pending->provider, 'tasks', $pending->accountEmail, (string) $list['id'], $shared + [
                 'external_calendar_name' => $list['title'],
                 'external_calendar_color' => null,
-            ]));
+            ]);
         }
 
-        // When the same Google account is reconnected with a refreshed scope,
-        // propagate the new tokens to all of that account's existing rows so
-        // refresh-token rotation stays in sync. We must iterate and save each
-        // model rather than a mass query-builder update(), because the bulk
-        // update bypasses the `encrypted` cast and would write plaintext tokens
-        // into columns that are read back as encrypted payloads (causing a
-        // DecryptException on the next access).
-        $existing = CalendarConnection::where('user_id', Auth::id())
-            ->where('account_email', $pending['account_email'])
-            ->get();
-        foreach ($existing as $row) {
-            $row->access_token = $pending['access_token'];
-            $row->refresh_token = $pending['refresh_token'];
-            $row->token_expires_at = now()->addSeconds($pending['expires_in'] - 60);
-            $row->save();
+        // When the same account is reconnected (refreshed scope, new app password), propagate
+        // the new secrets to all of that account's existing rows so they keep working, and
+        // revive rows that were switched off because their access had failed. We must iterate
+        // and save each model rather than a mass query-builder update(), because the bulk
+        // update bypasses the `encrypted` casts and would write plaintext secrets into columns
+        // that are read back as encrypted payloads (causing a DecryptException on next access).
+        $hasTokens = array_key_exists('access_token', $pending->secrets);
+        $newCredentials = $pending->secrets['credentials'] ?? null;
+        if ($hasTokens || $newCredentials) {
+            $existing = CalendarConnection::where('user_id', $userId)
+                ->where('provider', $pending->provider)
+                ->where('account_email', $pending->accountEmail)
+                ->get();
+            foreach ($existing as $row) {
+                if ($hasTokens) {
+                    $row->access_token = $shared['access_token'];
+                    $row->refresh_token = $shared['refresh_token'];
+                    $row->token_expires_at = $shared['token_expires_at'];
+                }
+                if ($newCredentials) {
+                    // keep the row's own flags (read_only) next to the new secrets
+                    $row->credentials = $newCredentials + array_intersect_key((array) $row->credentials, ['read_only' => true]);
+                }
+                if ($row->sync_error !== null) {
+                    $row->is_active = true;
+                    $row->sync_error = null;
+                    $row->sync_error_at = null;
+                }
+                $row->save();
+            }
         }
 
-        $request->session()->forget('calendar_connect_pending');
+        PendingConnection::forget();
 
-        return redirect()->route('calendar.index')->with('status', 'Connected.');
+        return redirect()->route('calendar.index')->with('success', 'Connected.');
     }
 
     /**
-     * Find-or-create a connection for the authenticated user, reviving a
-     * previously soft-deleted row if one exists. updateOrCreate() only looks at
-     * non-trashed rows, so without this a disconnect-then-reconnect would try to
-     * INSERT over the still-present soft-deleted row and hit the unique index.
+     * Connect a 'form' / 'url' provider from the generic dialog (CalDAV server + app password,
+     * an ICS link, …): validate the provider's declared fields, then hand them to
+     * connectWithForm(). It returns the new connections, or a PendingConnection to pick from.
      */
-    private function upsertConnection(array $pending, string $kind, string $externalId, array $attributes): void
+    public function manualStore(Request $request, string $provider): RedirectResponse
     {
-        $connection = CalendarConnection::withTrashed()->firstOrNew([
-            'user_id' => Auth::id(),
-            'provider' => $pending['provider'],
-            'kind' => $kind,
-            'account_email' => $pending['account_email'],
-            'external_calendar_id' => $externalId,
-        ]);
+        abort_unless(CalendarProviders::has($provider), 404);
+        $impl = CalendarProviders::make($provider);
+        abort_unless($impl->available() && in_array($impl->connectMode(), ['form', 'url'], true), 404);
 
-        if ($connection->trashed()) {
-            $connection->restore();
+        $rules = [];
+        $names = [];
+        $flashable = []; // old input kept after an error: never passwords or links (ICS tokens)
+        foreach ($impl->formFields() as $field) {
+            if (in_array($field['type'] ?? 'text', ['text', 'email'], true)) {
+                $flashable[] = $field['name'];
+            }
+            $rules[$field['name']] = array_merge(
+                [($field['required'] ?? true) ? 'required' : 'nullable', 'string', 'max:2048'],
+                match ($field['type'] ?? 'text') {
+                    'url' => ['url:http,https,webcal'],
+                    'email' => ['email'],
+                    default => [],
+                },
+            );
+            $names[$field['name']] = $field['label'];
         }
 
-        $connection->fill($attributes)->save();
+        try {
+            $input = $request->validate($rules, [], $names);
+            $result = $impl->connectWithForm($request->user(), $input);
+        } catch (ValidationException $e) {
+            if ($request->expectsJson()) {
+                throw $e;
+            }
+
+            // Laravel would flash every field but `password`; secrets must not land in the session.
+            return back()->withErrors($e->errors())->withInput($request->only($flashable));
+        }
+
+        if ($result instanceof PendingConnection) {
+            $result->put();
+
+            return redirect()->route('calendar.index', ['picking' => $provider]);
+        }
+
+        $count = count($result);
+
+        return redirect()->route('calendar.index')
+            ->with('success', $count === 1 ? 'Calendar connected.' : "{$count} calendars connected.");
     }
 
     /** Toggle a connection's active state. */
@@ -243,32 +282,43 @@ class CalendarConnectionController extends Controller
         return back();
     }
 
-    /** Disconnect (soft delete + clear tokens). */
+    /** Disconnect (soft delete + clear tokens and credentials). */
     public function destroy(Request $request, CalendarConnection $connection): RedirectResponse
     {
         abort_unless($connection->user_id === Auth::id(), 403);
-        $connection->update(['access_token' => null, 'refresh_token' => null, 'is_active' => false]);
+        $connection->update(['access_token' => null, 'refresh_token' => null, 'credentials' => null, 'is_active' => false]);
         $connection->delete();
 
-        return back()->with('status', 'Calendar disconnected.');
+        return back()->with('success', 'Calendar disconnected.');
     }
 
-    /** Fetch full details for a single Google event (for the editor dialog). */
-    public function showEvent(Request $request, CalendarConnection $connection, string $eventId, GoogleCalendarService $service): JsonResponse
+    /**
+     * Full details of one event for the editor dialog, as a normalized event (any provider).
+     * `timezone` (the browser's) asks for the wall-clock times in that zone.
+     */
+    public function showEvent(Request $request, CalendarConnection $connection, string $eventId): JsonResponse
     {
-        abort_unless($connection->user_id === Auth::id(), 403);
-        $event = $service->getEvent($connection, $eventId);
+        $this->authorizeCalendar($connection, $eventId);
+        $timezone = $this->validTimezone($request->query('timezone'));
+
+        $provider = CalendarProviders::for($connection);
+        $event = $provider->getEvent($connection, $eventId, $timezone);
         if (! $event) {
             return response()->json(['error' => 'Event not found'], 404);
         }
 
-        return response()->json(['event' => $event]);
+        return response()->json([
+            'event' => $event,
+            'provider' => $connection->provider,
+            'provider_label' => $provider->label(),
+            'read_only' => ! $provider->isWritable($connection),
+        ]);
     }
 
-    /** Update a Google event's full content (title, description, location, times). */
-    public function updateEvent(Request $request, CalendarConnection $connection, string $eventId, GoogleCalendarService $service): RedirectResponse
+    /** Update an event's content (title, description, location, times) on its provider. */
+    public function updateEvent(Request $request, CalendarConnection $connection, string $eventId): RedirectResponse
     {
-        abort_unless($connection->user_id === Auth::id(), 403);
+        $this->authorizeCalendar($connection, $eventId);
         $validated = $request->validate([
             'title' => 'sometimes|string|max:500',
             'description' => 'sometimes|nullable|string|max:10000',
@@ -279,16 +329,16 @@ class CalendarConnectionController extends Controller
             'end_time' => 'sometimes|nullable|date_format:H:i',
             'timezone' => 'nullable|string|max:64',
         ]);
-        $service->updateEvent($connection, $eventId, $validated);
+        CalendarProviders::writable($connection)->updateEvent($connection, $eventId, $validated);
 
         return back();
     }
 
-    /** Delete a Google event. */
-    public function deleteEvent(Request $request, CalendarConnection $connection, string $eventId, GoogleCalendarService $service): RedirectResponse
+    /** Delete an event on its provider. */
+    public function deleteEvent(Request $request, CalendarConnection $connection, string $eventId): RedirectResponse
     {
-        abort_unless($connection->user_id === Auth::id(), 403);
-        $service->deleteEvent($connection, $eventId);
+        $this->authorizeCalendar($connection, $eventId);
+        CalendarProviders::writable($connection)->deleteEvent($connection, $eventId);
 
         return back();
     }
@@ -347,12 +397,12 @@ class CalendarConnectionController extends Controller
         return back();
     }
 
-    // ── Google Calendar event endpoints ─────────────────────────────────
+    // ── Calendar event endpoints (any provider) ─────────────────────────
 
-    /** Create an event on a specific Google calendar (called from QuickCreate). */
-    public function createEvent(Request $request, CalendarConnection $connection, GoogleCalendarService $service): RedirectResponse
+    /** Create an event on a connected calendar of any writable provider (QuickCreate). */
+    public function createEvent(Request $request, CalendarConnection $connection): RedirectResponse
     {
-        abort_unless($connection->user_id === Auth::id(), 403);
+        $this->authorizeCalendar($connection);
         $validated = $request->validate([
             'title' => 'required|string|max:500',
             'date' => 'required|date_format:Y-m-d',
@@ -360,11 +410,54 @@ class CalendarConnectionController extends Controller
             'end_date' => 'nullable|date_format:Y-m-d',
             'end_time' => 'nullable|date_format:H:i',
             'description' => 'nullable|string|max:5000',
+            'location' => 'nullable|string|max:500',
             'timezone' => 'nullable|string|max:64',
+            // Online meeting + guests (BRAI-147): only kinds this calendar allows
+            'conference' => 'nullable|in:google_meet,teams',
+            'attendees' => 'nullable|array|max:'.Meeting::MAX_ATTENDEES,
+            'attendees.*' => 'string|max:254|email:rfc',
         ]);
 
-        $service->createEvent($connection, $validated);
+        $provider = CalendarProviders::writable($connection);
+        $conference = $validated['conference'] ?? null;
+        if ($conference !== null && ! in_array($conference, MeetingCalendars::conferenceProviders($connection), true)) {
+            throw ValidationException::withMessages(['calendar' => $conference === 'teams'
+                ? 'Teams isn’t available for this account.'
+                : 'Google Meet isn’t available for this calendar.']);
+        }
+
+        $provider->createEvent($connection, [
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? null,
+            'location' => $validated['location'] ?? null,
+            'start_date' => $validated['date'],
+            'start_time' => $validated['time'] ?? null,
+            'end_date' => $validated['end_date'] ?? null,
+            'end_time' => $validated['end_time'] ?? null,
+            'timezone' => $validated['timezone'] ?? null,
+        ] + array_filter([
+            'conference' => $conference,
+            'attendees' => array_map(fn (string $email) => ['email' => trim($email), 'name' => null], $validated['attendees'] ?? []),
+        ]));
 
         return back();
+    }
+
+    /**
+     * The connection is the user's own calendar (not a Google Tasks list). Event ids are any
+     * segment but "." / "..", which would turn into another path once put into a provider URL.
+     */
+    private function authorizeCalendar(CalendarConnection $connection, ?string $eventId = null): void
+    {
+        abort_unless($connection->user_id === Auth::id(), 403);
+        abort_unless($connection->kind === 'calendar', 404);
+        abort_if($eventId === '.' || $eventId === '..', 404);
+    }
+
+    private function validTimezone(mixed $timezone): ?string
+    {
+        return is_string($timezone) && in_array($timezone, \DateTimeZone::listIdentifiers(\DateTimeZone::ALL_WITH_BC), true)
+            ? $timezone
+            : null;
     }
 }

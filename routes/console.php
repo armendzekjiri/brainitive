@@ -2,14 +2,17 @@
 
 use App\Jobs\RunImport;
 use App\Models\AutomationRun;
+use App\Models\GithubAppDelivery;
 use App\Models\GithubDelivery;
 use App\Models\HelpdeskInboundEmail;
 use App\Models\ImportRun;
 use App\Models\InboxNotification;
 use App\Models\LeadFormEvent;
 use App\Models\McpRequest;
+use App\Models\PortalLoginToken;
 use App\Models\ProjectExport;
 use App\Models\WebhookDelivery;
+use App\Support\GithubStars;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -34,7 +37,7 @@ Schedule::command('app:send-task-digest')
     ->withoutOverlapping();
 
 // Forget MCP idempotency keys after 7 days; webhook deliveries after 30.
-Schedule::command('model:prune', ['--model' => [McpRequest::class, GithubDelivery::class, LeadFormEvent::class, WebhookDelivery::class]])->daily();
+Schedule::command('model:prune', ['--model' => [McpRequest::class, GithubDelivery::class, GithubAppDelivery::class, LeadFormEvent::class, WebhookDelivery::class]])->daily();
 
 // Inbox (BRAI-102): archived notifications after 90 days, every notification after 180 days.
 Schedule::command('model:prune', ['--model' => [InboxNotification::class]])->dailyAt('03:30');
@@ -85,3 +88,9 @@ Schedule::call(function () {
         ->each(fn (ProjectExport $export) => $export->expire());
 })->name('exports:cleanup')->hourly()->withoutOverlapping();
 Schedule::command('model:prune', ['--model' => [ProjectExport::class]])->dailyAt('04:25');
+
+// v1.42.0: spent / expired guest sign-in links
+Schedule::command('model:prune', ['--model' => [PortalLoginToken::class]])->dailyAt('04:30');
+
+// v1.42.0: the repository's star count for the "Star on GitHub" buttons (cache only; pages never call GitHub)
+Schedule::call(fn () => GithubStars::refresh())->hourly()->name('github-stars')->withoutOverlapping();

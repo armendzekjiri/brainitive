@@ -17,7 +17,15 @@ class TicketAssignedNotification extends Notification
     public function __construct(
         public readonly Ticket $ticket,
         public readonly User $actor,
+        /** the automation rule that assigned (v1.41.2), shown instead of the person it acts as */
+        public readonly ?string $automation = null,
     ) {}
+
+    /** Who did it, as the text says it. */
+    private function by(): string
+    {
+        return $this->automation !== null ? "Automation “{$this->automation}”" : $this->actor->name;
+    }
 
     /**
      * Get the notification's delivery channels.
@@ -36,7 +44,7 @@ class TicketAssignedNotification extends Notification
 
         return $this->webPush(
             "Ticket {$this->ticket->key} assigned to you",
-            "{$this->actor->name}: {$this->ticket->subject}",
+            "{$this->by()}: {$this->ticket->subject}",
             $url,
         );
     }
@@ -62,7 +70,7 @@ class TicketAssignedNotification extends Notification
             'ticket_key' => $this->ticket->key,
             'ticket_subject' => $this->ticket->subject,
             'ticket_url' => $url,
-            'actor_name' => $this->actor->name,
+            'actor_name' => $this->by(),
             'actor_avatar' => $this->actor->avatar_display,
         ];
     }
@@ -85,7 +93,7 @@ class TicketAssignedNotification extends Notification
 
         return (new MailMessage)
             ->subject("Ticket {$this->ticket->key} assigned to you: ".NewLeadNotification::plain((string) $this->ticket->subject))
-            ->line("{$this->actor->name} assigned you to ticket {$this->ticket->key}.")
+            ->line("{$this->by()} assigned you to ticket {$this->ticket->key}.")
             ->line(NewLeadNotification::plain((string) $this->ticket->subject))
             ->action('View Ticket', $url);
     }

@@ -83,7 +83,7 @@ class NotificationPreferencesTest extends TestCase
         $this->withoutVite()->actingAs($user)->get(route('profile.edit'))
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->has('notificationCategories', 10)
+                ->has('notificationCategories', count(NotificationCatalog::CATEGORIES))
                 ->where('notificationCategories.0.key', 'mentions')
                 ->where('notificationCategories.8.key', 'leads')
                 ->where('notificationCategories.8.channels', ['in_app' => true, 'push' => true, 'email' => false]));

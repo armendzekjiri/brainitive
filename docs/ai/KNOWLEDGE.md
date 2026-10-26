@@ -27,7 +27,8 @@ page itself crashed with a 500 (fixed with BRAI-76, test in ErrorPagesTest).
 secret (encrypted column) is the only auth, checked with `hash_equals` over the raw body.
 Deployments are matched by window: what reached the deployed ref after the previous successful
 deploy to that environment (`github_connections.deployments`). Keep processing idempotent
-(upserts keyed by item+kind+repo+identifier) — GitHub redelivers.
+(upserts keyed by item+kind+repo+identifier) — GitHub redelivers. Since v1.42.0 this is the legacy
+mode; the GitHub App webhook is `/api/webhooks/github-app` (see "GitHub App vs manual webhooks").
 
 ### E2E suite (Playwright, BRAI-96): how it works and the traps it found
 Details in `e2e/README.md`; this lists what isn't obvious.
@@ -266,8 +267,11 @@ schema public". Use `createdb -h /tmp -O <DB_USERNAME> brainitive_test_<name>` (
   and fresh uuids for repeatable events (moves, assignments). Conditions are pre-checked before a run is
   created (a non-matching event leaves no row) and checked again when it starts.
 - **As whom:** the rule's `actor_id` (whoever saved it last). The runner `Auth::setUser($actor)` for the run
-  and restores the previous user, so history and "X assigned you" name the actor (assigning yourself stays
-  silent, as everywhere). Missing / suspended / no-longer-member actor → run `skipped`; a policy denial per
+  and restores the previous user, so history and "X assigned you" name the actor. Assigning yourself stays
+  silent, as everywhere — **except from a rule** (v1.41.2 fix): a rule acting as you that assigns you still
+  notifies you, worded "Automation “<rule>” assigned you" (`AutomationRunner::ruleName()` is non-null only
+  while a run's actions execute → `Assignments::item` / the ticket assign action pass it as `$automation` to
+  `ItemAssignedNotification` / `TicketAssignedNotification`). Missing / suspended / no-longer-member actor → run `skipped`; a policy denial per
   action → that action `error`. A switched-off rule or a newer version skips queued runs.
 - **Retries:** each action runs in its own transaction together with saving its result; a retried run
   skips actions already `ok` / `skipped`. A cache lock (180 s) keeps two workers off one run (the job
@@ -278,6 +282,20 @@ schema public". Use `createdb -h /tmp -O <DB_USERNAME> brainitive_test_<name>` (
   rule with a unique "Title contains" word and delete it at the end (`automations.spec.ts`).
 - **There is no global flash toast.** Pages show `flash.success` themselves (the automation pages use
   `components/automations/useFlashToast.ts`).
+- **Conditions are `{field, operator, value}` + rule `condition_match` all | any (v1.42.0, BRAI-144).**
+  `AutomationCatalog` (`CONDITION_FIELDS`, `OPERATORS`, `CUSTOM_FIELD_OPERATORS`) is the single source of
+  truth for which operators a field has; the builder only renders `forFrontend()`. Legacy `{type, value}`
+  conditions are normalised on read (`AutomationDefinition::normalizeCondition`) even after the data
+  migration `2026_10_31_180100_convert_automation_conditions` — keep it (its `down()` is a no-op).
+- **"Not" operators (`is_not`, `not_in`, `has_none`, `not_contains`, …) are true for an empty value** —
+  "label is not Bug" matches an issue without labels. Add `is_not_empty` when that's not wanted.
+- **Custom-field conditions (`custom:<item_field id>`) fail closed** when the field is archived / deleted
+  or its type no longer fits the operator (described "(field removed)"). Custom fields have no
+  multi-select type, so no multi-select family exists yet.
+- **Dates in conditions** ("within the next n days", before / after, overdue) use the rule actor's time
+  zone (`User::localTimezone()`, like `DueDateTrigger`); the dry run uses the current user's. Overdue =
+  open (no `completed_at`) and due day over or due time today passed. "Reporter" = `reporter_id`, else
+  `created_by`. Runs store the checked conditions (`automation_runs.conditions`); older runs show none.
 
 ### Quick capture: conversion is idempotent by row lock, not by request id (BRAI-70)
 `CaptureConversion::convert` locks the capture (`lockForUpdate`) inside one transaction; a capture
@@ -426,6 +444,18 @@ the allowlist renaming only.
   `AppServiceProvider` (or `/invite/{token}`) does — guests opening an invite are sent back to it
   after sign-up / login (`url.intended`). `acceptPendingForUser` skips existing memberships. A social login that matches a never-verified
   account resets it (`SignOutEverywhere`) before linking; Google needs `email_verified`.
+- **Sign in with Microsoft (v1.42.0, BRAI-148) — which email is trusted.** The email only links or creates
+  an account, so it is security-critical ("nOAuth": an Entra tenant admin can put ANY address in a user's
+  `mail`). Trusted only from the **id_token `email` claim** of a personal account (`tid` = consumer tenant
+  `9188040d-…`) or of a work / school account with **`xms_edov` = true** (optional claim, must be switched
+  on in the app registration), never for a B2B guest (`acct` = 1). Never Graph `mail`, `userPrincipalName`
+  or `preferred_username`. Without a trusted email an account already linked by `microsoft_id` still
+  signs in; linking / sign-up is refused ("We couldn't confirm the email address…"). The key is
+  `users.microsoft_id = "{tid}:{oid}"` (not `sub`, not the Graph id, never the email). Emails are
+  lower-cased and matched with `lower(email)`. Suspended users are refused before `Auth::login`. The
+  id_token signature isn't verified (token endpoint over TLS + secret + PKCE, OIDC Core 3.1.3.7); its
+  claims are (`aud`, `iss`, `exp`, `nonce`, GUID `tid` / `oid`, tenant pin). Entra setup:
+  [`tasks/feat-microsoft-login.md`](./tasks/feat-microsoft-login.md).
 - `App\Http\Middleware\GuardOAuthFlows` runs globally (for `/oauth/register`, which has no group)
   AND in the web group — the `/oauth/authorize` verification check needs the session, and global
   middleware runs before StartSession (`$request->user()` is null there). `POST /oauth/register` is throttled and https
@@ -633,6 +663,186 @@ php artisan tinker --execute="\App\Models\User::where('email','...')->update(['e
 - **Download security:** temporary signed *relative* URL (proxies), plus the exporter's session, plus an
   unexpired row with a file. An expired notification link redirects to the settings with a message.
   Files go after 24 h (`exports:cleanup`; dev has no scheduler, so a new export also cleans up).
+
+### Guest identities: not members, and never under `/portal` (v1.42.0)
+Contract: [`tasks/release-v1.42.0.md`](./tasks/release-v1.42.0.md) → "Foundation".
+- **A `PortalIdentity` is an email, not a member.** It gets no workspace / project access and no policy
+  passes for it. A verified Brainitive user is always their own identity (linked by email), so team
+  members can use portals without a second sign-in.
+- **`portal.identity` only proves "this email is theirs".** Every portal checks its own access on top
+  (portal enabled, post visible, active client membership, …). Signing in is open to any email.
+- **Prefixes:** guest sign-in is `/guest/*`; portal pages live under `PortalAuth::RETURN_PREFIXES`
+  (`/feedback/`, `/client/`) or the sign-in link can't return to them. **Never `/portal/*`** — that is
+  the stateless, CSRF-exempt helpdesk ticket portal.
+- Opening a sign-in link shows a confirm page; only the POST spends the token (mail scanners open links).
+- Mails to guests are plain mail-only `Notification`s outside `NotificationCatalog` (guests have no
+  preferences), like `TicketContact` mail.
+
+### Feedback portal: public shape, votes, merges (v1.42.0, BRAI-60)
+- **The public side only sees `FeedbackPresenter` output** — never the linked card, author emails,
+  moderation data or internal ids. Text is plain (`FeedbackText`); no HTML is stored.
+- Disabled / unknown portal → 404. Pending posts are visible only to their author.
+- **Votes count once:** unique (post, identity) + `insertOrIgnore` + `votes_count` changed in the same
+  transaction under a post row lock — so votes and a merge of the same post serialize, no deadlock.
+- **Merge** unions votes and followers without double counting; the old URL 301s to the target only if
+  it was public. Create card / link card are idempotent; link card = same project only.
+- A status change mails each follower once per post + status (`feedback_status_mails`); the unfollow
+  link is a signed URL that works without signing in.
+
+### Client portal: frozen deliverables, 404 vs 403 (v1.42.0, BRAI-73)
+- **Deliverables are frozen at publish** (`client_deliverables.content`): a published page version run
+  through `DeliverableHtml` (internal links / mentions → plain text, stickies and whiteboard embeds
+  dropped, `SafeHtml`), or a plan snapshot without hidden columns and `itemId`. Never drafts, never live
+  content — later edits reach the client only by publishing again.
+- **Approvals never carry over:** publishing the same page / plan again supersedes the current
+  deliverable (its decision stays as history; the new one awaits review). Decisions on superseded /
+  withdrawn deliverables are refused under a row lock (no race with a new publish).
+- **404 vs 403:** unknown / disabled portal, another portal's ids, a withdrawn deliverable and a
+  signed-in but **never invited** identity → 404 (signing in is open to anyone, so "not invited" must not
+  confirm the portal exists to strangers). Revoked / expired membership → 403 (`ClientPortal/Denied`).
+- Team comments reach the client only via "Reply to client" (`visibility = client`); internal notes stay
+  internal.
+
+### Document review: snapshots, anchors and the publish gate (v1.42.0, BRAI-80)
+Plan: [`tasks/feat-document-review.md`](./tasks/feat-document-review.md).
+- **Reviewers see the snapshot through the review** (`PageReviewPolicy`), not the draft — they get no
+  `PagePolicy::view` on an unpublished page.
+- **Stale is computed, never stored:** `review.content_hash !== $page->draftHash()`. The hash covers
+  name + icon + content but **excludes `excalidrawEmbeds`** (embedded scenes change without the text
+  changing; snapshots don't copy them either).
+- Status is recomputed lazily on every read / decision / publish check, so a reviewer who lost project
+  access drops out without hooks; a deleted user keeps `user_name` on the history.
+- **Quote anchors live twice and must stay in sync:** `App\Support\PageReviews\QuoteAnchor` (PHP) and
+  `components/page-review/anchors.ts`. 0 matches → outdated; several → the one whose prefix and suffix
+  match, else outdated — never attach a thread to the wrong text. Saved page HTML never changes.
+- **`ReviewGate` publishing rule:** with `pages.review_required`, publish / publish changes run in a
+  transaction that locks the page row, re-reads it, applies the pending editor changes, and refuse unless
+  an approved, open review has the current draft hash. Requests / decisions / cancels lock the same row.
+  Side doors are closed too: MCP `update-page`, restoring a version, `PageController::update` name / icon
+  (go to the draft), `saveExcalidraw` on non-whiteboards. Any new path that changes a published
+  review-required page must go through the gate.
+
+### GitHub App vs manual webhooks (v1.42.0, BRAI-61)
+Plan + production setup: [`tasks/feat-github-app.md`](./tasks/feat-github-app.md).
+- **Two modes.** Manual webhooks (`/api/webhooks/github/{uuid}`, per-project secret, `mode = webhook`)
+  vs the GitHub App (`/api/webhooks/github-app`, app secret, routed by installation + repository id;
+  `github_repositories.repo_id` unique = one project per repository). Each instance (prod, dev, every
+  self-hosted one) needs its own app — the URLs differ.
+- **Installation access check:** the setup state lives in the session (project + user); ownership is
+  proven by OAuth during install + `GET /user/installations`. GitHub lists an installation for anyone who
+  can read ONE of its repositories, so a project may only follow repositories the connecting person can
+  read (`GET /user/installations/{id}/repositories` → `github_connections.allowed_repository_ids`).
+- The GitHub App is separate from GitHub social login (`services.github`) — never widen login scopes.
+  Installation tokens are cached encrypted (`github-app:installation-token:*`), never shown.
+- **Merge transitions don't notify watchers.** The move is a model save (history via `ItemObserver`
+  marked `ActivityLog::via('github')`, outgoing webhooks, automations), but `item_status_changed` to
+  watchers is sent by `BoardController::move`, which the integration doesn't call. Each merged PR moves
+  the card at most once (`meta.merge_transition`), never out of a done column.
+
+### Calendar providers: normalized events, read-only calendars (v1.42.0, BRAI-140)
+Recipe: [`tasks/feat-calendar-providers.md`](./tasks/feat-calendar-providers.md) → "How to add a provider".
+- **`NormalizedEvent` all-day `end_date` is INCLUSIVE.** iCal `DTEND;VALUE=DATE` and Graph all-day
+  `end` are exclusive → pass end − 1 day. MCP `list_calendar_events` also returns the inclusive last day.
+- **Read-only providers / calendars:** writes go through `CalendarProviders::writable()`; a read-only
+  connection throws `CalendarReadOnly` (422 / "This calendar is read-only." in MCP). Per-calendar
+  read-only = `credentials.read_only` from the picker. The UI never lets read-only events be dragged.
+- A failing provider throws `CalendarSyncFailed` (never returns `[]`); the page stays 200 and shows
+  `sync_error`. Only Google deactivates a connection on a failed token refresh — others must not.
+- Save rotated tokens / `credentials` with `forceFill()->save()` (a query-builder update bypasses the
+  `encrypted` cast). User-supplied URLs (CalDAV, ICS) go through `SafeRemoteUrl` (below), never a bare
+  `Http::get`.
+- **Outlook (BRAI-140):** tokens refresh 60 s before expiry and once on a 401; a refused refresh keeps the
+  connection ("Outlook access expired. Reconnect Outlook." on every load until reconnect — the picker
+  `store` copies new tokens onto all rows of the account). 429 / 503 → friendly `CalendarSyncFailed` (one
+  short retry when Retry-After ≤ 2 s). Graph ids may contain `/` → `b64.` + base64url in our routes.
+  Recurring series: each calendarView instance has its own id, so an edit changes one occurrence. Logs
+  carry connection id + status + Graph error code only.
+- **Named throttles on calendar routes:** two routes with an unnamed `throttle:10,1` share a counter (and
+  `RouteThrottleTest` fails) — give each its own key (`throttle:10,1,calendar.connections.manual.store`).
+
+### Calendar links + CalDAV: SSRF guard, caps, recurrences (v1.42.0, BRAI-141)
+Details + limits: [`tasks/feat-calendar-caldav.md`](./tasks/feat-calendar-caldav.md).
+- **Every request to a user-entered calendar URL goes through `App\Support\Calendar\SafeRemoteUrl`**
+  (public IPs only, pinned resolve via `OutboundUrl`; webcal → https; ports 80 / 443 + `CALENDAR_ALLOWED_PORTS`
+  (default 8443, 5001, 5232); manual redirects, max 3, each hop re-checked; credentials only to the same
+  origin; 5 s connect / 20 s total; 5 MB cap via a `CappedStream` sink — Guzzle's `progress` callback can't
+  abort a chunked body). Transport errors become a generic `CalendarSyncFailed`: their messages carry URLs,
+  and ICS URLs are secrets — never shown, never logged.
+- **No private / loopback targets outside e2e.** `CALENDAR_LINKS_ALLOW_PRIVATE` works only with
+  `APP_ENV=e2e` (fixture server `e2e/helpers/calendar-server.ts`); never pass `$allowPrivate = true` anywhere
+  else. Self-hosted CalDAV must be reachable from the internet over https.
+- **CalDAV app password:** sent only over https and only to the "site" of the entered server
+  (`CaldavClient::site()` — a heuristic, not the Public Suffix List; iCloud's `pNN-caldav.icloud.com` is
+  fine); an answer from another origin is refused and its hrefs never followed; multistatus XML with a
+  DOCTYPE is refused; event ids are confined to the collection also after percent-decoding. 401 → "Check
+  your username and app password." (`sync_error`, connection stays active).
+- **No sabre/vobject** (dependency approval): our `Ics/` reader skips BYHOUR / BYMINUTE / BYSECOND,
+  BYWEEKNO / BYYEARDAY, sub-daily FREQ, RANGE=THISANDFUTURE and VTIMEZONE rules (unknown zones → standard
+  offset). Hard caps: 2000 occurrences per expansion, 50 000 periods per call shared by all series, 20 000
+  VEVENTs, 200 000 lines / 30 000 components per file.
+- **Recurring CalDAV events are expanded locally** (servers differ in `<C:expand>`, and edits need the
+  master). One occurrence is edited through a RECURRENCE-ID override and deleted with an EXDATE; moving a
+  whole series is refused (writing DTSTART in UTC would lose its zone). Timed writes are UTC. Floating
+  times are keyed by wall clock (no `Z`), so ids match in every viewer zone.
+- **ICS:** each link is its own connection (`sha1(url)`, URL only in encrypted `credentials`, UI shows the
+  host only; change = remove + add). Cached 15 min with ETag / If-Modified-Since, but a link still failing
+  after 15 min raises `CalendarSyncFailed` — the cache never hides it. Several one-off VEVENTs with one UID
+  are all shown (DTSTART as occurrence key).
+
+### Online meetings: conferencing is optional on the contract (v1.42.0, BRAI-147)
+- `conferenceProviders()` + `createEvent(conference, attendees)`; normalized events carry `conference_url`
+  (https only) / `conference_provider` only when there is a call — `NormalizedEvent::KEYS` is unchanged,
+  so read them with `?? null`.
+- **Google** ignores `conferenceData` without `?conferenceDataVersion=1`; Meet creation can come back
+  `pending` (read once more). Deletes send `sendUpdates=all` (guests get the cancellation, as with Outlook).
+- **Teams only for work / school accounts:** Graph offers it only when the calendar's
+  `allowedOnlineMeetingProviders` has `teamsForBusiness`; personal Outlook.com accounts usually don't →
+  "Teams isn't available for this account." `Calendars.ReadWrite` is enough (no `OnlineMeetings.*`).
+- Meeting rows aren't soft-deleted; cancel goes through the organiser's own calendar only, others can only
+  unlink. Attendee addresses are shown only to the organiser (the notes doc lists member names + "+N
+  guests"); members are sent by id and turned into addresses server-side. An issue moved to another
+  project keeps its meetings (`meetings.project_id` = where it was scheduled). The notes doc is created
+  once (row lock); an unpublished one gives others a 403, never a second doc.
+
+### Calendar feed: stateless, deterministic, throttled per feed (v1.42.0, BRAI-142)
+- `/calendar/feed/{token}.ics` is in `web.php` but excludes the session / cookie / CSRF / Inertia
+  middleware with `withoutMiddleware` (no `Set-Cookie`; calendar apps send none). Use the same pattern
+  for any public route that must not touch the session.
+- **Throttle:** per IP is loose (`throttle:600,1`) because Google / Outlook fetch every subscriber from a
+  few shared IPs; the real cap is per feed (`CalendarFeedController::FETCHES_PER_MINUTE` = 30, keyed on
+  the feed id), which also limits a leaked token.
+- **Bodies must stay deterministic** (`DTSTAMP` = `updated_at`, never `now()`), or the ETag changes on
+  every fetch and apps re-download everything. `Last-Modified` = `content_changed_at`, so removals and
+  lost access count as changes. Google ignores the ICS `URL` property — the link is the last line of
+  `DESCRIPTION`.
+
+### Smart links: plain anchors, derived from published content only (v1.42.0, BRAI-143)
+- **Saved as a normal `<a>`** with `data-smart-link="<ref>"` + `data-smart-link-view`, so share pages,
+  the client portal, MCP, exports and search see a plain link; only the Lexical editor with the
+  `smartLinks` prop turns it into a chip / card (comments, tickets, public pages render a link). `SafeHtml`
+  allows exactly these two `data-*` attributes on `a`, nothing else.
+- **Refs are ids, not URLs:** `item:<id>`, `page:<uuid>`, `ticket:<id>`, `plan:<id>`; a pasted plan URL gives
+  `plan:<project-slug>/<plan-slug>`, the endpoint answers with the canonical `plan:<id>` and the editor
+  rewrites it.
+- **Visibility mirrors ContentReferences:** what exists but the viewer can't open answers `restricted`,
+  everything else `not_found` — never a title. Cross-project links render but make no reference.
+- **Backlinks derive from published content only.** `Page::saved` syncs a doc's smart links from `content`
+  (the published version, or the doc itself before its first publish) — autosaved `draft_content` doesn't
+  count until published. Issues sync from `description` in `Item::saved`. Same project only; removing the
+  link prunes the derived row.
+- The quick-create dialog (`GlobalCreateModal`, `RichLexicalEditor.tsx`) is a separate small editor: a
+  pasted URL stays a plain link there.
+- **Side "+" block menu (fixed with BRAI-143):** the handle portal unmounted when the pointer left the
+  handle for the popover (`onMouseLeave` cleared `hoveredKey`). Keep the handle + popover mounted while the
+  menu is open (`RichLexicalEditorFull.tsx`).
+- **Docs open full width by default (v1.42.0):** `Pages/Pages/Show.tsx` reads localStorage
+  `page-full-width-<uuid>`; only an explicit `'false'` ("Exit full width") narrows it (e2e
+  `document-width.spec.ts`).
+
+### Page icons are images too (v1.41.2)
+An uploaded page icon is stored as a long `data:` URL. Always render page icons through
+`components/page/PageIcon.tsx` (`PageIcon` / `isImageIcon`), never as `{page.icon}` text — the workspace
+home and project page printed the base64 across the layout (e2e `page-icons.spec.ts`).
 
 ## Architectural decisions
 

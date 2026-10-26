@@ -34,6 +34,9 @@ export type Role = keyof typeof USERS;
 /** Email → helpdesk forwarding addresses in the local e2e app (BRAI-124); test-only values. */
 export const INBOUND_MAIL = { domain: 'inbound.e2e.test', postmarkToken: 'e2e-postmark-token' } as const;
 
+/** Fake Outlook app registration of the local e2e app (BRAI-140): enables the menu entry only. */
+export const OUTLOOK_E2E = { clientId: 'e2e-outlook-client' } as const;
+
 /** Seeded workspace / project / board (slugs). */
 export const SEED = { workspace: 'e2e-workspace', project: 'website', board: 'main-board', key: 'WEB' } as const;
 
@@ -77,12 +80,21 @@ export function appEnv(): Record<string, string> {
         E2E_PASSWORD: PASSWORD,
         // webhooks.spec.ts delivers to a receiver on 127.0.0.1; the app honours this only with APP_ENV=e2e
         WEBHOOKS_ALLOW_PRIVATE_TARGETS: 'true',
+        // calendar-links.spec.ts serves an ICS feed + a CalDAV server on 127.0.0.1; honoured only with APP_ENV=e2e
+        CALENDAR_LINKS_ALLOW_PRIVATE: 'true',
         // helpdesk-forwarding.spec.ts: forwarding addresses on (Postmark endpoint, test token)
         INBOUND_MAIL_DOMAIN: INBOUND_MAIL.domain,
         INBOUND_MAIL_PROVIDER: 'postmark',
         INBOUND_MAIL_POSTMARK_TOKEN: INBOUND_MAIL.postmarkToken,
         // helpdesk-email.spec.ts: a fake IMAP / SMTP connection (no network); honoured only with APP_ENV=e2e
         HELPDESK_MAIL_FAKE: 'true',
+        // github-app.spec.ts: a fake GitHub App + in-process GitHub API (BRAI-61); honoured only with APP_ENV=e2e
+        GITHUB_APP_FAKE: 'true',
+        // calendar-outlook.spec.ts + microsoft-login.spec.ts: a Microsoft app registration that only has to exist (Microsoft is never called)
+        MICROSOFT_CLIENT_ID: OUTLOOK_E2E.clientId,
+        MICROSOFT_CLIENT_SECRET: 'e2e-outlook-secret',
+        MICROSOFT_TENANT: 'common',
+        MICROSOFT_REDIRECT_URI: '',
         PHP_CLI_SERVER_WORKERS: process.env.E2E_SERVER_WORKERS ?? '4',
     };
 }

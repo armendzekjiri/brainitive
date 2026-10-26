@@ -10,7 +10,8 @@ use Illuminate\Database\Eloquent\Collection;
 /**
  * Helpers for the MCP calendar tools. Calendar connections are personal (owned
  * by a single user), so every lookup is scoped to the authenticated user — the
- * AI can only ever touch the connecting user's own Google calendars/tasks.
+ * AI can only ever touch the connecting user's own calendars (any provider, see
+ * App\Support\Calendar\CalendarProviders) and Google Tasks lists.
  */
 trait ResolvesCalendarConnections
 {
@@ -42,7 +43,7 @@ trait ResolvesCalendarConnections
             ->find($connectionId);
 
         if (! $connection) {
-            $noun = $kind === 'tasks' ? 'Google Tasks list' : 'Google calendar';
+            $noun = $kind === 'tasks' ? 'Google Tasks list' : 'calendar';
             throw new AuthorizationException("No connected {$noun} found with id {$connectionId}. Call list_calendar_connections to see the available ids.");
         }
 

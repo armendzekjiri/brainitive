@@ -83,6 +83,27 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.42.0',
+        title: 'Work with clients, every calendar, meetings and smart links',
+        tag: 'Feature',
+        date: '2026-10-27',
+        items: [
+            'Public feedback portal (project → Feedback): customers share ideas, vote and follow them at /feedback/your-name, signing in with just their email. You approve ideas, set Planned / Building / Released with a note, merge duplicates and turn ideas into cards; followers get an email when the status changes.',
+            'Client portal (project → Client portal): invite clients by email and share selected doc versions and plan snapshots at /client/your-name. They approve or request changes on the exact version they saw — a new version needs a fresh approval — and comment; your replies reach them only with "Reply to client".',
+            'Document review: ask teammates to review a draft. They comment on selected text and approve or request changes; editing afterwards marks the review outdated. Admins can require an approved review before a page is published.',
+            'Smart links: paste a link to an issue, doc, ticket or plan into a document or issue (or use /link or the "+" next to a block) and it shows live as a chip or card with title, status, due date and assignee. The linked item lists the document under "Referenced by".',
+            'Meetings: schedule a Google Meet or Microsoft Teams meeting from a card, a document or the calendar — invitations go out from your own calendar, Join sits on the card or doc, and meeting notes are one click away.',
+            'Calendars: connect Outlook / Microsoft 365, Apple iCloud and any CalDAV calendar (Fastmail, Nextcloud…), or add any calendar\'s ICS link read-only — next to Google. Read-only calendars can\'t be moved, and a calendar that fails to load shows a warning instead of disappearing.',
+            'Calendar feed (Calendar → Subscribe): your due dates, list tasks, My Day and focus sessions in Apple Calendar, Google Calendar or Outlook through a private link you can reset anytime.',
+            'Automations: conditions are now Field → Operator → Value (is / is not / any of / none of, has none of, contains, starts with, overdue, within the next N days, number comparisons, custom fields), with "Match all / any". The run history shows which conditions passed; existing rules were converted automatically.',
+            'GitHub in one click: project settings → Integrations → Connect GitHub, pick repositories, done — no webhooks to paste. Optionally, merging an issue\'s pull request moves its card (e.g. to Done).',
+            'Sign in with Microsoft (Outlook.com and Microsoft 365), next to Google and GitHub.',
+            'Documents open full width; the "+" next to a block works again and inserts real bullet, numbered and check lists.',
+            'Fixed: a document with an uploaded image as its icon showed a long line of code on the workspace home and project page. Fixed: a rule that assigns an issue to the person it runs as (e.g. "assign me when it moves to Testing") now notifies them — from Automation "rule name".',
+            '"Star on GitHub" with the live star count on the homepage and in the account menu.',
+        ]
+    },
+    {
         version: 'v1.41.1',
         title: 'Calendar opens again after deleting a board',
         tag: 'Fix',

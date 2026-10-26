@@ -25,6 +25,7 @@ import ExtractActionItemsDialog from '@/components/meetingNotes/ExtractActionIte
 import { PinButton } from '@/components/sidebar/PinButton';
 import { PinIcon, resolvePins, type PinKind, type SidebarProject } from '@/components/sidebar/pins';
 import { projectPreferences, useSidebarPreferences } from '@/lib/sidebarPreferences';
+import PageIcon from '@/components/page/PageIcon';
 
 type PageWithChildren = PageType & { children?: PageWithChildren[] };
 
@@ -234,7 +235,7 @@ function ProjectOverview({ workspace, project, members = [], recentlyUpdated = [
             <div key={page.id} className="min-w-0">
                 <div className="group/pin flex min-w-0 items-center gap-1 rounded-lg hover:bg-muted/70" style={{ paddingLeft: depth * 20 }}>
                     <Link href={route('pages.show', [...params, page.uuid])} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 group">
-                        {isFolder ? <Folder className="size-4 shrink-0 text-primary" /> : pageIcon ? <span className="w-5 shrink-0 text-center text-base">{pageIcon}</span> : <FileText className="size-4 shrink-0 text-muted-foreground" />}
+                        {isFolder ? <Folder className="size-4 shrink-0 text-primary" /> : pageIcon ? <PageIcon icon={pageIcon} className="w-5 text-center text-base" imageClassName="size-5" /> : <FileText className="size-4 shrink-0 text-muted-foreground" />}
                         <span className="truncate text-sm font-medium transition-colors group-hover:text-primary">{page.name}</span>
                     </Link>
                     <PinButton projectId={project.id} type="page" id={page.id} name={page.name} className="mr-2" />
@@ -248,6 +249,8 @@ function ProjectOverview({ workspace, project, members = [], recentlyUpdated = [
         { label: 'Health', aria: 'Project health', href: route('projects.health', params), icon: HeartPulse },
         { label: 'Workload', aria: 'Project workload', href: route('workload.index', params), icon: Gauge },
         { label: 'Releases', aria: 'Project releases', href: route('releases.index', params), icon: Rocket },
+        { label: 'Client portal', aria: 'Project client portal', href: route('client-portal.manage.index', params), icon: Briefcase },
+        ...(canUpdate ? [{ label: 'Feedback', aria: 'Feedback portal', href: route('projects.feedback.index', params), icon: Users2 }] : []), // BRAI-60: project admins
     ];
 
     return (

@@ -4,9 +4,11 @@ namespace Tests\Feature\Pages;
 
 use App\Models\Page;
 use App\Notifications\PageUpdatedNotification;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -362,6 +364,8 @@ class PageWorkflowTest extends TestCase
     public function test_migration_backfills_version_one_for_already_published_pages(): void
     {
         $migration = require database_path('migrations/2026_10_18_201813_create_page_versions_table.php');
+        // later tables point at page_versions (client portal deliverables, v1.42.0); the test rolls the DDL back
+        Schema::table('client_deliverables', fn (Blueprint $table) => $table->dropForeign(['page_version_id']));
         $migration->down();
 
         $published = Page::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->author->id, 'name' => 'Legacy']);

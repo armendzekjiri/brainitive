@@ -1,6 +1,6 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { Head, router, Link } from '@inertiajs/react';
-import { PageProps, CalendarEvent, CalendarConnectionRow } from '@/types';
+import { Head, router, Link, usePage } from '@inertiajs/react';
+import { PageProps, CalendarEvent, CalendarConnectionRow, CalendarProviderInfo, CalendarPickerData, NormalizedCalendarEvent } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -9,10 +9,16 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import {
-    ChevronLeft, ChevronRight, Calendar, Kanban, Clock, Filter, Check, Repeat, Plus, Trash2, ExternalLink, Settings,
+    ChevronLeft, ChevronRight, Calendar, Kanban, Clock, Filter, Check, Repeat, Plus, Trash2, ExternalLink, Settings, AlertTriangle, Lock,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { safeExternalHref } from '@/lib/sanitize';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { AssigneeAvatar } from '@/components/board/ItemPrimitives';
+import CalendarFeedButton from '@/components/calendar/CalendarFeedDialog';
+import QuickCreateMeetingFields, { NO_MEETING, type QuickMeeting } from '@/components/meetings/QuickCreateMeetingFields';
+import { CONFERENCE_LABELS, copyMeetingLink, safeJoinUrl } from '@/lib/meetings';
+import { Video } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
 
 type ProjectFilterOption = {
@@ -50,7 +56,17 @@ interface Props extends PageProps {
     projectsForFilter: ProjectFilterOption[];
     accessibleProjects: AccessibleProject[];
     connections: CalendarConnectionRow[];
+    calendarProviders: CalendarProviderInfo[];
     filters: Filters;
+}
+
+/** Source filter keys; 'external' = every connected calendar (any provider). */
+const ALL_SOURCES = ['board', 'list', 'external'] as const;
+const SOURCE_LABELS: Record<(typeof ALL_SOURCES)[number], string> = { board: 'Board', list: 'Lists', external: 'Calendars' };
+
+/** Show a calendar provider's refusal (read-only, expired access, …) from Inertia errors. */
+function toastCalendarError(errors: Record<string, string>, fallback: string) {
+    toast.error(errors.calendar || Object.values(errors)[0] || fallback);
 }
 
 const VIEW_LABELS = { month: 'Month', week: 'Week', day: 'Day' } as const;
@@ -60,7 +76,7 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 function eventHref(e: CalendarEvent): string {
     if (e.type === 'board_item') return route('boards.items.show', e.href_params);
     if (e.type === 'task_list_item') return route('task-lists.show', e.href_params);
-    return e.external_url || '#';
+    return safeExternalHref(e.external_url) || '#';
 }
 
 function timeToMinutes(time: string): number {
@@ -150,7 +166,7 @@ function filtersToParams(f: Filters): Record<string, any> {
     if (f.projects?.length) out.projects = f.projects;
     if (f.me_only) out.me_only = 1;
     if (!f.show_completed) out.show_completed = 0;
-    if (f.sources && f.sources.length < 3) out.sources = f.sources;
+    if (f.sources && f.sources.length < ALL_SOURCES.length) out.sources = f.sources;
     if (f.connections?.length) out.connections = f.connections;
     return out;
 }
@@ -177,7 +193,10 @@ function handleDrop(e: React.DragEvent, targetDate: string, targetTime?: string)
     };
     if (targetTime) payload.due_time = targetTime;
     if (parsed.connection_id) payload.connection_id = parsed.connection_id;
-    router.patch(route('calendar.reschedule'), payload, { preserveScroll: true });
+    router.patch(route('calendar.reschedule'), payload, {
+        preserveScroll: true,
+        onError: (errors) => toastCalendarError(errors, 'Could not move this event.'),
+    });
 }
 
 // ── Filter popover ───────────────────────────────────────────────────────
@@ -196,7 +215,7 @@ function FilterBar({
         (filters.projects?.length ? 1 : 0) +
         (filters.me_only ? 1 : 0) +
         (!filters.show_completed ? 1 : 0) +
-        (filters.sources && filters.sources.length < 3 ? 1 : 0) +
+        (filters.sources && filters.sources.length < ALL_SOURCES.length ? 1 : 0) +
         (filters.connections?.length ? 1 : 0);
 
     const apply = (next: Filters) => {
@@ -226,7 +245,7 @@ function FilterBar({
                         <button
                             type="button"
                             className="text-xs text-primary hover:underline"
-                            onClick={() => apply({ projects: [], me_only: false, show_completed: true, sources: ['board', 'list', 'google'], connections: [] })}
+                            onClick={() => apply({ projects: [], me_only: false, show_completed: true, sources: [...ALL_SOURCES], connections: [] })}
                         >
                             Clear all
                         </button>
@@ -255,9 +274,9 @@ function FilterBar({
                 <div className="space-y-1.5">
                     <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Source</p>
                     <div className="flex gap-1.5 flex-wrap">
-                        {(['board', 'list', 'google'] as const).map((src) => {
+                        {ALL_SOURCES.map((src) => {
                             const active = filters.sources?.includes(src);
-                            const label = src === 'board' ? 'Board' : src === 'list' ? 'Lists' : 'Google';
+                            const label = SOURCE_LABELS[src];
                             return (
                                 <button
                                     key={src}
@@ -265,7 +284,7 @@ function FilterBar({
                                         const next = active
                                             ? filters.sources.filter((s) => s !== src)
                                             : [...(filters.sources || []), src];
-                                        apply({ ...filters, sources: next.length === 0 ? ['board', 'list', 'google'] : next });
+                                        apply({ ...filters, sources: next.length === 0 ? [...ALL_SOURCES] : next });
                                     }}
                                     className={cn(
                                         'flex-1 px-2.5 py-1.5 rounded-full text-xs border transition-colors',
@@ -304,6 +323,12 @@ function FilterBar({
                                     >
                                         <span className="size-2 rounded-full shrink-0" style={{ background: c.external_calendar_color || '#4285F4' }} />
                                         <span className="truncate flex-1 text-left">{c.external_calendar_name}</span>
+                                        {c.sync_error && (
+                                            <span title={c.sync_error} className="shrink-0 text-amber-600 dark:text-amber-400">
+                                                <AlertTriangle className="size-3" aria-hidden />
+                                                <span className="sr-only">{c.sync_error}</span>
+                                            </span>
+                                        )}
                                         <span className="text-[10px] text-muted-foreground truncate">{c.account_email}</span>
                                     </button>
                                 );
@@ -352,15 +377,27 @@ function FilterBar({
 }
 
 // ── Event chip (shared) ──────────────────────────────────────────────────
+/** Opens an external event / Google task in its dialog. */
+type OpenExternal = (eventId: string, connectionId: number, kind: 'event' | 'task') => void;
+
+function isExternal(event: CalendarEvent): boolean {
+    return event.type === 'external_event' || event.type === 'google_task';
+}
+
+/** Can be dragged / resized: not a projected recurrence, not a read-only calendar. */
+function isMovable(event: CalendarEvent): boolean {
+    return !event.is_recurring_instance && !event.read_only;
+}
+
 function EventChip({
-    event, compact = false, multiDay = false, fill = false, onOpenGoogle,
+    event, compact = false, multiDay = false, fill = false, onOpenExternal,
 }: {
     event: CalendarEvent;
     compact?: boolean;
     multiDay?: boolean;
     /** When true (time-grid usage), the chip fills its parent's height. */
     fill?: boolean;
-    onOpenGoogle?: (eventId: string, connectionId: number, kind: 'event' | 'task') => void;
+    onOpenExternal?: OpenExternal;
 }) {
     const { base: color } = statusColor(event);
     const timeLabel = event.start_time && event.due_time
@@ -371,12 +408,13 @@ function EventChip({
                 ? formatTime(event.start_time)
                 : null;
 
-    const isGoogle = event.type === 'google_event' || event.type === 'google_task';
-    const googleKind: 'event' | 'task' = event.type === 'google_task' ? 'task' : 'event';
+    const external = isExternal(event);
+    const externalKind: 'event' | 'task' = event.type === 'google_task' ? 'task' : 'event';
+    const providerLabel = event.provider_label || (event.type === 'google_task' ? 'Google Tasks' : 'Calendar');
 
     const sharedDragProps = {
         'data-event': 'true' as const,
-        draggable: !event.is_recurring_instance,
+        draggable: isMovable(event),
         onDragStart: (e: React.DragEvent) => {
             e.dataTransfer.setData('application/calendar-event', JSON.stringify({
                 type: event.type,
@@ -400,21 +438,20 @@ function EventChip({
     const inner = (
         <>
             {!multiDay && <span className="w-[3px] self-stretch shrink-0 rounded-full" style={{ background: color }} />}
-            {(event.type === 'google_event' || event.type === 'google_task') && (
+            {external && (
                 <span
                     className="size-3.5 rounded-sm grid place-items-center shrink-0 text-[8px] font-bold text-white"
                     style={{ background: event.color || '#4285F4' }}
-                    title={event.source?.name
-                        ? `${event.type === 'google_task' ? 'Google Tasks' : 'Google Calendar'}: ${event.source.name}`
-                        : event.type === 'google_task' ? 'Google Tasks' : 'Google Calendar'}
+                    title={`${providerLabel}${event.source?.name ? `: ${event.source.name}` : ''}${event.read_only ? ' (read-only)' : ''}`}
                 >
-                    {event.type === 'google_task' ? '✓' : 'G'}
+                    {event.provider_badge || (event.type === 'google_task' ? '✓' : '•')}
                 </span>
             )}
             <span className={cn('min-w-0 flex-1 flex flex-col gap-0.5', !fill && 'flex-row items-center')}>
                 {fill && timeLabel && <span className="text-[10px] text-muted-foreground font-mono tabular-nums">{timeLabel}</span>}
                 <span className={cn('truncate font-medium flex items-center gap-1', event.is_completed && 'line-through')}>
                     {event.is_recurring_instance && <Repeat className="size-2.5 shrink-0 opacity-70" />}
+                    {safeJoinUrl(event.conference_url) && <Video className="size-3 shrink-0 text-primary" aria-hidden data-testid="event-video-icon" />}
                     {!compact && !fill && event.due_time && <span className="text-muted-foreground mr-1">{formatTime(event.due_time)}</span>}
                     {event.title}
                 </span>
@@ -423,11 +460,11 @@ function EventChip({
         </>
     );
 
-    if (isGoogle && onOpenGoogle) {
+    if (external && onOpenExternal && event.connection_id) {
         return (
             <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); onOpenGoogle(String(event.id), event.connection_id!, googleKind); }}
+                onClick={(e) => { e.stopPropagation(); onOpenExternal(String(event.id), event.connection_id!, externalKind); }}
                 {...sharedDragProps}
             >
                 {inner}
@@ -456,22 +493,26 @@ function QuickCreateModal({
     // Auto-select first project (and its first board) on mount.
     const defaultProject = accessibleProjects[0];
 
-    const [type, setType] = useState<'board' | 'list' | 'google'>('board');
+    const [type, setType] = useState<'board' | 'list' | 'external'>('board');
     const [title, setTitle] = useState('');
     const [projectId, setProjectId] = useState<number | null>(defaultProject?.id ?? null);
     const [boardId, setBoardId] = useState<number | null>(defaultProject?.boards[0]?.id ?? null);
     const [taskListId, setTaskListId] = useState<number | null>(defaultProject?.task_lists[0]?.id ?? null);
-    const calendarConns = useMemo(() => connections.filter((c) => c.kind === 'calendar'), [connections]);
-    const taskConns = useMemo(() => connections.filter((c) => c.kind === 'tasks'), [connections]);
-    const [googleKind, setGoogleKind] = useState<'event' | 'task'>('event');
+    // Writable calendars of any provider (read-only ones like ICS links can't take new events).
+    const calendarConns = useMemo(() => connections.filter((c) => c.is_active && c.kind === 'calendar' && !c.read_only), [connections]);
+    const taskConns = useMemo(() => connections.filter((c) => c.is_active && c.kind === 'tasks'), [connections]);
+    const hasExternalTargets = calendarConns.length + taskConns.length > 0;
+    const [externalKind, setExternalKind] = useState<'event' | 'task'>('event');
     const [connectionId, setConnectionId] = useState<number | null>(calendarConns[0]?.id ?? null);
     const [dateInput, setDateInput] = useState('');
     const [timeInput, setTimeInput] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [meeting, setMeeting] = useState<QuickMeeting>(NO_MEETING); // video call + guests (BRAI-147)
 
     useEffect(() => {
         if (!state) return;
         setTitle('');
+        setMeeting(NO_MEETING);
         setDateInput(state.date);
         setTimeInput(state.time ?? '');
         setSubmitting(false);
@@ -486,10 +527,10 @@ function QuickCreateModal({
         }
         // Default to event if any calendar connection exists; else task.
         if (calendarConns.length > 0) {
-            setGoogleKind('event');
+            setExternalKind('event');
             setConnectionId(calendarConns[0].id);
         } else if (taskConns.length > 0) {
-            setGoogleKind('task');
+            setExternalKind('task');
             setConnectionId(taskConns[0].id);
         } else {
             setConnectionId(null);
@@ -498,11 +539,11 @@ function QuickCreateModal({
 
     const project = useMemo(() => accessibleProjects.find((p) => p.id === projectId) ?? null, [accessibleProjects, projectId]);
 
-    const hasGoogleSource = (googleKind === 'task' ? taskConns.length : calendarConns.length) > 0;
+    const hasExternalSource = (externalKind === 'task' ? taskConns.length : calendarConns.length) > 0;
     const canSubmit = title.trim() && dateInput && (
         (type === 'board' && project && boardId)
         || (type === 'list' && project && taskListId)
-        || (type === 'google' && connectionId && hasGoogleSource)
+        || (type === 'external' && connectionId && hasExternalSource && !(externalKind === 'event' && meeting.conference && !timeInput))
     );
 
     const submit = (e: React.FormEvent) => {
@@ -510,12 +551,15 @@ function QuickCreateModal({
         if (!canSubmit) return;
         setSubmitting(true);
 
-        if (type === 'google') {
+        if (type === 'external') {
             const conn = connections.find((c) => c.id === connectionId);
             if (!conn) { setSubmitting(false); return; }
             const payload: Record<string, any> = { title: title.trim(), date: dateInput, timezone: browserTimezone() };
             if (timeInput) payload.time = timeInput;
-            const routeName = googleKind === 'task'
+            if (externalKind === 'event' && meeting.conference) payload.conference = meeting.conference;
+            // guests only go with a video call setup the form still shows (the fields clear themselves otherwise)
+            if (externalKind === 'event' && meeting.attendees.length > 0) payload.attendees = meeting.attendees;
+            const routeName = externalKind === 'task'
                 ? 'calendar.connections.tasks.create'
                 : 'calendar.connections.events.create';
             router.post(
@@ -524,7 +568,7 @@ function QuickCreateModal({
                 {
                     preserveScroll: true,
                     onSuccess: () => { setSubmitting(false); onClose(); },
-                    onError: () => setSubmitting(false),
+                    onError: (errors) => { setSubmitting(false); toastCalendarError(errors, 'Could not create the event.'); },
                 },
             );
             return;
@@ -621,15 +665,15 @@ function QuickCreateModal({
                         </button>
                         <button
                             type="button"
-                            onClick={() => setType('google')}
-                            disabled={connections.length === 0}
+                            onClick={() => setType('external')}
+                            disabled={!hasExternalTargets}
                             className={cn(
                                 'flex-1 h-8 px-3 text-xs font-semibold rounded-[5px] transition-colors',
-                                type === 'google' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                                connections.length === 0 && 'opacity-40 cursor-not-allowed',
+                                type === 'external' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                                !hasExternalTargets && 'opacity-40 cursor-not-allowed',
                             )}
                         >
-                            Google
+                            Calendar
                         </button>
                     </div>
 
@@ -645,17 +689,17 @@ function QuickCreateModal({
                         />
                     </div>
 
-                    {/* Google: event vs task sub-toggle, then calendar/list picker */}
-                    {type === 'google' && (
+                    {/* External: event vs task (Google Tasks) sub-toggle, then calendar/list picker */}
+                    {type === 'external' && (
                         <>
                             <div className="inline-flex w-full p-[3px] bg-secondary border border-border rounded-md gap-[1px]">
                                 <button
                                     type="button"
-                                    onClick={() => { setGoogleKind('event'); setConnectionId(calendarConns[0]?.id ?? null); }}
+                                    onClick={() => { setExternalKind('event'); setConnectionId(calendarConns[0]?.id ?? null); }}
                                     disabled={calendarConns.length === 0}
                                     className={cn(
                                         'flex-1 h-8 px-3 text-xs font-semibold rounded-[5px] transition-colors',
-                                        googleKind === 'event' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                                        externalKind === 'event' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
                                         calendarConns.length === 0 && 'opacity-40 cursor-not-allowed',
                                     )}
                                 >
@@ -663,11 +707,11 @@ function QuickCreateModal({
                                 </button>
                                 <button
                                     type="button"
-                                    onClick={() => { setGoogleKind('task'); setConnectionId(taskConns[0]?.id ?? null); }}
+                                    onClick={() => { setExternalKind('task'); setConnectionId(taskConns[0]?.id ?? null); }}
                                     disabled={taskConns.length === 0}
                                     className={cn(
                                         'flex-1 h-8 px-3 text-xs font-semibold rounded-[5px] transition-colors',
-                                        googleKind === 'task' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                                        externalKind === 'task' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
                                         taskConns.length === 0 && 'opacity-40 cursor-not-allowed',
                                     )}
                                 >
@@ -675,11 +719,11 @@ function QuickCreateModal({
                                 </button>
                             </div>
                             <div className="space-y-1.5">
-                                <Label>{googleKind === 'task' ? 'Task list' : 'Calendar'}</Label>
+                                <Label>{externalKind === 'task' ? 'Task list' : 'Calendar'}</Label>
                                 <Select value={connectionId ? String(connectionId) : ''} onValueChange={(v) => setConnectionId(parseInt(v, 10))}>
-                                    <SelectTrigger><SelectValue placeholder={`Select ${googleKind === 'task' ? 'list' : 'calendar'}…`} /></SelectTrigger>
+                                    <SelectTrigger aria-label={externalKind === 'task' ? 'Task list' : 'Calendar'}><SelectValue placeholder={`Select ${externalKind === 'task' ? 'list' : 'calendar'}…`} /></SelectTrigger>
                                     <SelectContent>
-                                        {(googleKind === 'task' ? taskConns : calendarConns).map((c) => (
+                                        {(externalKind === 'task' ? taskConns : calendarConns).map((c) => (
                                             <SelectItem key={c.id} value={String(c.id)}>
                                                 <span className="flex items-center gap-2">
                                                     <span className="size-2 rounded-full" style={{ background: c.external_calendar_color || '#4285F4' }} />
@@ -691,11 +735,14 @@ function QuickCreateModal({
                                     </SelectContent>
                                 </Select>
                             </div>
+                            {externalKind === 'event' && (
+                                <QuickCreateMeetingFields open={open} connectionId={connectionId} value={meeting} onChange={setMeeting} hasTime={!!timeInput} />
+                            )}
                         </>
                     )}
 
                     {/* Project (Brainitive only) */}
-                    {type !== 'google' && (
+                    {type !== 'external' && (
                     <>
                     <div className="space-y-1.5">
                         <Label>Project</Label>
@@ -783,24 +830,40 @@ function QuickCreateModal({
 }
 
 // ── Multi-day bar (month view) ───────────────────────────────────────────
-function MultiDayBar({ event, span }: { event: CalendarEvent; span: number }) {
+function MultiDayBar({ event, span, onOpenExternal }: { event: CalendarEvent; span: number; onOpenExternal?: OpenExternal }) {
     const { base: color } = statusColor(event);
+    const className = cn(
+        'absolute left-0.5 right-0.5 h-[18px] rounded-md px-1.5 text-[11px] font-medium leading-[18px] truncate transition-shadow text-left',
+        'hover:shadow-sm border border-transparent hover:border-border cursor-pointer',
+        event.is_completed && 'opacity-50',
+    );
+    const style = { backgroundColor: `${color}25`, color, width: `calc(${span * 100}% - 4px)` };
+    const inner = (
+        <span className={cn('truncate inline-flex items-center gap-1', event.is_completed && 'line-through')}>
+            <span className="size-1.5 rounded-full shrink-0" style={{ background: color }} />
+            {event.title}
+        </span>
+    );
+
+    // External events open their dialog (any provider), like single-day chips.
+    if (isExternal(event) && onOpenExternal && event.connection_id) {
+        return (
+            <button
+                type="button"
+                data-event="true"
+                className={className}
+                style={style}
+                title={event.provider_label ? `${event.title} — ${event.provider_label}` : event.title}
+                onClick={(e) => { e.stopPropagation(); onOpenExternal(String(event.id), event.connection_id!, event.type === 'google_task' ? 'task' : 'event'); }}
+            >
+                {inner}
+            </button>
+        );
+    }
+
     return (
-        <Link
-            href={eventHref(event)}
-            data-event="true"
-            className={cn(
-                'absolute left-0.5 right-0.5 h-[18px] rounded-md px-1.5 text-[11px] font-medium leading-[18px] truncate transition-shadow',
-                'hover:shadow-sm border border-transparent hover:border-border cursor-pointer',
-                event.is_completed && 'opacity-50',
-            )}
-            style={{ backgroundColor: `${color}25`, color, width: `calc(${span * 100}% - 4px)` }}
-            title={event.title}
-        >
-            <span className={cn('truncate inline-flex items-center gap-1', event.is_completed && 'line-through')}>
-                <span className="size-1.5 rounded-full shrink-0" style={{ background: color }} />
-                {event.title}
-            </span>
+        <Link href={eventHref(event)} data-event="true" className={className} style={style} title={event.title}>
+            {inner}
         </Link>
     );
 }
@@ -817,7 +880,7 @@ function useNow(intervalMs = 60_000) {
 
 // ── Resizable timed event ───────────────────────────────────────────────
 function TimedEvent({
-    event, top, height, hourHeight, snapMinutes, dateIso, laneIdx, laneCount, onOpenGoogle,
+    event, top, height, hourHeight, snapMinutes, dateIso, laneIdx, laneCount, onOpenExternal,
 }: {
     event: CalendarEvent;
     top: number;
@@ -829,14 +892,14 @@ function TimedEvent({
     laneIdx: number;
     /** Total number of side-by-side lanes for this overlap group. */
     laneCount: number;
-    onOpenGoogle?: (eventId: string, connectionId: number, kind: 'event' | 'task') => void;
+    onOpenExternal?: OpenExternal;
 }) {
     const [drag, setDrag] = useState<{ top: number; height: number } | null>(null);
     const resizing = drag !== null;
 
     /** Common drag-resize handler. `edge` = which edge is being dragged. */
     const startResize = (e: React.MouseEvent, edge: 'top' | 'bottom') => {
-        if (event.is_recurring_instance) return;
+        if (!isMovable(event)) return;
         e.preventDefault();
         e.stopPropagation();
         const startY = e.clientY;
@@ -882,7 +945,10 @@ function TimedEvent({
                 timezone: browserTimezone(),
             };
             if (event.connection_id) payload.connection_id = event.connection_id;
-            router.patch(route('calendar.reschedule'), payload, { preserveScroll: true });
+            router.patch(route('calendar.reschedule'), payload, {
+                preserveScroll: true,
+                onError: (errors) => toastCalendarError(errors, 'Could not move this event.'),
+            });
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
@@ -907,7 +973,7 @@ function TimedEvent({
             }}
         >
             {/* Top resize handle */}
-            {!event.is_recurring_instance && (
+            {isMovable(event) && (
                 <div
                     onMouseDown={(e) => startResize(e, 'top')}
                     className={cn(
@@ -919,9 +985,9 @@ function TimedEvent({
                     title="Drag to start earlier"
                 />
             )}
-            <EventChip event={event} fill onOpenGoogle={onOpenGoogle} />
+            <EventChip event={event} fill onOpenExternal={onOpenExternal} />
             {/* Bottom resize handle */}
-            {!event.is_recurring_instance && (
+            {isMovable(event) && (
                 <div
                     onMouseDown={(e) => startResize(e, 'bottom')}
                     className={cn(
@@ -977,7 +1043,7 @@ function layoutLanes(items: { startMins: number; endMins: number }[]): { laneIdx
 }
 
 // ── Month view ───────────────────────────────────────────────────────────
-function MonthView({ events, date, onQuickCreate, onOpenGoogle }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenGoogle: (eventId: string, connectionId: number, kind: "event" | "task") => void }) {
+function MonthView({ events, date, onQuickCreate, onOpenExternal }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenExternal: OpenExternal }) {
     const d = parseISO(date);
     const year = d.getFullYear();
     const month = d.getMonth();
@@ -1060,13 +1126,13 @@ function MonthView({ events, date, onQuickCreate, onOpenGoogle }: { events: Cale
                                     const dayOfWeek = startCell % 7;
                                     const maxSpan = 7 - dayOfWeek;
                                     const span = Math.min(daysBetween(start, end) + 1 - (isoDate(start) === iso ? 0 : daysBetween(start, cellDate)), maxSpan);
-                                    return <MultiDayBar key={`${event.type}-${event.id}-${iso}`} event={event} span={span} />;
+                                    return <MultiDayBar key={`${event.type}-${event.connection_id ?? ''}-${event.id}-${iso}`} event={event} span={span} onOpenExternal={onOpenExternal} />;
                                 })}
                             </div>
 
                             {/* Single-day events */}
                             <div className="space-y-0.5 mt-[26px]">
-                                {dayEvents.slice(0, 3).map((ev) => <EventChip key={`${ev.type}-${ev.id}`} event={ev} compact onOpenGoogle={onOpenGoogle} />)}
+                                {dayEvents.slice(0, 3).map((ev) => <EventChip key={`${ev.type}-${ev.connection_id ?? ''}-${ev.id}`} event={ev} compact onOpenExternal={onOpenExternal} />)}
                                 {dayEvents.length > 3 && <div className="text-[10px] text-muted-foreground px-1.5">+{dayEvents.length - 3} more</div>}
                             </div>
                         </div>
@@ -1084,14 +1150,14 @@ function TimeGrid({
     timedByCol,
     dateKey,
     onQuickCreate,
-    onOpenGoogle,
+    onOpenExternal,
 }: {
     columns: { key: string; label: string; iso: string }[];
     allDayByCol: Map<string, CalendarEvent[]>;
     timedByCol: Map<string, CalendarEvent[]>;
     dateKey: string;
     onQuickCreate: (s: NonNullable<QuickCreateState>) => void;
-    onOpenGoogle: (eventId: string, connectionId: number, kind: 'event' | 'task') => void;
+    onOpenExternal: OpenExternal;
 }) {
     const today = isoDate(new Date());
     const now = useNow();
@@ -1140,7 +1206,7 @@ function TimeGrid({
                                     onQuickCreate({ date: col.iso, time: null });
                                 }}
                             >
-                                {items.map((ev) => <EventChip key={`${ev.type}-${ev.id}`} event={ev} compact onOpenGoogle={onOpenGoogle} />)}
+                                {items.map((ev) => <EventChip key={`${ev.type}-${ev.connection_id ?? ''}-${ev.id}`} event={ev} compact onOpenExternal={onOpenExternal} />)}
                             </div>
                         );
                     })}
@@ -1242,7 +1308,7 @@ function TimeGrid({
                                         const lanes = layoutLanes(computed.map((c) => ({ startMins: c.startMins, endMins: c.endMins })));
                                         return computed.map((c, i) => (
                                             <TimedEvent
-                                                key={`${c.ev.type}-${c.ev.id}-${c.ev.due_date}`}
+                                                key={`${c.ev.type}-${c.ev.connection_id ?? ''}-${c.ev.id}-${c.ev.due_date}`}
                                                 event={c.ev}
                                                 top={c.top}
                                                 height={c.height}
@@ -1251,7 +1317,7 @@ function TimeGrid({
                                                 dateIso={col.iso}
                                                 laneIdx={lanes[i].laneIdx}
                                                 laneCount={lanes[i].laneCount}
-                                                onOpenGoogle={onOpenGoogle}
+                                                onOpenExternal={onOpenExternal}
                                             />
                                         ));
                                     })()}
@@ -1266,7 +1332,7 @@ function TimeGrid({
 }
 
 // ── Week view ────────────────────────────────────────────────────────────
-function WeekView({ events, date, onQuickCreate, onOpenGoogle }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenGoogle: (eventId: string, connectionId: number, kind: "event" | "task") => void }) {
+function WeekView({ events, date, onQuickCreate, onOpenExternal }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenExternal: OpenExternal }) {
     const d = parseISO(date);
     const dayOfWeek = (d.getDay() + 6) % 7;
     const monday = new Date(d);
@@ -1290,11 +1356,11 @@ function WeekView({ events, date, onQuickCreate, onOpenGoogle }: { events: Calen
         else allDayByCol.get(key)!.push(ev);
     });
 
-    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} onQuickCreate={onQuickCreate} onOpenGoogle={onOpenGoogle} />;
+    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} onQuickCreate={onQuickCreate} onOpenExternal={onOpenExternal} />;
 }
 
 // ── Day view ─────────────────────────────────────────────────────────────
-function DayView({ events, date, onQuickCreate, onOpenGoogle }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenGoogle: (eventId: string, connectionId: number, kind: "event" | "task") => void }) {
+function DayView({ events, date, onQuickCreate, onOpenExternal }: { events: CalendarEvent[]; date: string; onQuickCreate: (s: NonNullable<QuickCreateState>) => void; onOpenExternal: OpenExternal }) {
     const d = parseISO(date);
     const iso = isoDate(d);
     const dayName = d.toLocaleDateString('en', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -1312,21 +1378,11 @@ function DayView({ events, date, onQuickCreate, onOpenGoogle }: { events: Calend
         else allDayByCol.get(iso)!.push(ev);
     });
 
-    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} onQuickCreate={onQuickCreate} onOpenGoogle={onOpenGoogle} />;
+    return <TimeGrid columns={columns} allDayByCol={allDayByCol} timedByCol={timedByCol} dateKey={date} onQuickCreate={onQuickCreate} onOpenExternal={onOpenExternal} />;
 }
 
-// ── Google event editor dialog ───────────────────────────────────────────
-type GoogleEventDetails = {
-    id: string;
-    summary?: string;
-    description?: string;
-    location?: string;
-    start?: { date?: string; dateTime?: string; timeZone?: string };
-    end?: { date?: string; dateTime?: string; timeZone?: string };
-    htmlLink?: string;
-};
-
-function GoogleEventDialog({
+// ── External event dialog (any provider) ─────────────────────────────────
+function ExternalEventDialog({
     eventId, connectionId, onClose,
 }: {
     eventId: string | null;
@@ -1335,7 +1391,9 @@ function GoogleEventDialog({
 }) {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [details, setDetails] = useState<GoogleEventDetails | null>(null);
+    const [details, setDetails] = useState<NormalizedCalendarEvent | null>(null);
+    const [providerLabel, setProviderLabel] = useState('the calendar');
+    const [readOnly, setReadOnly] = useState(false);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [location, setLocation] = useState('');
@@ -1350,34 +1408,40 @@ function GoogleEventDialog({
     useEffect(() => {
         if (!open || !eventId || !connectionId) return;
         setLoading(true);
-        fetch(route('calendar.connections.events.show', [connectionId, eventId]), { credentials: 'same-origin' })
-            .then((r) => r.json())
+        // A late answer for a previously opened event must never fill (or close) this one.
+        const controller = new AbortController();
+        // Ask for the times in the browser's zone, the same zone they're saved back in.
+        const url = `${route('calendar.connections.events.show', [connectionId, eventId])}?timezone=${encodeURIComponent(browserTimezone())}`;
+        fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' }, signal: controller.signal })
+            .then((r) => r.json().catch(() => ({})).then((data) => {
+                // Not JSON (expired session → login page, HTML error page) → the generic message.
+                if (!r.ok || !data?.event) throw new Error(data?.message || data?.error || 'Could not load this event.');
+                return data;
+            }))
             .then((data) => {
-                const ev: GoogleEventDetails = data.event;
-                setDetails(ev);
-                setTitle(ev?.summary || '');
+                const ev: NormalizedCalendarEvent | undefined = data.event;
+                setDetails(ev ?? null);
+                setProviderLabel(data.provider_label || 'the calendar');
+                setReadOnly(!!data.read_only);
+                setTitle(ev?.title || '');
                 setDescription(ev?.description || '');
                 setLocation(ev?.location || '');
-                if (ev?.start?.date) {
-                    setAllDay(true);
-                    setStartDate(ev.start.date);
-                    setStartTime('');
-                    // Google all-day end is exclusive — subtract a day for display
-                    const e = ev.end?.date ? new Date(ev.end.date) : new Date(ev.start.date);
-                    e.setDate(e.getDate() - 1);
-                    setEndDate(e.toISOString().split('T')[0]);
-                    setEndTime('');
-                } else if (ev?.start?.dateTime) {
-                    setAllDay(false);
-                    setStartDate(ev.start.dateTime.substring(0, 10));
-                    setStartTime(ev.start.dateTime.substring(11, 16));
-                    setEndDate(ev.end?.dateTime?.substring(0, 10) || ev.start.dateTime.substring(0, 10));
-                    setEndTime(ev.end?.dateTime?.substring(11, 16) || '');
-                }
+                setAllDay(!!ev?.all_day);
+                // Normalized events already have an inclusive end date.
+                setStartDate(ev?.start_date || '');
+                setStartTime(ev?.start_time || '');
+                setEndDate(ev?.end_date || ev?.start_date || '');
+                setEndTime(ev?.end_time || '');
                 setLoading(false);
             })
-            .catch(() => setLoading(false));
-    }, [eventId, connectionId, open]);
+            .catch((error: unknown) => {
+                if (controller.signal.aborted) return;
+                setLoading(false);
+                toast.error(error instanceof Error ? error.message : 'Could not load this event.');
+                onClose();
+            });
+        return () => controller.abort();
+    }, [eventId, connectionId, open]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!open) return null;
 
@@ -1402,16 +1466,17 @@ function GoogleEventDialog({
         router.patch(route('calendar.connections.events.update', [connectionId, eventId]), payload, {
             preserveScroll: true,
             onSuccess: () => { setSaving(false); onClose(); },
-            onError: () => setSaving(false),
+            onError: (errors) => { setSaving(false); toastCalendarError(errors, 'Could not save the event.'); },
         });
     };
 
     const remove = () => {
         if (!eventId || !connectionId) return;
-        if (!window.confirm('Delete this event from Google Calendar?')) return;
+        if (!window.confirm(`Delete this event from ${providerLabel}?`)) return;
         router.delete(route('calendar.connections.events.destroy', [connectionId, eventId]), {
             preserveScroll: true,
             onSuccess: () => onClose(),
+            onError: (errors) => toastCalendarError(errors, 'Could not delete the event.'),
         });
     };
 
@@ -1419,13 +1484,17 @@ function GoogleEventDialog({
         <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>Edit Google event</DialogTitle>
-                    <DialogDescription>Changes are saved directly to Google Calendar.</DialogDescription>
+                    <DialogTitle>{readOnly ? 'Event' : 'Edit event'}</DialogTitle>
+                    <DialogDescription>
+                        {readOnly
+                            ? <span className="inline-flex items-center gap-1"><Lock className="size-3" />This calendar is read-only ({providerLabel}).</span>
+                            : `Changes are saved directly to ${providerLabel}.`}
+                    </DialogDescription>
                 </DialogHeader>
                 {loading ? (
                     <p className="text-sm text-muted-foreground py-8 text-center">Loading…</p>
                 ) : (
-                    <div className="space-y-4">
+                    <fieldset disabled={readOnly} className="space-y-4 min-w-0">
                         <div className="space-y-1.5">
                             <Label htmlFor="ge-title">Title</Label>
                             <Input id="ge-title" value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -1441,7 +1510,7 @@ function GoogleEventDialog({
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
                                 rows={4}
-                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-70"
                                 placeholder="Notes, agenda, links…"
                             />
                         </div>
@@ -1471,22 +1540,38 @@ function GoogleEventDialog({
                                 </div>
                             )}
                         </div>
-                        {details?.htmlLink && (
-                            <a href={details.htmlLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                                <ExternalLink className="size-3" />Open in Google Calendar
-                            </a>
-                        )}
+                    </fieldset>
+                )}
+                {!loading && safeJoinUrl(details?.conference_url) && (
+                    <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-3 py-2" data-testid="event-conference">
+                        <Video className="size-4 text-primary" />
+                        <span className="flex-1 text-sm">{CONFERENCE_LABELS[details?.conference_provider ?? 'other']}</span>
+                        <Button size="sm" variant="outline" type="button" onClick={() => copyMeetingLink(safeJoinUrl(details?.conference_url)!)}>Copy link</Button>
+                        <Button size="sm" asChild>
+                            <a href={safeJoinUrl(details?.conference_url)!} target="_blank" rel="noopener noreferrer">Join</a>
+                        </Button>
                     </div>
                 )}
-                <div className="flex items-center justify-between pt-2">
-                    <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={remove} disabled={loading || saving}>
-                        <Trash2 className="size-3.5 mr-1.5" />Delete
-                    </Button>
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-                        <Button onClick={save} disabled={loading || saving || !title.trim()}>{saving ? 'Saving…' : 'Save'}</Button>
+                {!loading && safeExternalHref(details?.external_url) && (
+                    <a href={safeExternalHref(details?.external_url)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                        <ExternalLink className="size-3" />Open in {providerLabel}
+                    </a>
+                )}
+                {readOnly ? (
+                    <div className="flex justify-end pt-2">
+                        <Button variant="outline" onClick={onClose}>Close</Button>
                     </div>
-                </div>
+                ) : (
+                    <div className="flex items-center justify-between pt-2">
+                        <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={remove} disabled={loading || saving}>
+                            <Trash2 className="size-3.5 mr-1.5" />Delete
+                        </Button>
+                        <div className="flex gap-2">
+                            <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+                            <Button onClick={save} disabled={loading || saving || !title.trim()}>{saving ? 'Saving…' : 'Save'}</Button>
+                        </div>
+                    </div>
+                )}
             </DialogContent>
         </Dialog>
     );
@@ -1639,16 +1724,25 @@ function GoogleTaskDialog({
 }
 
 // ── Connections menu (Add calendar / Manage) ─────────────────────────────
-type PickerData = {
-    provider: string;
-    account_email: string;
-    account_name: string | null;
-    calendars: { id: string; summary: string; backgroundColor: string | null; primary: boolean; access_role: string }[];
-    task_lists: { id: string; title: string }[];
-};
+function ProviderBadge({ badge, color, className }: { badge: string; color: string; className?: string }) {
+    return (
+        <span className={cn('size-4 rounded grid place-items-center text-[10px] font-bold text-white shrink-0', className)} style={{ background: color }}>
+            {badge}
+        </span>
+    );
+}
 
-function ConnectionsMenu({ connections }: { connections: CalendarConnectionRow[] }) {
+function ConnectionsMenu({ connections, providers }: { connections: CalendarConnectionRow[]; providers: CalendarProviderInfo[] }) {
     const [manageOpen, setManageOpen] = useState(false);
+    const [manualProvider, setManualProvider] = useState<CalendarProviderInfo | null>(null);
+
+    const connect = (provider: CalendarProviderInfo) => {
+        if (provider.connect_mode === 'oauth' && provider.redirect_url) {
+            window.location.href = provider.redirect_url;
+        } else {
+            setManualProvider(provider);
+        }
+    };
 
     return (
         <>
@@ -1659,10 +1753,12 @@ function ConnectionsMenu({ connections }: { connections: CalendarConnectionRow[]
                     </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem onClick={() => window.location.href = route('calendar.connections.google.redirect')}>
-                        <span className="size-4 rounded grid place-items-center text-[10px] font-bold bg-[#4285F4] text-white mr-2">G</span>
-                        Google Calendar
-                    </DropdownMenuItem>
+                    {providers.map((provider) => (
+                        <DropdownMenuItem key={provider.key} onClick={() => connect(provider)}>
+                            <ProviderBadge badge={provider.badge} color={provider.color} className="mr-2" />
+                            {provider.label}
+                        </DropdownMenuItem>
+                    ))}
                     {connections.length > 0 && <DropdownMenuSeparator />}
                     {connections.length > 0 && (
                         <DropdownMenuItem onClick={() => setManageOpen(true)}>
@@ -1672,6 +1768,8 @@ function ConnectionsMenu({ connections }: { connections: CalendarConnectionRow[]
                     )}
                 </DropdownMenuContent>
             </DropdownMenu>
+
+            <ManualConnectDialog provider={manualProvider} onClose={() => setManualProvider(null)} />
 
             <Dialog open={manageOpen} onOpenChange={setManageOpen}>
                 <DialogContent className="sm:max-w-md">
@@ -1688,10 +1786,17 @@ function ConnectionsMenu({ connections }: { connections: CalendarConnectionRow[]
                                 <span className="size-3 rounded-full shrink-0" style={{ background: c.external_calendar_color || '#4285F4' }} />
                                 <div className="min-w-0 flex-1">
                                     <div className="text-sm font-medium truncate flex items-center gap-1.5">
-                                        {c.external_calendar_name}
-                                        <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground px-1 py-0.5 rounded bg-muted">{c.kind === 'tasks' ? 'Tasks' : 'Calendar'}</span>
+                                        <span className="truncate">{c.external_calendar_name}</span>
+                                        <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground px-1 py-0.5 rounded bg-muted shrink-0">{c.kind === 'tasks' ? 'Tasks' : 'Calendar'}</span>
+                                        {c.read_only && <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground px-1 py-0.5 rounded bg-muted shrink-0">Read-only</span>}
                                     </div>
-                                    <div className="text-[11px] text-muted-foreground truncate">{c.account_email}</div>
+                                    <div className="text-[11px] text-muted-foreground truncate">{c.provider_label} · {c.account_email}</div>
+                                    {c.sync_error && (
+                                        <div className="text-[11px] text-amber-700 dark:text-amber-400 flex items-start gap-1 mt-0.5">
+                                            <AlertTriangle className="size-3 mt-0.5 shrink-0" />
+                                            <span>{c.sync_error}</span>
+                                        </div>
+                                    )}
                                 </div>
                                 <Button
                                     variant="ghost"
@@ -1702,6 +1807,7 @@ function ConnectionsMenu({ connections }: { connections: CalendarConnectionRow[]
                                         router.delete(route('calendar.connections.destroy', c.id), { preserveScroll: true });
                                     }}
                                     title="Disconnect"
+                                    aria-label={`Disconnect ${c.external_calendar_name ?? 'calendar'}`}
                                 >
                                     <Trash2 className="size-3.5" />
                                 </Button>
@@ -1714,8 +1820,91 @@ function ConnectionsMenu({ connections }: { connections: CalendarConnectionRow[]
     );
 }
 
-// ── Calendar picker dialog (after OAuth) ─────────────────────────────────
-function CalendarPickerDialog({ data, onClose }: { data: PickerData | null; onClose: () => void }) {
+// ── Generic connect dialog for 'form' / 'url' providers (CalDAV, ICS links, …) ──
+function ManualConnectDialog({ provider, onClose }: { provider: CalendarProviderInfo | null; onClose: () => void }) {
+    const [values, setValues] = useState<Record<string, string>>({});
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        setValues({});
+        setErrors({});
+        setSubmitting(false);
+    }, [provider?.key]);
+
+    if (!provider) return null;
+
+    const submit = (e: React.FormEvent) => {
+        e.preventDefault();
+        setSubmitting(true);
+        router.post(route('calendar.connections.manual.store', provider.key), values, {
+            preserveScroll: true,
+            onSuccess: (page) => {
+                setSubmitting(false);
+                const message = (page.props as PageProps).flash?.success;
+                if (message) toast.success(message);
+                onClose();
+            },
+            onError: (errs) => {
+                setSubmitting(false);
+                setErrors(errs);
+                // An error the dialog has no place for (not a field, not `calendar`) still shows.
+                const shown = new Set([...provider.fields.map((f) => f.name), 'calendar']);
+                if (!Object.keys(errs).some((key) => shown.has(key))) toastCalendarError(errs, 'Could not connect this calendar.');
+            },
+        });
+    };
+
+    return (
+        <Dialog open={!!provider} onOpenChange={(o) => { if (!o) onClose(); }}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Connect {provider.label}</DialogTitle>
+                    <DialogDescription>
+                        {provider.capabilities.write
+                            ? 'Events show on this calendar, and you can add and move them here.'
+                            : 'Events show on this calendar. This connection is read-only.'}
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={submit} className="space-y-4" data-testid="manual-connect-form">
+                    {provider.fields.map((field) => {
+                        const id = `mc-${provider.key}-${field.name}`;
+                        return (
+                            <div key={field.name} className="space-y-1.5">
+                                <Label htmlFor={id}>{field.label}</Label>
+                                <Input
+                                    id={id}
+                                    type={field.type}
+                                    value={values[field.name] ?? ''}
+                                    onChange={(e) => setValues({ ...values, [field.name]: e.target.value })}
+                                    placeholder={field.placeholder ?? undefined}
+                                    required={field.required}
+                                    autoComplete={field.type === 'password' ? 'new-password' : 'off'}
+                                    aria-invalid={!!errors[field.name]}
+                                    aria-describedby={[field.help && `${id}-help`, errors[field.name] && `${id}-error`].filter(Boolean).join(' ') || undefined}
+                                />
+                                {field.help && <p id={`${id}-help`} className="text-xs text-muted-foreground">{field.help}</p>}
+                                {errors[field.name] && <p id={`${id}-error`} className="text-xs text-destructive">{errors[field.name]}</p>}
+                            </div>
+                        );
+                    })}
+                    {errors.calendar && (
+                        <p className="text-sm text-destructive flex items-start gap-1.5" role="alert">
+                            <AlertTriangle className="size-4 mt-0.5 shrink-0" />{errors.calendar}
+                        </p>
+                    )}
+                    <div className="flex justify-end gap-2 pt-2">
+                        <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
+                        <Button type="submit" disabled={submitting}>{submitting ? 'Connecting…' : 'Connect'}</Button>
+                    </div>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// ── Calendar picker dialog (after connecting) ────────────────────────────
+function CalendarPickerDialog({ data, onClose }: { data: CalendarPickerData | null; onClose: () => void }) {
     const [selectedCalendars, setSelectedCalendars] = useState<string[]>([]);
     const [selectedLists, setSelectedLists] = useState<string[]>([]);
     useEffect(() => {
@@ -1730,6 +1919,7 @@ function CalendarPickerDialog({ data, onClose }: { data: PickerData | null; onCl
     if (!data) return null;
 
     const totalPicked = selectedCalendars.length + selectedLists.length;
+    const hasLists = data.task_lists.length > 0;
 
     const submit = () => {
         if (totalPicked === 0) return;
@@ -1751,7 +1941,7 @@ function CalendarPickerDialog({ data, onClose }: { data: PickerData | null; onCl
                 <DialogHeader>
                     <DialogTitle>Choose what to add</DialogTitle>
                     <DialogDescription>
-                        Pick which of <strong>{data.account_email}</strong>'s calendars and task lists to show on Brainitive.
+                        Pick which of <strong>{data.account_email}</strong>'s calendars{hasLists ? ' and task lists' : ''} to show on Brainitive.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 max-h-96 overflow-y-auto">
@@ -1771,9 +1961,10 @@ function CalendarPickerDialog({ data, onClose }: { data: PickerData | null; onCl
                                                 active ? 'bg-primary/10' : 'hover:bg-muted',
                                             )}
                                         >
-                                            <span className="size-3 rounded-full shrink-0" style={{ background: c.backgroundColor || '#4285F4' }} />
-                                            <span className="flex-1 text-left truncate">{c.summary}</span>
+                                            <span className="size-3 rounded-full shrink-0" style={{ background: c.color || '#4285F4' }} />
+                                            <span className="flex-1 text-left truncate">{c.name}</span>
                                             {c.primary && <span className="text-[10px] text-muted-foreground">primary</span>}
+                                            {c.read_only && <span className="text-[10px] text-muted-foreground">read-only</span>}
                                             {active && <Check className="size-4 text-primary shrink-0" />}
                                         </button>
                                     );
@@ -1781,7 +1972,7 @@ function CalendarPickerDialog({ data, onClose }: { data: PickerData | null; onCl
                             </div>
                         </div>
                     )}
-                    {data.task_lists.length > 0 && (
+                    {hasLists && (
                         <div>
                             <p className="px-1 mb-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Task lists</p>
                             <div className="space-y-1">
@@ -1817,17 +2008,39 @@ function CalendarPickerDialog({ data, onClose }: { data: PickerData | null; onCl
     );
 }
 
+/** Calendars that failed to load last time — a small warning under the header. */
+function SyncWarnings({ connections }: { connections: CalendarConnectionRow[] }) {
+    const failing = connections.filter((c) => c.sync_error);
+    if (failing.length === 0) return null;
+    return (
+        <div className="px-5 py-1.5 border-b border-amber-200 dark:border-amber-900/60 bg-amber-50 dark:bg-amber-950/30 text-xs text-amber-800 dark:text-amber-300 space-y-0.5 shrink-0" role="status" data-testid="calendar-sync-warnings">
+            {failing.map((c) => (
+                <p key={c.id} className="flex items-start gap-1.5 min-w-0">
+                    <AlertTriangle className="size-3.5 mt-px shrink-0" />
+                    <span className="min-w-0 break-words"><strong className="font-semibold">{c.external_calendar_name || c.provider_label}</strong> ({c.provider_label}): {c.sync_error}</span>
+                </p>
+            ))}
+        </div>
+    );
+}
+
 // ── Main page ────────────────────────────────────────────────────────────
-export default function CalendarIndex({ events, view, date, projectsForFilter, accessibleProjects, connections, filters }: Props) {
+export default function CalendarIndex({ events, view, date, projectsForFilter, accessibleProjects, connections, calendarProviders, filters }: Props) {
     const d = parseISO(date);
+    const { props: { flash }, url: pageUrl } = usePage<PageProps>();
     const [quickCreate, setQuickCreate] = useState<QuickCreateState>(null);
-    const [pickerData, setPickerData] = useState<PickerData | null>(null);
-    const [googleEvent, setGoogleEvent] = useState<{ id: string; connectionId: number } | null>(null);
+    const [pickerData, setPickerData] = useState<CalendarPickerData | null>(null);
+    const [externalEvent, setExternalEvent] = useState<{ id: string; connectionId: number } | null>(null);
     const [googleTask, setGoogleTask] = useState<{ id: string; connectionId: number } | null>(null);
-    const openGoogle = (id: string, connectionId: number, kind: 'event' | 'task') => {
+    const openExternal: OpenExternal = (id, connectionId, kind) => {
         if (kind === 'task') setGoogleTask({ id, connectionId });
-        else setGoogleEvent({ id, connectionId });
+        else setExternalEvent({ id, connectionId });
     };
+
+    // Connect flows end on this page with a flash message (e.g. "Connecting … was cancelled").
+    useEffect(() => {
+        if (flash?.error) toast.error(flash.error);
+    }, [flash?.error]);
     const changeView = (nextView: CalendarView) => {
         if (nextView !== view) {
             saveCalendarView(nextView);
@@ -1836,15 +2049,17 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
         router.get(route('calendar.index'), { view: nextView, date, ...filtersToParams(filters) }, { preserveState: true });
     };
 
-    // If the URL has ?picking=google, fetch the pending session state and show picker.
+    // After connecting (?picking=<provider>), fetch the pending session state and show the picker —
+    // on a full page load (OAuth callback) and after an Inertia redirect (CalDAV form, BRAI-141).
     useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('picking') === 'google') {
-            fetch(route('calendar.connections.pending'), { credentials: 'same-origin' })
-                .then((r) => r.json())
-                .then((data) => { if (data.pending) setPickerData(data.pending); });
+        const params = new URL(pageUrl, window.location.origin).searchParams;
+        if (params.get('picking')) {
+            fetch(route('calendar.connections.pending'), { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+                .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+                .then((data) => { if (data.pending) setPickerData(data.pending); })
+                .catch(() => toast.error('Could not load the calendars to pick from. Please connect again.'));
         }
-    }, []);
+    }, [pageUrl]);
     const headerLabel = view === 'month'
         ? d.toLocaleDateString('en', { month: 'long', year: 'numeric' })
         : view === 'week'
@@ -1876,7 +2091,8 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
                     <h1 className="text-lg font-bold tracking-tight">{headerLabel}</h1>
                     <div className="flex-1" />
                     <FilterBar projectsForFilter={projectsForFilter} connections={connections} filters={filters} view={view} date={date} />
-                    <ConnectionsMenu connections={connections} />
+                    <ConnectionsMenu connections={connections} providers={calendarProviders} />
+                    <CalendarFeedButton />
                     <div className="inline-flex p-[3px] bg-secondary border border-border rounded-[7px] gap-[1px]">
                         {VIEWS.map((v) => {
                             const icons = { month: Calendar, week: Kanban, day: Clock };
@@ -1899,9 +2115,11 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
                     </div>
                 </div>
 
-                {view === 'month' && <MonthView events={events} date={date} onQuickCreate={setQuickCreate} onOpenGoogle={openGoogle} />}
-                {view === 'week' && <WeekView events={events} date={date} onQuickCreate={setQuickCreate} onOpenGoogle={openGoogle} />}
-                {view === 'day' && <DayView events={events} date={date} onQuickCreate={setQuickCreate} onOpenGoogle={openGoogle} />}
+                <SyncWarnings connections={connections} />
+
+                {view === 'month' && <MonthView events={events} date={date} onQuickCreate={setQuickCreate} onOpenExternal={openExternal} />}
+                {view === 'week' && <WeekView events={events} date={date} onQuickCreate={setQuickCreate} onOpenExternal={openExternal} />}
+                {view === 'day' && <DayView events={events} date={date} onQuickCreate={setQuickCreate} onOpenExternal={openExternal} />}
 
                 <QuickCreateModal
                     state={quickCreate}
@@ -1912,10 +2130,11 @@ export default function CalendarIndex({ events, view, date, projectsForFilter, a
 
                 <CalendarPickerDialog data={pickerData} onClose={() => setPickerData(null)} />
 
-                <GoogleEventDialog
-                    eventId={googleEvent?.id ?? null}
-                    connectionId={googleEvent?.connectionId ?? null}
-                    onClose={() => setGoogleEvent(null)}
+                <ExternalEventDialog
+                    key={externalEvent ? `${externalEvent.connectionId}-${externalEvent.id}` : 'closed'}
+                    eventId={externalEvent?.id ?? null}
+                    connectionId={externalEvent?.connectionId ?? null}
+                    onClose={() => setExternalEvent(null)}
                 />
 
                 <GoogleTaskDialog

@@ -4,6 +4,8 @@ namespace App\Support\Automation;
 
 use App\Models\Board;
 use App\Models\Helpdesk;
+use App\Models\ItemField;
+use App\Models\ItemFieldOption;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
 use App\Models\Project;
@@ -74,6 +76,48 @@ final class AutomationOptions
             ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name])->values();
     }
 
+    /**
+     * Every custom field of the project, archived ones included (a condition may still point at one:
+     * it then fails closed). Options include archived ones too, flagged.
+     *
+     * @return Collection<int, array{id: int, name: string, type: string, archived: bool, options: list<array{id: int, name: string, archived: bool}>}>
+     */
+    public function allCustomFields(): Collection
+    {
+        return $this->cache['customFields'] ??= ItemField::where('project_id', $this->project->id)
+            ->with('options')->orderBy('position')->orderBy('id')->get()
+            ->map(fn (ItemField $field) => [
+                'id' => $field->id,
+                'name' => $field->name,
+                'type' => $field->type,
+                'archived' => $field->isArchived(),
+                'options' => $field->options->map(fn (ItemFieldOption $o) => [
+                    'id' => $o->id, 'name' => $o->label, 'archived' => $o->archived_at !== null,
+                ])->values()->all(),
+            ])->values();
+    }
+
+    /** Active custom fields (the builder offers these), with their active options. */
+    public function customFields(): Collection
+    {
+        return $this->allCustomFields()->where('archived', false)
+            ->map(fn (array $field) => [
+                'id' => $field['id'],
+                'name' => $field['name'],
+                'type' => $field['type'],
+                'options' => array_values(array_map(
+                    fn (array $o) => ['id' => $o['id'], 'name' => $o['name']],
+                    array_filter($field['options'], fn (array $o) => ! $o['archived']),
+                )),
+            ])->values();
+    }
+
+    /** A custom field of this project by id (archived ones too), or null when it is gone. */
+    public function customField(int $id): ?array
+    {
+        return $this->allCustomFields()->firstWhere('id', $id);
+    }
+
     /** @return array<string, mixed> props for the builder */
     public function forFrontend(): array
     {
@@ -84,6 +128,7 @@ final class AutomationOptions
             'priorities' => $this->priorities()->all(),
             'labels' => $this->labels()->all(),
             'members' => $this->members()->all(),
+            'customFields' => $this->customFields()->all(),
         ];
     }
 

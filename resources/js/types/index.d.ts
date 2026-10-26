@@ -579,6 +579,8 @@ export type PageProps<
     };
     /** Current user may open the current workspace's settings (admin). */
     canManageWorkspace?: boolean;
+    /** The open-source repository + cached star count (GithubStars::shared) for the "Star on GitHub" buttons. */
+    githubRepo?: { url: string; stars: number | null };
     /** Running focus timer (BRAI-74), null when none. */
     activeTimer?: ActiveTimer | null;
     // Shared layout data
@@ -642,7 +644,7 @@ export interface MyWorkItem {
     completed_at?: string;
     status?: 'todo' | 'done';
     position: number;
-    source: { type: 'board' | 'list'; id: number; name: string; slug: string };
+    source: { type: 'board' | 'list' | 'external'; id: number; name: string; slug: string };
     /** done/open column ids: the circle in My Work / My Day completes or reopens the issue */
     board?: { id: number; name: string; slug: string; done_column_id?: number | null; open_column_id?: number | null };
     task_list?: { id: number; name: string; slug: string };
@@ -1066,19 +1068,29 @@ export interface TicketAttachment {
 
 export interface CalendarConnectionRow {
     id: number;
+    /** A CalendarProviders key ('google', …). */
     provider: string;
+    provider_label: string;
+    provider_badge: string;
     kind: 'calendar' | 'tasks';
     account_email: string;
     account_name: string | null;
     external_calendar_id: string;
     external_calendar_name: string | null;
     external_calendar_color: string | null;
+    server_url: string | null;
     is_active: boolean;
+    /** Events of this calendar can't be created / moved / edited (ICS links, …). */
+    read_only: boolean;
+    /** Why loading this calendar failed last time (null when fine). */
+    sync_error: string | null;
+    sync_error_at: string | null;
 }
 
 export interface CalendarEvent {
     id: number | string;
-    type: 'board_item' | 'task_list_item' | 'google_event' | 'google_task';
+    /** external_event = an event of any connected calendar provider; google_task = a Google Tasks task. */
+    type: 'board_item' | 'task_list_item' | 'external_event' | 'google_task';
     key: string;
     title: string;
     start_date: string | null;
@@ -1096,16 +1108,27 @@ export interface CalendarEvent {
         color?: string | null;
         workspace: { id: number; name: string; slug: string };
     };
-    source: { type: 'board' | 'list'; id: number; name: string; slug: string };
+    source: { type: 'board' | 'list' | 'external'; id: number; name: string; slug: string };
     href_params: string[];
     item_type?: ItemType | null;
     priority?: ItemPriority | null;
     is_recurring_instance?: boolean;
-    /** Google events: the external link to the event on calendar.google.com. */
+    /** External events: the link to the event in its provider (e.g. calendar.google.com). */
     external_url?: string | null;
-    /** Google events: which connection (and therefore which Google calendar) the event came from. */
+    /** External events / Google tasks: which connection (and therefore which calendar) it came from. */
     connection_id?: number | null;
     account_email?: string | null;
+    /** External events / Google tasks: the provider key, its name and its chip badge. */
+    provider?: string;
+    provider_label?: string;
+    provider_badge?: string;
+    /** External events: can't be moved or edited here. */
+    read_only?: boolean;
+    all_day?: boolean;
+    location?: string | null;
+    /** External events: the event's video call (https), if it has one (BRAI-147). */
+    conference_url?: string | null;
+    conference_provider?: ConferenceProvider | null;
 }
 
 /** One entry of an item's history (activity_logs), see App\Observers\ItemObserver. */
@@ -1142,7 +1165,7 @@ export interface AdminUserRow {
     suspended_at: string | null;
     last_login_at: string | null;
     created_at: string | null;
-    sign_in_methods: ('password' | 'google' | 'github')[];
+    sign_in_methods: ('password' | 'google' | 'github' | 'microsoft')[];
     is_instance_admin: boolean;
     workspaces_count: number;
     owned_workspaces_count: number;
@@ -1839,7 +1862,9 @@ export type NotificationCategoryKey =
     | 'sprints'
     | 'helpdesk'
     | 'leads'
-    | 'workspace';
+    | 'workspace'
+    | 'reviews'
+    | 'feedback';
 
 export type NotificationFilter = 'all' | 'unread' | 'mentions' | 'assigned';
 
@@ -1991,9 +2016,12 @@ export interface RecentContentEntry {
 export type AutomationSubject = 'item' | 'ticket';
 export type AutomationValue = number | string | null;
 
+/** A condition (BRAI-144): field × operator × value. Legacy {type, value} rules are sent normalised. */
 export interface AutomationCondition {
-    type: string;
-    value: AutomationValue;
+    /** A CONDITION_FIELDS key, or "custom:<item field id>". */
+    field: string;
+    operator: string;
+    value: AutomationConditionValue;
 }
 
 export interface AutomationAction {
@@ -2009,10 +2037,11 @@ export interface AutomationRule {
     version: number;
     trigger: string;
     trigger_config: { column_id?: number | null };
+    condition_match: AutomationMatch;
     conditions: AutomationCondition[];
     actions: AutomationAction[];
     /** The rule in words ("Issue created" / "Board is Main Board" / "Assign to Max Member"). */
-    summary: { when: string; if: string[]; then: string[] };
+    summary: { when: string; match: AutomationMatch; if: string[]; then: string[] };
     /** The person the rule runs as (whoever saved it last). */
     actor: { id: number; name: string } | null;
     actor_problem: string | null;
@@ -2038,6 +2067,8 @@ export interface AutomationRun {
     status: AutomationRunStatus;
     message: string | null;
     results: AutomationRunResult[];
+    /** The conditions as checked for this run (null on runs from before BRAI-144). */
+    conditions: AutomationRunConditions | null;
     created_at: string | null;
     finished_at: string | null;
 }
@@ -2055,9 +2086,13 @@ export interface AutomationCatalogEntry {
 
 export interface AutomationCatalog {
     triggers: AutomationCatalogEntry[];
-    conditions: AutomationCatalogEntry[];
+    conditionFields: AutomationConditionField[];
+    operators: AutomationOperator[];
+    /** Custom field type → operator keys. */
+    customFieldOperators: Record<string, string[]>;
     actions: AutomationCatalogEntry[];
     maxConditions: number;
+    maxList: number;
     maxActions: number;
 }
 
@@ -2074,13 +2109,16 @@ export interface AutomationOptions {
     priorities: { id: number; name: string }[];
     labels: { id: number; name: string; color?: string | null }[];
     members: { id: number; name: string }[];
+    /** Active custom fields of the project's issues (BRAI-144). */
+    customFields: AutomationCustomField[];
 }
 
 /** "Test on an issue" (automations.preview). */
 export interface AutomationPreview {
     subject: string;
     matches: boolean;
-    conditions: { type: string; label: string; passed: boolean }[];
+    match: AutomationMatch;
+    conditions: { field: string; operator: string; label: string; passed: boolean }[];
     actions: { label: string; status: 'ok' | 'skipped' | 'error'; message: string }[];
 }
 
@@ -2151,4 +2189,537 @@ export interface ProjectArchivePreview {
     people: { ref: string; name: string; email: string | null; member_id: number | null }[];
     members: { id: number; name: string; email: string | null }[];
     omitted: { what: string; count: number | null; why: string }[];
+}
+
+// ── Guest portals (v1.42.0 foundation) ────────────────────────────────────────
+
+/** The viewer of a portal page (PortalIdentity::toPortalArray via PortalAuth::shared). */
+export interface PortalIdentityData {
+    uuid: string;
+    name: string;
+    email: string;
+    /** a Brainitive account (signed in to the app) rather than an emailed guest */
+    is_member: boolean;
+}
+
+// ── Calendar feed (BRAI-142) ──────────────────────────────────────────────────
+
+/** What a calendar feed includes (CalendarFeed::DEFAULT_OPTIONS). */
+export interface CalendarFeedOptions {
+    assigned: boolean;
+    created: boolean;
+    tasks: boolean;
+    my_day: boolean;
+    focus: boolean;
+    completed: boolean;
+    descriptions: boolean;
+    /** empty = every project the user can open */
+    project_ids: number[];
+}
+
+/** JSON of calendar-feed.show / store / update / reset / destroy (CalendarFeedController::payload). */
+export interface CalendarFeedPayload {
+    feed: {
+        url: string;
+        links: { apple: string; google: string; outlook: string };
+        options: CalendarFeedOptions;
+        created_at: string | null;
+        last_fetched_at: string | null;
+        fetch_count: number;
+    } | null;
+    defaults: CalendarFeedOptions;
+    projects: { id: number; name: string; workspace: string | null }[];
+}
+
+// ── Client portal (v1.42.0, BRAI-73) ──────────────────────────────────────────
+
+/** awaiting | approved | changes_requested — plus superseded / withdrawn (displayStatus()) */
+export type ClientDeliverableStatus = 'awaiting' | 'approved' | 'changes_requested' | 'superseded' | 'withdrawn';
+export type ClientDecisionValue = 'approved' | 'changes_requested';
+
+/** A frozen plan snapshot (Deliverables::planSnapshot): hidden columns and issue links removed. */
+export interface ClientPlanSnapshot {
+    description: string | null;
+    data: import('@/components/plan/types').PlanData;
+    settings: import('@/components/plan/types').PlanSettings;
+}
+
+/** ClientPortalController summary (client side). */
+export interface ClientDeliverableSummary {
+    uuid: string;
+    kind: 'page' | 'plan';
+    title: string;
+    version: number;
+    status: ClientDeliverableStatus;
+    published_at: string | null;
+    is_current: boolean;
+    comments_count?: number;
+}
+
+export interface ClientPortalPublic {
+    title: string;
+    slug: string;
+    welcome: string | null;
+}
+
+export interface ClientDecisionEntry {
+    id: number;
+    name: string;
+    email?: string;
+    decision: ClientDecisionValue;
+    note: string | null;
+    version: number;
+    created_at: string | null;
+    is_me?: boolean;
+}
+
+export interface ClientCommentEntry {
+    id: number;
+    author: string;
+    from_team: boolean;
+    /** team page only */
+    visibility?: 'client' | 'internal';
+    is_me?: boolean;
+    body: string;
+    created_at: string | null;
+}
+
+/** A version of the same doc / plan, client side (by uuid). */
+export interface ClientDeliverableVersion {
+    uuid: string;
+    version: number;
+    status: ClientDeliverableStatus;
+    decision: ClientDecisionValue | 'awaiting';
+    published_at: string | null;
+}
+
+/** A version of the same doc / plan, team side (by id). */
+export interface ClientDeliverableTeamVersion {
+    id: number;
+    version: number;
+    status: ClientDeliverableStatus;
+    decision: ClientDecisionValue | 'awaiting';
+    published_at: string | null;
+}
+
+/** ClientPortalTeamController summary (team side). */
+export interface ClientDeliverableTeamSummary {
+    id: number;
+    uuid: string;
+    kind: 'page' | 'plan';
+    title: string;
+    version: number;
+    status: ClientDeliverableStatus;
+    decision: ClientDecisionValue | 'awaiting';
+    published_at: string | null;
+    published_by: string | null;
+    decisions_count: number | null;
+    comments_count: number | null;
+    last_decision_at: string | null;
+}
+
+export interface ClientPortalMemberRow {
+    id: number;
+    name: string | null;
+    email: string | null;
+    state: 'active' | 'expired' | 'revoked';
+    invited_by: string | null;
+    invited_at: string | null;
+    expires_at: string | null;
+    revoked_at: string | null;
+    last_seen_at: string | null;
+}
+
+// ── GitHub App connect + merge transitions (v1.42.0, BRAI-61) ─────────────────
+
+/** A repository of the project's GitHub App installation (ProjectGithubController::settingsFor). */
+export interface GithubAvailableRepository {
+    id: number;
+    full_name: string;
+    private: boolean;
+    /** this project follows it */
+    followed: boolean;
+    /** another project follows it (a repository feeds one project) */
+    taken: boolean;
+    /** followed, but the installation no longer shares it */
+    removed: boolean;
+}
+
+export interface GithubConnectionSettings {
+    mode: 'webhook' | 'app';
+    last_delivery_at: string | null;
+    last_event: string | null;
+    last_error: string | null;
+    linked_issues: number;
+    // mode = webhook (legacy)
+    webhook_url?: string;
+    secret?: string;
+    repositories?: string[];
+    // mode = app
+    installation?: { account: string | null; account_type: string | null; suspended: boolean; removed: boolean; manage_url: string | null } | null;
+    available_repositories?: GithubAvailableRepository[];
+    last_refreshed_at?: string | null;
+    rate_limited_until?: string | null;
+}
+
+export interface GithubBoardTransition {
+    id: number;
+    name: string;
+    /** move the card here when its primary PR is merged; null = off */
+    merge_column_id: number | null;
+    columns: { id: number; name: string; is_done_column: boolean }[];
+}
+
+/** Project settings → Integrations → GitHub. */
+export interface GithubSettings {
+    /** the instance's GitHub App, when one is set up */
+    app: { name: string; url: string; can_connect: boolean } | null;
+    connection: GithubConnectionSettings | null;
+    boards: GithubBoardTransition[];
+}
+
+/** Instance admin → GitHub App (Admin\GithubAppController::show). No secrets. */
+export interface AdminGithubApp {
+    source: 'env' | 'stored' | 'fake';
+    app_id: number;
+    slug: string;
+    name: string | null;
+    owner: string | null;
+    url: string;
+    can_verify_installations: boolean;
+    created_at: string | null;
+}
+
+// ── Feedback portal (v1.42.0, BRAI-60) ────────────────────────────────────────
+export type FeedbackStatus = 'open' | 'planned' | 'building' | 'released' | 'declined';
+
+/** FeedbackPresenter::portal() — public */
+export interface FeedbackPortalData {
+    slug: string;
+    title: string;
+    intro: string | null;
+    url: string;
+    roadmap_url: string;
+}
+
+/** FeedbackPresenter::post() — public fields only (never the card, ids or emails) */
+export interface FeedbackPostData {
+    number: number;
+    title: string;
+    body: string | null;
+    excerpt: string | null;
+    status: FeedbackStatus;
+    status_label: string;
+    status_note: string | null;
+    votes_count: number;
+    author_name: string | null;
+    created_at: string | null;
+    url: string;
+    is_pending: boolean;
+    is_mine: boolean;
+    has_voted: boolean;
+    is_following: boolean;
+}
+
+/** FeedbackModerationController::presentPost() — team page */
+export interface FeedbackModerationPost {
+    id: number;
+    number: number;
+    title: string;
+    body: string | null;
+    moderation: 'pending' | 'approved' | 'rejected';
+    status: FeedbackStatus;
+    status_note: string | null;
+    votes_count: number;
+    author: { name: string; email: string } | null;
+    created_at: string | null;
+    public_url: string;
+    merged_into: { number: number; title: string } | null;
+    item: { key: string; title: string; url: string } | null;
+}
+
+/** FeedbackEvent (moderator audit) */
+export interface FeedbackEventData {
+    id: number;
+    actor_name: string | null;
+    action: string;
+    label: string;
+    post_number: number | null;
+    changes: Record<string, unknown> | null;
+    created_at: string | null;
+}
+
+// ── Document review (BRAI-80) ─────────────────────────────────────────────────
+
+/** pending / approved / changes_requested are open; the rest are closed. */
+export type PageReviewStatus = 'pending' | 'approved' | 'changes_requested' | 'cancelled' | 'superseded' | 'published';
+export type PageReviewDecision = 'pending' | 'approved' | 'changes_requested';
+
+/** ReviewPresenter::summary() → reviewers[] */
+export interface PageReviewReviewerData {
+    id: number;
+    /** null when the account was deleted (the name stays on the history) */
+    user_id: number | null;
+    name: string;
+    decision: PageReviewDecision;
+    comment: string | null;
+    decided_at: string | null;
+    /** false: deleted or can't open the project any more — not counted in the status */
+    active: boolean;
+}
+
+/** ReviewPresenter::summary() */
+export interface PageReviewSummary {
+    uuid: string;
+    number: number;
+    status: PageReviewStatus;
+    /** the draft changed since the snapshot was taken */
+    stale: boolean;
+    content_hash: string;
+    snapshot_name: string;
+    message: string | null;
+    requested_by: { id: number | null; name: string };
+    created_at: string | null;
+    closed_at: string | null;
+    url: string;
+    reviewers: PageReviewReviewerData[];
+}
+
+/** The `review` prop of Pages/Review. */
+export interface PageReviewDetail extends PageReviewSummary {
+    snapshot_html: string;
+    my_decision: { decision: PageReviewDecision; comment: string | null } | null;
+}
+
+/** The `review` prop of Pages/Show (ReviewPresenter::forPage); null for folders / whiteboards. */
+export interface PageReviewShowState {
+    required: boolean;
+    can_manage: boolean;
+    can_request: boolean;
+    /** sha256 of the current draft (editors only) — compared with latest.content_hash */
+    draft_hash: string | null;
+    latest: PageReviewSummary | null;
+    /** open reviews waiting for this user's decision */
+    assigned: { uuid: string; requested_by_name: string; url: string }[];
+}
+
+export interface PageReviewComment {
+    uuid: string;
+    author: { id: number | null; name: string };
+    body: string;
+    created_at: string | null;
+}
+
+/** ReviewPresenter::threads() — a root comment (comments[0]) and its replies. */
+export interface PageReviewThread {
+    uuid: string;
+    review_uuid: string | null;
+    review_number: number | null;
+    /** text-quote anchor; null = page-level comment */
+    quote: string | null;
+    prefix: string | null;
+    suffix: string | null;
+    /** the quote can't be found (unambiguously) in the snapshot being viewed */
+    outdated: boolean;
+    resolved: boolean;
+    resolved_at: string | null;
+    resolved_by_name: string | null;
+    comments: PageReviewComment[];
+}
+
+/** pages.reviews.candidates */
+export interface PageReviewCandidate {
+    id: number;
+    name: string;
+    email: string;
+    avatar: string | null;
+}
+
+/** Draft autosave / presence responses carry the draft hash since BRAI-80. */
+export interface PageDraftHashState extends PageDraftState {
+    draft_hash?: string;
+}
+
+// ── Calendar providers (BRAI-140) ──────────────────────────────────────────────
+// Shape of App\Support\Calendar\CalendarProviders::catalog() and NormalizedEvent.
+
+export interface CalendarProviderField {
+    name: string;
+    label: string;
+    type: 'text' | 'url' | 'email' | 'password';
+    help: string | null;
+    placeholder: string | null;
+    required: boolean;
+}
+
+export interface CalendarProviderInfo {
+    key: string;
+    label: string;
+    badge: string;
+    color: string;
+    connect_mode: 'oauth' | 'form' | 'url';
+    /** oauth: where "Connect" goes. */
+    redirect_url: string | null;
+    /** form / url: the fields of the generic connect dialog. */
+    fields: CalendarProviderField[];
+    capabilities: { write: boolean; tasks: boolean };
+}
+
+/** One event as every provider returns it (end_date inclusive for all-day events). */
+export interface NormalizedCalendarEvent {
+    id: string;
+    title: string;
+    description: string | null;
+    location: string | null;
+    all_day: boolean;
+    start_date: string;
+    start_time: string | null;
+    end_date: string;
+    end_time: string | null;
+    timezone: string | null;
+    external_url: string | null;
+    /** Only present when the event has a video call (BRAI-147). */
+    conference_url?: string;
+    conference_provider?: ConferenceProvider;
+}
+
+/** The picker after connecting (calendar.connections.pending). */
+export interface CalendarPickerData {
+    provider: string;
+    provider_label: string;
+    account_email: string;
+    account_name: string | null;
+    calendars: { id: string; name: string; color: string | null; primary: boolean; read_only: boolean }[];
+    task_lists: { id: string; title: string }[];
+}
+
+// ── Automation condition builder (BRAI-144; AutomationCatalog / AutomationConditions) ──
+export type AutomationMatch = 'all' | 'any';
+
+/** null (empty-type operators), an id / text / number, a list of ids, {days: n} or a Y-m-d date. */
+export type AutomationConditionValue = number | string | number[] | { days: number } | null;
+
+/** What an operator's value holds: none, one id, many ids, text, number, date (Y-m-d), days ({days: n}). */
+export type AutomationOperatorValue = 'one' | 'many' | 'text' | 'number' | 'date' | 'days' | null;
+
+export interface AutomationOperator {
+    key: string;
+    label: string;
+    value: AutomationOperatorValue;
+}
+
+export interface AutomationConditionField {
+    key: string;
+    label: string;
+    /** Where ids come from (board, helpdesk, column, item_type, priority, label, member), null = free value. */
+    source: string | null;
+    operators: string[];
+    subjects: AutomationSubject[];
+}
+
+export interface AutomationCustomField {
+    id: number;
+    name: string;
+    type: 'text' | 'number' | 'date' | 'checkbox' | 'select' | string;
+    options: { id: number; name: string }[];
+}
+
+export interface AutomationRunConditions {
+    match: AutomationMatch;
+    items: { label: string; passed: boolean }[];
+}
+
+// ─── Smart links in docs and issue descriptions (BRAI-143) ───────────────────────
+
+/** How a smart link shows in the editor. */
+export type SmartLinkView = 'inline' | 'card';
+
+/** Live data of one smart link (`smart-links.index`, state `ok`). */
+export interface SmartLinkData {
+    /** Canonical ref: `item:12`, `page:<uuid>`, `ticket:3`, `plan:4` */
+    ref: string;
+    type: ContentReferenceType;
+    /** Issue / Doc / Whiteboard / Ticket / Plan */
+    label: string;
+    /** Issue or ticket key */
+    key: string | null;
+    title: string;
+    url: string;
+    icon?: string | null;
+    status: { name: string; category: 'todo' | 'in_progress' | 'done' } | null;
+    due_date: string | null;
+    person: { role: string; name: string; avatar: string | null } | null;
+    priority: { name: string; color: string | null } | null;
+    item_type: { name: string; slug: string; icon: string | null; color: string | null } | null;
+    project: { name: string; slug: string };
+    updated_at: string | null;
+}
+
+/** One answer of `smart-links.index`: restricted / not found carry nothing else. */
+export type SmartLinkResult = ({ state: 'ok' } & SmartLinkData) | { state: 'restricted' } | { state: 'not_found' };
+
+/** A picker result (`smart-links.search`). */
+export interface SmartLinkSearchResult extends ContentReferenceSummary {
+    ref: string;
+}
+
+export interface SmartLinkSearchResponse {
+    project: { slug: string; name: string };
+    projects: { slug: string; name: string }[];
+    results: SmartLinkSearchResult[];
+}
+
+// ── Online meetings from issues, docs and the calendar (v1.42.0, BRAI-147) ─────────
+
+export type ConferenceProvider = 'google_meet' | 'teams' | 'other';
+
+/** A calendar the user can schedule a meeting in (meetings.options / calendar.meetings.calendars). */
+export interface MeetingCalendar {
+    id: number;
+    provider: string;
+    provider_label: string;
+    name: string;
+    account_email: string;
+    color: string | null;
+    /** Video calls this calendar can add ([] = none, e.g. Teams on a personal Microsoft account). */
+    conference_providers: Exclude<ConferenceProvider, 'other'>[];
+}
+
+export interface MeetingOptions {
+    calendars: MeetingCalendar[];
+    /** Project members (never their emails: the server resolves them). */
+    members: { id: number; name: string; avatar: string | null }[];
+    timezone: string;
+    connect_url: string;
+    max_attendees: number;
+}
+
+/** What a meeting is attached to: an issue (numeric id) or a doc (uuid). */
+export interface MeetingSubject {
+    type: 'item' | 'page';
+    id: string;
+    title: string;
+    /** Absolute link back to the issue / doc (prefilled into the description). */
+    url: string;
+}
+
+export interface Meeting {
+    id: number;
+    title: string;
+    starts_at: string;
+    ends_at: string;
+    timezone: string;
+    conference_provider: ConferenceProvider | null;
+    conference_label: string | null;
+    join_url: string | null;
+    event_url: string | null;
+    provider: string;
+    provider_label: string;
+    /** Emails only for the organiser. */
+    attendees: { name: string | null; email: string | null }[];
+    organizer: { id: number; name: string } | null;
+    notes_page: { uuid: string; name: string; url: string } | null;
+    can_remove: boolean;
+    can_cancel: boolean;
+    can_create_notes: boolean;
 }

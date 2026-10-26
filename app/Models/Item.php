@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Observers\ItemObserver;
 use App\Support\References\ContentReferences;
+use App\Support\References\SmartLinks;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -83,6 +84,13 @@ class Item extends Model
         static::updated(function (Item $item) {
             if ($item->wasChanged('assigned_to') && $item->assigned_to) {
                 $item->watchers()->syncWithoutDetaching([$item->assigned_to]);
+            }
+        });
+
+        // Smart links in the description are derived references (BRAI-143)
+        static::saved(function (Item $item) {
+            if ($item->wasRecentlyCreated ? (string) $item->description !== '' : $item->wasChanged('description')) {
+                SmartLinks::syncItem($item);
             }
         });
 

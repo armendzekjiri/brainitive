@@ -6,12 +6,14 @@ use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Notifications\PageMentions;
 use App\Support\References\ContentReferences;
+use App\Support\References\SmartLinks;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class Page extends Model
@@ -39,6 +41,7 @@ class Page extends Model
         'draft_updated_by',
         'edit_revision',
         'current_version',
+        'review_required',
     ];
 
     protected $casts = [
@@ -48,6 +51,7 @@ class Page extends Model
         'draft_updated_at' => 'datetime',
         'edit_revision' => 'integer',
         'current_version' => 'integer',
+        'review_required' => 'boolean',
     ];
 
     /**
@@ -59,6 +63,7 @@ class Page extends Model
         'status' => 'draft',
         'edit_revision' => 0,
         'current_version' => 0,
+        'review_required' => false,
     ];
 
     /**
@@ -136,10 +141,17 @@ class Page extends Model
             }
         });
 
-        // Issue cards on a whiteboard are derived references (BRAI-71)
+        // Issue cards on a whiteboard (BRAI-71) and smart links in a doc (BRAI-143) are derived
+        // references. Docs derive from `content`: the published version (or the draft itself
+        // before the first publish) — autosaved draft_content doesn't count until published.
         static::saved(function (Page $page) {
-            if ($page->type === 'page' && ($page->wasRecentlyCreated || $page->wasChanged('content')) && $page->is_whiteboard) {
+            if ($page->type !== 'page' || ! ($page->wasRecentlyCreated || $page->wasChanged('content'))) {
+                return;
+            }
+            if ($page->is_whiteboard) {
                 ContentReferences::syncWhiteboard($page);
+            } else {
+                SmartLinks::syncPage($page);
             }
         });
         // Pages are hard-deleted and their subpages go with them (FK cascade, no events)
@@ -224,6 +236,44 @@ class Page extends Model
     public function versions(): HasMany
     {
         return $this->hasMany(PageVersion::class)->orderByDesc('version');
+    }
+
+    /**
+     * Reviews of the draft (BRAI-80), newest first.
+     */
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(PageReview::class)->orderByDesc('id');
+    }
+
+    /**
+     * What the editor currently works on: the draft of a published page, else the page itself.
+     *
+     * @return array{name: string, icon: string|null, content: array<string, mixed>|null}
+     */
+    public function draftState(): array
+    {
+        if ($this->hasUnpublishedChanges()) {
+            return ['name' => (string) ($this->draft_name ?: $this->name), 'icon' => $this->draft_icon, 'content' => $this->draft_content];
+        }
+
+        return ['name' => (string) $this->name, 'icon' => $this->icon, 'content' => $this->content];
+    }
+
+    /**
+     * sha256 of the current draft's name + icon + content (BRAI-80): a review whose snapshot has another
+     * hash is stale, and "review required" pages only publish a draft with an approved hash. Embedded
+     * Excalidraw scenes are left out: their own endpoint saves them and readers see the image in the HTML.
+     */
+    public function draftHash(): string
+    {
+        $state = $this->draftState();
+        $content = $state['content'];
+        if (is_array($content)) {
+            unset($content['excalidrawEmbeds']);
+        }
+
+        return hash('sha256', json_encode([$state['name'], $state['icon'], $content], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
     }
 
     /**
@@ -312,7 +362,8 @@ class Page extends Model
         $this->update($attributes);
 
         if (array_key_exists('content', $changes)) {
-            PageMentions::notify($this, $user, $before, $changes['content']); // BRAI-103: new mentions only
+            // BRAI-103: new mentions only; after commit, so a publish holding the page lock (BRAI-80) never waits on mail
+            DB::afterCommit(fn () => PageMentions::notify($this, $user, $before, $changes['content']));
         }
     }
 

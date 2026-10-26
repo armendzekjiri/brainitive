@@ -8,7 +8,8 @@ use Symfony\Component\HtmlSanitizer\HtmlSanitizerConfig;
 /**
  * Allowlist HTML sanitizer for rich text that reaches other people's browsers — above all
  * anything the public helpdesk widget / portal accepts. Keeps formatting, links and images;
- * drops scripts, event handlers, javascript: URLs, iframes and styles.
+ * drops scripts, event handlers, javascript: URLs, iframes, styles and data-* attributes (except
+ * the smart link ones on links).
  * The frontend sanitizes again when rendering (resources/js/lib/sanitize.ts).
  */
 class SafeHtml
@@ -34,6 +35,9 @@ class SafeHtml
                 ->allowRelativeLinks()
                 ->allowRelativeMedias()
                 ->forceAttribute('a', 'rel', 'noopener noreferrer')
+                // smart links (BRAI-143): a plain link everywhere, a live chip in the editor
+                ->allowAttribute('data-smart-link', 'a')
+                ->allowAttribute('data-smart-link-view', 'a')
                 ->withMaxInputLength(500_000)
         );
     }

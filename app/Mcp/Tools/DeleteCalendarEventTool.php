@@ -3,7 +3,8 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\ResolvesCalendarConnections;
-use App\Services\GoogleCalendarService;
+use App\Support\Calendar\CalendarProviderException;
+use App\Support\Calendar\CalendarProviders;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -12,16 +13,16 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('Delete a Google Calendar event. Identify it by connection_id + event_id (from list_calendar_events). This permanently removes it from the user\'s Google calendar — confirm with the user before calling.')]
+#[Description('Delete a calendar event from a writable connected calendar. Identify it by connection_id + event_id (from list_calendar_events). This permanently removes it from the user\'s calendar — confirm with the user before calling.')]
 class DeleteCalendarEventTool extends Tool
 {
     use ResolvesCalendarConnections;
 
-    public function handle(Request $request, GoogleCalendarService $calendar): Response|ResponseFactory
+    public function handle(Request $request): Response|ResponseFactory
     {
         $validated = $request->validate([
             'connection_id' => 'required|integer',
-            'event_id' => 'required|string',
+            'event_id' => 'required|string|max:1024|not_in:.,..',
         ]);
 
         try {
@@ -30,11 +31,13 @@ class DeleteCalendarEventTool extends Tool
             return Response::error($e->getMessage());
         }
 
-        $ok = $calendar->deleteEvent($connection, $validated['event_id']);
+        try {
+            CalendarProviders::writable($connection)->deleteEvent($connection, $validated['event_id']);
+        } catch (CalendarProviderException $e) {
+            return Response::error($e->getMessage());
+        }
 
-        return $ok
-            ? Response::structured(['deleted' => true, 'event_id' => $validated['event_id']])
-            : Response::error('Could not delete the event (it may not exist, or the connection needs reauthorising).');
+        return Response::structured(['deleted' => true, 'event_id' => $validated['event_id']]);
     }
 
     /**

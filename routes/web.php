@@ -20,12 +20,15 @@ use App\Http\Controllers\InvitationController;
 use App\Http\Controllers\ItemFieldController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LeadFormController;
+use App\Http\Controllers\MeetingController;
 use App\Http\Controllers\MeetingNotesController;
 use App\Http\Controllers\MyDayController;
 use App\Http\Controllers\MyWorkController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OnboardingController;
+use App\Http\Controllers\OutlookCalendarConnectController;
 use App\Http\Controllers\PageController;
+use App\Http\Controllers\PageReviewController;
 use App\Http\Controllers\PageStickyNoteController;
 use App\Http\Controllers\PageVersionController;
 use App\Http\Controllers\PlanController;
@@ -43,6 +46,7 @@ use App\Http\Controllers\ReleaseController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ShareLinkController;
 use App\Http\Controllers\SidebarPreferencesController;
+use App\Http\Controllers\SmartLinkController;
 use App\Http\Controllers\SnippetController;
 use App\Http\Controllers\SprintController;
 use App\Http\Controllers\TaskListController;
@@ -52,6 +56,7 @@ use App\Http\Controllers\WorkloadController;
 use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkTimerController;
 use App\Http\Middleware\ReadOnlySession;
+use App\Support\Auth\MicrosoftLogin;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -61,6 +66,7 @@ Route::get('/', function () {
         'canRegister' => Route::has('register'),
         'canLoginWithGoogle' => (bool) config('services.google.client_id'),
         'canLoginWithGitHub' => (bool) config('services.github.client_id'),
+        'canLoginWithMicrosoft' => MicrosoftLogin::available(),
     ])->withViewData(['meta' => [
         // link previews of the homepage (Open Graph / X), see resources/views/partials/social-meta.blade.php
         'title' => 'Brainitive – Workspaces, Boards & Wiki',
@@ -151,6 +157,12 @@ Route::middleware('cors')->group(function () {
     Route::get('/portal/tickets/{ticket:uuid}/replies', [TicketController::class, 'publicReplies'])->name('helpdesks.tickets.replies.public');
 });
 
+// Feedback + client portals and guest sign-in (v1.42.0) — people outside the workspace
+require __DIR__.'/portal.php';
+
+// Private calendar feed for Apple / Outlook / Google Calendar (BRAI-142): public .ics + owner JSON
+require __DIR__.'/calendar-feed.php';
+
 // Workspace invitation (guest can view; auth user with matching email can accept)
 Route::get('/invite/{token}', [InvitationController::class, 'show'])->name('invitations.show');
 
@@ -202,19 +214,29 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar.index');
     Route::patch('/calendar/view', [CalendarController::class, 'updateView'])->name('calendar.view.update');
     Route::patch('/calendar/reschedule', [CalendarController::class, 'reschedule'])->name('calendar.reschedule');
+    // Calendars that can add a Google Meet / Teams call, for quick create (BRAI-147)
+    Route::get('/calendar/meeting-calendars', [MeetingController::class, 'calendars'])
+        ->middleware(ReadOnlySession::class)->name('calendar.meetings.calendars');
 
-    // Calendar connections (external providers: Google, etc.)
+    // Calendar connections (external providers through App\Support\Calendar\CalendarProviders)
     Route::prefix('calendar/connections')->controller(CalendarConnectionController::class)->group(function () {
         Route::get('google/redirect', 'redirectToGoogle')->name('calendar.connections.google.redirect');
         Route::get('google/callback', 'googleCallback')->name('calendar.connections.google.callback');
+        Route::get('outlook/redirect', [OutlookCalendarConnectController::class, 'redirect'])
+            ->middleware('throttle:20,1,calendar.outlook.redirect')->name('calendar.connections.outlook.redirect');
+        Route::get('outlook/callback', [OutlookCalendarConnectController::class, 'callback'])
+            ->middleware('throttle:20,1,calendar.outlook.callback')->name('calendar.connections.outlook.callback');
         Route::get('pending', 'pendingPicker')->name('calendar.connections.pending');
         Route::post('/', 'store')->name('calendar.connections.store');
+        // Generic connect for 'form' / 'url' providers (CalDAV, ICS links, …) — BRAI-140.
+        Route::post('manual/{provider}', 'manualStore')->where('provider', '[a-z0-9_-]+')
+            ->middleware('throttle:10,1,calendar.connections.manual.store')->name('calendar.connections.manual.store');
         Route::patch('{connection}/toggle', 'toggle')->name('calendar.connections.toggle');
         Route::delete('{connection}', 'destroy')->name('calendar.connections.destroy');
-        Route::post('{connection}/events', 'createEvent')->name('calendar.connections.events.create');
-        Route::get('{connection}/events/{eventId}', 'showEvent')->name('calendar.connections.events.show')->where('eventId', '[A-Za-z0-9_-]+');
-        Route::patch('{connection}/events/{eventId}', 'updateEvent')->name('calendar.connections.events.update')->where('eventId', '[A-Za-z0-9_-]+');
-        Route::delete('{connection}/events/{eventId}', 'deleteEvent')->name('calendar.connections.events.destroy')->where('eventId', '[A-Za-z0-9_-]+');
+        Route::post('{connection}/events', 'createEvent')->middleware('throttle:30,1,calendar.connections.events.create')->name('calendar.connections.events.create'); // invites guests (BRAI-147)
+        Route::get('{connection}/events/{eventId}', 'showEvent')->name('calendar.connections.events.show')->where('eventId', '[^/]+');
+        Route::patch('{connection}/events/{eventId}', 'updateEvent')->name('calendar.connections.events.update')->where('eventId', '[^/]+');
+        Route::delete('{connection}/events/{eventId}', 'deleteEvent')->name('calendar.connections.events.destroy')->where('eventId', '[^/]+');
 
         Route::post('{connection}/tasks', 'createTask')->name('calendar.connections.tasks.create');
         Route::get('{connection}/tasks/{taskId}', 'showTask')->name('calendar.connections.tasks.show')->where('taskId', '[A-Za-z0-9_-]+');
@@ -242,6 +264,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         require __DIR__.'/imports.php';
 
         Route::get('users', [WorkspaceController::class, 'users'])->name('workspaces.users.index');
+
+        // Smart links in docs and issue descriptions (BRAI-143): batched live data + picker search
+        Route::get('smart-links', [SmartLinkController::class, 'index'])->middleware([ReadOnlySession::class, 'throttle:240,1,smart-links'])->name('smart-links.index');
+        Route::get('smart-links/search', [SmartLinkController::class, 'search'])->middleware([ReadOnlySession::class, 'throttle:120,1,smart-links.search'])->name('smart-links.search');
         Route::get('lead-form-templates', [LeadFormController::class, 'templates'])->name('lead-form-templates.index');
         Route::get('members/{user}', [WorkspaceController::class, 'memberProfile'])->name('workspaces.members.profile');
 
@@ -320,6 +346,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
             require __DIR__.'/automation.php';
         });
 
+        // Client portal, team side (v1.42.0, BRAI-73)
+        Route::prefix('projects/{project:slug}')->scopeBindings()->group(function () {
+            require __DIR__.'/client-portal.php';
+        });
+        // Feedback portal moderation (v1.42.0, BRAI-60) — the public side is in portal.php
+        Route::prefix('projects/{project:slug}')->scopeBindings()->group(fn () => require __DIR__.'/feedback.php');
+        // Online meetings from issues and docs (v1.42.0, BRAI-147)
+        Route::prefix('projects/{project:slug}')->scopeBindings()->group(fn () => require __DIR__.'/meetings.php');
+
         // Project members (assign workspace users to project with role)
         Route::prefix('projects/{project:slug}')->scopeBindings()->group(function () {
             Route::get('members/search', [ProjectController::class, 'searchMembers'])->name('projects.members.search');
@@ -343,6 +378,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('github', [ProjectGithubController::class, 'store'])->name('projects.github.store');
             Route::post('github/rotate', [ProjectGithubController::class, 'rotate'])->name('projects.github.rotate');
             Route::delete('github', [ProjectGithubController::class, 'destroy'])->name('projects.github.destroy');
+            // GitHub App connect + merge transitions (BRAI-61)
+            Route::post('github/app/connect', [ProjectGithubController::class, 'connect'])->middleware('throttle:10,1,projects.github.app.connect')->name('projects.github.app.connect');
+            Route::put('github/repositories', [ProjectGithubController::class, 'repositories'])->name('projects.github.repositories');
+            Route::put('github/transitions', [ProjectGithubController::class, 'transitions'])->name('projects.github.transitions');
+            Route::post('github/refresh', [ProjectGithubController::class, 'refresh'])->middleware('throttle:6,1,projects.github.refresh')->name('projects.github.refresh');
+            Route::patch('boards/{board:slug}/items/{item}/development/primary', [ProjectGithubController::class, 'primary'])->name('boards.items.development.primary');
             Route::get('boards/{board:slug}/backlog', [SprintController::class, 'backlog'])->name('boards.backlog');
             Route::post('boards/{board:slug}/backlog/rank', [SprintController::class, 'rank'])->name('boards.backlog.rank');
             Route::get('boards/{board:slug}/reports', [SprintController::class, 'reports'])->name('boards.reports');
@@ -531,6 +572,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('pages/{page}/unpublish', [PageController::class, 'unpublish'])->name('pages.unpublish');
             Route::post('pages/{page}/archive', [PageController::class, 'archive'])->name('pages.archive');
             Route::delete('pages/{page}', [PageController::class, 'destroy'])->name('pages.destroy');
+            // Document review (BRAI-80): review a draft snapshot, inline comments, "review required" switch
+            Route::get('pages/{page}/reviews/candidates', [PageReviewController::class, 'candidates'])->middleware(ReadOnlySession::class)->name('pages.reviews.candidates');
+            Route::post('pages/{page}/reviews', [PageReviewController::class, 'store'])->middleware('throttle:20,1,pages.reviews.store')->name('pages.reviews.store');
+            Route::get('pages/{page}/reviews/{review}', [PageReviewController::class, 'show'])->whereUuid('review')->name('pages.reviews.show');
+            Route::post('pages/{page}/reviews/{review}/decision', [PageReviewController::class, 'decide'])->whereUuid('review')->middleware('throttle:30,1,pages.reviews.decide')->name('pages.reviews.decide');
+            Route::post('pages/{page}/reviews/{review}/cancel', [PageReviewController::class, 'cancel'])->whereUuid('review')->name('pages.reviews.cancel');
+            Route::post('pages/{page}/reviews/{review}/comments', [PageReviewController::class, 'storeComment'])->whereUuid('review')->middleware('throttle:60,1,pages.reviews.comments.store')->name('pages.reviews.comments.store');
+            Route::patch('pages/{page}/review-threads/{thread}', [PageReviewController::class, 'updateThread'])->whereUuid('thread')->name('pages.reviews.threads.update');
+            Route::put('pages/{page}/review-settings', [PageReviewController::class, 'settings'])->name('pages.reviews.settings');
         });
     });
 });
@@ -575,6 +625,9 @@ Route::middleware('auth')->group(function () {
     // Browser push subscriptions
     Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');
     Route::delete('/api/push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push-subscriptions.destroy');
+
+    // GitHub App setup callback (BRAI-61): GitHub returns here after install / repository changes
+    Route::get('/github/app/setup', [ProjectGithubController::class, 'setup'])->middleware('throttle:20,1,github.app.setup')->name('github.app.setup');
 });
 
 // Instance admin console — accounts, workspaces (metadata only) and instance settings
@@ -602,6 +655,12 @@ Route::middleware(['auth', 'verified', 'instance.admin'])->prefix('admin')->name
     Route::get('settings', [Admin\SettingsController::class, 'edit'])->name('settings.edit');
     Route::put('settings', [Admin\SettingsController::class, 'update'])->name('settings.update');
     Route::post('settings/test-email', [Admin\SettingsController::class, 'testEmail'])->name('settings.test-email');
+
+    // GitHub App for repository connections (BRAI-61): created with GitHub's manifest flow
+    Route::get('github-app', [Admin\GithubAppController::class, 'show'])->name('github-app.show');
+    Route::post('github-app/manifest', [Admin\GithubAppController::class, 'manifest'])->middleware('throttle:10,1,admin.github-app.manifest')->name('github-app.manifest');
+    Route::get('github-app/callback', [Admin\GithubAppController::class, 'callback'])->middleware('throttle:10,1,admin.github-app.callback')->name('github-app.callback');
+    Route::delete('github-app', [Admin\GithubAppController::class, 'destroy'])->name('github-app.destroy');
 
     Route::get('audit-log', Admin\AuditLogController::class)->name('audit-log');
 });

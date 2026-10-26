@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
-import { Check, ChevronRight, Copy, GitBranch, GitCommitHorizontal, GitPullRequest, Rocket } from 'lucide-react';
-import { useState } from 'react';
+import { Check, ChevronRight, Copy, GitBranch, GitCommitHorizontal, GitMerge, GitPullRequest, Rocket, Star } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 export interface DevLink {
@@ -13,6 +13,8 @@ export interface DevLink {
     state: string | null;
     author: string | null;
     occurred_at: string | null;
+    /** pull requests: the one whose merge moves the card (merge transitions, BRAI-61) */
+    primary?: boolean;
 }
 
 export interface Development {
@@ -22,6 +24,8 @@ export interface Development {
     commit_count: number;
     pull_requests: DevLink[];
     deployments: DevLink[];
+    /** the board's merge transition target, when one is set */
+    merge_column?: string | null;
 }
 
 const STATE_STYLES: Record<string, string> = {
@@ -96,13 +100,28 @@ function branchName(key: string, title: string) {
     return `feat/${key.toLowerCase()}${slug ? '-' + slug : ''}`;
 }
 
-export function DevelopmentPanel({ development, itemKey, itemTitle, settingsUrl }: {
+export function DevelopmentPanel({ development, itemKey, itemTitle, settingsUrl, primaryUrl, canEdit = false }: {
     development: Development | null;
     itemKey: string;
     itemTitle: string;
     settingsUrl: string;
+    /** PATCH endpoint to pick the primary pull request (boards.items.development.primary) */
+    primaryUrl?: string;
+    canEdit?: boolean;
 }) {
     const [copied, setCopied] = useState<string | null>(null);
+    // the server's answer to "make primary" until the next details load
+    const [local, setLocal] = useState<Development | null>(development);
+    useEffect(() => setLocal(development), [development]);
+    const makePrimary = (link: DevLink) => {
+        if (!primaryUrl) return;
+        window.axios.patch(primaryUrl, { link_id: link.id })
+            .then(({ data }: { data: { development: Development } }) => {
+                setLocal(data.development);
+                toast.success(`#${link.identifier} is now the primary pull request.`);
+            })
+            .catch(() => toast.error('Could not change the primary pull request.'));
+    };
     const copy = async (what: string, text: string) => {
         try {
             await navigator.clipboard.writeText(text);
@@ -113,7 +132,7 @@ export function DevelopmentPanel({ development, itemKey, itemTitle, settingsUrl 
         }
     };
 
-    const d = development;
+    const d = local;
     const branch = branchName(itemKey, itemTitle);
     const empty = !d || (d.branches.length + d.commits.length + d.pull_requests.length + d.deployments.length === 0);
     const latestPr = d?.pull_requests[0];
@@ -143,10 +162,26 @@ export function DevelopmentPanel({ development, itemKey, itemTitle, settingsUrl 
                         summary={<StateBadge state={latestPr?.state ?? null} />}
                         render={(l) => (
                             <>
-                                <div className="flex items-center gap-2"><ExternalTitle link={l} fallback={`#${l.identifier}`} /><StateBadge state={l.state} /></div>
+                                <div className="flex items-center gap-2">
+                                    <ExternalTitle link={l} fallback={`#${l.identifier}`} />
+                                    {l.primary && d.pull_requests.length > 1 && (
+                                        <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">Primary</span>
+                                    )}
+                                    <StateBadge state={l.state} />
+                                </div>
                                 <span className="text-muted-foreground">{l.repository}#{l.identifier} · {l.author ?? 'unknown'} · {ago(l.occurred_at)}</span>
+                                {canEdit && primaryUrl && !l.primary && (
+                                    <button type="button" onClick={() => makePrimary(l)} className="ml-1 inline-flex items-center gap-1 text-primary hover:underline">
+                                        <Star className="size-3" /> Make primary
+                                    </button>
+                                )}
                             </>
                         )} />
+                    {d.merge_column && d.pull_requests.length > 0 && (
+                        <p className="flex items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground">
+                            <GitMerge className="size-3.5 shrink-0" /> Merging the primary pull request moves this to {d.merge_column}.
+                        </p>
+                    )}
                     <Group icon={Rocket} label={deployed.length === 1 ? deployed[0].identifier : `${deployed.length} environments`} links={deployed}
                         summary={deployed.length === 1 ? <StateBadge state={deployed[0].state} /> : undefined}
                         render={(l) => (

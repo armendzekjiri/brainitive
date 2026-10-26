@@ -2,9 +2,14 @@
 
 namespace Tests\Feature\Notifications;
 
+use App\Models\ClientPortal;
 use App\Models\Comment;
+use App\Models\FeedbackPortal;
 use App\Models\Helpdesk;
 use App\Models\LeadForm;
+use App\Models\Page;
+use App\Models\PageComment;
+use App\Models\PageReview;
 use App\Models\Sprint;
 use App\Models\TaskList;
 use App\Models\TaskListItem;
@@ -12,11 +17,18 @@ use App\Models\TicketContact;
 use App\Models\Webhook;
 use App\Notifications\AutomationNoticeNotification;
 use App\Notifications\CatalogNotification;
+use App\Notifications\ClientCommentedNotification;
+use App\Notifications\ClientDecisionNotification;
+use App\Notifications\FeedbackSubmittedNotification;
+use App\Notifications\GithubSyncFailedNotification;
 use App\Notifications\InvitationAcceptedNotification;
 use App\Notifications\ItemCommentedNotification;
 use App\Notifications\ItemDueNotification;
 use App\Notifications\LeadAssignedNotification;
 use App\Notifications\NotificationCatalog;
+use App\Notifications\ReviewCommentedNotification;
+use App\Notifications\ReviewDecidedNotification;
+use App\Notifications\ReviewRequestedNotification;
 use App\Notifications\SprintCompletedNotification;
 use App\Notifications\SprintStartedNotification;
 use App\Notifications\TaskAssignedNotification;
@@ -65,6 +77,17 @@ class CatalogNotificationContractTest extends TestCase
         $contact = TicketContact::create(['email' => 'c@example.com', 'uuid' => (string) Str::uuid()]);
         $ticket = $helpdesk->tickets()->create(['subject' => 'Help', 'column_id' => $helpdesk->columns()->first()->id, 'ticket_contact_id' => $contact->id, 'key' => 'SUP-1', 'position' => 0]);
         $webhook = Webhook::create(['workspace_id' => $this->workspace->id, 'name' => 'Zapier', 'url' => 'https://hooks.example.com/x?token=secret', 'secret' => Webhook::generateSecret(), 'events' => ['*'], 'created_by' => $this->editor->id]);
+        // BRAI-73: client portal
+        $portal = ClientPortal::create(['project_id' => $this->project->id, 'slug' => 'contract-co', 'title' => 'Contract', 'enabled' => true]);
+        $deliverable = $portal->deliverables()->create(['kind' => 'page', 'version' => 1, 'title' => 'Spec', 'content' => ['html' => '<p>x</p>'], 'published_by' => $this->editor->id, 'published_at' => now()]);
+        $decision = $deliverable->decisions()->create(['identity_name' => 'Clara', 'identity_email' => 'c@client.test', 'decision' => 'approved', 'version' => 1, 'created_at' => now()]);
+        $clientComment = $deliverable->comments()->create(['author_name' => 'Clara', 'visibility' => 'client', 'body' => 'Looks good']);
+        $feedbackPortal = FeedbackPortal::create(['project_id' => $this->project->id, 'slug' => 'contract-ideas', 'title' => 'Ideas', 'enabled' => true]); // BRAI-60
+        $feedbackPost = $feedbackPortal->posts()->create(['number' => 1, 'title' => 'Dark mode [x](y)', 'body' => 'Please <b>add</b> it']);
+        // BRAI-80 document review
+        $page = Page::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->editor->id, 'name' => 'Runbook']);
+        $review = PageReview::create(['page_id' => $page->id, 'requested_by' => $this->editor->id, 'requested_by_name' => $this->editor->name, 'snapshot_name' => 'Runbook', 'snapshot_content' => $page->content, 'content_hash' => $page->draftHash(), 'message' => '<b>Please</b> check']);
+        $pageComment = PageComment::create(['page_id' => $page->id, 'page_review_id' => $review->id, 'user_id' => $this->viewer->id, 'user_name' => $this->viewer->name, 'body' => 'Which Friday?']);
         auth()->logout();
 
         return [
@@ -82,6 +105,13 @@ class CatalogNotificationContractTest extends TestCase
             new TicketSlaBreachedNotification($ticket, 'resolution', now()->subHour()),
             new AutomationNoticeNotification($item, 'Triage', 'Look at {{item.key}}', $this->editor), // BRAI-63
             new AutomationNoticeNotification($ticket, 'Triage', null, null), // BRAI-63
+            new ClientDecisionNotification($deliverable, $decision), // BRAI-73
+            new ClientCommentedNotification($deliverable, $clientComment),
+            new GithubSyncFailedNotification($this->project->githubConnection()->create(['uuid' => (string) Str::uuid(), 'secret' => 's']), 'The GitHub App was uninstalled.'), // BRAI-61
+            new FeedbackSubmittedNotification($feedbackPost), // BRAI-60
+            new ReviewRequestedNotification($review, $this->editor), // BRAI-80
+            new ReviewDecidedNotification($review, 'changes_requested', 'Shorter please', $this->viewer),
+            new ReviewCommentedNotification($review, $pageComment, $this->viewer),
         ];
     }
 

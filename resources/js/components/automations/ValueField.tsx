@@ -20,9 +20,10 @@ interface Props {
     invalid?: boolean;
 }
 
-type Option = { value: string; label: string };
+export type Option = { value: string; label: string };
+export type OptionGroup = { group: string; options: Option[] };
 
-function choices(kind: string, options: AutomationOptions, subject: AutomationSubject): Option[] | { group: string; options: Option[] }[] {
+export function choices(kind: string, options: AutomationOptions, subject: AutomationSubject): Option[] | OptionGroup[] {
     const ids = (rows: { id: number; name: string }[]) => rows.map((r) => ({ value: String(r.id), label: r.name }));
     switch (kind) {
         case 'board':
@@ -48,6 +49,9 @@ function choices(kind: string, options: AutomationOptions, subject: AutomationSu
     }
 }
 
+/** A select's raw value: "" = nothing, digits = an id, else a keyword ("reporter"). */
+export const toValue = (raw: string): AutomationValue => (raw === '' ? null : /^\d+$/.test(raw) ? Number(raw) : raw);
+
 export default function ValueField({ kind, value, onChange, options, subject, label, invalid }: Props) {
     if (kind === 'days') {
         return (
@@ -63,7 +67,6 @@ export default function ValueField({ kind, value, onChange, options, subject, la
     }
 
     const list = choices(kind, options, subject);
-    const toValue = (raw: string): AutomationValue => (raw === '' ? null : /^\d+$/.test(raw) ? Number(raw) : raw);
 
     return (
         <select aria-label={label} aria-invalid={invalid} className={cn(selectClass, invalid && 'border-destructive')} value={value === null || value === undefined ? '' : String(value)} onChange={(e) => onChange(toValue(e.target.value))}>

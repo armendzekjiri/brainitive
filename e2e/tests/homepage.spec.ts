@@ -5,7 +5,7 @@ import { expect, test } from '../fixtures';
  * The public homepage (Pages/Welcome.tsx) shows what the latest releases shipped (BRAI-98).
  * When a release adds feature cards to the homepage, add their titles here.
  */
-const SPOTLIGHT = ['Bring your data', 'Automations that do the busywork', 'Email into your helpdesk'];
+const SPOTLIGHT = ['Work with your clients', 'Every calendar, every meeting', 'Smart links & sharper automations'];
 const NEW_FEATURES = [
     'Project templates',
     'Saved board views',
@@ -36,6 +36,14 @@ const NEW_FEATURES = [
     'Workflow automation',
     'Import from Trello, Jira & Notion',
     'Project export & restore',
+    'Calendar sync',
+    'Calendar feed',
+    'Smart links',
+    'Document review',
+    'Meetings: Google Meet & Teams',
+    'Client portal',
+    'Feedback portal',
+    'Social login',
 ];
 const GROUPS = ['Plan & organize', 'Capture & focus', 'Create & write', 'Collaborate & share', 'Customers, leads & billing', 'Insight & planning', 'Connect & automate'];
 
@@ -108,6 +116,31 @@ test.describe('homepage', () => {
         expect(png.status()).toBe(200);
         expect(png.headers()['content-type']).toContain('image/png');
         await context.close();
+    });
+
+    test('"Star on GitHub" buttons lead to the repository (top bar, hero, open-source card, footer)', async ({ browser }) => {
+        const { context, page, errors } = await guestPage(browser, { viewport: { width: 1280, height: 900 } });
+        await page.goto('/');
+
+        const stars = page.getByTestId('github-star');
+        await expect(stars).toHaveCount(4);
+        for (const link of await stars.all()) {
+            await expect(link).toHaveAttribute('href', /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/);
+            await expect(link).toHaveAttribute('target', '_blank');
+            await expect(link).toHaveAttribute('aria-label', /Star Brainitive on GitHub/);
+        }
+        await expect(stars.first()).toBeVisible(); // top bar
+
+        expect(errors, 'uncaught errors on the homepage').toEqual([]);
+        await context.close();
+    });
+
+    test('signed in, the account menu has "Star on GitHub" too', async ({ page }) => {
+        await page.goto('/dashboard');
+        await page.getByRole('button', { name: /Erin Owner/ }).last().click();
+        const star = page.getByRole('menuitem', { name: /Star Brainitive on GitHub/ });
+        await expect(star).toBeVisible();
+        await expect(star).toHaveAttribute('href', /^https:\/\/github\.com\//);
     });
 
     test('fits a 375 px phone in light and dark mode', async ({ browser }) => {

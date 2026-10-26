@@ -12,11 +12,11 @@ class ItemDevLink extends Model
 {
     public const KINDS = ['branch', 'commit', 'pull_request', 'deployment'];
 
-    protected $fillable = ['item_id', 'github_connection_id', 'kind', 'repository', 'identifier', 'title', 'url', 'state', 'author', 'meta', 'occurred_at'];
+    protected $fillable = ['item_id', 'github_connection_id', 'kind', 'repository', 'identifier', 'title', 'url', 'state', 'author', 'meta', 'occurred_at', 'primary'];
 
     protected function casts(): array
     {
-        return ['meta' => 'array', 'occurred_at' => 'datetime'];
+        return ['meta' => 'array', 'occurred_at' => 'datetime', 'primary' => 'boolean'];
     }
 
     public function item(): BelongsTo

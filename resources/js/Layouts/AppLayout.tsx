@@ -116,6 +116,7 @@ import { PinButton } from '@/components/sidebar/PinButton';
 import { useSidebarNavItems } from '@/components/sidebar/navItems';
 import { PinIcon, resolvePins, type SidebarProject } from '@/components/sidebar/pins';
 import { SIDEBAR_GROUPS, openCustomizeSidebar, projectPreferences, useSidebarPreferences } from '@/lib/sidebarPreferences';
+import GitHubStarButton from '@/components/GitHubStarButton';
 
 interface Props extends PropsWithChildren {
     title?: string;
@@ -1648,6 +1649,9 @@ function AppSidebar({
                             <DropdownMenuItem onClick={customize} className="flex items-center gap-3 p-2 cursor-pointer">
                                 <PanelLeft className="size-4" />
                                 <span className="text-sm">Customize sidebar</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild className="cursor-pointer">
+                                <GitHubStarButton variant="link" className="flex w-full gap-3 p-2 text-sm [&>svg]:size-4" />
                             </DropdownMenuItem>
                             {currentWorkspace && route().has('imports.index') && (
                                 <DropdownMenuItem asChild className="cursor-pointer">
