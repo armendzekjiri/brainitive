@@ -677,6 +677,8 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
     );
     const isPublished = page.status === 'published';
     const isDocument = page.type === 'page' && !isExcalidrawPage(page.content);
+    // Smart links (BRAI-143): live chips, paste-to-chip and the "/link" picker
+    const smartLinkConfig = useMemo(() => ({ workspaceSlug: workspace.slug, projectSlug: project.slug }), [workspace.slug, project.slug]);
 
     // What the editor works on: the shared draft of a published page, or the page itself
     const editSource = isPublished && page.draft_updated_at
@@ -1552,6 +1554,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
                                     onChange={handleUpdateContent}
                                     editable={isEditing}
                                     pollScope={{ type: 'page', id: page.uuid }}
+                                    smartLinks={smartLinkConfig}
                                     placeholder="Start writing, or press / for commands…"
                                     showToolbar={isEditing && showFormattingToolbar}
                                     minHeight="400px"

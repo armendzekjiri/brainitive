@@ -11,8 +11,9 @@ import type {
 
 /**
  * Linked content and backlinks (BRAI-71): what this issue / doc / whiteboard / ticket / plan
- * links to ("Related content") and what links to it ("Referenced by"). Plan rows and
- * whiteboard cards linked to an issue appear as read-only derived entries. The server only
+ * links to ("Related content") and what links to it ("Referenced by"). Plan rows, whiteboard
+ * cards linked to an issue and smart links in docs / issue descriptions (BRAI-143) appear as
+ * read-only derived entries. The server only
  * returns what the viewer may see.
  */
 export default function RelatedContent({ workspaceSlug, projectSlug, type, id, refreshKey, className }: {
@@ -168,7 +169,7 @@ function EntryList({ entries, empty, removing, onRemove, label }: {
                             <Badge
                                 variant="secondary"
                                 className="rounded-full px-2 py-0 text-[10px] font-medium"
-                                title="Comes from the plan or whiteboard; change it there"
+                                title="Comes from the plan, whiteboard or a smart link in the content; change it there"
                             >
                                 {entry.derived_label}
                             </Badge>

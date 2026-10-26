@@ -23,8 +23,10 @@ use Illuminate\Support\Facades\Auth;
  *
  * - **Manual** references are picked by people ("Link related content").
  * - **Derived** references mirror existing domain links — plan rows and whiteboard cards linked
- *   to issues. Model hooks call syncDerived() whenever the plan / whiteboard is saved, so
- *   removing the row link or the card removes the backlink. They are read-only here.
+ *   to issues, and smart links in a doc or an issue description (BRAI-143, SmartLinks). Model
+ *   hooks call syncDerived() / syncDerivedTargets() whenever the plan / whiteboard / doc / issue
+ *   is saved, so removing the row link, the card or the smart link removes the backlink. They
+ *   are read-only here.
  *
  * Visibility is decided in batch, with the rules the policies apply inside a project the user
  * can already open: pages through Page::visibleTo() (drafts: author + admins), everything else
@@ -36,8 +38,11 @@ class ContentReferences
     /** Results per type in the picker. */
     public const PICKER_LIMIT = 8;
 
-    /** Label of a derived reference, by the type of its source. */
-    private const DERIVED_LABELS = ['plan' => 'Plan row', 'page' => 'Whiteboard card'];
+    /** Label of a derived reference, by the type of its source (a doc's smart links: see derivedLabel()). */
+    private const DERIVED_LABELS = ['plan' => 'Plan row', 'page' => 'Whiteboard card', 'item' => 'Smart link'];
+
+    /** Target types a derived reference can point to. */
+    public const DERIVED_TARGET_TYPES = ['item', 'page', 'ticket', 'plan'];
 
     private const PAGE_SUMMARY_COLUMNS = ['id', 'project_id', 'uuid', 'name', 'icon', 'type', 'status', 'created_by', 'updated_at'];
 
@@ -141,7 +146,7 @@ class ContentReferences
 
             if ($reference->isDerived()) {
                 $entry['derived'] = true;
-                $entry['derived_label'] = self::DERIVED_LABELS[$reference->source_type] ?? 'Linked';
+                $entry['derived_label'] = self::derivedLabel($reference->source_type, $outgoing ? $model : $other);
             } else {
                 $entry['manual'] = true;
                 $entry['reference_id'] = $reference->id;
@@ -169,7 +174,6 @@ class ContentReferences
     public static function candidates(Workspace $workspace, Project $project, User $user, Model $source, ?string $search): array
     {
         $sourceType = ContentReference::typeOf($source);
-        $search = trim((string) $search);
 
         $linked = ContentReference::query()
             ->where('source_type', $sourceType)
@@ -179,14 +183,39 @@ class ContentReferences
             ->mapWithKeys(fn (ContentReference $r) => ["{$r->target_type}:{$r->target_id}" => true])
             ->all();
 
+        $types = array_values(array_filter(
+            array_keys(ContentReference::TYPES),
+            fn (string $type) => ! ($sourceType === 'item' && $type === 'item'),
+        ));
+
+        return array_map(function (Model $model) use ($workspace, $project, $linked) {
+            $summary = self::summary($workspace, $project, $model);
+
+            return $summary + ['linked' => isset($linked[$summary['key']])];
+        }, self::search($project, $user, $search, $types, $source));
+    }
+
+    /**
+     * Content of the project the user can see, newest first, up to PICKER_LIMIT per type,
+     * matching the title (or the key of issues / tickets), loaded with what summary() needs.
+     * Used by the "Link related content" picker and the smart link picker (BRAI-143).
+     *
+     * @param  list<string>  $types
+     * @return list<Model>
+     */
+    public static function search(Project $project, User $user, ?string $search, array $types, ?Model $exclude = null): array
+    {
+        $search = trim((string) $search);
+        $excludeType = $exclude ? ContentReference::typeOf($exclude) : null;
+
         $results = [];
-        foreach (array_keys(ContentReference::TYPES) as $type) {
-            if ($sourceType === 'item' && $type === 'item') {
+        foreach ($types as $type) {
+            if (! isset(ContentReference::TYPES[$type])) {
                 continue;
             }
             $query = self::visibleQuery($project, $user, $type);
-            if ($type === $sourceType) {
-                $query->whereKeyNot($source->getKey());
+            if ($exclude !== null && $type === $excludeType) {
+                $query->whereKeyNot($exclude->getKey());
             }
             if ($search !== '') {
                 $column = self::titleColumn($type);
@@ -195,11 +224,7 @@ class ContentReferences
                     default => $q->whereLike($column, "%{$search}%"),
                 });
             }
-            $models = $query->orderByDesc('updated_at')->orderByDesc('id')->limit(self::PICKER_LIMIT)->get();
-            foreach ($models as $model) {
-                $summary = self::summary($workspace, $project, $model);
-                $results[] = $summary + ['linked' => isset($linked[$summary['key']])];
-            }
+            array_push($results, ...$query->orderByDesc('updated_at')->orderByDesc('id')->limit(self::PICKER_LIMIT)->get()->all());
         }
 
         return $results;
@@ -214,9 +239,8 @@ class ContentReferences
      */
     public static function syncDerived(Model $source, array $itemIds): void
     {
-        $sourceType = ContentReference::typeOf($source);
         $projectId = (int) $source->getAttribute('project_id');
-        if ($sourceType === null || ! $projectId) {
+        if (ContentReference::typeOf($source) === null || ! $projectId) {
             return;
         }
 
@@ -228,34 +252,68 @@ class ContentReferences
             ->map(fn ($id) => (int) $id)
             ->all();
 
-        $derived = fn () => ContentReference::query()
-            ->where('source_type', $sourceType)
-            ->where('source_id', $source->getKey())
-            ->where('target_type', 'item')
-            ->where('origin', ContentReference::ORIGIN_DERIVED);
+        self::syncDerivedTargets($source, $projectId, ['item' => $valid]);
+    }
 
-        $existing = $derived()->pluck('target_id')->map(fn ($id) => (int) $id)->all();
-
-        $gone = array_values(array_diff($existing, $valid));
-        if ($gone !== []) {
-            $derived()->whereIn('target_id', $gone)->delete();
+    /**
+     * Make the derived references of a source match the given targets, for the target types
+     * given (other target types are left alone). The ids must already be endpoints of the
+     * source's project — callers check that.
+     *
+     * @param  array<string, list<int>>  $targetsByType
+     */
+    public static function syncDerivedTargets(Model $source, int $projectId, array $targetsByType): void
+    {
+        $sourceType = ContentReference::typeOf($source);
+        if ($sourceType === null || ! $projectId || $targetsByType === []) {
+            return;
         }
 
-        $new = array_values(array_diff($valid, $existing));
+        $existing = ContentReference::query()
+            ->where('source_type', $sourceType)
+            ->where('source_id', $source->getKey())
+            ->where('origin', ContentReference::ORIGIN_DERIVED)
+            ->whereIn('target_type', array_keys($targetsByType))
+            ->get(['id', 'target_type', 'target_id']);
+
+        $wanted = [];
+        foreach ($targetsByType as $type => $ids) {
+            foreach ($ids as $id) {
+                if (! ($type === $sourceType && (int) $id === (int) $source->getKey())) {
+                    $wanted["{$type}:".(int) $id] = [$type, (int) $id];
+                }
+            }
+        }
+
+        $have = [];
+        $gone = [];
+        foreach ($existing as $reference) {
+            $key = "{$reference->target_type}:{$reference->target_id}";
+            if (isset($wanted[$key])) {
+                $have[$key] = true;
+            } else {
+                $gone[] = $reference->id;
+            }
+        }
+        if ($gone !== []) {
+            ContentReference::query()->whereKey($gone)->delete();
+        }
+
+        $new = array_diff_key($wanted, $have);
         if ($new !== []) {
             $now = now();
             // ON CONFLICT DO NOTHING (pgsql) / INSERT OR IGNORE (sqlite): a parallel save can't fail or abort a transaction
-            ContentReference::insertOrIgnore(array_map(fn (int $itemId) => [
+            ContentReference::insertOrIgnore(array_values(array_map(fn (array $target) => [
                 'project_id' => $projectId,
                 'source_type' => $sourceType,
                 'source_id' => $source->getKey(),
-                'target_type' => 'item',
-                'target_id' => $itemId,
+                'target_type' => $target[0],
+                'target_id' => $target[1],
                 'origin' => ContentReference::ORIGIN_DERIVED,
                 'created_by' => Auth::id(),
                 'created_at' => $now,
                 'updated_at' => $now,
-            ], $new));
+            ], $new)));
         }
     }
 
@@ -430,6 +488,16 @@ class ContentReferences
             'ticket' => 'subject',
             default => 'name',
         };
+    }
+
+    /** "Plan row", "Whiteboard card" or "Smart link" (a doc's or issue description's smart link). */
+    private static function derivedLabel(string $sourceType, ?Model $source): string
+    {
+        if ($sourceType === 'page' && $source instanceof Page && ! self::pageIsWhiteboard($source)) {
+            return 'Smart link';
+        }
+
+        return self::DERIVED_LABELS[$sourceType] ?? 'Linked';
     }
 
     private static function pageIsWhiteboard(Page $page): bool

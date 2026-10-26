@@ -2622,3 +2622,43 @@ export interface AutomationRunConditions {
     match: AutomationMatch;
     items: { label: string; passed: boolean }[];
 }
+
+// ─── Smart links in docs and issue descriptions (BRAI-143) ───────────────────────
+
+/** How a smart link shows in the editor. */
+export type SmartLinkView = 'inline' | 'card';
+
+/** Live data of one smart link (`smart-links.index`, state `ok`). */
+export interface SmartLinkData {
+    /** Canonical ref: `item:12`, `page:<uuid>`, `ticket:3`, `plan:4` */
+    ref: string;
+    type: ContentReferenceType;
+    /** Issue / Doc / Whiteboard / Ticket / Plan */
+    label: string;
+    /** Issue or ticket key */
+    key: string | null;
+    title: string;
+    url: string;
+    icon?: string | null;
+    status: { name: string; category: 'todo' | 'in_progress' | 'done' } | null;
+    due_date: string | null;
+    person: { role: string; name: string; avatar: string | null } | null;
+    priority: { name: string; color: string | null } | null;
+    item_type: { name: string; slug: string; icon: string | null; color: string | null } | null;
+    project: { name: string; slug: string };
+    updated_at: string | null;
+}
+
+/** One answer of `smart-links.index`: restricted / not found carry nothing else. */
+export type SmartLinkResult = ({ state: 'ok' } & SmartLinkData) | { state: 'restricted' } | { state: 'not_found' };
+
+/** A picker result (`smart-links.search`). */
+export interface SmartLinkSearchResult extends ContentReferenceSummary {
+    ref: string;
+}
+
+export interface SmartLinkSearchResponse {
+    project: { slug: string; name: string };
+    projects: { slug: string; name: string }[];
+    results: SmartLinkSearchResult[];
+}

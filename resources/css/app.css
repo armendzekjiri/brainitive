@@ -699,3 +699,18 @@ html {
 .rich-html hr { border-color: hsl(var(--border)); }
 .rich-html table { border-collapse: collapse; width: 100%; }
 .rich-html th, .rich-html td { border: 1px solid hsl(var(--border)); padding: 0.4em 0.6em; text-align: left; }
+
+/* Smart links (BRAI-143): the chip sits in the text; a card takes its own line. The chip / card
+   anchors style themselves (not like the doc's text links). */
+.lexical-editor-content.lexical-doc a.smart-link-anchor {
+    color: inherit;
+    font-weight: inherit;
+    text-decoration: none;
+}
+.smart-link-host {
+    display: inline;
+}
+.smart-link-host--card {
+    display: block;
+    margin: 0.375rem 0;
+}

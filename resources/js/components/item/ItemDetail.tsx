@@ -901,6 +901,8 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
         localComments, replyingTo, replyText, setReplyText, replyEditorKey,
         handlePostComment, handleReply, cancelReply, history, detailsLoading,
     } = d;
+    // Smart links in the description (BRAI-143)
+    const smartLinkConfig = useMemo(() => ({ workspaceSlug: workspace.slug, projectSlug: project.slug }), [workspace.slug, project.slug]);
     const [activityTab, setActivityTab] = useState<'all' | 'comments' | 'history' | 'worklog'>('comments');
     if (!item) return null;
 
@@ -982,6 +984,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                             content={editorContent}
                             projectId={project.id}
                             pollScope={{ type: 'item', id: String(item.id) }}
+                            smartLinks={smartLinkConfig}
                             onChange={handleEditorChange}
                             placeholder="Add a description…"
                             editable={true}
@@ -1007,6 +1010,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                                 key={`view-${editorKey}`}
                                 content={savedDescription}
                                 pollScope={{ type: 'item', id: String(item.id) }}
+                                smartLinks={smartLinkConfig}
                                 onChange={() => { }}
                                 editable={false}
                                 showToolbar={false}
