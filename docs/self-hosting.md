@@ -15,14 +15,16 @@ software, hosted and updated for you.
 
 ## Quick start
 
+No clone and no build: `compose.yaml` runs the published image, it only needs a `.env`.
+
 ```bash
-git clone https://github.com/armendzekjiri/brainitive.git
-cd brainitive
-cp .env.docker.example .env
+mkdir brainitive && cd brainitive
+curl -fsSLO https://raw.githubusercontent.com/armendzekjiri/brainitive/main/compose.yaml
+curl -fsSL https://raw.githubusercontent.com/armendzekjiri/brainitive/main/.env.docker.example -o .env
 
 # 1. Edit .env: DB_PASSWORD, APP_URL, MAIL_* (MAIL_MAILER=log until you have SMTP)
 
-# 2. Start
+# 2. Start (downloads the image the first time)
 docker compose up -d
 ```
 
@@ -54,8 +56,8 @@ tags:
 | `1.15.0`, `1.15` | A specific release / newest patch of a minor version — pin one with `BRAINITIVE_IMAGE` in `.env` |
 | `edge` | Latest commit on `main` (may be unreleased) |
 
-Release notes: GitHub → Releases. To build from source instead, set
-`BRAINITIVE_IMAGE=brainitive:local` in `.env` and run `docker compose up -d --build`.
+Release notes: GitHub → Releases. To build from source instead, `git clone` the repository,
+set `BRAINITIVE_IMAGE=brainitive:local` in `.env` and run `docker compose up -d --build`.
 
 ## HTTPS
 
@@ -81,10 +83,11 @@ the proxy — with `*`, any client can fake its IP (and so dodge login rate limi
 ## Updating
 
 ```bash
-git pull                      # or change the image tag
-docker compose pull           # skip when you build yourself
-docker compose up -d --build
+docker compose pull           # the newest image of your tag (latest, or the version you pinned)
+docker compose up -d
 ```
+
+Building from source instead: `git pull && docker compose up -d --build`.
 
 Migrations run automatically when the `app` container starts. Check **Help → Changelog**
 for what changed.

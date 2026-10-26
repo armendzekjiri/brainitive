@@ -29,12 +29,14 @@
 access; paid plans come later and are announced in advance. →
 [www.brainitive.app](https://www.brainitive.app/#pricing)
 
-**Self-hosted** — free and complete, on your own server:
+**Self-hosted** — free and complete, on your own server. Two files and our ready-made image
+(`ghcr.io/armendzekjiri/brainitive`), nothing to build:
 
 ```bash
-git clone https://github.com/armendzekjiri/brainitive.git && cd brainitive
-cp .env.docker.example .env   # then set DB_PASSWORD
-docker compose up -d --build  # open http://localhost:8080
+mkdir brainitive && cd brainitive
+curl -fsSLO https://raw.githubusercontent.com/armendzekjiri/brainitive/main/compose.yaml
+curl -fsSL https://raw.githubusercontent.com/armendzekjiri/brainitive/main/.env.docker.example -o .env   # then set DB_PASSWORD
+docker compose up -d                           # open http://localhost:8080
 ```
 
 HTTPS, backups, updates and optional features: [docs/self-hosting.md](docs/self-hosting.md).
