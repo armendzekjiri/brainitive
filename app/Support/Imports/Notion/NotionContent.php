@@ -2,6 +2,7 @@
 
 namespace App\Support\Imports\Notion;
 
+use App\Support\Imports\ImportFailed;
 use App\Support\Imports\Shared\MarkdownHtml;
 use App\Support\SafeHtml;
 use Closure;
@@ -27,6 +28,8 @@ final class NotionContent
 
     public const MAX_TABLE_COLUMNS = 40;
 
+    public const MAX_TABLE_HTML = 400_000;
+
     /**
      * @param  Closure(string $key): ?string  $pageUrl  URL of the page created for a node, or null
      * @param  Closure(string $path, bool $image): ?string  $asset  URL of a stored file, or null (not allowed)
@@ -46,7 +49,11 @@ final class NotionContent
             $html .= $this->table($node);
         }
         if ($node->markdown !== null) {
-            $html .= MarkdownHtml::toHtml($this->archive->body($node), lineBreaks: true);
+            try {
+                $html .= MarkdownHtml::toHtml($this->archive->body($node), lineBreaks: true);
+            } catch (ImportFailed) {
+                throw new ImportFailed('“'.$node->title.'” is too long to import. Split it into smaller pages in Notion and export again.');
+            }
         }
 
         return $html === '' ? '' : $this->rewrite($node, $html);
@@ -68,16 +75,17 @@ final class NotionContent
         }
         $base = $node->baseDirectory();
 
-        $note = '<p><em>Imported from a Notion database. Databases come over as a table: views, filters, formulas and relations aren’t kept'
-            .($total > self::MAX_TABLE_ROWS ? ', and this table shows the first '.self::MAX_TABLE_ROWS.' of '.$total.' rows' : '')
-            .'.</em></p>';
-
         $out = '<table><thead><tr>';
         foreach ($header as $cell) {
             $out .= '<th>'.MarkdownHtml::e($cell).'</th>';
         }
         $out .= '</tr></thead><tbody>';
+        $shown = 0;
         foreach (array_slice($rows, 0, self::MAX_TABLE_ROWS) as $row) {
+            if (strlen($out) > self::MAX_TABLE_HTML) {
+                break; // SafeHtml (and the editor) stop at about 500 000 characters
+            }
+            $shown++;
             $out .= '<tr>';
             foreach (array_keys($header) as $i) {
                 $cell = $row[$i] ?? '';
@@ -91,6 +99,9 @@ final class NotionContent
             $out .= '</tr>';
         }
         $out .= '</tbody></table>';
+        $note = '<p><em>Imported from a Notion database. Databases come over as a table: views, filters, formulas and relations aren’t kept'
+            .($shown < $total ? ', and this table shows the first '.$shown.' of '.$total.' rows' : '')
+            .'.</em></p>';
         $csvUrl = ($this->asset)($node->csv, false); // our own URL (or "#" in the preview): left alone below
         $csv = $csvUrl === null ? '' : '<p>Original data: <a href="'.MarkdownHtml::e($csvUrl).'">'.MarkdownHtml::e($node->title).'.csv</a></p>';
 

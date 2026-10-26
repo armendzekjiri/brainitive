@@ -42,9 +42,6 @@ final class NotionArchive
     /** @var array<string, string> folder → node key */
     private array $byDirectory = [];
 
-    /** @var array<string, string> */
-    private array $bodies = [];
-
     private function __construct(public readonly string $root) {}
 
     /**
@@ -99,10 +96,6 @@ final class NotionArchive
         if ($node->markdown === null) {
             return '';
         }
-        if (isset($this->bodies[$node->key])) {
-            return $this->bodies[$node->key];
-        }
-
         $text = (string) file_get_contents($this->path($node->markdown));
         if (str_starts_with($text, "\u{FEFF}")) {
             $text = substr($text, 3);
@@ -113,7 +106,7 @@ final class NotionArchive
         }
         $text = preg_replace('/\A\s*#[ \t]+[^\n]*\n?/u', '', $text, 1) ?? $text;
 
-        return $this->bodies[$node->key] = $text;
+        return $text; // read again each time: holding every page would cost up to MAX_ENTRIES × 256 KB
     }
 
     public function isEmpty(NotionNode $node): bool

@@ -2,6 +2,7 @@
 
 namespace App\Support\Imports\Shared;
 
+use App\Support\Imports\ImportFailed;
 use App\Support\SafeHtml;
 use League\CommonMark\Environment\Environment;
 use League\CommonMark\Extension\Autolink\AutolinkExtension;
@@ -22,7 +23,7 @@ use League\CommonMark\MarkdownConverter;
  */
 final class MarkdownHtml
 {
-    /** SafeHtml truncates longer input; callers should cap their Markdown below this. */
+    /** SafeHtml would truncate longer input (broken markup), so longer output is refused. */
     public const MAX_HTML = 500_000;
 
     private static ?MarkdownConverter $converter = null;
@@ -31,6 +32,8 @@ final class MarkdownHtml
 
     /**
      * @param  bool  $lineBreaks  single newlines become <br> (Notion: one block per line)
+     *
+     * @throws ImportFailed when the HTML would be longer than MAX_HTML
      */
     public static function toHtml(string $markdown, bool $lineBreaks = false): string
     {
@@ -43,6 +46,9 @@ final class MarkdownHtml
         }
 
         $raw = (string) self::converter($lineBreaks)->convert($markdown);
+        if (strlen($raw) > self::MAX_HTML) {
+            throw new ImportFailed('A text is too long to import (more than '.intdiv(self::MAX_HTML, 1000).' 000 characters as HTML).');
+        }
         preg_match_all('#<pre><code(?: class="language-([^"]*)")?>#', $raw, $languages);
 
         $html = (string) SafeHtml::clean($raw);

@@ -553,6 +553,32 @@ php artisan tinker --execute="\App\Models\User::where('email','...')->update(['e
   in PHP arrays, and the preview runs inside the web request, so `TrelloExport` raises `memory_limit` to at
   most 512 MB (never lowers it). Raise both together if bigger boards ever need importing.
 
+### Notion import: tree, links and files (v1.41.0, BRAI-66)
+- **Tree:** a Notion page with subpages becomes a **folder** (same name) holding the page first, then the
+  subpages; a database (CSV) becomes a table page (+ folder when its rows have pages). Folders without
+  a page of their own (teamspace folders) stay folders; Notion's `Export-<uuid>` wrapper folder is
+  dropped. Children are ordered as the parent page links them (database rows: CSV order), then by title.
+- **Drafts:** every page is created `status = draft` by the importing user and never published, so only
+  the author and admins see them. **Folder names are visible to the whole project** (folders always are).
+- **Two passes:** pass 1 creates the tree (`notion_folder` / `notion_page`, source id = Notion id, or a
+  hash of the path when the name has none); pass 2 writes each page's content once (`notion_content`
+  mapping, in the same transaction as the update + report save) with links via `ImportMappings::map`.
+  Links to skipped (empty) pages keep their words only; links to files / pages missing from the export
+  become text and are reported (preview + report).
+- **Paths are compared in NFC** (macOS zip tools write NFD names, Notion links are NFC).
+- **Files:** only from inside the archive, stored like editor uploads: FileController's validation rules,
+  `Uploads::imageExtension` / `extension`, the public disk, `Storage::url`. Names are UUIDv5 of
+  (run uuid, path), and `imports/<run>/notion-stored.json` lists what was stored, so a retry neither
+  duplicates nor double-counts. SVG, video etc. aren't accepted by the editor and are reported.
+- **Markdown:** `Imports\Shared\MarkdownHtml` (league/commonmark GFM, single newline → `<br>` for Notion),
+  not `PageContentConverter::markdownToHtml` (no tables / images / nested lists). HTML longer than
+  500 000 characters is refused (`ImportFailed`, page named) because `SafeHtml` would truncate it.
+  Tables stop at 1 000 rows / 400 000 characters with a note; the original CSV is linked.
+- **Limits (fail in the preview):** 2 000 pages / databases / folders, 256 KB Markdown per page, 5 MB per
+  CSV, SafeZip 5 000 files / 512 MB. Upload rule 200 MB, but `docker/php.ini` caps uploads at 50 MB
+  (`post_max_size` 55M): raise both for bigger exports. Memory stays bounded: page bodies are read from
+  disk when needed, never all held at once.
+
 ## Architectural decisions
 
 ### Inline validation over FormRequest classes

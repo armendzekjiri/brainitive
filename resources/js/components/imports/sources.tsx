@@ -1,7 +1,7 @@
 import NotionPreview from '@/components/imports/sources/NotionPreview';
+import TrelloPreview from '@/components/imports/sources/TrelloPreview';
 import type { ImportRunData } from '@/types';
 import type { ComponentType } from 'react';
-import TrelloPreview from '@/components/imports/sources/TrelloPreview';
 
 /**
  * Per-source preview + options (v1.41.0). The run page renders the component registered for the

@@ -368,6 +368,7 @@ class NotionImporterTest extends TestCase
             'symbolic link' => $link,
             'isn’t a readable ZIP' => $notAZip,
             'doesn’t look like a Notion export' => $this->zipOf(['readme.txt' => 'hello', 'photo.png' => 'x']),
+            'is too long to import' => $this->zipOf(['Table 0123456789abcdef0123456789abcdef.md' => "|a|\n|-|\n".str_repeat("|x|\n", 60000)]),
             'more than 256 KB of text' => $this->zipOf(['Huge 0123456789abcdef0123456789abcdef.md' => '# Huge'."\n".str_repeat('a', 300 * 1024)]),
             'unsafe file name ("..")' => $this->exportZip(nested: true, extra: fn (ZipArchive $z) => $z->addFromString('a/../../evil.md', 'x')),
         ];
