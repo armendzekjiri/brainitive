@@ -6,6 +6,7 @@ use App\Models\Comment;
 use App\Models\Item;
 use App\Models\User;
 use App\Notifications\ItemCommentedNotification;
+use App\Support\Imports\ImportScope;
 
 /**
  * item_commented: a new comment (or reply) tells the issue's watchers, its assignee and its reporter.
@@ -19,6 +20,9 @@ class ItemCommentNotifications
      */
     public static function notify(Item $item, Comment $comment, User $author, array $mentionedIds = []): void
     {
+        if (ImportScope::active()) {
+            return; // bulk imports notify nobody per record (v1.41.0)
+        }
         $project = $item->board?->project;
         if (! $project) {
             return;
