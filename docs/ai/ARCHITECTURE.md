@@ -349,6 +349,17 @@ Plan [`tasks/feat-automation.md`](./tasks/feat-automation.md); contract `tasks/r
 - Preview + mapping UI: `components/imports/sources/JiraPreview.tsx`. Fixtures:
   `tests/Fixtures/imports/jira/*.csv`. Tests: `JiraImporterTest`, `e2e/tests/import-jira.spec.ts`.
 
+### Notion import (v1.41.0, BRAI-66)
+Plan [`tasks/feat-import-notion.md`](./tasks/feat-import-notion.md).
+- `app/Support/Imports/Notion/`: `NotionImporter` (registry key `notion`, needs `PagePolicy::create`),
+  `NotionArchive` (SafeZip unpack incl. nested `…-Part-N.zip`, `Title <id>` names → `NotionNode` tree,
+  link resolution, limits), `NotionContent` (page / CSV table → sanitized HTML, links + files
+  rewritten; shared by preview and run), `NotionAssets` (archive files → editor uploads).
+- Shared: `app/Support/Imports/Shared/MarkdownHtml` — GFM Markdown → `SafeHtml` HTML with Lexical
+  check lists and code languages; for any importer that needs tables / images / nested lists.
+- Preview + options UI: `components/imports/sources/NotionPreview.tsx`. Fixture:
+  `tests/Fixtures/imports/notion/`. Tests: `NotionImporterTest`, `e2e/tests/import-notion.spec.ts`.
+
 ### Sharing (read-only links)
 - **Docs and issues:** `ShareLink` (morph `shareable`: `Page` / `Item`, random token, `expires_at`, `revoked_at`, views), `ShareLinkController` — manage via `share-links.*` (needs `update` on the item), public view `/s/{token}` → `Pages/Share/Show.tsx` (`noindex`, 410 when revoked / expired / deleted). UI: `components/share/ShareButton.tsx`.
 - **Plans** keep their own `share_token` (`/share/plans/{token}`); bookmarks / snippets have `visibility = public`.

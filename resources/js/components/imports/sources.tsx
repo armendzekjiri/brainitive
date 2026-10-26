@@ -1,7 +1,8 @@
 import JiraPreview from '@/components/imports/sources/JiraPreview';
+import NotionPreview from '@/components/imports/sources/NotionPreview';
+import TrelloPreview from '@/components/imports/sources/TrelloPreview';
 import type { ImportRunData } from '@/types';
 import type { ComponentType } from 'react';
-import TrelloPreview from '@/components/imports/sources/TrelloPreview';
 
 /**
  * Per-source preview + options (v1.41.0). The run page renders the component registered for the
@@ -18,7 +19,7 @@ export interface SourcePreviewProps {
 
 export const SOURCE_PREVIEWS: Record<string, ComponentType<SourcePreviewProps>> = {
     trello: TrelloPreview,            // BRAI-65
-    jira: JiraPreview,                 // BRAI-139
-    // notion: NotionPreview,          // BRAI-66
+    jira: JiraPreview,                // BRAI-139
+    notion: NotionPreview,            // BRAI-66
     // brainitive: ArchivePreview,     // BRAI-81 (restore)
 };
