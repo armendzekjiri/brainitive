@@ -83,6 +83,15 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.42.1',
+        title: 'Meetings one click away on every issue',
+        tag: 'Improvement',
+        date: '2026-10-26',
+        items: [
+            'Issues: a "Meeting" button next to Attach, Create subtask and Link issue schedules a Google Meet or Microsoft Teams meeting for the issue right away — whichever your connected calendar offers.',
+        ]
+    },
+    {
         version: 'v1.42.0',
         title: 'Work with clients, every calendar, meetings and smart links',
         tag: 'Feature',

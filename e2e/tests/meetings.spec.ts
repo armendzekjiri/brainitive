@@ -58,6 +58,27 @@ async function schedule(page: Page, host: string, call: 'Google Meet' | 'Microso
 }
 
 test.describe('online meetings', () => {
+    test('the "Meeting" quick action next to Link issue opens the dialog once and schedules a Teams meeting', async ({ page }) => {
+        const host = `${uid('meetq')}.example.test`;
+        test.skip(!(await connectMeetCalendar(page, host)), 'the e2e provider exists only with APP_ENV=e2e');
+        try {
+            const title = uid('Budget call');
+            await page.goto(urls.board());
+            await createCard(page, title);
+            const issue = await openCard(page, title);
+
+            await issue.getByRole('button', { name: 'Meeting', exact: true }).click();
+            await expect(page.getByRole('dialog', { name: 'Schedule meeting' })).toHaveCount(1);
+            await schedule(page, host, 'Microsoft Teams', 'guest@partner.example.test');
+
+            const row = issueDialog(page).getByTestId('meetings-section').getByTestId('meeting-row').filter({ hasText: title });
+            await expect(row).toContainText('Teams');
+            await expect(row.getByRole('link', { name: 'Join' })).toHaveAttribute('href', /^https:\/\/meet\.e2e\.test\//);
+        } finally {
+            await disconnect(page, host);
+        }
+    });
+
     test('schedule a Google Meet from a card, join it, then cancel it', async ({ page }) => {
         const host = `${uid('meet')}.example.test`;
         test.skip(!(await connectMeetCalendar(page, host)), 'the e2e provider exists only with APP_ENV=e2e');

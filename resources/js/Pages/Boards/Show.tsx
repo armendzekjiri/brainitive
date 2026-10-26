@@ -1200,7 +1200,7 @@ function ItemEditModal({
                                 </SheetTrigger>
                                 <SheetContent side="right" className="w-[300px] sm:w-[360px] p-0">
                                     <div className="px-5 py-5 h-full overflow-y-auto">
-                                        <ItemDetailSidebar d={d} />
+                                        <ItemDetailSidebar d={d} inSheet />
                                     </div>
                                 </SheetContent>
                             </Sheet>
