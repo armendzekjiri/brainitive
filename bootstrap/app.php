@@ -54,6 +54,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'widget/*',
             'portal/*',
             'f/*', // public lead forms: submit + analytics events (stateless)
+            'book/*', // public booking pages: book, cancel, reschedule (embeddable; throttled + honeypot)
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

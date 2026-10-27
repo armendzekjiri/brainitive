@@ -166,6 +166,8 @@ final class BusyTimes
             ->whereNull('completed_at')
             ->whereHas('board')
             ->whereHas('column', fn ($q) => $q->where('is_done_column', false))
+            // a booking's own card: the booking already blocks (and stops blocking once cancelled)
+            ->whereNotIn('id', Booking::whereNotNull('item_id')->select('item_id'))
             ->whereBetween('due_date', self::localDates($from, $to, $zone))
             ->get(['id', 'start_date', 'start_time', 'due_date', 'due_time'])
             ->map(fn (Item $item) => self::timedEntry($item->start_date, $item->start_time, $item->due_date, $item->due_time, $zone))

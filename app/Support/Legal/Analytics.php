@@ -18,7 +18,7 @@ class Analytics
 {
     /** Path prefixes without analytics; also checked in the browser for client-side navigations. */
     private const EXCLUDED_PREFIXES = [
-        '/f', '/support', '/widget', '/portal', '/feedback', '/client', '/guest',
+        '/f', '/book', '/support', '/widget', '/portal', '/feedback', '/client', '/guest',
         '/s', '/r', '/changelog', '/share', '/embed-test',
         '/invite', '/reset-password', '/verify-email', '/calendar/feed', '/oauth', '/offline',
     ];

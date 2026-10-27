@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Contracts\Billing\BuildsReportData;
 use App\Models\Board;
 use App\Models\BoardView;
+use App\Models\BookingPage;
 use App\Models\Bookmark;
 use App\Models\Capture;
 use App\Models\ClientPortal;
@@ -26,6 +27,7 @@ use App\Models\WorkspaceInvitation;
 use App\Policies\BillingPolicy;
 use App\Policies\BoardPolicy;
 use App\Policies\BoardViewPolicy;
+use App\Policies\BookingPagePolicy;
 use App\Policies\BookmarkPolicy;
 use App\Policies\CapturePolicy;
 use App\Policies\ClientPortalPolicy;
@@ -161,6 +163,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(WorkloadAllocation::class, WorkloadPolicy::class);
         Gate::policy(ClientPortal::class, ClientPortalPolicy::class); // client portal, team side (v1.42.0, BRAI-73)
         Gate::policy(Meeting::class, MeetingPolicy::class); // online meetings (v1.42.0, BRAI-147)
+        Gate::policy(BookingPage::class, BookingPagePolicy::class); // booking pages (v1.45.0, BRAI-158)
         // client billing (v1.38.0): workspace admins only
         Gate::define('manageBilling', [BillingPolicy::class, 'manageBilling']);
 
