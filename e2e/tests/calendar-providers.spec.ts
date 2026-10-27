@@ -62,12 +62,13 @@ test.describe('calendar providers', () => {
     test('the connect menu lists the providers and an old "google" filter link still works', async ({ page }) => {
         await page.goto(`/calendar?view=month&date=${isoDay(day20())}&sources[]=board&sources[]=google`);
 
-        // 'google' now means every connected calendar ('external'): one source is off (Lists).
+        // 'google' now means every connected calendar ('external'): Lists and Bookings (v1.45.0) are off.
         await page.getByRole('button', { name: 'Filter (1)' }).click();
         // in the filter popover: the sidebar has a "Lists" section once the user has task lists
         const filter = page.getByRole('dialog');
         await expect(filter.getByRole('button', { name: 'Calendars', exact: true })).toBeVisible();
         await filter.getByRole('button', { name: 'Lists', exact: true }).click();
+        await filter.getByRole('button', { name: 'Bookings', exact: true }).click();
         await expect(page.getByRole('button', { name: 'Filter', exact: true })).toBeVisible();
         await expect(page).not.toHaveURL(/sources/);
         await page.keyboard.press('Escape');

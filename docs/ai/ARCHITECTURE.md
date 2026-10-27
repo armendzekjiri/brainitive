@@ -27,6 +27,7 @@ External site ──▶ routes/web.php (cors, no CSRF) ──▶ Helpdesk widget
 Visitor / iframe ──▶ routes/web.php /f/{slug} (no CSRF) ──▶ PublicLeadFormController
 Guest (email link) ──▶ routes/portal.php /guest/login, /feedback/{slug}, /client/{slug} ──▶ PortalAuth + portal controllers
 Calendar apps ──secret URL──▶ routes/calendar-feed.php /calendar/feed/{token}.ics (stateless) ──▶ CalendarFeedController
+Visitor ──▶ routes/booking.php /book/{slug}, /book/manage/{token} (no login, no CSRF: book/*) ──▶ PublicBookingController
 GitHub App ──HMAC──▶ routes/api.php /api/webhooks/github-app ──▶ ProcessGithubAppDelivery
 Other tools ──Bearer inbound token──▶ routes/api.php /api/lead-forms/{uuid}/inbound
 Postmark / Mailgun ──token / HMAC──▶ routes/api.php /api/inbound-mail/{postmark|mailgun} ──▶ InboundMail::receive()
@@ -195,6 +196,16 @@ Plan [`tasks/feat-document-review.md`](./tasks/feat-document-review.md). Ask col
   Both scheduled every 5 min in `routes/console.php`. Task-list digest: see Task Lists.
 - **Routes:** `calendar/connections/...` controller group in `web.php`
 - **Pages:** `Pages/Calendar/`
+
+### Booking pages — "book a time with me" (v1.45.0, BRAI-158)
+Plan [`tasks/feat-booking-pages.md`](./tasks/feat-booking-pages.md). A user's public pages; free times = a meeting type's hours minus busy time.
+- **Models / tables** (migration `2026_11_03_100000_create_booking_pages_tables`): `BookingPage` (`booking_pages`: user, workspace = operator + card boards, `public_slug`, `timezone`, `busy_sources` json `{connections: 'all'|ids, issues, tasks, all_day_blocks}`, `card_board_id` / `card_column_id`, `settings` consent; soft deletes; route key uuid), `BookingType` (`booking_types`: name, slug per page, `duration_minutes`, `location`, `availability` `{weekly, overrides}` as "HH:MM" wall clock in the page zone, `rules`, `target_connection_id`, `questions`), `Booking` (`bookings`: UTC `starts_at` / `ends_at`, guest name / email / zone / answers / consent, `status` confirmed | cancelled, sha256 `manage_token_hash`, calendar event id + `conference_url`, `unchecked_connection_ids`, `item_id`, `reminded_at`; partial unique index `(user_id, starts_at) WHERE status = 'confirmed'`).
+- **Support** `app/Support/Booking/`: `BookingRules` (parsed type), `Availability::slots()` (pure: rules + busy → UTC starts, DST-safe), `BusyTimes::for()` (host's confirmed bookings of all pages + the page's sources; calendar reads cached 3 min, a failing calendar is skipped and reported in `failed`), `BookingService` (`book` / `cancel` / `reschedule`: fresh slot check → host row lock + re-check → unique index; then calendar event with the guest as attendee (+ Meet / Teams), optional card, notifications), `BookingWarnings` (unreadable calendar → host notified once per page + calendar + day), `BookingInput` (editor / answer validation), `BookingTemplates`, `BookingText`, `SlotTaken`.
+- **Controllers / routes:** `BookingPageController` (`booking-pages.index|store|show|update|destroy`, `booking-types.preview`, `bookings.cancel`), `BookingTypeController` (`booking-types.store|update|duplicate|reorder|destroy`) in `web.php`; `PublicBookingController` in `routes/booking.php` (`booking.public|public.type|slots|store`, `booking.manage|manage.slots|manage.cancel|manage.reschedule`). Policy `BookingPagePolicy` (owner who is still in the workspace).
+- **Notifications:** `booking_created`, `booking_cancelled`, `booking_calendar_unreadable` (category `bookings`); guest mail `BookingGuestNotification` (confirmed / rescheduled / cancelled / reminder, `.ics` attached). Command `app:send-booking-reminders` (every 15 min).
+- **Calendar:** source `booking` in `CalendarController` (read-only events; skipped when the same event already shows from its connected calendar).
+- **UI:** `Pages/Booking/{Index,Show,Public}.tsx`, `components/booking/BookingTypeEditor.tsx`, `lib/booking.ts`; sidebar key `booking_pages`.
+- **Tests:** `tests/Unit/BookingAvailabilityTest.php`, `tests/Feature/Booking/{BusyTimesTest,BookingFlowTest}.php`, e2e `e2e/tests/booking-pages.spec.ts`.
 
 ### Meetings — Google Meet / Teams from issues, docs and the calendar (v1.42.0, BRAI-147)
 Plan [`tasks/feat-meetings.md`](./tasks/feat-meetings.md). A calendar event with a call, created in the user's own writable Google / Outlook calendar (the invite notifies attendees; no in-app notification).

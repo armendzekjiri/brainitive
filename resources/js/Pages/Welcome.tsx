@@ -32,6 +32,7 @@ import {
     Download,
     MousePointerClick,
     ListChecks,
+    CalendarClock,
     CalendarDays,
     Briefcase,
     Code2,
@@ -833,6 +834,13 @@ export default function Welcome({
                     title: 'Calendar sync',
                     description:
                         'Google, Outlook / Microsoft 365, iCloud and any CalDAV calendar — or a read-only ICS link — next to your work; reschedule in place.',
+                    isNew: true,
+                },
+                {
+                    icon: CalendarClock,
+                    title: 'Booking pages',
+                    description:
+                        'Share a link and let people book a time with you: your hours minus what’s in your calendars, your own meeting types, invites with Meet or Teams.',
                     isNew: true,
                 },
                 {

@@ -1,5 +1,5 @@
 import { usePage } from '@inertiajs/react';
-import { Bell, Bookmark, CalendarDays, ChartColumn, Clock, Code2, Home, Lightbulb, ListTodo, ReceiptText, type LucideIcon } from 'lucide-react';
+import { Bell, Bookmark, CalendarClock, CalendarDays, ChartColumn, Clock, Code2, Home, Lightbulb, ListTodo, ReceiptText, type LucideIcon } from 'lucide-react';
 import type { PageProps, SidebarNavKey } from '@/types';
 
 /**
@@ -98,6 +98,16 @@ export function useSidebarNavItems(): SidebarNavItem[] {
             hideable: true,
             hint: 'Due dates and connected calendars',
             palette: { id: 'nav-calendar', label: 'Go to Calendar', description: 'Due dates and connected calendars', keywords: 'schedule events google' },
+        },
+        {
+            key: 'booking_pages',
+            label: 'Booking pages',
+            icon: CalendarClock,
+            href: route('booking-pages.index'),
+            active: current.startsWith('booking-pages.'),
+            hideable: true,
+            hint: 'Let people book a time with you',
+            palette: { id: 'nav-booking-pages', label: 'Go to Booking pages', description: 'Let people book a time with you', keywords: 'book appointment schedule meeting calendly slots availability' },
         },
         {
             key: 'inbox',
