@@ -104,6 +104,7 @@ const CHANGELOG = [
             'A booking lands in the calendar you pick with the guest invited (and a Google Meet or Teams link), in your Brainitive calendar, in the page\'s Bookings tab and — if you want — as a card on a board. You get a notification; the guest gets a confirmation with a calendar file, a link to reschedule or cancel, and a reminder a day before.',
             'Visitors see times in their own time zone, on any screen size; the page can be embedded on your website. Only free times ever leave Brainitive — never what is in your calendar.',
             'If a calendar can\'t be read, the page keeps working without it and tells you that bookings may overlap its events.',
+            'Fixed: instance admins can create the GitHub App again (Admin → GitHub App) — GitHub refused it with "HTTP 422". If GitHub refuses for another reason, such as a name that is already taken, the page now says why.',
         ]
     },
     {
