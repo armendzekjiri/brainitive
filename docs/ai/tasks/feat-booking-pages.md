@@ -37,6 +37,17 @@ What we already have and reuse:
   appointments block it. All-day / date-only entries don't block (per-page switch "all-day events
   block the day"). Confirmed bookings from **all** the user's pages always block, so two pages
   can't book the same hour.
+- **Meeting types are the user's own:** any number per page, each with its own name and length
+  (5 min – 12 h, free input, presets 15 / 30 / 45 / 60 / 90). E.g. "Quick question, 15 min" next
+  to "Workshop, 45 min". Add, rename, reorder (drag), switch off, duplicate, delete.
+- **Templates** (`App\Support\Booking\BookingTemplates`, like `LeadFormTemplates`): a new page
+  starts blank or from a template that **pre-fills everything**: title, intro, meeting types,
+  hours, rules, location kind and questions. All of it stays editable afterwards; a template is only
+  a starting point (no link back). Templates: Blank · Sales / intro call (15 + 30 min) · Consulting
+  (30 + 60 min, buffers) · Support / help session (15 + 30 min) · Job interview (30 + 45 min,
+  questions: role, CV link) · Emergency (15 min, short notice 30 min, evenings / weekends, few busy
+  sources) · Office hours (15-min slots, one weekday afternoon) · Coaching / tutoring (45 + 60 min,
+  weekly limits). A meeting type can also be added from a template inside an existing page.
 - Each meeting type has:
   - **Duration** (15/30/45/60/90/custom).
   - **Location:** Google Meet / Teams (only if the target calendar allows it,
@@ -81,7 +92,7 @@ What we already have and reuse:
 ### Data (PostgreSQL; migrations also run on SQLite in tests)
 - `booking_pages`: id, uuid, user_id, workspace_id, `public_slug` (unique), title, intro, timezone,
   enabled, `busy_sources` json (`{connections: [ids], issues: bool, tasks: bool, all_day_blocks:
-  bool}`; connection ids are checked to be the host's own), `card_board_id` + `card_column_id`
+  bool}`; `connections` is `"all"` (default: also calendars connected later) or a list of ids, checked to be the host's own), `card_board_id` + `card_column_id`
   (nullable: "also create a card"; checked against the user's edit rights at save and at booking),
   settings json (branding, consent),
   timestamps, soft deletes. Several per user.
@@ -119,6 +130,8 @@ What we already have and reuse:
      host's "new booking" notification + bookings list say "⚠ <calendar> wasn't checked: look for
      an overlap".
 - Pure function core (rules + busy → slots), so most of it is unit-tested without HTTP.
+- Known limit (v1.45): recurring task-list tasks block only their first occurrence (the calendar's
+  recurrence projection is private to `CalendarController`); fine for a first version.
 
 ### Booking (POST, the critical path)
 In one request:
