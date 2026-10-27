@@ -737,6 +737,11 @@ Plan + production setup: [`tasks/feat-github-app.md`](./tasks/feat-github-app.md
   can read ONE of its repositories, so a project may only follow repositories the connecting person can
   read (`GET /user/installations/{id}/repositories` → `github_connections.allowed_repository_ids`).
 - The GitHub App is separate from GitHub social login (`services.github`) — never widen login scopes.
+- **The manifest must not set `setup_url` / `setup_on_update` together with `request_oauth_on_install`.**
+  GitHub shows the create screen but refuses the conversion with HTTP 422 (hit on brainitive.app,
+  2026-10-27); `callback_urls` alone brings people back to `/github/app/setup`. A refused conversion is
+  logged and shown with GitHub's reason (`GithubApi::refusalReason`); `FakeGithub` / `Http::fake` don't
+  enforce GitHub's rules, so check real-GitHub constraints in their docs.
   Installation tokens are cached encrypted (`github-app:installation-token:*`), never shown.
 - **Merge transitions don't notify watchers.** The move is a model save (history via `ItemObserver`
   marked `ActivityLog::via('github')`, outgoing webhooks, automations), but `item_status_changed` to
@@ -1583,3 +1588,20 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   "Deleted or moved project" with the snapshot ticket key / title — never the new workspace's
   names. Whether unbilled entries should move with the project is an open decision (activities
   are per workspace, so moving them would need the activity cleared or mapped).
+
+### Booking pages: UTC timestamps, double booking, busy sources (v1.45.0, BRAI-158)
+- **Eloquent writes a timestamp's wall clock without converting it.** A `Carbon` in Europe/Berlin saved into
+  `bookings.starts_at` lands an hour off. `Booking` converts `starts_at` / `ends_at` to UTC in a mutator — do
+  the same for any new column that takes zoned instants.
+- **Double booking is stopped three times** (`BookingService::book`): a fresh busy read (calendars, outside the
+  lock), a `lockForUpdate` on the host's user row + overlap / daily-max re-check, and the partial unique index
+  `(user_id, starts_at) WHERE status = 'confirmed'`. Reschedule cancels the old row first so the same slot can be
+  picked again.
+- **A booking's own card would block its own time** through the "issues" busy source (it has a due time and is
+  assigned to the host) — and keep blocking after a cancel. `BusyTimes::issues()` excludes items linked from
+  `bookings.item_id`.
+- **An unreadable busy calendar is ignored, not fatal** (product decision 2026-10-27): slots go on without it,
+  the host is notified once a day per page + calendar, and bookings made meanwhile store
+  `unchecked_connection_ids` for a "look for an overlap" hint.
+- Recurring task-list tasks block only their first occurrence (the recurrence projection is private to
+  `CalendarController`).

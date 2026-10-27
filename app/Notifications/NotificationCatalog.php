@@ -35,6 +35,8 @@ final class NotificationCatalog
         // v1.42.0 "Work with clients"
         'reviews' => ['label' => 'Reviews & approvals', 'description' => 'Review requests, reviewer decisions, and client approvals or change requests.', 'defaults' => ['in_app' => true, 'push' => true, 'email' => true]],
         'feedback' => ['label' => 'Feedback portal', 'description' => 'New ideas waiting for moderation on your public feedback portals.', 'defaults' => ['in_app' => true, 'push' => false, 'email' => false]],
+        // v1.45.0 (BRAI-158)
+        'bookings' => ['label' => 'Bookings', 'description' => 'New, rescheduled and cancelled bookings on your booking pages, and calendars that couldn’t be checked.', 'defaults' => ['in_app' => true, 'push' => true, 'email' => true]],
     ];
 
     /**
@@ -72,6 +74,10 @@ final class NotificationCatalog
         'automation_notice' => 'status', // BRAI-63: the "Notify" action of an automation rule
         'export_ready' => 'workspace', // BRAI-81: a project export can be downloaded
         'data_export_ready' => 'workspace', // BRAI-156: "Download my data" is ready (in-app + email always; push per category)
+        // BRAI-158 (booking pages): to the host
+        'booking_created' => 'bookings',
+        'booking_cancelled' => 'bookings',
+        'booking_calendar_unreadable' => 'bookings',
         // v1.42.0 — one line per type, reserved by the foundation so the tickets don't collide
         'feedback_submitted' => 'feedback', // BRAI-60: a new post waits for moderation (project admins)
         'client_decision' => 'reviews', // BRAI-73: a client approved / requested changes on a deliverable

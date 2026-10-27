@@ -77,7 +77,7 @@ class CalendarProviderDispatchTest extends TestCase
             ->where('connections.0.provider_label', 'Fake DAV')
             ->where('connections.0.read_only', false)
             ->where('connections.0.sync_error', null)
-            ->where('filters.sources', ['board', 'list', 'external'])
+            ->where('filters.sources', ['board', 'list', 'external', 'booking'])
             ->where('calendarProviders.0.key', 'google')
             ->where('calendarProviders.0.connect_mode', 'oauth')
             // registry order, then the test-only fakes (other real providers may sit in between)

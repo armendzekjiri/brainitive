@@ -7,6 +7,10 @@ use App\Mail\InstanceTestMail;
 use App\Models\BillingReport;
 use App\Models\Board;
 use App\Models\BoardColumn;
+use App\Models\Booking;
+use App\Models\BookingPage;
+use App\Models\BookingType;
+use App\Models\CalendarConnection;
 use App\Models\ClientDeliverable;
 use App\Models\ClientDeliverableComment;
 use App\Models\ClientDeliverableDecision;
@@ -37,6 +41,10 @@ use App\Models\Webhook;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Notifications\AutomationNoticeNotification;
+use App\Notifications\BookingCalendarUnreadableNotification;
+use App\Notifications\BookingCancelledNotification;
+use App\Notifications\BookingCreatedNotification;
+use App\Notifications\BookingGuestNotification;
 use App\Notifications\ClientCommentedNotification;
 use App\Notifications\ClientDecisionNotification;
 use App\Notifications\ClientPortalGuestNotification;
@@ -144,6 +152,9 @@ final class EmailPreviews
             'page-updated' => $member('Page updated', fn () => new PageUpdatedNotification($s->page(), $s->sam())),
             'task-digest' => $member('Daily task digest', fn () => new TaskDigestNotification(2, 1, ['Send the October invoice', 'Book the venue', 'Review the onboarding copy'], url('/my-work'))),
             'new-lead' => $member('New lead', fn () => new NewLeadNotification($s->lead())),
+            'booking-created' => $member('New booking', fn () => new BookingCreatedNotification($s->booking())),
+            'booking-cancelled' => $member('Booking cancelled by the guest', fn () => new BookingCancelledNotification($s->booking(['status' => Booking::CANCELLED, 'cancelled_by' => 'guest', 'cancel_reason' => 'Something came up, sorry!']))),
+            'booking-calendar-unreadable' => $member('Booking page: calendar couldn’t be checked', fn () => new BookingCalendarUnreadableNotification($s->booking()->type->page, $s->make(CalendarConnection::class, ['id' => 0, 'external_calendar_name' => 'Personal', 'account_email' => 'alex@example.com']))),
             'ticket-assigned' => $member('Ticket assigned', fn () => new TicketAssignedNotification($s->ticket(), $s->sam())),
             'ticket-created-team' => $member('New ticket (team)', fn () => new TicketCreatedNotification($s->ticket(), $s->contact())),
             'ticket-reply-team' => $member('Ticket reply (team)', fn () => new TicketReplyNotification($s->ticket(), $s->ticketReply('<p>Thanks! It works again after clearing the cache.</p>'), $s->contact())),
@@ -154,6 +165,10 @@ final class EmailPreviews
             'ticket-resolved' => ['label' => 'Ticket resolved', 'group' => 'guest', 'recipient' => 'Helpdesk customer', 'build' => fn () => [new TicketResolvedNotification($s->ticket(), '<p>Hi Jordan,</p><p>the fix is live. Thanks for your patience!</p>'), $s->contact()]],
             'helpdesk-mail-reply' => ['label' => 'Mailbox reply (threaded)', 'group' => 'guest', 'recipient' => 'Helpdesk customer', 'build' => fn () => [TicketMailer::compose($s->ticket(), $s->ticketReply('<p>Hi Jordan,</p><p>we found the cause: the reset link expired too early. It is <b>fixed</b> now.</p><p>Best,<br>Sam</p>')), $s->contact()]],
             'helpdesk-mail-acknowledgment' => ['label' => 'Mailbox acknowledgment', 'group' => 'guest', 'recipient' => 'Helpdesk customer', 'build' => fn () => [TicketMailer::compose($s->ticket(), null), $s->contact()]],
+            'booking-confirmed' => ['label' => 'Booking confirmed', 'group' => 'guest', 'recipient' => 'Booking guest', 'build' => fn () => [new BookingGuestNotification($s->booking(), 'confirmed', Str::random(48)), (new AnonymousNotifiable)->route('mail', 'jordan@example.com')]],
+            'booking-rescheduled' => ['label' => 'Booking moved', 'group' => 'guest', 'recipient' => 'Booking guest', 'build' => fn () => [new BookingGuestNotification($s->booking(), 'rescheduled', Str::random(48)), (new AnonymousNotifiable)->route('mail', 'jordan@example.com')]],
+            'booking-reminder' => ['label' => 'Booking reminder', 'group' => 'guest', 'recipient' => 'Booking guest', 'build' => fn () => [new BookingGuestNotification($s->booking(), 'reminder'), (new AnonymousNotifiable)->route('mail', 'jordan@example.com')]],
+            'booking-cancelled-guest' => ['label' => 'Booking cancelled', 'group' => 'guest', 'recipient' => 'Booking guest', 'build' => fn () => [new BookingGuestNotification($s->booking(['status' => Booking::CANCELLED, 'cancelled_by' => 'host', 'cancel_reason' => 'I’m ill today — please pick another time.']), 'cancelled'), (new AnonymousNotifiable)->route('mail', 'jordan@example.com')]],
             'lead-confirmation' => ['label' => 'Lead confirmation', 'group' => 'guest', 'recipient' => 'Form visitor', 'build' => fn () => [new LeadConfirmationNotification($s->lead()), (new AnonymousNotifiable)->route('mail', 'jordan@example.com')]],
             'portal-login-link' => ['label' => 'Portal sign-in link', 'group' => 'guest', 'recipient' => 'Portal guest', 'build' => fn () => [new PortalLoginLinkNotification(Str::random(48)), $s->guest()]],
             'client-portal-invited' => ['label' => 'Client portal invitation', 'group' => 'guest', 'recipient' => 'Client', 'build' => fn () => [new ClientPortalGuestNotification(ClientPortalGuestNotification::INVITED, $s->portal(), null, 'Sam Rivera'), $s->guest()]],
@@ -278,6 +293,21 @@ final class EmailPreviews
     private function guest(): PortalIdentity
     {
         return $this->make(PortalIdentity::class, ['uuid' => (string) Str::uuid(), 'name' => 'Jordan Lee', 'email' => 'jordan@example.com']);
+    }
+
+    /** A booking on Alex's "Talk to Northwind" page (BRAI-158), Monday next week 10:00 Berlin. */
+    private function booking(array $attributes = []): Booking
+    {
+        $page = $this->make(BookingPage::class, ['id' => 0, 'uuid' => (string) Str::uuid(), 'public_slug' => 'alex-morgan', 'title' => 'Talk to Northwind', 'timezone' => 'Europe/Berlin'], ['user' => $this->alex(), 'workspace' => $this->workspace()]);
+        $type = $this->make(BookingType::class, ['id' => 0, 'name' => 'Intro call', 'duration_minutes' => 30, 'location' => ['kind' => 'google_meet', 'value' => null],
+            'questions' => [['id' => 'topic', 'label' => 'What would you like to talk about?', 'type' => 'textarea', 'required' => true, 'options' => []]]], ['page' => $page]);
+        $start = now('Europe/Berlin')->next('Monday')->setTime(10, 0)->utc();
+
+        return $this->make(Booking::class, $attributes + [
+            'uuid' => (string) Str::uuid(), 'starts_at' => $start, 'ends_at' => $start->copy()->addMinutes(30), 'guest_name' => 'Jordan Lee', 'guest_email' => 'jordan@example.com',
+            'guest_timezone' => 'Europe/London', 'answers' => ['topic' => 'Our website relaunch next spring.'], 'status' => Booking::CONFIRMED,
+            'conference_url' => 'https://meet.google.com/abc-defg-hij',
+        ], ['type' => $type]);
     }
 
     private function workspace(): Workspace

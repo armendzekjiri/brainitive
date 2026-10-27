@@ -9,6 +9,8 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * Read-only calls to GitHub as the instance's GitHub App (BRAI-61). No outbound writes.
@@ -192,7 +194,12 @@ final class GithubApi
     {
         $response = self::client()->post('/app-manifests/'.rawurlencode($code).'/conversions');
         if (! $response->successful()) {
-            throw new GithubApiException('GitHub could not create the app (HTTP '.$response->status().').', $response->status());
+            // GitHub says why ("Validation failed" + field errors, e.g. a taken name): log it and show it.
+            // A refused conversion carries no secrets; never log a successful body (it has the private key).
+            $reason = self::refusalReason((array) $response->json());
+            Log::warning('GitHub App manifest conversion refused', ['status' => $response->status(), 'reason' => $reason]);
+
+            throw new GithubApiException('GitHub could not create the app (HTTP '.$response->status().')'.($reason !== '' ? ': '.$reason : '.'), $response->status());
         }
 
         return (array) $response->json();
@@ -264,5 +271,19 @@ final class GithubApi
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /** "Validation failed — name: Name has already been taken" from a GitHub error body, plain and short. */
+    private static function refusalReason(array $body): string
+    {
+        $parts = [];
+        foreach ((array) ($body['errors'] ?? []) as $error) {
+            $parts[] = is_array($error)
+                ? trim(($error['field'] ?? $error['resource'] ?? '').': '.($error['message'] ?? $error['code'] ?? ''), ': ')
+                : (string) $error;
+        }
+        $text = trim((string) ($body['message'] ?? '').($parts ? ' — '.implode('; ', array_filter($parts)) : ''));
+
+        return Str::limit(preg_replace('/[\x00-\x1F]+/', ' ', strip_tags($text)) ?? '', 300);
     }
 }
