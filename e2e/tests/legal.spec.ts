@@ -1,4 +1,5 @@
 import type { Browser, Page } from '@playwright/test';
+import { BASE_URL } from '../env';
 import { expect, test, uid, urls } from '../fixtures';
 import { createHelpdesk, createProject, createWorkspace, guestPage, projectKey } from '../helpers/helpdesk';
 
@@ -63,7 +64,7 @@ test.describe('legal pages', () => {
         const external: string[] = [];
         guest.page.on('request', (r) => {
             const host = new URL(r.url()).hostname;
-            if (!['127.0.0.1', 'localhost'].includes(host)) external.push(r.url());
+            if (!['127.0.0.1', 'localhost', new URL(BASE_URL).hostname].includes(host)) external.push(r.url());
         });
 
         await guest.page.goto('/imprint');

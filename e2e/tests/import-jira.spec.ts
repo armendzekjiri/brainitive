@@ -31,7 +31,8 @@ test('a Jira CSV export becomes a new board with epics, sub-tasks and comments',
     await expect(preview.getByRole('list', { name: 'What the file contains' })).toContainText('2 nested under an epic or parent');
     await expect(page.getByLabel('Column for Code Review')).toHaveValue('Code Review');
     await expect(page.getByLabel('Column for Closed')).toHaveValue('Done');
-    await expect(page.getByRole('combobox', { name: 'Item type for Improvement' })).toHaveText('Create “Improvement”');
+    // matched by name: a global "Improvement" type (dev.brainitive.app's shared data) is picked instead of a new one
+    await expect(page.getByRole('combobox', { name: 'Item type for Improvement' })).toHaveText(/^(Create “Improvement”|Improvement)$/);
     await expect(page.getByRole('combobox', { name: 'Item type for Sub-task' })).toHaveText('Subtask');
     await expect(page.getByRole('combobox', { name: 'Priority for Blocker' })).toHaveText('Highest');
     await expect(page.getByRole('combobox', { name: 'Member for Ola Nordmann' })).toHaveText('Unassigned');
