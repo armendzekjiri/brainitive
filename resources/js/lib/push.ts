@@ -49,7 +49,8 @@ async function getRegistration(): Promise<ServiceWorkerRegistration | null> {
 export async function isSubscribed(): Promise<boolean> {
     const reg = await getRegistration();
     if (!reg) return false;
-    const sub = await reg.pushManager.getSubscription();
+    // Firefox / WebKit reject when no push service is reachable (headless, privacy settings)
+    const sub = await reg.pushManager.getSubscription().catch(() => null);
     return !!sub;
 }
 
@@ -108,7 +109,7 @@ export async function unsubscribeFromPush(): Promise<boolean> {
     const reg = await getRegistration();
     if (!reg) return false;
 
-    const sub = await reg.pushManager.getSubscription();
+    const sub = await reg.pushManager.getSubscription().catch(() => null);
     if (!sub) return true;
 
     const endpoint = sub.endpoint;
