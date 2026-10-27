@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Portal;
 
+use App\Models\InstanceSettings;
 use App\Models\PortalIdentity;
 use App\Models\PortalLoginToken;
 use App\Models\User;
@@ -126,6 +127,20 @@ class PortalAuthTest extends TestCase
 
         $this->actingAs($user)->get('/feedback/test-only/probe')->assertRedirect(route('guest.login', ['return_to' => '/feedback/test-only/probe']));
         $this->assertSame(0, PortalIdentity::count());
+    }
+
+    public function test_without_required_verification_an_unconfirmed_account_never_takes_over_a_guest_identity(): void
+    {
+        // someone registers the victim's address on an instance that doesn't require verification
+        InstanceSettings::instance()->update(['settings' => ['require_email_verification' => false]]);
+        $victim = PortalIdentity::create(['email' => 'client@example.com', 'name' => 'Real client', 'email_verified_at' => now()]);
+        $squatter = User::factory()->unverified()->create(['email' => 'client@example.com']);
+        $this->assertTrue($squatter->hasVerifiedEmail(), 'the instance treats everyone as verified');
+
+        $this->actingAs($squatter)->get('/feedback/test-only/probe')->assertRedirect();
+
+        $this->assertNull($victim->fresh()->user_id);
+        $this->assertSame(1, PortalIdentity::count());
     }
 
     public function test_json_calls_without_an_identity_get_401(): void
