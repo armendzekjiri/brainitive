@@ -1583,3 +1583,20 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   "Deleted or moved project" with the snapshot ticket key / title — never the new workspace's
   names. Whether unbilled entries should move with the project is an open decision (activities
   are per workspace, so moving them would need the activity cleared or mapped).
+
+### Booking pages: UTC timestamps, double booking, busy sources (v1.45.0, BRAI-158)
+- **Eloquent writes a timestamp's wall clock without converting it.** A `Carbon` in Europe/Berlin saved into
+  `bookings.starts_at` lands an hour off. `Booking` converts `starts_at` / `ends_at` to UTC in a mutator — do
+  the same for any new column that takes zoned instants.
+- **Double booking is stopped three times** (`BookingService::book`): a fresh busy read (calendars, outside the
+  lock), a `lockForUpdate` on the host's user row + overlap / daily-max re-check, and the partial unique index
+  `(user_id, starts_at) WHERE status = 'confirmed'`. Reschedule cancels the old row first so the same slot can be
+  picked again.
+- **A booking's own card would block its own time** through the "issues" busy source (it has a due time and is
+  assigned to the host) — and keep blocking after a cancel. `BusyTimes::issues()` excludes items linked from
+  `bookings.item_id`.
+- **An unreadable busy calendar is ignored, not fatal** (product decision 2026-10-27): slots go on without it,
+  the host is notified once a day per page + calendar, and bookings made meanwhile store
+  `unchecked_connection_ids` for a "look for an overlap" hint.
+- Recurring task-list tasks block only their first occurrence (the recurrence projection is private to
+  `CalendarController`).

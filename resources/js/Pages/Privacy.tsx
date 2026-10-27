@@ -119,7 +119,7 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                 </p>
                 <p>
                     The content of a workspace — documents, issues, comments, files, and the data of people outside the workspace (for example the
-                    contacts of a helpdesk, the leads of a form or the members of a client portal) — is the responsibility of the workspace’s
+                    contacts of a helpdesk, the leads of a form, the guests of a booking page or the members of a client portal) — is the responsibility of the workspace’s
                     owner, our customer. For this content <strong>the customer is the controller</strong> and we process it on the customer’s
                     behalf as a <strong>processor</strong> (Art. 28 GDPR)
                     {legal.dpa ? (
@@ -254,6 +254,11 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                     <li>
                         <strong>iCloud / CalDAV and calendar links (ICS):</strong> our server signs in with the app password you enter, or downloads
                         the link you enter.
+                    </li>
+                    <li>
+                        <strong>Booking pages:</strong> to show when you’re free, our server reads the start and end of the events in the
+                        calendars you pick for a page (never their titles for the visitor — the page only shows free times), plus your issues and
+                        tasks with a time if you choose. A booking is written to the calendar you pick, with the guest invited.
                     </li>
                     <li>
                         <strong>Calendar feed:</strong> a private link that lets your calendar app read your Brainitive events. We count how often it

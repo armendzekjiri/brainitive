@@ -1,7 +1,7 @@
 # Booking pages: "Book a time with me" from your real calendar availability
 
 **Branch:** feat/booking-pages (into release/v1.45.0)
-**Status:** in-progress
+**Status:** done (built; waiting for the v1.45.0 release)
 **Started:** 2026-10-27
 **Board card:** BRAI-158 (https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-398)
 
@@ -189,3 +189,8 @@ index), legal data inventory, HelpModal CHANGELOG v1.45.0, homepage feature card
    Brainitive calendar ("Bookings" source), plus optionally a card on a board + column they pick.
 4. **v1.45.0 = booking pages only.** Semantic search (BRAI-150) moves to a later release.
 
+## Built (2026-10-27)
+Everything in "Scope (v1.45.0)" except these, which were left for later:
+- Card per booking goes to a normal board; a lead form's leads board (own `leads` table) is not offered yet.
+- MCP tools for bookings (list / share link).
+- Drag-and-drop reordering of meeting types: up / down buttons instead (keyboard friendly).
