@@ -31,9 +31,8 @@ final class AppManifest
             'hook_attributes' => ['url' => route('webhooks.github.app'), 'active' => true],
             'redirect_url' => route('admin.github-app.callback'),
             // "Request user authorization (OAuth) during installation": GitHub sends the person back to
-            // the callback with a code, which proves the installation is theirs. No setup_url /
-            // setup_on_update: GitHub refuses them together with OAuth on install (HTTP 422 on the
-            // manifest conversion, seen on brainitive.app 2026-10-27) — the callback does both jobs.
+            // the callback with a code, which proves the installation is theirs; it also does the
+            // setup URL's job, so the manifest sets no setup_url.
             'callback_urls' => [$callback],
             'request_oauth_on_install' => true,
             'public' => $public,

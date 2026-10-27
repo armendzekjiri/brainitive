@@ -218,6 +218,9 @@ class GithubAppTest extends TestCase
         $this->actingAs($instanceAdmin)->get(route('admin.github-app.callback', ['code' => 'one-time-code', 'state' => $query['state']]))
             ->assertRedirect(route('admin.github-app.show'))->assertSessionHas('success');
 
+        // GitHub refuses the JSON body `[]` (422 "links/0/schema"): an empty POST sends an object
+        Http::assertSent(fn ($request) => str_ends_with($request->url(), '/app-manifests/one-time-code/conversions') && $request->body() === '{}');
+
         $app = GithubApp::sole();
         $this->assertSame([4321, 'brainitive-test', 'the-webhook-secret'], [$app->app_id, $app->slug, $app->webhook_secret]);
         $raw = (array) DB::table('github_apps')->first();
