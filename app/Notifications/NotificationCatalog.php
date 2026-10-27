@@ -71,6 +71,7 @@ final class NotificationCatalog
         'sla_breached' => 'helpdesk',
         'automation_notice' => 'status', // BRAI-63: the "Notify" action of an automation rule
         'export_ready' => 'workspace', // BRAI-81: a project export can be downloaded
+        'data_export_ready' => 'workspace', // BRAI-156: "Download my data" is ready (in-app + email always; push per category)
         // v1.42.0 — one line per type, reserved by the foundation so the tickets don't collide
         'feedback_submitted' => 'feedback', // BRAI-60: a new post waits for moderation (project admins)
         'client_decision' => 'reviews', // BRAI-73: a client approved / requested changes on a deliverable

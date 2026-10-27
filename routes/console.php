@@ -2,6 +2,7 @@
 
 use App\Jobs\RunImport;
 use App\Models\AutomationRun;
+use App\Models\DataExport;
 use App\Models\GithubAppDelivery;
 use App\Models\GithubDelivery;
 use App\Models\HelpdeskInboundEmail;
@@ -88,8 +89,13 @@ Schedule::call(function () {
     // an export that never finished (a lost worker) leaves its work folder behind
     ProjectExport::query()->whereIn('status', [ProjectExport::QUEUED, ProjectExport::RUNNING])->where('updated_at', '<', now()->subDay())
         ->each(fn (ProjectExport $export) => $export->expire());
+    // "Download my data" (BRAI-156): the same 24 h life
+    // lazyById: expire() changes the filtered columns, an offset walk would skip rows
+    DataExport::query()->whereNotNull('file_path')->where('expires_at', '<', now())->lazyById()->each(fn (DataExport $export) => $export->expire());
+    DataExport::query()->whereIn('status', [DataExport::QUEUED, DataExport::RUNNING])->where('updated_at', '<', now()->subDay())
+        ->lazyById()->each(fn (DataExport $export) => $export->expire());
 })->name('exports:cleanup')->hourly()->withoutOverlapping();
-Schedule::command('model:prune', ['--model' => [ProjectExport::class]])->dailyAt('04:25');
+Schedule::command('model:prune', ['--model' => [ProjectExport::class, DataExport::class]])->dailyAt('04:25');
 
 // v1.42.0: spent / expired guest sign-in links
 Schedule::command('model:prune', ['--model' => [PortalLoginToken::class]])->dailyAt('04:30');

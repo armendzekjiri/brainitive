@@ -118,9 +118,18 @@ sub-processor list, the retention table and the DPA annex. The imprint never sho
 - Whether Brainitive Cloud (free, but with announced paid plans) is a "geschäftsmäßiger digitaler
   Dienst" (imprint duty) — assumed yes.
 
+## Self-service data export (Art. 15 / 20) — done (feat/data-export)
+
+Profile → **Your data** → "Download my data": a background job writes a ZIP of JSON files + README.txt
+about the signed-in account (`App\Support\Privacy\PersonalDataArchive`, file list in its README and in
+[`data-inventory.md`](data-inventory.md) §14). The signed link works 24 h and only in the owner's
+session; the file is deleted then (`exports:cleanup`), the `data_exports` row after 30 days; one request
+per hour. Never in the ZIP: password hash, tokens, app passwords, calendar credentials, push keys, other
+people's comments / pages / private content, content of workspaces the person left (the workspace is
+controller — such requests go to it, see Privacy "Your rights"). Same on self-hosted installs.
+
 ## Follow-ups (not in this ticket)
 
-- Account-level "Download my data" (Art. 15/20) — today by e-mail request; project export exists.
 - Purge soft-deleted content after a trash period; retention for `admin_audit_logs`, `activity_logs`,
   `captures`, portal identities, `sent_*reminders`; daily log rotation (`LOG_STACK=daily`).
 - Remove the TEMPORARY IP/UA logging in `LogMcpRequest`.

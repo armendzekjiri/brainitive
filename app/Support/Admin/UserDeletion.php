@@ -2,6 +2,7 @@
 
 namespace App\Support\Admin;
 
+use App\Models\DataExport;
 use App\Models\InstanceAdmin;
 use App\Models\User;
 use Illuminate\Database\Query\Builder;
@@ -83,6 +84,8 @@ class UserDeletion
                 ->update(['parent_id' => null]);
 
             $user->tokens()->each(fn ($token) => $token->revoke());
+            // "Download my data" ZIPs: the rows cascade, the files must go too
+            DataExport::where('user_id', $user->id)->get()->each->expire();
             $user->delete();
         });
     }

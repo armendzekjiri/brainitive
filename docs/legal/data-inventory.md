@@ -158,5 +158,20 @@ log settings, data retention.
 - Rectification: profile, workspace settings. Erasure: Profile → Delete account (**fixed**: no longer
   cascades other people's work; blocked while owning a shared workspace; uses `UserDeletion`).
   OAuth-only accounts must reset a password first to delete (open item).
-- Export: project export ZIP (excludes members, tickets, leads, time entries, history). **No
-  account-level "download my data"** → requests by e-mail (open item).
+- Export: project export ZIP (excludes members, tickets, leads, time entries, history).
+- **Access + portability (Art. 15 / 20): Profile → Your data → "Download my data"** (feat/data-export).
+  Queued job `ExportPersonalData` → `PersonalDataArchive` → ZIP on the private disk
+  (`data-exports/<uuid>/`), `data_exports` row; signed link 24 h, owner's session only, in-app + email
+  (`data_export_ready`); file deleted after 24 h (`exports:cleanup` hourly), row pruned after 30 days,
+  files removed on account deletion; 1 request / hour (`data-export:<user>`). Contents (JSON + README):
+  account (profile, settings, notification choices, sign-in provider names, terms), memberships, issues
+  created / assigned / reported, own comments (issues, pages, client portals), own pages + drafts,
+  whiteboards (.excalidraw), task-list items, captures, snippets, bookmarks, time entries, My Day,
+  sticky notes, notifications of the last 365 days (title + link, no body), push devices (label, UA,
+  dates), sessions (IP, UA, last activity), calendar connections (provider, account, calendar name,
+  server host) + feed options, app tokens / OAuth clients (names, scopes, dates), own activity (2 years,
+  ≤ 10 000, field names only), admin actions on the account (action + date), guest-portal identities
+  (linked, or same address when the account is verified) with decisions / comments / ideas / votes /
+  follows, uploaded attachments (copied up to 500 MB, else listed) and the profile photo. Workspace
+  content only from workspaces / projects the person can still open; trashed own content flagged.
+  Never: secrets (hashes, tokens, credentials, keys, session ids), other people's records.
