@@ -27,9 +27,12 @@ export const docEditor = (page: Page) => page.locator('.lexical-editor-content[c
 /** Lexical editor in read mode (published page, not editing). */
 export const docReader = (page: Page) => page.locator('.lexical-editor-content');
 
-/** Resolves on the next successful autosave of a page draft (PUT …/pages/{uuid}/draft). */
+/**
+ * Resolves on the next successful autosave of a page draft: PUT …/pages/{uuid}/draft, or
+ * …/pages/{uuid}/collab/draft where live editing is on (dev.brainitive.app runs a realtime server).
+ */
 export const draftSaved = (page: Page) =>
-    page.waitForResponse((r) => r.request().method() === 'PUT' && /\/pages\/[^/]+\/draft$/.test(new URL(r.url()).pathname) && r.ok());
+    page.waitForResponse((r) => r.request().method() === 'PUT' && /\/pages\/[^/]+\/(collab\/)?draft$/.test(new URL(r.url()).pathname) && r.ok());
 
 /** A date as YYYY-MM-DD in local time (what the calendar's ?date= expects). */
 export const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
