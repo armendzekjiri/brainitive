@@ -68,6 +68,8 @@ test.describe('calendar providers', () => {
         const filter = page.getByRole('dialog');
         await expect(filter.getByRole('button', { name: 'Calendars', exact: true })).toBeVisible();
         await filter.getByRole('button', { name: 'Lists', exact: true }).click();
+        // each click reloads the filters: wait for Lists to land before the next one
+        await expect(page).toHaveURL(/list/);
         await filter.getByRole('button', { name: 'Bookings', exact: true }).click();
         await expect(page.getByRole('button', { name: 'Filter', exact: true })).toBeVisible();
         await expect(page).not.toHaveURL(/sources/);
