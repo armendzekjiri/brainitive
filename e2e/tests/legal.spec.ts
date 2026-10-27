@@ -3,8 +3,8 @@ import { expect, test, uid, urls } from '../fixtures';
 import { createHelpdesk, createProject, createWorkspace, guestPage, projectKey } from '../helpers/helpdesk';
 
 /**
- * Legal & privacy (BRAI-156): the legal pages and their footer links, no cookie banner, the analytics
- * opt-out, and customers' public pages naming who runs them — Workspace settings → Legal, the operator
+ * Legal & privacy (BRAI-156): the legal pages and their footer links, no cookie banner, the statistics
+ * choice on /cookies (the consent flow itself: analytics-consent.spec.ts), and customers' public pages naming who runs them — Workspace settings → Legal, the operator
  * line on a support page and a lead form, and the lead form's consent checkbox.
  * The e2e app runs as Brainitive Cloud (LEGAL_CLOUD=true in e2e/env.ts).
  */
@@ -50,7 +50,7 @@ test.describe('legal pages', () => {
         await guest.page.getByTestId('legal-footer-links').getByRole('link', { name: 'DPA' }).click();
         await expect(guest.page.getByTestId('legal-title')).toHaveText('Data Processing Agreement');
 
-        // no cookie banner anywhere: there is nothing optional to consent to
+        // no cookie banner: the only optional thing (statistics) asks with its own notice, on brainitive.app only
         await guest.page.goto('/');
         await expect(guest.page.getByRole('dialog', { name: 'Cookie consent' })).toHaveCount(0);
 
@@ -70,7 +70,7 @@ test.describe('legal pages', () => {
         await expect(guest.page.getByTestId('imprint-details').getByRole('link', { name: 'hello@brainitive.app' })).toBeVisible();
 
         await guest.page.goto('/privacy');
-        await expect(guest.page.getByRole('heading', { name: /Reach measurement \(Umami\)/ })).toBeVisible();
+        await expect(guest.page.getByRole('heading', { name: /Visit statistics \(Umami, only with your consent\)/ })).toBeVisible();
         await guest.page.goto('/');
         await guest.page.waitForLoadState('networkidle');
         expect(external, 'requests to other hosts').toEqual([]);
@@ -90,19 +90,22 @@ test.describe('legal pages', () => {
         await guest.close();
     });
 
-    test('a visitor switches reach measurement off and on again', async ({ browser }) => {
+    test('a visitor sees and changes the statistics choice on /cookies', async ({ browser }) => {
         const guest = await visitor(browser);
+        // an opt-out from before consent existed counts as “not allowed”
+        await guest.page.addInitScript(() => localStorage.setItem('umami.disabled', '1'));
         await guest.page.goto('/cookies');
-        const optOut = guest.page.getByTestId('analytics-opt-out');
-        await expect(optOut.getByTestId('analytics-state')).toHaveText('on');
-        await optOut.getByRole('button', { name: 'Switch measurement off' }).click();
-        await expect(optOut.getByTestId('analytics-state')).toHaveText('off');
-        expect(await guest.page.evaluate(() => localStorage.getItem('umami.disabled'))).toBe('1');
+        const setting = guest.page.getByTestId('analytics-consent-setting');
+        await expect(setting.getByTestId('analytics-state')).toHaveText('not allowed');
+        await expect(guest.page.getByRole('cell', { name: 'brainitive:analytics-consent' })).toBeVisible();
 
-        await guest.page.reload();
-        await expect(guest.page.getByTestId('analytics-state')).toHaveText('off');
-        await guest.page.getByRole('button', { name: 'Allow measurement again' }).click();
-        expect(await guest.page.evaluate(() => localStorage.getItem('umami.disabled'))).toBeNull();
+        await setting.getByRole('button', { name: 'Allow', exact: true }).click();
+        await expect(setting.getByTestId('analytics-state')).toHaveText('allowed');
+        expect(await guest.page.evaluate(() => JSON.parse(localStorage.getItem('brainitive:analytics-consent') ?? '{}').choice)).toBe('granted');
+
+        await setting.getByRole('button', { name: 'Don’t allow' }).click();
+        await expect(setting.getByTestId('analytics-state')).toHaveText('not allowed');
+        expect(await guest.page.evaluate(() => JSON.parse(localStorage.getItem('brainitive:analytics-consent') ?? '{}').choice)).toBe('denied');
         await guest.close();
     });
 

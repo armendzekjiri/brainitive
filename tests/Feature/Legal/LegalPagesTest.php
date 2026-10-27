@@ -149,16 +149,42 @@ class LegalPagesTest extends TestCase
         }
     }
 
-    public function test_the_tracker_is_rendered_cookieless_with_privacy_flags_on_brainitive_app_only(): void
+    public function test_the_server_never_renders_the_tracker_only_the_consent_config_on_brainitive_app(): void
     {
-        $this->get('/')->assertDontSee('stats.novabrainhub.de', false);
+        $this->get('/')->assertOk()
+            ->assertDontSee('stats.novabrainhub.de', false)
+            ->assertDontSee('window.brainitiveAnalytics', false);
 
-        $this->get('https://www.brainitive.app/')->assertOk()
-            ->assertSee('stats.novabrainhub.de/script.js', false)
-            ->assertSee('data-do-not-track="true"', false)
-            ->assertSee('data-exclude-search="true"', false);
+        // brainitive.app: no <script src=…stats…> — the browser loads it only after "Allow"
+        $html = $this->get('https://www.brainitive.app/')->assertOk()->getContent();
+        $this->assertStringContainsString('window.brainitiveAnalytics = ', $html);
+        $this->assertStringContainsString('stats.novabrainhub.de\\/script.js', $html, 'the script URL is only data');
+        $this->assertDoesNotMatchRegularExpression('#<script[^>]+src="https://stats\.novabrainhub\.de#', $html);
+        $this->assertStringContainsString('"excluded":["\\/f"', $html);
 
-        $this->get('https://www.brainitive.app/f/missing')->assertDontSee('stats.novabrainhub.de', false);
+        $this->get('https://www.brainitive.app/f/missing')->assertDontSee('brainitiveAnalytics', false);
+    }
+
+    public function test_the_e2e_analytics_opt_in_only_works_in_the_e2e_environment(): void
+    {
+        $request = fn () => tap(Request::create('http://127.0.0.1:8010/'), fn (Request $r) => $r->headers->set('X-E2E-Analytics', '1'));
+
+        config(['legal.analytics.e2e_opt_in' => true]);
+        $this->assertFalse(Analytics::enabledFor($request()), 'APP_ENV=testing ignores the header');
+
+        $this->app['env'] = 'e2e';
+        try {
+            $this->assertTrue(Analytics::enabledFor($request()));
+            $this->assertFalse(Analytics::enabledFor(Request::create('http://127.0.0.1:8010/')), 'without the header');
+            $support = Request::create('http://127.0.0.1:8010/support/acme');
+            $support->headers->set('X-E2E-Analytics', '1');
+            $this->assertFalse(Analytics::enabledFor($support), 'customer pages stay excluded');
+
+            config(['legal.analytics.e2e_opt_in' => false]);
+            $this->assertFalse(Analytics::enabledFor($request()), 'only with ANALYTICS_E2E_OPT_IN');
+        } finally {
+            $this->app['env'] = 'testing';
+        }
     }
 
     // ── no third-party requests from our own assets ──────────────────────────

@@ -15,7 +15,7 @@ const TOC = [
     { id: 'summary', title: 'Summary' },
     { id: 'roles', title: 'Our role: controller or processor' },
     { id: 'website', title: 'Visiting our website' },
-    { id: 'analytics', title: 'Reach measurement (Umami)' },
+    { id: 'analytics', title: 'Visit statistics (Umami, only with your consent)' },
     { id: 'account', title: 'Your account and sign-in' },
     { id: 'content', title: 'Workspaces and content' },
     { id: 'email', title: 'E-mails and notifications' },
@@ -100,7 +100,7 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                     <li>We process your data to provide Brainitive: your account, your workspaces and what you create in them.</li>
                     <li>We do not sell personal data, do not show advertising and do not use advertising or tracking cookies.</li>
                     <li>
-                        Our reach measurement (Umami) runs on our own server, sets no cookies and stores nothing on your device. It does not run on
+                        Our visit statistics (Umami) run on our own server and only if you allow them; they set no cookies. They never run on
                         customers’ pages or on links that contain a secret.
                     </li>
                     <li>
@@ -147,16 +147,18 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                 </p>
             </LegalSection>
 
-            <LegalSection id="analytics" num={n('analytics')} title="Reach measurement (Umami)">
+            <LegalSection id="analytics" num={n('analytics')} title="Visit statistics (Umami, only with your consent)">
                 <p>
-                    On www.brainitive.app we measure how often pages are used with <strong>Umami</strong>, an open-source analytics tool that we
-                    run ourselves on a server of {p.hosting ?? 'OVHcloud'} (stats.novabrainhub.de). No analytics company receives the data.
+                    On www.brainitive.app we would like to measure how often pages are used with <strong>Umami</strong>, an open-source analytics
+                    tool that we run ourselves on a server of {p.hosting ?? 'OVHcloud'} (stats.novabrainhub.de). No analytics company receives the
+                    data. <strong>It runs only if you allow it.</strong> We ask once with a small notice (“Allow” or “No thanks”); until you
+                    answer, and if you say no, the Umami script is not loaded and your browser sends nothing to it.
                 </p>
                 <ul>
-                    <li>Umami sets no cookies and stores nothing in your browser.</li>
+                    <li>Umami sets no cookies. We store only your answer in your browser (see the <a href={legal.cookies}>Cookies page</a>).</li>
                     <li>
-                        It records the page address (without query strings), the referring website, browser, operating system, device type,
-                        screen size, language, and the country or region derived from your IP address.
+                        With your consent it records the page address (without query strings or page titles), the referring page, browser,
+                        operating system, device type, screen size, language, and the country or region derived from your IP address.
                     </li>
                     <li>
                         Umami does not store your IP address. By its design it uses the IP address and browser data only briefly, to derive the
@@ -164,17 +166,21 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                         periods or across websites.
                     </li>
                     <li>
-                        It does not run on customers’ public pages (support pages, forms, portals, shared links) or on pages whose address contains
-                        a secret (password reset, invitations, calendar feeds).
+                        It never runs on customers’ public pages (support pages, forms, portals, shared links) or on pages whose address contains a
+                        secret (password reset, invitations, calendar feeds), even if you allowed it.
+                    </li>
+                    <li>
+                        If your browser sends <em>Global Privacy Control</em> or <em>Do Not Track</em>, we treat that as “no” and do not ask.
                     </li>
                 </ul>
                 <p>
-                    Legal basis: Art. 6 (1) (f) GDPR — our legitimate interest in knowing which parts of our service are used, so we can improve
-                    it, without identifying you. Statistics are kept for {keep(legal.retention.analytics, 'analytics retention period')}.
+                    Legal basis: your consent, Art. 6 (1) (a) GDPR, and for reading information from your browser § 25 (1) TDDDG. Statistics are
+                    kept for {keep(legal.retention.analytics, 'analytics retention period')}.
                 </p>
                 <p>
-                    You can object at any time: Umami respects your browser’s <em>Do Not Track</em> setting, and you can switch measurement off for
-                    your browser on our <a href={legal.cookies}>Cookies page</a>.
+                    You can withdraw your consent at any time with effect for the future — on our <a href={legal.cookies}>Cookies page</a>, where
+                    you can also change your answer. Counting stops immediately; the lawfulness of the counting before the withdrawal is not
+                    affected (Art. 7 (3) GDPR).
                 </p>
             </LegalSection>
 
@@ -312,8 +318,9 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
             <LegalSection id="device" num={n('device')} title="Cookies and storage on your device">
                 <p>
                     We only use cookies and browser storage that are strictly necessary for the service you asked for (§ 25 (2) no. 2 TDDDG): the
-                    session and security cookies, “remember me”, and preferences such as your theme or sidebar layout. Because we use no optional
-                    cookies, we do not show a cookie banner. The complete list is on our <a href={legal.cookies}>Cookies page</a>.
+                    session and security cookies, “remember me”, and preferences such as your theme or sidebar layout. We use no optional cookies;
+                    the only optional thing — our visit statistics — runs only with your consent (section {n('analytics')}), and your answer is
+                    remembered in your browser. The complete list is on our <a href={legal.cookies}>Cookies page</a>.
                 </p>
             </LegalSection>
 

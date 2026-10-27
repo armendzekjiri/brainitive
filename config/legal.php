@@ -64,11 +64,15 @@ return [
         'analytics' => env('LEGAL_ANALYTICS_RETENTION'),
     ],
 
-    // The operator's self-hosted, cookieless Umami (brainitive.app only; see LegalInfo / Analytics)
+    // The operator's self-hosted, cookieless Umami (brainitive.app only; see LegalInfo / Analytics).
+    // The browser loads it only after the visitor's consent (components/legal/AnalyticsConsentNotice).
     'analytics' => [
         'hosts' => array_values(array_filter(array_map('trim', explode(',', (string) env('ANALYTICS_HOSTS', 'brainitive.app,www.brainitive.app'))))),
         'script' => env('ANALYTICS_UMAMI_SCRIPT', 'https://stats.novabrainhub.de/script.js'),
         'website_id' => env('ANALYTICS_UMAMI_WEBSITE_ID', 'e6d93341-8b10-4d6a-8629-b9599635909e'),
+        // e2e only (APP_ENV=e2e): requests with `X-E2E-Analytics: 1` count as an analytics host, so
+        // analytics-consent.spec.ts can test the consent flow; every other journey runs without it
+        'e2e_opt_in' => (bool) env('ANALYTICS_E2E_OPT_IN', false),
     ],
 
 ];

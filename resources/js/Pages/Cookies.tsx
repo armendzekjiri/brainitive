@@ -1,56 +1,16 @@
 import { Cookie } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { AnalyticsConsentSetting } from '@/components/legal/AnalyticsConsent';
 import { LegalLayout, LegalSection, LegalTable } from '@/components/legal/LegalLayout';
+import { CONSENT_KEY } from '@/lib/analytics/consent';
 import type { LegalPageData } from '@/types';
 
 /*
  * Cookies & device storage (BRAI-156): every cookie, localStorage / sessionStorage key and IndexedDB
  * database the app actually uses (docs/legal/data-inventory.md § device storage). All are strictly
- * necessary for a function the user asked for (§ 25 (2) no. 2 TDDDG), so there is no consent banner.
+ * necessary for a function the user asked for (§ 25 (2) no. 2 TDDDG). The one optional thing — our
+ * statistics (Umami) — runs only with consent (AnalyticsConsentNotice); its choice is managed here.
  * A new key in resources/js → add it here. DRAFT, to be confirmed by a lawyer (docs/legal/README.md).
  */
-
-/** Umami's own opt-out switch: the tracker sends nothing while this key is set. */
-const UMAMI_OPT_OUT = 'umami.disabled';
-
-function AnalyticsOptOut() {
-    const [optedOut, setOptedOut] = useState<boolean | null>(null);
-
-    useEffect(() => {
-        try {
-            setOptedOut(localStorage.getItem(UMAMI_OPT_OUT) !== null);
-        } catch {
-            setOptedOut(false);
-        }
-    }, []);
-
-    const toggle = () => {
-        try {
-            if (optedOut) localStorage.removeItem(UMAMI_OPT_OUT);
-            else localStorage.setItem(UMAMI_OPT_OUT, '1');
-            setOptedOut(!optedOut);
-        } catch {
-            // storage blocked: nothing to switch (and nothing is measured with storage blocked either)
-        }
-    };
-
-    if (optedOut === null) return null;
-
-    return (
-        <div className="flex flex-col gap-3 rounded-xl border bg-background p-4 sm:flex-row sm:items-center sm:justify-between" data-testid="analytics-opt-out">
-            <p className="text-sm">
-                Reach measurement in this browser: <strong data-testid="analytics-state">{optedOut ? 'off' : 'on'}</strong>
-            </p>
-            <button
-                type="button"
-                onClick={toggle}
-                className="rounded-lg border px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-            >
-                {optedOut ? 'Allow measurement again' : 'Switch measurement off'}
-            </button>
-        </div>
-    );
-}
 
 export default function Cookies({ legal }: { legal: LegalPageData }) {
     const cookies = [
@@ -72,7 +32,9 @@ export default function Cookies({ legal }: { legal: LegalPageData }) {
         ['brainitive-offline:…', 'Offline mode switched on, and for which account.', 'Until you switch it off or sign out'],
         ['brainitive-docs-epoch-…, brainitive-whiteboards-epoch-…', 'Version marker of the local copy of a document / whiteboard you co-edit.', 'Cleared on sign-out'],
         ['tz-sync-failed:… (session storage)', 'Avoids retrying a failed time-zone update.', 'Until the tab is closed'],
-        ...(legal.analytics ? [[UMAMI_OPT_OUT, 'Only if you switch reach measurement off below.', 'Until you switch it on again']] : []),
+        ...(legal.analytics
+            ? [[CONSENT_KEY, 'Your answer to “May we count your visit?” (allowed or not, and when), so we don’t ask again.', 'Until you change it or clear your browser storage']]
+            : []),
     ];
 
     const databases = [
@@ -89,8 +51,9 @@ export default function Cookies({ legal }: { legal: LegalPageData }) {
             intro={
                 <p>
                     {legal.app_name} only stores what is strictly necessary for the functions you use (§ 25 (2) no. 2 TDDDG): signing in,
-                    security and your own preferences. We use no advertising, tracking or third-party cookies, so we do not ask for consent with a
-                    cookie banner. This page lists everything we store on your device.
+                    security and your own preferences. We use no advertising, tracking or third-party cookies.
+                    {legal.analytics && ' The only optional thing is our own visit statistics, which run only if you allow them.'} This page lists
+                    everything we store on your device.
                 </p>
             }
         >
@@ -109,13 +72,17 @@ export default function Cookies({ legal }: { legal: LegalPageData }) {
             </LegalSection>
 
             {legal.analytics && (
-                <LegalSection id="analytics" num={4} title="Reach measurement">
+                <LegalSection id="analytics" num={4} title="Visit statistics (your consent)">
                     <p>
-                        On www.brainitive.app we count page views with Umami, which we run on our own server. It sets no cookies and stores nothing
-                        on your device, and it respects your browser’s <em>Do Not Track</em> setting. Details are in our{' '}
-                        <a href={legal.privacy}>Privacy Policy</a>. You can switch it off for this browser here:
+                        On www.brainitive.app we would like to count page views with Umami, which we run on our own server. It sets no cookies,
+                        stores nothing on your device and shares nothing with anyone — but because its script reads a few details of your browser
+                        (such as screen size and language), it runs <strong>only if you allow it</strong> (§ 25 (1) TDDDG). Until you choose, and if
+                        you choose “No thanks”, it is not loaded at all. If your browser sends <em>Global Privacy Control</em> or{' '}
+                        <em>Do Not Track</em>, we treat that as “no” and do not ask. Details are in our{' '}
+                        <a href={`${legal.privacy}#analytics`}>Privacy Policy</a>.
                     </p>
-                    <AnalyticsOptOut />
+                    <p>You can change or withdraw your choice for this browser at any time; withdrawing stops the counting immediately:</p>
+                    <AnalyticsConsentSetting />
                 </LegalSection>
             )}
 
