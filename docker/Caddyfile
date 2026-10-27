@@ -32,6 +32,8 @@
 
 	# Live co-editing of documents (BRAI-54): the realtime service's WebSocket on this host, so no
 	# extra port. Without the service this answers 502 and the editor falls back to single-user editing.
+	# Live channels (BRAI-151) use the same route (/collab?live=1). The service's publish endpoint
+	# (/internal/live/publish) is deliberately NOT routed: the app reaches it on the Docker network.
 	handle /collab* {
 		reverse_proxy {$COLLAB_UPSTREAM:realtime:1234}
 	}

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\InstanceSettings;
 use App\Models\User;
 use App\Models\WorkspaceInvitation;
+use App\Support\Legal\LegalInfo;
 use App\Support\SignOutEverywhere;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -74,6 +75,8 @@ class GitHubAuthController extends Controller
                     'github_id' => $githubUser->getId(),
                     'email_verified_at' => now(),
                     'password' => bcrypt(str()->random(64)),
+                    // the sign-in page says that continuing accepts the Terms (BRAI-156)
+                    ...LegalInfo::termsAcceptance(),
                 ]);
 
                 WorkspaceInvitation::acceptPendingForUser($user);

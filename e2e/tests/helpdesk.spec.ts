@@ -339,7 +339,9 @@ test.describe('helpdesk', () => {
         const guest = await guestPage(browser);
         await guest.page.goto(`/support/${address}`);
         await expect(guest.page.getByRole('heading', { level: 1, name: hd.name })).toBeVisible();
-        await expect(guest.page.getByText('E2E Workspace')).toBeVisible();
+        // the header names the workspace; since BRAI-156 the operator line under the form does too
+        await expect(guest.page.getByText('E2E Workspace', { exact: true }).first()).toBeVisible();
+        await expect(guest.page.getByTestId('operator-name')).toHaveText('E2E Workspace');
         await expect(guest.page.getByText('Get in touch')).toBeVisible();
         // the template hides the subject (filled in automatically)
         await expect(guest.page.getByLabel(/^Subject/)).toHaveCount(0);

@@ -29,7 +29,7 @@ trait SendsWebPush
         return (new WebPushMessage)
             ->title($title)
             ->body($body)
-            ->icon('/apple-touch-icon.png')
+            ->icon('/android-chrome-192x192.png')
             ->badge('/favicon-32x32.png')
             ->data(['url' => $url])
             ->options(['TTL' => 1800]);

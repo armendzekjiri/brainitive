@@ -93,6 +93,9 @@ export interface LeadFormSettings {
     notify_user_ids?: number[];
     webhook_url?: string | null;
     show_branding: boolean;
+    /** Consent checkbox above the submit button (BRAI-156) */
+    consent?: 'off' | 'optional' | 'required';
+    consent_text?: string | null;
 }
 
 export type LeadAnswers = Record<string, unknown>;
@@ -360,6 +363,9 @@ export interface LeadCard {
     answers: { id: string; label: string; type: string; display: string }[];
     utm: Record<string, string> | null;
     referrer: string | null;
+    /** consent checkbox ticked (BRAI-156): when, and the exact text shown */
+    consent_at?: string | null;
+    consent_text?: string | null;
     assignee: LeadMember | null;
     created_at: string;
 }

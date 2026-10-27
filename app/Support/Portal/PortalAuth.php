@@ -37,7 +37,9 @@ final class PortalAuth
     public static function current(Request $request): ?PortalIdentity
     {
         $user = $request->user();
-        if ($user instanceof User && $user->hasVerifiedEmail()) {
+        // the account must really have proved its email (not just "verification off on this instance"):
+        // otherwise anyone could register someone else's address and take over their guest identity
+        if ($user instanceof User && $user->email_verified_at !== null) {
             return self::identityForUser($user);
         }
 

@@ -3,6 +3,8 @@
 namespace App\Notifications;
 
 use App\Models\Ticket;
+use App\Notifications\Messages\BrandedMailMessage;
+use App\Support\Mail\BrandedMail;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -31,10 +33,14 @@ class TicketResolvedNotification extends Notification
 
     public function toMail(object $notifiable): MailMessage
     {
-        $mail = (new MailMessage)
+        $sender = BrandedMail::helpdeskName($this->ticket->helpdesk);
+        $mail = BrandedMailMessage::guest($notifiable, "You get this email because you have a ticket with {$sender}.")
             ->subject("Resolved: {$this->plainSubject()} [{$this->ticket->key}]")
-            ->greeting($notifiable->name ? "Hi {$notifiable->name}," : 'Hi,')
-            ->line("Your ticket {$this->ticket->key} has been resolved.");
+            ->eyebrow("{$sender} · {$this->ticket->key}")
+            ->headline('Your ticket is resolved')
+            ->line("Your ticket {$this->ticket->key} has been resolved.")
+            ->context($sender)
+            ->signOff($sender);
 
         $text = trim(html_entity_decode(strip_tags(str_replace(['</p>', '<br>', '<br/>', '<br />'], "\n", (string) $this->message))));
         foreach (array_filter(preg_split('/\n{2,}|\r\n\r\n/', $text) ?: []) as $paragraph) {

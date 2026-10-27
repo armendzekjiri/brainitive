@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import RelatedContent from '@/components/references/RelatedContent';
+import { LiveAvatars } from '@/components/live/LiveAvatars';
 import { PlanChart } from '@/components/plan/PlanChart';
 import { PlanHistoryDialog } from '@/components/plan/PlanHistoryDialog';
 import { ImportDialog } from '@/components/plan/ImportDialog';
@@ -26,6 +27,8 @@ import { CreateIssuesDialog, IssuePickerDialog } from '@/components/plan/IssueDi
 import { rowFromIssue, rowIssueDates, rowsFromIssues, syncFromIssues, unlinkRows } from '@/components/plan/issues';
 import { IssueAction, IssueSummary, PlanPayload, PlanRow } from '@/components/plan/types';
 import { usePlanEditor } from '@/components/plan/usePlanEditor';
+import { useLivePlan } from '@/hooks/useLivePlan';
+import { toast } from 'sonner';
 import { PageProps, Project, Workspace } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -100,6 +103,23 @@ export default function PlanShow({ workspace, project, plan, members, issues: in
         syncIssues(map);
     };
 
+    // Live plans (BRAI-152): others' saves, renames and linked-issue changes show up without a reload
+    useLivePlan(plan.id, {
+        onSaved: editor.remoteSaved,
+        onIssues: () => void refreshIssues().catch(() => { /* offline: the next change or reload catches up */ }),
+        onDetails: () => router.reload({ only: ['plan'] }),
+        onDeleted: () => {
+            toast.error('This plan was deleted by someone else.');
+            router.visit(route('projects.show', [workspace.slug, project.slug]));
+        },
+        onResync: () => {
+            window.axios.get(route('plans.document', params))
+                .then(({ data }) => editor.remoteSaved(data.edit_revision))
+                .catch(() => { /* still offline */ });
+            void refreshIssues().catch(() => {});
+        },
+    });
+
     const onIssueAction = (action: IssueAction, rowIds: string[]) => {
         if (action === 'refresh') void refreshIssues();
         else if (action === 'unlink') editor.apply((doc) => ({ ...doc, data: unlinkRows(doc.data, rowIds) }));
@@ -152,7 +172,11 @@ export default function PlanShow({ workspace, project, plan, members, issues: in
         return () => clearInterval(id);
     }, []);
 
-    useEffect(() => setName(plan.name), [plan.name]);
+    // a rename by someone else (live reload of `plan`) never replaces the name being typed
+    useEffect(() => {
+        if (!renaming) setName(plan.name);
+    }, [plan.name]); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => setShareUrl(plan.share_url), [plan.share_url]);
 
     useEffect(() => {
         if (!printMode) return;
@@ -212,7 +236,13 @@ export default function PlanShow({ workspace, project, plan, members, issues: in
             case 'dirty': return { icon: <span className="size-1.5 rounded-full bg-amber-500" />, text: 'Unsaved changes', tone: 'text-muted-foreground' };
             case 'error': return { icon: <CloudOff className="size-3.5" />, text: 'Offline — retrying', tone: 'text-destructive' };
             case 'conflict': return { icon: <AlertTriangle className="size-3.5" />, text: 'Not saved', tone: 'text-destructive' };
-            default: return { icon: <Check className="size-3.5" />, text: editor.lastSavedAt ? `Saved ${relativeTime(editor.lastSavedAt)}` : 'All changes saved', tone: 'text-muted-foreground' };
+            default: return {
+                icon: <Check className="size-3.5" />,
+                text: editor.remoteEditor
+                    ? `Updated by ${editor.remoteEditor.name} ${relativeTime(editor.lastSavedAt)}`
+                    : editor.lastSavedAt ? `Saved ${relativeTime(editor.lastSavedAt)}` : 'All changes saved',
+                tone: 'text-muted-foreground',
+            };
         }
     })();
 
@@ -267,6 +297,8 @@ export default function PlanShow({ workspace, project, plan, members, issues: in
                             )}
                         </div>
                         <div className="flex items-center gap-1.5">
+                            {/* Who else is on this plan (BRAI-151) */}
+                            <LiveAvatars channel={`plan.${plan.id}`} />
                             {can.update && (
                                 <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" onClick={() => editor.saveNow()} title="Save now and keep this state in the history">
                                     <Save className="size-3.5" /><span className="hidden md:inline">Save version</span>

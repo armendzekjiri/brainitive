@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\Item;
 use App\Models\ItemField;
 use App\Models\ItemFieldValue;
+use App\Support\Live\BoardLive;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -74,6 +75,7 @@ class ItemFieldValues
             if ($changed) {
                 // Lets open popups notice the change (history refetch keys off updated_at).
                 $item->touch();
+                BoardLive::itemIds([$item->id], ['custom_fields'], (int) $item->board_id); // live boards (BRAI-152)
             }
         });
     }

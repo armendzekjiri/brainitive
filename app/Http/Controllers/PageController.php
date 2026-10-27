@@ -9,6 +9,7 @@ use App\Models\Workspace;
 use App\Notifications\PageUpdatedNotification;
 use App\Support\Collab\CollabConfig;
 use App\Support\Collab\PageCollab;
+use App\Support\Collab\WhiteboardCollab;
 use App\Support\PageReviews\ReviewGate;
 use App\Support\PageReviews\ReviewPresenter;
 use Illuminate\Http\JsonResponse;
@@ -110,6 +111,7 @@ class PageController extends Controller
             'breadcrumbs' => $page->path,
             'review' => ReviewPresenter::forPage($page, $user, $canUpdate), // BRAI-80
             'collab' => PageCollab::props($page, $user, $canUpdate), // live co-editing (BRAI-54); null = single-user editor
+            'whiteboardCollab' => WhiteboardCollab::props($page, $user, $canUpdate), // live whiteboard preview (BRAI-153); null = static
             'can' => [
                 'update' => $canUpdate,
                 'delete' => $user->can('delete', $page),
@@ -181,6 +183,8 @@ class PageController extends Controller
             // Issue cards + stickies → issues
             'issuesUrl' => route('pages.whiteboard.issues', [$workspace->slug, $project->slug, $page->uuid]),
             'createIssuesUrl' => route('pages.whiteboard.issues.store', [$workspace->slug, $project->slug, $page->uuid]),
+            // Live drawing (BRAI-153); null = today's single-user editor with its autosave
+            'live' => $isEmbed ? null : $this->liveWhiteboardConfig($request, $workspace, $project, $page),
             'boards' => $isEmbed ? [] : $project->boards()->get(['id', 'name', 'project_id'])
                 ->each(fn ($board) => $board->setRelation('project', $project))
                 ->filter(fn ($board) => $request->user()->can('createItems', $board))
@@ -195,6 +199,29 @@ class PageController extends Controller
             'excalidrawConfig' => $excalidrawConfig,
             'returnUrl' => $returnUrl,
         ]);
+    }
+
+    /**
+     * What the whiteboard editor needs to draw live (BRAI-153); null when it isn't offered.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function liveWhiteboardConfig(Request $request, Workspace $workspace, Project $project, Page $page): ?array
+    {
+        $props = WhiteboardCollab::props($page, $request->user(), true);
+        if ($props === null) {
+            return null;
+        }
+        $params = [$workspace->slug, $project->slug, $page->uuid];
+
+        return $props + [
+            'pageUuid' => $page->uuid,
+            'user' => ['id' => $request->user()->id, 'name' => $request->user()->name],
+            'sessionUrl' => route('pages.whiteboard.collab.session', $params),
+            'saveUrl' => route('pages.whiteboard.collab.save', $params),
+            'bootstrapUrl' => route('pages.whiteboard.collab.bootstrap', $params),
+            'uploadUrl' => route('upload.image'),
+        ];
     }
 
     /**

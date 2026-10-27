@@ -14,6 +14,7 @@ import {
 import { cacheShell, dropShell } from './shell';
 import { getOfflineState, refreshOffline, setOfflineState } from './store';
 import { startSyncEngine, syncNow } from './sync';
+import { forgetLiveWhiteboardCopies } from '@/lib/whiteboard/scene';
 
 /** Start offline mode for this (signed-in) account on this device. */
 export async function activateOffline(userId: number): Promise<void> {
@@ -73,6 +74,7 @@ export async function clearAllOfflineData(): Promise<void> {
     }));
     setActiveOfflineUser(null);
     await dropShell();
+    await forgetLiveWhiteboardCopies(); // live whiteboards (BRAI-153) keep a copy per board on this device
 }
 
 let watching = false;

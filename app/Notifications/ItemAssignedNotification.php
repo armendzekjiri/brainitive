@@ -82,10 +82,12 @@ class ItemAssignedNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         $title = NewLeadNotification::plain((string) $this->item->title);
+        $board = $this->item->board;
 
-        return (new MailMessage)
+        return $this->brandedMail($notifiable, 'item_assigned')
             ->subject("{$this->by()} assigned you to {$this->item->key}: {$title}")
-            ->line("{$this->by()} assigned you to {$this->item->key}.")
+            ->eyebrow($board ? trim(($board->project?->name ? $board->project->name.' · ' : '').$board->name) : null)
+            ->headline("{$this->by()} assigned you to {$this->item->key}")
             ->line($title)
             ->action('Open issue', $this->toDatabase($notifiable)['item_url']);
     }

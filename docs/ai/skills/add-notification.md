@@ -58,7 +58,11 @@ The base class gives you, for free:
   `type, title, body, url, actor_name, actor_avatar, project_name, subject_key`. The bell renders
   any type generically from them, so a new type needs no frontend change;
 - `toWebPush()` (title, body or context, url) and a generic `toMail()` (Markdown-safe: user text
-  goes through `plain()`).
+  goes through `plain()`) on the branded layout (`BrandedMailMessage` via
+  `RespectsPreferences::brandedMail($notifiable, TYPE)`: "Manage notifications" for members, a
+  guest footer for everyone else). A custom `toMail()` starts from `$this->brandedMail(...)` too.
+- **Add every new email to `App\Support\Mail\EmailPreviews::entries()`** (v1.44.0) —
+  `EmailTemplatesTest` renders each entry and Admin → Emails previews it.
 
 Older types (`item_assigned`, `mentioned`, `ticket_*`, `lead_created`, …) keep their own keys:
 rows in the DB must keep rendering. Don't change their payloads; new types use the contract.

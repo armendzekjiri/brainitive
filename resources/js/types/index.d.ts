@@ -2929,3 +2929,173 @@ export type PageCollabBootstrap =
 export interface PagePresenceCollabState extends PageDraftState {
     collab_epoch?: number | null;
 }
+
+/** GET push-subscriptions.index — one registered browser (BRAI-154). Endpoints never reach the page. */
+export interface PushDevice {
+    id: number;
+    /** SHA-256 hex of the endpoint: matches `endpointHash()` of this browser's subscription → "This device". */
+    endpoint_hash: string;
+    label: string;
+    browser: string | null;
+    os: string | null;
+    platform: 'windows' | 'macos' | 'ios' | 'android' | 'linux' | 'chromeos' | 'other';
+    /** "Chrome/Edge (Google push)", "Firefox", "Safari / iPhone", … */
+    service: string;
+    service_host: string;
+    created_at: string | null;
+    last_success_at: string | null;
+    last_error: string | null;
+    last_error_at: string | null;
+    /** The push service answered 404 / 410: no more pushes go there. */
+    expired_at: string | null;
+}
+
+/** POST push-subscriptions.test — what the push service answered. */
+export interface PushTestResult {
+    status: 'delivered' | 'expired' | 'rejected' | 'network' | 'unconfigured' | 'invalid';
+    http_status: number | null;
+    reason: string | null;
+}
+
+// ── Live channels (BRAI-151): resources/js/lib/live, docs/ai/tasks/feat-live-foundation.md ──────
+
+/** Shared prop `live`: null = live channels are off (no socket, no token request). */
+export interface LiveSharedConfig {
+    /** e2e only: the client is exposed as `window.__brainitiveLive`. */
+    debug: boolean;
+}
+
+/** State of one channel subscription in this tab. */
+export type LiveChannelStatus = 'off' | 'connecting' | 'live' | 'offline' | 'forbidden';
+
+/** Someone in a channel (presence). Several tabs of one person = one member. */
+export interface LiveMember {
+    id: number;
+    name: string;
+    avatar: string | null;
+    /** Fixed per user (same palette as the live document carets). */
+    color: string;
+}
+
+/** Who sent a signal — set by the realtime server from the sender's token, never by the sender. */
+export interface LiveSender {
+    id: number;
+    name: string;
+}
+
+/** An event Brainitive published (`Live::publish`): ids and hints only, refetch the data. */
+export interface LiveEvent<P extends Record<string, unknown> = Record<string, unknown>> {
+    channel: string;
+    event: string;
+    payload: P;
+}
+
+/** POST live.token */
+export interface LiveTokenResponse {
+    url: string;
+    token: string;
+    expires_at: number;
+    channels: string[];
+    denied: string[];
+    user: { id: number; name: string; avatar: string | null };
+}
+
+// ── Live whiteboards (BRAI-153, v1.44.0) ────────────────────────────────────────────────────
+
+/** `whiteboardCollab` prop of Pages/Show: the preview watches the live whiteboard; null = static. */
+export interface WhiteboardCollabProps {
+    epoch: number;
+    /** wss URL of the realtime server, or a path on this host ("/collab"). */
+    url: string;
+}
+
+// ── Legal pages + public-page operator (BRAI-156, v1.44.0) ──────────────────────────────────
+
+/** Shared prop `legalLinks` (LegalInfo::links): null = that document doesn't exist on this install. */
+export interface LegalLinks {
+    cloud: boolean;
+    privacy: string;
+    terms: string;
+    cookies: string;
+    imprint: string | null;
+    subprocessors: string | null;
+    dpa: string | null;
+    refund: string | null;
+}
+
+/** `legal` prop of the legal pages (LegalInfo::pageProps). Empty operator values are null. */
+export interface LegalPageData extends LegalLinks {
+    document: { key: string; version: string; updated: string };
+    operator: {
+        name: string | null;
+        description: string | null;
+        address: string | null;
+        email: string | null;
+        phone: string | null;
+        representative: string | null;
+        register: string | null;
+        vat_id: string | null;
+        content_responsible: string | null;
+        dpo: string | null;
+        eu_representative: string | null;
+        supervisory_authority: string | null;
+        governing_law: string | null;
+        jurisdiction: string | null;
+    };
+    providers: {
+        hosting: string | null;
+        hosting_location: string | null;
+        email: string | null;
+        email_location: string | null;
+        backup: string | null;
+        backup_location: string | null;
+    };
+    external: { privacy_url: string | null; terms_url: string | null; imprint_url: string | null };
+    retention: { server_logs: string | null; backups: string | null; analytics: string | null };
+    app_name: string;
+    /** the session cookie's name (config session.cookie) */
+    session_cookie: string;
+    /** the operator's Umami runs on this install (Brainitive Cloud) */
+    analytics: boolean;
+    host: string | null;
+}
+
+/** Who runs a customer's public page (PublicOperator::for): the workspace, not the platform. */
+export interface PublicOperatorData {
+    name: string;
+    /** false = no legal name set and the page mustn't reveal the workspace name: `name` is generic */
+    named: boolean;
+    privacy_url: string | null;
+    imprint_url: string | null;
+    configured: boolean;
+    platform_name: string;
+    platform_privacy_url: string;
+}
+
+/** Workspace settings → Legal (workspaces.legal_* columns). */
+export interface WorkspaceLegalFields {
+    legal_controller_name?: string | null;
+    legal_privacy_url?: string | null;
+    legal_imprint_url?: string | null;
+}
+
+/** "Download my data" (BRAI-156): DataExport::present() — status like ProjectExportData */
+export interface DataExportData {
+    uuid: string;
+    status: ProjectExportStatus;
+    file_size: number;
+    counts: Record<string, number> | null;
+    error: string | null;
+    created_at: string | null;
+    finished_at: string | null;
+    expires_at: string | null;
+    /** signed, only for the account owner, until expires_at */
+    download_url: string | null;
+}
+
+/** GET/POST profile.data-export.index|store */
+export interface DataExportState {
+    exports: DataExportData[];
+    /** seconds until a new request is allowed (0 = now) */
+    available_in: number;
+}

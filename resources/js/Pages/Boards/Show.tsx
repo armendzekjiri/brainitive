@@ -122,6 +122,7 @@ import DuplicateItemDialog from '@/components/item/DuplicateItemDialog';
 import { itemTree } from '@/lib/itemTree';
 import { useItemDetail, ItemDetailMain, ItemDetailSidebar, ItemFilePreviewDialog, type ProjectItemLite } from '@/components/item/ItemDetail';
 import { BoardHeader } from '@/components/board/BoardHeader';
+import { LiveAvatars } from '@/components/live/LiveAvatars';
 import { CustomFieldFilters } from '@/components/board/CustomFieldFilters';
 import {
     compareNullable, compareText, fieldComparator, fieldParam, fieldValue, formatFieldValue, fieldOption,
@@ -130,6 +131,7 @@ import {
 import { ActiveSprintBar, type SprintSummary } from '@/components/board/ActiveSprintBar';
 import SavedViewsMenu from '@/components/board/SavedViewsMenu';
 import { BulkEditBar } from '@/components/board/BulkEditBar';
+import { useLiveBoard } from '@/hooks/useLiveBoard';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -205,6 +207,7 @@ function ItemCard({
 
     return (
         <article
+            data-live-card={item.id}
             draggable
             onDragStart={(e) => onDragStart(e, item)}
             onDragEnd={onDragEnd}
@@ -1192,6 +1195,8 @@ function ItemEditModal({
                             </Link>
                         </nav>
                         <div className="flex items-center gap-1">
+                            {/* Who else has this issue open (BRAI-151) */}
+                            <LiveAvatars channel={`item.${item.id}`} />
                             <Sheet open={detailsSheetOpen} onOpenChange={setDetailsSheetOpen}>
                                 <SheetTrigger asChild>
                                     <Button variant="ghost" size="icon" className="size-8 lg:hidden">
@@ -1515,6 +1520,7 @@ function ListView({
                         {sortedItems.map((item) => (
                             <tr
                                 key={item.id}
+                                data-live-card={item.id}
                                 className={cn('border-b hover:bg-muted/50 cursor-pointer transition-colors', selectedIds.has(item.id) && 'bg-primary/5 hover:bg-primary/10')}
                                 onClick={() => onEditItem(item)}
                             >
@@ -1654,6 +1660,7 @@ function GanttView({
     board,
     onEditItem,
     onUpdateItemDates,
+    onDraggingChange,
 }: {
     columns: (BoardColumn & { items: Item[] })[];
     workspace: Workspace;
@@ -1661,6 +1668,8 @@ function GanttView({
     board: Board;
     onEditItem: (item: Item) => void;
     onUpdateItemDates: (item: Item, start_date: string | null, due_date: string | null) => void;
+    /** A bar or row is being dragged (live boards hold changes meanwhile). */
+    onDraggingChange?: (dragging: boolean) => void;
 }) {
     // Build tree-ordered list: parents first, children indented underneath
     const rawItems = columns.flatMap(col => col.items.map(item => ({ ...item, columnName: col.name })));
@@ -1732,6 +1741,9 @@ function GanttView({
         startDue: Date;
     } | null>(null);
     const [isDragging, setIsDragging] = useState(false); // only toggled on mousedown/up
+    const draggingNow = isDragging || sidebarDragId !== null;
+    useEffect(() => onDraggingChange?.(draggingNow), [draggingNow, onDraggingChange]);
+    useEffect(() => () => onDraggingChange?.(false), [onDraggingChange]); // switching views mid-drag
     const didDragRef = useRef(false);
     const dragPreviewRef = useRef<{ start_date: string; due_date: string } | null>(null);
     const dragBarRef = useRef<HTMLDivElement | null>(null);
@@ -2366,7 +2378,7 @@ export default function BoardsShow({
     auth,
     workspace,
     project,
-    board,
+    board: boardProp,
     boardItemTypes = [],
     priorities,
     projectUsers,
@@ -2403,6 +2415,23 @@ export default function BoardsShow({
     const itemTypes = boardItemTypes;
     const [editingItem, setEditingItem] = useState<Item | null>(null);
 
+    // Live boards (BRAI-152): others' changes patch the cards in place (every view reads `board`)
+    const editingItemRef = useRef(editingItem);
+    editingItemRef.current = editingItem;
+    const live = useLiveBoard(boardProp, {
+        cardsUrl: route('boards.cards', [workspace.slug, project.slug, boardProp.slug]),
+        reloadProps: ['board', 'activeSprint', 'plannedSprints', 'projectItems'],
+        onGone: (ids) => {
+            const open = editingItemRef.current;
+            if (open && ids.includes(open.id)) toast.info(`${open.key} was deleted or moved off this board by someone else.`);
+        },
+        onBoardDeleted: () => {
+            toast.error('This board was deleted by someone else.');
+            router.visit(route('projects.show', [workspace.slug, project.slug]));
+        },
+    });
+    const board = live.board;
+
     // Links like …/boards/x#item-123 (search, command palette, AI connector) open that issue;
     // one that isn't on the board right now (e.g. outside the running sprint) opens its own page.
     // The listener is registered once: it reads the *current* board through a ref, so cards
@@ -2431,6 +2460,10 @@ export default function BoardsShow({
     }, []);
     const [draggedItem, setDraggedItem] = useState<Item | null>(null);
     const [dragOverColumn, setDragOverColumn] = useState<number | null>(null);
+    // a card in the user's hand stays where it is until the drop
+    const [timelineDragging, setTimelineDragging] = useState(false);
+    const { setPaused: pauseLive } = live;
+    useEffect(() => pauseLive(draggedItem !== null || timelineDragging), [draggedItem, timelineDragging, pauseLive]);
     // Filters live in the URL so a filtered board can be shared or bookmarked
     const initialFilters = useMemo(readBoardFilters, []);
     const [searchQuery, setSearchQuery] = useState(initialFilters.q);
@@ -3252,6 +3285,7 @@ export default function BoardsShow({
                         project={project}
                         board={board}
                         onEditItem={setEditingItem}
+                        onDraggingChange={setTimelineDragging}
                         onUpdateItemDates={(item, start_date, due_date) => {
                             router.patch(
                                 route('boards.items.update', [workspace.slug, project.slug, board.slug, item.id]),

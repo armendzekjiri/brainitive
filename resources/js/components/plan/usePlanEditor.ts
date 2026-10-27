@@ -34,6 +34,8 @@ export function usePlanEditor({ initial, revision, saveUrl, documentUrl, canEdit
     const [saveState, setSaveState] = useState<SaveState>('saved');
     const [conflict, setConflict] = useState<PlanConflict | null>(null);
     const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+    /** Live plans (BRAI-152): who saved the version this editor took over last (null = this user). */
+    const [remoteEditor, setRemoteEditor] = useState<{ id: number; name: string } | null>(null);
 
     const docRef = useRef(doc);
     const revisionRef = useRef(revision);
@@ -42,6 +44,10 @@ export function usePlanEditor({ initial, revision, saveUrl, documentUrl, canEdit
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const inFlight = useRef(false);
     const conflictRef = useRef(false);
+    /** Newest revision someone else saved (live event); followed once this editor is idle. */
+    const remoteRevision = useRef(0);
+    const following = useRef(false);
+    const followRemoteRef = useRef<() => void>(() => {});
 
     docRef.current = doc;
 
@@ -55,9 +61,11 @@ export function usePlanEditor({ initial, revision, saveUrl, documentUrl, canEdit
         if (!canEdit || inFlight.current) return;
         if (conflictRef.current && !options.force) return;
         if (timer.current) clearTimeout(timer.current);
+        timer.current = null;
         const sending = docRef.current;
         if (sending === savedRef.current && !options.checkpoint && !options.force) {
             setSaveState('saved');
+            followRemoteRef.current(); // undone back to the saved document: take over a remote save now
             return;
         }
         inFlight.current = true;
@@ -74,6 +82,7 @@ export function usePlanEditor({ initial, revision, saveUrl, documentUrl, canEdit
             savedRef.current = sending;
             conflictRef.current = false;
             setConflict(null);
+            setRemoteEditor(null);
             setLastSavedAt(new Date());
             setSaveState(docRef.current === sending ? 'saved' : 'dirty');
         } catch (error: unknown) {
@@ -84,13 +93,14 @@ export function usePlanEditor({ initial, revision, saveUrl, documentUrl, canEdit
                 setSaveState('conflict');
             } else {
                 setSaveState('error');
-                timer.current = setTimeout(() => persist(), RETRY_DELAY);
+                timer.current = setTimeout(() => { timer.current = null; void persist(); }, RETRY_DELAY);
             }
         } finally {
             inFlight.current = false;
             if (!conflictRef.current && docRef.current !== savedRef.current && gestureBase.current === null) {
                 schedule();
             }
+            followRemoteRef.current();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [canEdit, saveUrl]);
@@ -99,7 +109,7 @@ export function usePlanEditor({ initial, revision, saveUrl, documentUrl, canEdit
         if (!canEdit || conflictRef.current) return;
         if (timer.current) clearTimeout(timer.current);
         setSaveState('dirty');
-        timer.current = setTimeout(() => persist(), AUTOSAVE_DELAY);
+        timer.current = setTimeout(() => { timer.current = null; void persist(); }, AUTOSAVE_DELAY);
     }, [canEdit, persist]);
 
     /**
@@ -129,6 +139,7 @@ export function usePlanEditor({ initial, revision, saveUrl, documentUrl, canEdit
             pushPast(base);
             schedule();
         }
+        followRemoteRef.current();
     }, [schedule]);
 
     const cancelGesture = useCallback(() => {
@@ -138,6 +149,7 @@ export function usePlanEditor({ initial, revision, saveUrl, documentUrl, canEdit
             docRef.current = base;
             setDoc(base);
         }
+        followRemoteRef.current();
     }, []);
 
     const undo = useCallback(() => {
@@ -175,6 +187,56 @@ export function usePlanEditor({ initial, revision, saveUrl, documentUrl, canEdit
         setSaveState('saved');
     }, []);
 
+    /**
+     * Live plans (BRAI-152): take over what someone else saved, without ever overwriting this user's
+     * work. Idle and clean → the new document replaces the shown one (the undo history goes: undoing
+     * into the old document would revert their change). Mid-gesture or saving → wait. Unsaved local
+     * changes → save them now: the revision guard answers with the usual conflict ("changed by
+     * someone else — load latest / overwrite") or, when both made the very same change, "saved".
+     */
+    followRemoteRef.current = () => {
+        if (remoteRevision.current <= revisionRef.current || conflictRef.current || following.current) return;
+        if (gestureBase.current !== null || inFlight.current) return; // called again when done
+        // viewers never save: their view settings (zoom …) simply stay theirs
+        if (canEdit && docRef.current !== savedRef.current) {
+            if (timer.current === null) schedule(); // the save (pending or now) settles it, then we come back
+            return;
+        }
+        following.current = true;
+        const base = docRef.current;
+        let fetched = false;
+        window.axios.get(documentUrl)
+            .then(({ data }) => {
+                fetched = true;
+                if (docRef.current !== base || gestureBase.current !== null) return; // the user started editing meanwhile
+                if (timer.current) clearTimeout(timer.current);
+                timer.current = null;
+                const next: PlanDocument = { data: data.data, settings: canEdit ? data.settings : docRef.current.settings };
+                past.current = [];
+                future.current = [];
+                setHistoryTick((t) => t + 1);
+                docRef.current = next;
+                savedRef.current = next;
+                revisionRef.current = data.edit_revision;
+                setDoc(next);
+                setSaveState('saved');
+                setRemoteEditor(data.last_edited_by ?? null);
+                setLastSavedAt(data.updated_at ? new Date(data.updated_at) : new Date());
+            })
+            .catch(() => { /* offline / no access / deleted: the next event or resync tries again — no retry loop */ })
+            .finally(() => {
+                following.current = false;
+                if (fetched) followRemoteRef.current(); // newer events, or edits made while fetching
+            });
+    };
+
+    /** Someone else saved `revision` (live event `plan.updated`). */
+    const remoteSaved = useCallback((revision: number) => {
+        if (revision <= revisionRef.current) return; // this editor's own save, or older
+        remoteRevision.current = Math.max(remoteRevision.current, revision);
+        followRemoteRef.current();
+    }, []);
+
     const loadLatest = useCallback(async () => {
         const { data } = await window.axios.get(documentUrl);
         replace({ data: data.data, settings: data.settings }, data.edit_revision);
@@ -209,6 +271,8 @@ export function usePlanEditor({ initial, revision, saveUrl, documentUrl, canEdit
         saveState,
         conflict,
         lastSavedAt,
+        remoteEditor,
+        remoteSaved,
         saveNow: () => persist({ checkpoint: true }),
         overwrite: () => persist({ force: true }),
         loadLatest,

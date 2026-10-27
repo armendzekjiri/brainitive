@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Plan;
+use App\Support\Legal\PublicOperator;
 use App\Support\Plans\PlanDocument;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -14,7 +15,7 @@ class PublicPlanController extends Controller
 {
     public function show(string $token): Response
     {
-        $plan = Plan::where('share_token', $token)->with('project:id,name,color')->firstOrFail();
+        $plan = Plan::where('share_token', $token)->with('project:id,name,color,workspace_id', 'project.workspace')->firstOrFail();
         $settings = PlanDocument::normalizeSettings($plan->settings);
         $data = $plan->data ?? Plan::emptyData();
 
@@ -32,6 +33,7 @@ class PublicPlanController extends Controller
                 'settings' => $settings,
                 'updated_at' => $plan->updated_at?->toIso8601String(),
             ],
+            'operator' => PublicOperator::for($plan->project?->workspace), // who shares it (BRAI-156)
         ]);
     }
 }

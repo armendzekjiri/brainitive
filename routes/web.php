@@ -11,15 +11,19 @@ use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\CaptureInboxController;
 use App\Http\Controllers\CommandPaletteController;
 use App\Http\Controllers\ContentReferenceController;
+use App\Http\Controllers\DataExportController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\HelpdeskController;
 use App\Http\Controllers\HelpdeskForwardingController;
 use App\Http\Controllers\HelpdeskMailboxController;
 use App\Http\Controllers\HelpdeskWidgetController;
 use App\Http\Controllers\InvitationController;
+use App\Http\Controllers\ItemCollabController;
 use App\Http\Controllers\ItemFieldController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\LeadFormController;
+use App\Http\Controllers\LegalController;
+use App\Http\Controllers\LiveTokenController;
 use App\Http\Controllers\MeetingController;
 use App\Http\Controllers\MeetingNotesController;
 use App\Http\Controllers\MyDayController;
@@ -53,12 +57,15 @@ use App\Http\Controllers\SnippetController;
 use App\Http\Controllers\SprintController;
 use App\Http\Controllers\TaskListController;
 use App\Http\Controllers\TicketController;
+use App\Http\Controllers\WhiteboardCollabController;
 use App\Http\Controllers\WhiteboardController;
 use App\Http\Controllers\WorkloadController;
 use App\Http\Controllers\WorkspaceController;
+use App\Http\Controllers\WorkspaceLegalController;
 use App\Http\Controllers\WorkTimerController;
 use App\Http\Middleware\ReadOnlySession;
 use App\Support\Auth\MicrosoftLogin;
+use App\Support\Legal\LegalInfo;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Session\Middleware\StartSession;
@@ -81,19 +88,19 @@ Route::get('/', function () {
     ]]);
 });
 
-Route::get('/privacy', function () {
-    return Inertia::render('Privacy');
-})->name('privacy');
-
-Route::get('/terms', function () {
-    return Inertia::render('Terms');
-})->name('terms');
-
-Route::get('/cookies', function () {
-    return Inertia::render('Cookies');
-})->name('cookies');
+// Legal pages (BRAI-156): operator data from config/legal.php via LegalInfo; DPA, sub-processors and
+// refund policy are Brainitive Cloud documents (404 on self-hosted installs), the imprint only exists
+// when there's something to show.
+Route::get('/privacy', [LegalController::class, 'privacy'])->name('privacy');
+Route::get('/terms', [LegalController::class, 'terms'])->name('terms');
+Route::get('/cookies', [LegalController::class, 'cookies'])->name('cookies');
+Route::get('/imprint', [LegalController::class, 'imprint'])->name('imprint');
+Route::get('/legal/subprocessors', [LegalController::class, 'subprocessors'])->name('legal.subprocessors');
+Route::get('/legal/dpa', [LegalController::class, 'dpa'])->name('legal.dpa');
 
 Route::get('/refund', function () {
+    abort_unless(LegalInfo::isCloud(), 404);
+
     return Inertia::render('Refund');
 })->name('refund');
 
@@ -192,6 +199,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/search', [SearchController::class, 'page'])->middleware('throttle:120,1,search')->name('search');
     Route::get('/search/quick', [SearchController::class, 'quick'])->middleware([ReadOnlySession::class, 'throttle:240,1,search.quick'])->name('search.quick');
     Route::post('/command-palette/recent', [CommandPaletteController::class, 'recent'])->name('command-palette.recent');
+    // Live channels (BRAI-151): a short-lived token for the realtime server, asked on every (re)connect
+    Route::post('/live/token', LiveTokenController::class)->middleware([ReadOnlySession::class, 'throttle:60,1,live.token'])->name('live.token');
 
     // My Work — assigned items across all workspaces
     Route::get('/my-work', [MyWorkController::class, 'index'])->name('my-work.index');
@@ -270,6 +279,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('workspaces/{workspace}/members/{user}', [WorkspaceController::class, 'updateMemberRole'])->name('workspaces.members.update');
     Route::delete('workspaces/{workspace}/members/{user}', [WorkspaceController::class, 'removeMember'])->name('workspaces.members.remove');
     Route::delete('workspaces/{workspace}/invitations/{invitation}', [WorkspaceController::class, 'cancelInvitation'])->name('workspaces.invitations.destroy');
+    // Who runs the workspace's public pages: name + privacy / imprint links (BRAI-156)
+    Route::patch('workspaces/{workspace}/legal', [WorkspaceLegalController::class, 'update'])->middleware('throttle:30,1,workspaces.legal.update')->name('workspaces.legal.update');
 
     // Workspace-scoped routes
     Route::prefix('workspaces/{workspace}')->group(function () {
@@ -385,6 +396,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::prefix('projects/{project}')->scopeBindings()->group(function () {
             Route::post('boards', [BoardController::class, 'store'])->name('boards.store');
             Route::get('boards/{board:slug}/items', [BoardController::class, 'rootItemsJson'])->name('boards.root-items');
+            Route::get('boards/{board:slug}/cards', [BoardController::class, 'cards'])->name('boards.cards'); // live boards (BRAI-152)
             Route::get('boards/{board:slug}', [BoardController::class, 'show'])->name('boards.show');
             // Saved views (BRAI-78)
             Route::post('boards/{board:slug}/views', [BoardViewController::class, 'store'])->name('boards.views.store');
@@ -438,6 +450,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::patch('boards/{board:slug}/items/{item}/move-to-board', [BoardController::class, 'moveItemToBoard'])->name('boards.items.move-to-board');
             Route::delete('boards/{board:slug}/items/{item}', [BoardController::class, 'destroyItem'])->name('boards.items.destroy');
             Route::post('boards/{board:slug}/items/{item}/comments', [BoardController::class, 'storeComment'])->name('boards.items.comments.store');
+            // Live issue descriptions (BRAI-151): connection token, HTML save (normal item update), first load
+            Route::post('boards/{board:slug}/items/{item}/collab/session', [ItemCollabController::class, 'session'])->middleware([ReadOnlySession::class, 'throttle:60,1,items.collab.session'])->name('items.collab.session');
+            Route::put('boards/{board:slug}/items/{item}/collab/description', [ItemCollabController::class, 'save'])->middleware([ReadOnlySession::class, 'throttle:180,1,items.collab.save'])->name('items.collab.save');
+            Route::post('boards/{board:slug}/items/{item}/collab/bootstrap', [ItemCollabController::class, 'bootstrap'])->middleware([ReadOnlySession::class, 'throttle:30,1,items.collab.bootstrap'])->name('items.collab.bootstrap');
             Route::post('boards/{board:slug}/items/{item}/attachments', [BoardController::class, 'storeAttachment'])->name('boards.items.attachments.store');
             Route::delete('boards/{board:slug}/items/{item}/attachments/{attachment}', [BoardController::class, 'destroyAttachment'])->name('boards.items.attachments.destroy');
 
@@ -586,6 +602,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('pages/{page}/collab/session', [PageCollabController::class, 'session'])->middleware([ReadOnlySession::class, 'throttle:60,1,pages.collab.session'])->name('pages.collab.session');
             Route::put('pages/{page}/collab/draft', [PageCollabController::class, 'save'])->middleware([ReadOnlySession::class, 'throttle:180,1,pages.collab.save'])->name('pages.collab.save');
             Route::post('pages/{page}/collab/bootstrap', [PageCollabController::class, 'bootstrap'])->middleware([ReadOnlySession::class, 'throttle:30,1,pages.collab.bootstrap'])->name('pages.collab.bootstrap');
+            // Live whiteboards (BRAI-153): same realtime server, own document kind
+            Route::post('pages/{page}/whiteboard/collab/session', [WhiteboardCollabController::class, 'session'])->middleware([ReadOnlySession::class, 'throttle:60,1,pages.whiteboard.collab.session'])->name('pages.whiteboard.collab.session');
+            Route::post('pages/{page}/whiteboard/collab/scene', [WhiteboardCollabController::class, 'save'])->middleware([ReadOnlySession::class, 'throttle:120,1,pages.whiteboard.collab.save'])->name('pages.whiteboard.collab.save');
+            Route::post('pages/{page}/whiteboard/collab/bootstrap', [WhiteboardCollabController::class, 'bootstrap'])->middleware([ReadOnlySession::class, 'throttle:30,1,pages.whiteboard.collab.bootstrap'])->name('pages.whiteboard.collab.bootstrap');
             Route::get('pages/{page}/versions', [PageVersionController::class, 'index'])->name('pages.versions.index');
             Route::get('pages/{page}/versions/{versionNumber}', [PageVersionController::class, 'show'])->whereNumber('versionNumber')->name('pages.versions.show');
             Route::post('pages/{page}/versions/{versionNumber}/restore', [PageVersionController::class, 'restore'])->whereNumber('versionNumber')->name('pages.versions.restore');
@@ -619,6 +639,10 @@ Route::middleware('auth')->group(function () {
     Route::patch('/sidebar/preferences', [SidebarPreferencesController::class, 'update'])->name('sidebar.preferences');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::delete('/profile/connected-apps/{clientId}', [ProfileController::class, 'disconnectApp'])->name('profile.connected-apps.destroy');
+    // "Download my data" (GDPR Art. 15 + 20, BRAI-156): queued ZIP, signed 24 h link for its owner only
+    Route::get('/data-exports', [DataExportController::class, 'index'])->middleware(ReadOnlySession::class)->name('profile.data-export.index');
+    Route::post('/data-exports', [DataExportController::class, 'store'])->middleware('throttle:5,1,profile.data-export.store')->name('profile.data-export.store');
+    Route::get('/data-exports/{dataExport}/download', [DataExportController::class, 'download'])->whereUuid('dataExport')->middleware('throttle:30,1,profile.data-export.download')->name('profile.data-export.download');
 
     // File uploads
     Route::post('/upload/image', [FileController::class, 'uploadImage'])->name('upload.image');
@@ -647,6 +671,11 @@ Route::middleware('auth')->group(function () {
     // Browser push subscriptions
     Route::post('/api/push-subscriptions', [PushSubscriptionController::class, 'store'])->name('push-subscriptions.store');
     Route::delete('/api/push-subscriptions', [PushSubscriptionController::class, 'destroy'])->name('push-subscriptions.destroy');
+    // Profile → Notifications device list + test push (BRAI-154); ids are scoped to the user's own subscriptions
+    Route::get('/api/push-subscriptions', [PushSubscriptionController::class, 'index'])->name('push-subscriptions.index');
+    Route::delete('/api/push-subscriptions/{subscription}', [PushSubscriptionController::class, 'remove'])->where('subscription', '[0-9]{1,18}')->name('push-subscriptions.remove');
+    Route::post('/api/push-subscriptions/{subscription}/test', [PushSubscriptionController::class, 'test'])->where('subscription', '[0-9]{1,18}')
+        ->middleware('throttle:10,1,push-subscriptions.test')->name('push-subscriptions.test');
 
     // GitHub App setup callback (BRAI-61): GitHub returns here after install / repository changes
     Route::get('/github/app/setup', [ProjectGithubController::class, 'setup'])->middleware('throttle:20,1,github.app.setup')->name('github.app.setup');
@@ -685,6 +714,13 @@ Route::middleware(['auth', 'verified', 'instance.admin'])->prefix('admin')->name
     Route::delete('github-app', [Admin\GithubAppController::class, 'destroy'])->name('github-app.destroy');
 
     Route::get('audit-log', Admin\AuditLogController::class)->name('audit-log');
+
+    // Email previews (BRAI-155): every email with sample data + a test send to the admin's own address
+    Route::get('emails', [Admin\EmailPreviewController::class, 'index'])->name('emails.index');
+    Route::get('emails/{email}', [Admin\EmailPreviewController::class, 'show'])->where('email', '[a-z0-9-]{1,64}')
+        ->middleware('throttle:120,1,admin.emails.show')->name('emails.show');
+    Route::post('emails/{email}/send', [Admin\EmailPreviewController::class, 'send'])->where('email', '[a-z0-9-]{1,64}')
+        ->middleware('throttle:5,1,admin.emails.send')->name('emails.send');
 });
 
 require __DIR__.'/auth.php';

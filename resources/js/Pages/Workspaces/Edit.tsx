@@ -62,7 +62,9 @@ import {
     EyeOff,
     Sparkles,
     Webhook as WebhookIcon,
+    Scale,
 } from 'lucide-react';
+import { WorkspaceLegalSettings } from '@/components/legal/WorkspaceLegalSettings';
 import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { Link } from '@inertiajs/react';
 import { toast } from 'sonner';
@@ -351,7 +353,7 @@ export default function WorkspacesEdit({
     const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
     const [inviteConfirmPending, setInviteConfirmPending] = useState<{ email: string; role: string } | null>(null);
     const [inviteSending, setInviteSending] = useState(false);
-    const [settingsTab, setSettingsTab] = useState<'general' | 'branding' | 'members' | 'ai' | 'danger'>('general');
+    const [settingsTab, setSettingsTab] = useState<'general' | 'branding' | 'members' | 'ai' | 'legal' | 'danger'>('general');
 
     useEffect(() => {
         const message = props.flash?.success;
@@ -645,6 +647,9 @@ export default function WorkspacesEdit({
                                     </TabsTrigger>
                                     <TabsTrigger value="ai" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
                                         <Bot className="size-4" />AI
+                                    </TabsTrigger>
+                                    <TabsTrigger value="legal" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
+                                        <Scale className="size-4" />Legal
                                     </TabsTrigger>
                                     {/* Webhooks has its own page (v1.39.0, BRAI-104) */}
                                     <Link href={route('webhooks.index', workspace.slug)} className="inline-flex h-9 w-full shrink-0 items-center justify-start gap-2 whitespace-nowrap rounded-sm px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
@@ -1368,6 +1373,11 @@ export default function WorkspacesEdit({
                         {/* AI Settings */}
                         <TabsContent value="ai">
                             <AiSettingsTab workspace={workspace} />
+                        </TabsContent>
+
+                        {/* Legal: who runs the public pages (BRAI-156) */}
+                        <TabsContent value="legal">
+                            <WorkspaceLegalSettings workspace={workspace} />
                         </TabsContent>
 
                         {/* Danger Zone */}

@@ -1,5 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { PageProps, Ticket, TicketReply } from '@/types';
+import { PageProps, PublicOperatorData, Ticket, TicketReply } from '@/types';
+import { OperatorNotice } from '@/components/legal/OperatorNotice';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -27,6 +28,7 @@ interface Props extends PageProps {
     access_token: string;
     app_name: string;
     app_logo_url: string;
+    operator?: PublicOperatorData | null;
     attachments_enabled?: boolean;
 }
 
@@ -40,7 +42,7 @@ function isReplyBodyEmpty(html: string): boolean {
     return !stripHtml(html).trim();
 }
 
-export default function TicketsPublicShow({ ticket, access_token, app_name, app_logo_url, attachments_enabled = true }: Props) {
+export default function TicketsPublicShow({ ticket, access_token, app_name, app_logo_url, attachments_enabled = true, operator = null }: Props) {
     const [replyBody, setReplyBody] = useState('');
     const [replyEditorKey, setReplyEditorKey] = useState(0);
     const [replyAttachments, setReplyAttachments] = useState<File[]>([]);
@@ -386,41 +388,7 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
                                     {app_name}
                                 </span>
                             </Link>
-                            <nav className="flex flex-wrap items-center justify-center gap-6 text-sm font-medium">
-                                <Link
-                                    href={route('terms')}
-                                    className="text-[#485E72]/70 hover:text-[#0E83DC] transition-colors"
-                                >
-                                    Terms
-                                </Link>
-                                <Link
-                                    href={route('privacy')}
-                                    className="text-[#485E72]/70 hover:text-[#0E83DC] transition-colors"
-                                >
-                                    Privacy
-                                </Link>
-                                <Link
-                                    href={route('cookies')}
-                                    className="text-[#485E72]/70 hover:text-[#0E83DC] transition-colors"
-                                >
-                                    Cookies
-                                </Link>
-                                <Link
-                                    href={route('refund')}
-                                    className="text-[#485E72]/70 hover:text-[#0E83DC] transition-colors"
-                                >
-                                    Refund
-                                </Link>
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        window.dispatchEvent(new CustomEvent('brainitive-open-cookie-settings'))
-                                    }
-                                    className="text-[#485E72]/70 hover:text-[#0E83DC] transition-colors"
-                                >
-                                    Cookie settings
-                                </button>
-                            </nav>
+                            <OperatorNotice operator={operator} className="max-w-md text-center sm:text-right" />
                         </div>
                         <div className="mt-8 pt-6 border-t border-[#C0C5C0]/20 flex flex-col sm:flex-row items-center justify-between gap-3">
                             <p className="text-xs text-[#485E72]/50">

@@ -12,6 +12,8 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkTimer;
 use App\Support\GithubStars;
+use App\Support\Legal\LegalInfo;
+use App\Support\Live\LiveConfig;
 use App\Support\Plans\PlanTemplates;
 use App\Support\Sidebar\SidebarPreferences;
 use Illuminate\Http\Request;
@@ -244,6 +246,8 @@ class HandleInertiaRequests extends Middleware
             'activeTimer' => fn () => $user ? WorkTimer::where('user_id', $user->id)->first()?->payload($user) : null,
             // "Star on GitHub" buttons (homepage + account menu): repository link and cached star count
             'githubRepo' => fn () => GithubStars::shared(),
+            // Footer links to the legal pages (BRAI-156): imprint / DPA / sub-processors may be null (self-hosted)
+            'legalLinks' => fn () => LegalInfo::links(),
             'workspaces' => $workspaces,
             'currentWorkspace' => $currentWorkspace,
             // workspace settings are admin-only: hide the link for everyone else (it would end in a 403)
@@ -266,6 +270,8 @@ class HandleInertiaRequests extends Middleware
                 'subscribed' => fn () => $user ? $user->pushSubscriptions()->exists() : false,
             ],
             'onboarding' => fn () => $user ? $this->onboardingProps($user) : null,
+            // Live channels (BRAI-151): null = off (no socket, no token request); see lib/live
+            'live' => fn () => $user && LiveConfig::enabled($request) ? ['debug' => app()->environment('e2e')] : null,
             'flash' => [
                 'success' => fn () => ($request->hasSession() ? $request->session() : null)?->get('success'),
                 'error' => fn () => ($request->hasSession() ? $request->session() : null)?->get('error'),

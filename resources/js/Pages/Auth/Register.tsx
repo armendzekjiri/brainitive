@@ -1,6 +1,7 @@
 import InputError from '@/components/InputError';
 import InputLabel from '@/components/InputLabel';
 import PrimaryButton from '@/components/PrimaryButton';
+import { TermsNotice } from '@/components/legal/TermsNotice';
 import TextInput from '@/components/TextInput';
 import GuestLayout from '@/Layouts/GuestLayout';
 import { Head, Link, useForm } from '@inertiajs/react';
@@ -108,6 +109,8 @@ export default function Register({ registrationOpen = true }: { registrationOpen
                         className="mt-2"
                     />
                 </div>
+
+                <TermsNotice className="mt-4" />
 
                 <div className="mt-4 flex items-center justify-end">
                     <Link

@@ -55,8 +55,9 @@ class ItemReminderNotification extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
+        return $this->brandedMail($notifiable, 'item_reminder')
             ->subject("{$this->itemKey} {$this->whenLabel}")
+            ->headline("{$this->itemKey} {$this->whenLabel}")
             ->line(NewLeadNotification::plain($this->itemTitle))
             ->action('Open', url($this->url));
     }

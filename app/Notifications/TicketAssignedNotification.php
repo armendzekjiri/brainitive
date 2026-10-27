@@ -7,7 +7,6 @@ use App\Models\User;
 use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
 use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class TicketAssignedNotification extends Notification
@@ -75,9 +74,6 @@ class TicketAssignedNotification extends Notification
         ];
     }
 
-    /**
-     * Get the mail representation of the notification.
-     */
     public function toMail(object $notifiable)
     {
         $helpdesk = $this->ticket->helpdesk;
@@ -91,10 +87,13 @@ class TicketAssignedNotification extends Notification
             $this->ticket->id,
         ]);
 
-        return (new MailMessage)
+        return $this->brandedMail($notifiable, 'ticket_assigned')
             ->subject("Ticket {$this->ticket->key} assigned to you: ".NewLeadNotification::plain((string) $this->ticket->subject))
+            ->eyebrow("{$project->name} · {$helpdesk->name}")
+            ->headline("{$this->ticket->key} is assigned to you")
             ->line("{$this->by()} assigned you to ticket {$this->ticket->key}.")
             ->line(NewLeadNotification::plain((string) $this->ticket->subject))
-            ->action('View Ticket', $url);
+            ->context($workspace->name)
+            ->action('View ticket', $url);
     }
 }

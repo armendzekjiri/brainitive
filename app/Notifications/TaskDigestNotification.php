@@ -58,7 +58,10 @@ class TaskDigestNotification extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
-        $mail = (new MailMessage)->subject('Your tasks: '.$this->summary());
+        $mail = $this->brandedMail($notifiable, 'task_digest')
+            ->subject('Your tasks: '.$this->summary())
+            ->headline('Your tasks: '.$this->summary())
+            ->preheader(implode(' · ', array_map(fn ($title) => NewLeadNotification::plain($title), $this->titles)));
         foreach ($this->titles as $title) {
             $mail->line('- '.NewLeadNotification::plain($title));
         }

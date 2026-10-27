@@ -83,6 +83,25 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.44.0',
+        title: 'Everything live, branded emails, privacy by default',
+        tag: 'Feature',
+        date: '2026-10-27',
+        items: [
+            'Live boards and plans: cards created, moved, edited or deleted by teammates (and by automations, the AI connector or imports) show up on your open board, list, timeline and backlog right away — your filters, drag and open card stay as they are. Gantt plans follow others\' changes and never overwrite your unsaved edit.',
+            'Live basics: comments and ticket replies appear instantly, avatars show who else is on an issue, board or plan, "… is typing" under the comment box, and issue descriptions can be written together like documents.',
+            'Live whiteboards: draw together in real time — shapes, sticky notes and images appear for everyone with named cursors, like Miro; it keeps working offline.',
+            'The notification bell rings the moment something arrives, and reading in one tab updates every other tab.',
+            'Notification devices (Profile → Notifications): see every browser that gets your push notifications and send a test to any of them, with next steps for Windows, macOS, iPhone and Android.',
+            'Every email Brainitive sends has one branded look: logo, dark mode and phone friendly, "Manage notifications" for members; helpdesk customers see your helpdesk\'s name. Instance admins can preview every email (Admin → Emails).',
+            'Privacy: no more requests to Google Fonts or other CDNs (video and design embeds load on click), no cookie banner, and our own visit statistics run only if you allow them, a new imprint, sub-processor list and data processing agreement, and rewritten privacy policy, terms and cookie pages.',
+            'Your public pages: workspaces can name their legal entity and link their own privacy policy and imprint on support pages, forms and portals; lead forms get an optional or required consent checkbox that is saved with the lead.',
+            '"Download my data" (Profile → Your data): a ZIP with everything Brainitive holds about your account — profile, settings, the issues, comments, pages, whiteboards and tasks you created, time entries, notifications, devices, connected calendars and apps, and your uploaded files. The link arrives in the app and by email and works for 24 hours, only for you.',
+            'Fixed: deleting your account no longer removes work you created in shared workspaces — it is handed to the workspace owner.',
+            'Security: on instances that don\'t require email verification, an unconfirmed account can no longer take over the guest identity (client and feedback portals) of the same email address.',
+        ]
+    },
+    {
         version: 'v1.43.0',
         title: 'Find anything, write together, work offline',
         tag: 'Feature',

@@ -74,12 +74,15 @@ import {
     Video,
     CalendarSync,
     WifiOff,
+    Radio,
+    MailCheck,
     UsersRound,
     type LucideIcon,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
 import { Button } from '@/components/ui/button';
-import { CookieConsent } from '@/components/CookieConsent';
+import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks';
+import { TermsNotice } from '@/components/legal/TermsNotice';
 import GitHubStarButton from '@/components/GitHubStarButton';
 
 /*
@@ -393,45 +396,45 @@ const SPOTLIGHT: {
     shortcut?: string;
 }[] = [
     {
-        key: 'search',
-        version: 'v1.43',
-        icon: Search,
+        key: 'everything-live',
+        version: 'v1.44',
+        icon: Radio,
         color: '#0E83DC',
-        title: 'Find anything',
+        title: 'Everything live',
         description:
-            'One search across issues, docs, comments, tickets, tasks, plans, snippets and files — ranked, typo tolerant, and only what you’re allowed to see.',
+            'Boards, plans, comments, issue descriptions and whiteboards update the moment a teammate changes them — see who’s here and who’s typing.',
         points: [
-            'Filters by project, status, assignee and date',
-            '“Phrases”, -exclusions and issue keys like WEB-12',
-            'Right in ⌘K, no extra server',
+            'Cards move on everyone’s board, no reload',
+            'Draw together on whiteboards with named cursors',
+            'Instant notification bell',
         ],
     },
     {
-        key: 'live-docs',
-        version: 'v1.43',
-        icon: UsersRound,
+        key: 'branded-email',
+        version: 'v1.44',
+        icon: MailCheck,
         color: '#69A748',
-        title: 'Write together, live',
+        title: 'Emails that look like Brainitive',
         description:
-            'Edit the same document at the same time — see everyone’s cursor and changes as they type, then publish when it’s ready.',
+            'Every email — notifications, invitations, helpdesk replies, portals — in one clean, branded layout that works on phones and in dark mode.',
         points: [
-            'Live cursors with names',
-            'Keeps working offline, syncs when you’re back',
-            'Drafts, reviews and versions stay as they are',
+            '“Manage notifications” in every member email',
+            'Helpdesk customers see your helpdesk’s name',
+            'Test web push on each of your devices',
         ],
     },
     {
-        key: 'offline',
-        version: 'v1.43',
-        icon: WifiOff,
+        key: 'privacy',
+        version: 'v1.44',
+        icon: ShieldCheck,
         color: '#0E83DC',
-        title: 'Work offline',
+        title: 'Privacy by default',
         description:
-            'On the train or a bad connection, My Day, task lists, issues and quick capture keep working — and sync when you’re back online.',
+            'No third-party fonts or trackers in your browser, a clear privacy policy, imprint and data processing agreement — and your public pages name you as the operator.',
         points: [
-            'Opt-in per device',
-            'Conflicts are never overwritten: keep mine or theirs',
-            'Cleared when you sign out',
+            'Your privacy & imprint links on support pages and forms',
+            'Optional consent checkbox on lead forms',
+            'Data processing agreement for teams',
         ],
     },
 ];
@@ -1506,6 +1509,7 @@ export default function Welcome({
                                                     </a>
                                                 )}
                                             </div>
+                                            <TermsNotice action="continuing with Google, GitHub or Microsoft for the first time" className="mt-3 text-center" />
                                         </>
                                     )}
                                 </>
@@ -1737,43 +1741,11 @@ export default function Welcome({
                                 >
                                     Self-hosting
                                 </a>
-                                <Link
-                                    href="/privacy"
-                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
-                                >
-                                    Privacy Policy
-                                </Link>
-                                <Link
-                                    href="/terms"
-                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
-                                >
-                                    Terms of Service
-                                </Link>
-                                <Link
-                                    href="/cookies"
-                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
-                                >
-                                    Cookie Policy
-                                </Link>
-                                <Link
-                                    href="/refund"
-                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
-                                >
-                                    Refund Policy
-                                </Link>
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        window.dispatchEvent(
-                                            new CustomEvent(
-                                                'brainitive-open-cookie-settings',
-                                            ),
-                                        )
-                                    }
-                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
-                                >
-                                    Cookie settings
-                                </button>
+                                {/* Imprint · Privacy · Terms · Cookies · Sub-processors (BRAI-156) */}
+                                <LegalFooterLinks
+                                    className="gap-x-6"
+                                    linkClassName="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium hover:no-underline"
+                                />
                             </div>
                         </div>
                         <div className="mt-8 pt-6 border-t border-border/50 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -1792,7 +1764,6 @@ export default function Welcome({
                 </footer>
             </div>
 
-            <CookieConsent />
         </>
     );
 }

@@ -49,6 +49,14 @@ The chosen design; note alternatives if the choice isn't obvious.
 | [Release v1.41.0: bring your data — Trello, Jira, Notion imports, project export/restore (BRAI-65/139/66/81)](./release-v1.41.0.md) | done |
 | [Release v1.42.0: work with clients — feedback portal, client portal, document review, GitHub App connect, calendar feed + providers (Outlook, CalDAV / iCloud, ICS), smart links, automation conditions, meetings, Sign in with Microsoft (BRAI-60/73/80/61/142/140/141/143/144/147/148)](./release-v1.42.0.md) | in progress |
 | Release v1.43.0: find anything, write together, work offline — search, live docs, offline mode (BRAI-55/54/82) | in progress |
+| Release v1.44.0: everything live, push devices, branded email, legal & privacy (BRAI-151/152/153/154/155/156) | in progress |
+| [Live channels foundation: pub/sub, presence, signals; instant bell (BRAI-151, part 1)](./feat-live-foundation.md) | done |
+| [Live basics: comments, who's here, typing, live issue descriptions (BRAI-151, part 2)](./feat-live-basics.md) | done |
+| [Live boards + plans (BRAI-152)](./feat-live-boards.md) | done |
+| [Live whiteboards: draw together (BRAI-153)](./feat-live-whiteboards.md) | done |
+| [Web push devices + test notification (BRAI-154)](./feat-push-test.md) | done |
+| [Branded email templates (BRAI-155)](./feat-email-templates.md) | done |
+| [Legal & privacy compliance review (BRAI-156)](./feat-legal-compliance.md) | done |
 | [Find anything: real search on PostgreSQL (BRAI-55)](./feat-search.md) | done |
 | [Offline notes and tasks: opt-in local drafts with explicit sync conflicts (BRAI-82)](./feat-offline.md) | done |
 | [Live co-editing of documents: Yjs + Hocuspocus, offline merge, Docker service (BRAI-54)](./feat-live-docs.md) | done |

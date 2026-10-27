@@ -9,7 +9,9 @@ use App\Models\Ticket;
 use App\Models\TicketEmailMessage;
 use App\Models\TicketReply;
 use App\Support\Helpdesks\Inbound\TicketMailThread;
+use App\Support\Mail\BrandedMail;
 use App\Support\Webhooks\WebhookDispatcher;
+use Illuminate\Mail\Markdown;
 use Illuminate\Support\Str;
 use Symfony\Component\Mime\Address;
 use Symfony\Component\Mime\Email;
@@ -108,14 +110,26 @@ final class TicketMailer
         app(MailTransports::class)->forMailbox($mailbox)->send($email);
     }
 
+    /**
+     * The mail as it would go out (body + subject, no addresses, threading or sending) — for the admin
+     * email previews (BRAI-155).
+     */
+    public static function compose(Ticket $ticket, ?TicketReply $reply): Email
+    {
+        $mailbox = new HelpdeskMailbox;
+        $email = $reply ? self::replyEmail($mailbox, $ticket, $reply) : self::acknowledgmentEmail($mailbox, $ticket);
+
+        return $email->subject(TicketMailThread::replySubject($ticket));
+    }
+
     private static function replyEmail(HelpdeskMailbox $mailbox, Ticket $ticket, TicketReply $reply): Email
     {
         $body = (string) $reply->body;
-        $footer = '<p style="color:#6b7280;font-size:12px">'.e($ticket->key).' · <a href="'.e($ticket->publicUrl()).'">View the ticket online</a><br>Reply to this email to answer.</p>';
+        $plain = self::plain($body);
 
         $email = (new Email)
-            ->html('<div>'.$body.'</div><hr style="border:none;border-top:1px solid #e5e7eb">'.$footer)
-            ->text(self::plain($body)."\n\n--\n{$ticket->key} · View the ticket online: {$ticket->publicUrl()}\nReply to this email to answer.");
+            ->html(self::branded($ticket, $body, Str::limit(preg_replace('/\s+/u', ' ', $plain) ?? '', 140)))
+            ->text($plain."\n\n--\n{$ticket->key} · View the ticket online: {$ticket->publicUrl()}\nReply to this email to answer.");
 
         foreach (TicketMailThread::participants($ticket) as $cc) {
             if (filter_var($cc, FILTER_VALIDATE_EMAIL)) {
@@ -136,7 +150,7 @@ final class TicketMailer
         ];
 
         $email = (new Email)
-            ->html(implode('', array_map(fn ($line) => '<p>'.e($line).'</p>', $lines)).'<p><a href="'.e($ticket->publicUrl()).'">View the ticket online</a></p>')
+            ->html(self::branded($ticket, implode('', array_map(fn ($line) => '<p>'.e($line).'</p>', array_slice($lines, 1))), $lines[1], BrandedMail::greeting($ticket->contact->name)))
             ->text(implode("\n\n", $lines)."\n\nView the ticket online: ".$ticket->publicUrl());
 
         // RFC 3834: an automatic answer, so the customer's autoresponder doesn't answer it
@@ -144,6 +158,20 @@ final class TicketMailer
         $email->getHeaders()->addTextHeader('X-Auto-Response-Suppress', 'All');
 
         return $email;
+    }
+
+    /** The HTML part on the branded mail layout (BRAI-155), signed by the helpdesk; $bodyHtml is trusted (stored, sanitised). */
+    private static function branded(Ticket $ticket, string $bodyHtml, string $preheader, ?string $greeting = null): string
+    {
+        return (string) app(Markdown::class)->render('emails.helpdesk.ticket-message', [
+            'sender' => BrandedMail::helpdeskName($ticket->helpdesk),
+            'ticketKey' => (string) $ticket->key,
+            'ticketUrl' => $ticket->publicUrl(),
+            'bodyHtml' => $bodyHtml,
+            'greeting' => $greeting,
+            'preheader' => $preheader,
+            'signOff' => $greeting !== null, // an agent's reply carries their own sign-off
+        ]);
     }
 
     /** From / To / Reply-To / subject and the threading headers. */

@@ -48,6 +48,9 @@ use App\Support\Helpdesks\Mail\ImapMailboxConnector;
 use App\Support\Helpdesks\Mail\MailboxConnector;
 use App\Support\Helpdesks\Mail\MailHost;
 use App\Support\Helpdesks\Mail\MailTransports;
+use App\Support\Mail\BrandedMail;
+use App\Support\Push\PushReportHandler;
+use App\Support\Push\WebPushClient;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -58,6 +61,9 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Passport\Passport;
+use Minishlink\WebPush\WebPush;
+use NotificationChannels\WebPush\ReportHandlerInterface;
+use NotificationChannels\WebPush\WebPushChannel;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -89,7 +95,17 @@ class AppServiceProvider extends ServiceProvider
         ResetPassword::createUrlUsing(fn ($user, string $token) => rtrim((string) (config('app.url') ?: url('/')), '/')
             .route('password.reset', ['token' => $token, 'email' => $user->getEmailForPasswordReset()], false));
 
+        // BRAI-155: branded mail layout — secured Markdown encoding + the password reset mail
+        BrandedMail::register();
+
         Vite::prefetch(concurrency: 3);
+
+        // Web push (BRAI-154): one WebPush client for real notifications and the Profile test push
+        // (faked in e2e), and a report handler that records each push service answer on the
+        // subscription and flags expired ones instead of deleting them. Overrides the package's
+        // bindings (app providers boot after package providers).
+        $this->app->when(WebPushChannel::class)->needs(WebPush::class)->give(fn (): WebPush => WebPushClient::make());
+        $this->app->when(WebPushChannel::class)->needs(ReportHandlerInterface::class)->give(PushReportHandler::class);
 
         // OAuth 2.1 (Passport) — powers the remote MCP server connect flow for
         // ChatGPT / Claude. The consent screen shown during "Add connector" is

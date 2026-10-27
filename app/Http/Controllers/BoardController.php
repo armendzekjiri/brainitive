@@ -27,6 +27,7 @@ use App\Support\Boards\ItemFieldValues;
 use App\Support\Boards\ItemMentions;
 use App\Support\Boards\Swimlanes;
 use App\Support\Github\ItemDevelopment;
+use App\Support\Live\BoardLive;
 use App\Support\References\ContentReferences;
 use App\Support\Uploads;
 use Illuminate\Database\Eloquent\Builder;
@@ -323,6 +324,7 @@ class BoardController extends Controller
                 ->where('board_id', $board->id)
                 ->update(['position' => $columnData['position']]);
         }
+        BoardLive::columnsReordered($board->id, array_column($validated['columns'], 'id'));
 
         return response()->json(['success' => true]);
     }
@@ -345,6 +347,7 @@ class BoardController extends Controller
                 ->where('board_id', $board->id)
                 ->update(['position' => $itemData['position']]);
         }
+        BoardLive::itemIds(array_column($validated['items'], 'id'), ['position'], $board->id); // ids of other boards: dropped by the refetch
 
         return back()->with('success', 'Items reordered successfully.');
     }
@@ -486,6 +489,32 @@ class BoardController extends Controller
     }
 
     /**
+     * Live boards (BRAI-152): the current card data of some cards of this board — what an open
+     * board refetches after a live event. Same cards and shape as show(): cards in this board's
+     * columns (Scrum: the running sprint only). An id that isn't returned left the board (deleted,
+     * moved away, out of the sprint) and is dropped by the client.
+     */
+    public function cards(Request $request, Workspace $workspace, Project $project, Board $board): JsonResponse
+    {
+        $this->authorize('view', $board);
+
+        $validated = $request->validate([
+            'ids' => 'required|array|min:1|max:100',
+            'ids.*' => 'integer|min:1',
+        ]);
+
+        $activeSprintId = $board->isScrum() ? ($board->activeSprint()->value('id') ?? 0) : null;
+        $items = $this->withCardData(Item::query())
+            ->whereIn('id', array_values(array_unique(array_map('intval', $validated['ids']))))
+            ->where('board_id', $board->id)
+            ->whereIn('column_id', $board->columns()->select('id'))
+            ->when($board->isScrum(), fn ($query) => $query->where('sprint_id', $activeSprintId))
+            ->get();
+
+        return response()->json(['items' => $items]);
+    }
+
+    /**
      * Comments, attachments and history of one item (JSON), fetched when it is opened.
      */
     public function itemDetails(Workspace $workspace, Project $project, Board $board, Item $item): JsonResponse
@@ -513,6 +542,9 @@ class BoardController extends Controller
             ->get(['id', 'user_id', 'action', 'changes', 'metadata', 'created_at']);
 
         return response()->json([
+            // live issue view (BRAI-151): title / description changed elsewhere are refetched with the rest
+            'title' => $item->title,
+            'description' => $item->description,
             'comments' => $comments,
             'attachments' => $attachments,
             'history' => $history,
@@ -922,6 +954,7 @@ class BoardController extends Controller
         $result = $item->labels()->sync($validLabels);
 
         if ($result['attached'] !== [] || $result['detached'] !== []) {
+            BoardLive::itemIds([$item->id], ['labels'], $item->board_id);
             $names = $project->labels()->whereIn('id', array_merge($result['attached'], $result['detached']))->pluck('name', 'id');
             ActivityLog::log($item, 'labels_changed', [
                 'labels' => [
@@ -1056,7 +1089,10 @@ class BoardController extends Controller
         // sprint, which belongs to the old board.
         $fromProjectId = (int) $board->project_id;
         DB::transaction(function () use ($item, $targetBoard, $targetColumn, $fromProjectId) {
-            Item::whereIn('id', $item->descendantIds())->update([
+            // live boards: the subtree leaves this board (the issue itself reports through its model)
+            $descendants = $item->descendantIds();
+            BoardLive::itemsLeft((int) $item->board_id, (int) $targetBoard->id, $descendants, array_fill_keys($descendants, $targetColumn->id));
+            Item::whereIn('id', $descendants)->update([
                 'board_id' => $targetBoard->id,
                 'project_id' => $targetBoard->project_id,
                 'column_id' => $targetColumn->id,

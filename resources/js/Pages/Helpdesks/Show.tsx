@@ -92,6 +92,7 @@ import { useState, useRef, useEffect, DragEvent, FormEvent, useCallback, useMemo
 import { Link } from '@inertiajs/react';
 import { RichLexicalEditor } from '@/components/editor/RichLexicalEditorFull';
 import { safeHtmlProp } from '@/lib/sanitize';
+import { useLiveChannel } from '@/lib/live';
 import NewTicketDialog from '@/components/helpdesk/NewTicketDialog';
 import ResolveTicketDialog from '@/components/helpdesk/ResolveTicketDialog';
 import ReplyEmailStatus from '@/components/helpdesk/email/ReplyEmailStatus';
@@ -500,6 +501,27 @@ function TicketEditModal({
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ticket?.id]);
+
+    // Live replies (BRAI-151): a reply anywhere (colleague, customer portal, email) reloads the board's
+    // tickets; the panel takes the fresh replies (the draft in the reply box is separate state)
+    const replyKey = (ticket?.replies ?? []).map((reply) => `${reply.id}:${reply.updated_at}`).join(',');
+    useEffect(() => {
+        if (ticket) setLocalReplies(ticket.replies || []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [replyKey]);
+    const liveReloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const reloadReplies = useCallback(() => {
+        if (liveReloadTimer.current) clearTimeout(liveReloadTimer.current);
+        liveReloadTimer.current = setTimeout(() => {
+            liveReloadTimer.current = null;
+            router.reload({ only: ['helpdesk'] });
+        }, 150);
+    }, []);
+    useEffect(() => () => { if (liveReloadTimer.current) clearTimeout(liveReloadTimer.current); }, []);
+    useLiveChannel(ticket ? `ticket.${ticket.id}` : null, {
+        onEvent: (e) => { if (e.event.startsWith('reply.')) reloadReplies(); },
+        onResync: reloadReplies,
+    });
 
     // Title handlers
     const startEditTitle = () => {

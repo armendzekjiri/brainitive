@@ -7,8 +7,9 @@ use App\Models\TicketContact;
 use App\Models\User;
 use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
+use App\Support\Legal\PublicOperator;
+use App\Support\Mail\BrandedMail;
 use Illuminate\Bus\Queueable;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class TicketCreatedNotification extends Notification
@@ -82,7 +83,8 @@ class TicketCreatedNotification extends Notification
     }
 
     /**
-     * Get the mail representation of the notification.
+     * Get the mail representation of the notification: the customer's confirmation (signed by the
+     * helpdesk) or the team's "new ticket" mail.
      */
     public function toMail(object $notifiable)
     {
@@ -92,32 +94,41 @@ class TicketCreatedNotification extends Notification
 
         // Different URL for contacts vs users (use token passed from controller so we don't invalidate the one returned in API)
         if ($notifiable instanceof TicketContact) {
-            $url = $this->ticket->publicUrl();
-            $subject = "Ticket {$this->ticket->key} created: {$this->plainSubject()}";
-            $line = "Your ticket has been created and we'll get back to you soon.";
-            $action = 'View Ticket';
-        } else {
-            $url = route('tickets.show', [
-                $workspace->slug,
-                $project->slug,
-                $helpdesk->slug,
-                $this->ticket->id,
-            ]);
-            $subject = "New ticket {$this->ticket->key}: {$this->plainSubject()}";
-            $sourceName = $this->source instanceof User
-                ? $this->source->name
-                : ($this->source instanceof TicketContact
-                    ? ($this->source->name ?: $this->source->email)
-                    : 'A user');
-            $line = "{$sourceName} created a new ticket.";
-            $action = 'Review Ticket';
+            $sender = BrandedMail::helpdeskName($helpdesk);
+
+            return $this->brandedMail($notifiable, 'ticket_created', "You get this email because you contacted {$sender}.")
+                ->subject("Ticket {$this->ticket->key} created: {$this->plainSubject()}")
+                ->eyebrow($sender)
+                ->headline("We received your ticket {$this->ticket->key}")
+                ->line("Your ticket has been created and we'll get back to you soon.")
+                ->quote($this->plainSubject())
+                // the contact learns who runs the helpdesk (BRAI-156)
+                ->line(PublicOperator::mailLine($workspace, nameFallback: true))
+                ->action('View ticket', $this->ticket->publicUrl())
+                ->context($sender)
+                ->signOff($sender);
         }
 
-        return (new MailMessage)
-            ->subject($subject)
-            ->line($line)
-            ->line($this->plainSubject())
-            ->action($action, $url);
+        $url = route('tickets.show', [
+            $workspace->slug,
+            $project->slug,
+            $helpdesk->slug,
+            $this->ticket->id,
+        ]);
+        $sourceName = $this->source instanceof User
+            ? $this->source->name
+            : ($this->source instanceof TicketContact
+                ? ($this->source->name ?: $this->source->email)
+                : 'A user');
+
+        return $this->brandedMail($notifiable, 'ticket_created')
+            ->subject("New ticket {$this->ticket->key}: {$this->plainSubject()}")
+            ->eyebrow("{$project->name} · {$helpdesk->name}")
+            ->headline("New ticket {$this->ticket->key}")
+            ->line(NewLeadNotification::plain((string) $sourceName).' created a new ticket.')
+            ->quote($this->plainSubject())
+            ->context($workspace->name)
+            ->action('Review ticket', $url);
     }
 
     /** The visitor-written subject as plain text: no Markdown links, images or formatting in mails. */

@@ -169,12 +169,8 @@ class FetchLinkMetadataJob implements ShouldQueue
             return $this->resolveUrl(trim($m[2]), $base);
         }
 
-        // Fallback: Google favicon service
-        $host = parse_url($pageUrl, PHP_URL_HOST);
-        if ($host) {
-            return 'https://www.google.com/s2/favicons?sz=32&domain='.urlencode($host);
-        }
-
+        // No fallback to Google's favicon service: every viewer's browser would ask Google
+        // (BRAI-156). The bookmark shows a generic link icon instead.
         return null;
     }
 
