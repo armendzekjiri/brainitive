@@ -91,6 +91,15 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.45.1',
+        title: 'GitHub App: creating it works',
+        tag: 'Fix',
+        date: '2026-10-27',
+        items: [
+            'Fixed: creating the GitHub App (Admin → GitHub App → Connect) no longer ends in "GitHub could not create the app (HTTP 422)" after you confirm on GitHub.',
+        ]
+    },
+    {
         version: 'v1.45.0',
         title: 'Booking pages: let people book a time with you',
         tag: 'Major Feature',

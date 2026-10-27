@@ -737,11 +737,13 @@ Plan + production setup: [`tasks/feat-github-app.md`](./tasks/feat-github-app.md
   can read ONE of its repositories, so a project may only follow repositories the connecting person can
   read (`GET /user/installations/{id}/repositories` → `github_connections.allowed_repository_ids`).
 - The GitHub App is separate from GitHub social login (`services.github`) — never widen login scopes.
-- **The manifest must not set `setup_url` / `setup_on_update` together with `request_oauth_on_install`.**
-  GitHub shows the create screen but refuses the conversion with HTTP 422 (hit on brainitive.app,
-  2026-10-27); `callback_urls` alone brings people back to `/github/app/setup`. A refused conversion is
-  logged and shown with GitHub's reason (`GithubApi::refusalReason`); `FakeGithub` / `Http::fake` don't
-  enforce GitHub's rules, so check real-GitHub constraints in their docs.
+- **A POST to the GitHub API without data must send `{}`, never Laravel's default `[]`.** The manifest
+  conversion answered 422 "For 'links/0/schema', [] is not a null or object" (brainitive.app,
+  2026-10-27): `PendingRequest::post($url)` JSON-encodes its empty `$data` array. `GithubApi::emptyBody()`
+  sends `{}` (conversion + installation tokens). The manifest uses `callback_urls` alone (no `setup_url`)
+  to bring people back to `/github/app/setup`. A refused conversion is logged and shown with GitHub's
+  reason (`GithubApi::refusalReason`); `FakeGithub` / `Http::fake` don't enforce GitHub's rules, so assert
+  the exact request (`Http::assertSent`) when GitHub is strict about it.
   Installation tokens are cached encrypted (`github-app:installation-token:*`), never shown.
 - **Merge transitions don't notify watchers.** The move is a model save (history via `ItemObserver`
   marked `ActivityLog::via('github')`, outgoing webhooks, automations), but `item_status_changed` to

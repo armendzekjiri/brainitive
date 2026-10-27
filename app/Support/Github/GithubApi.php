@@ -192,7 +192,7 @@ final class GithubApi
      */
     public static function convertManifest(string $code): array
     {
-        $response = self::client()->post('/app-manifests/'.rawurlencode($code).'/conversions');
+        $response = self::emptyBody(self::client())->post('/app-manifests/'.rawurlencode($code).'/conversions');
         if (! $response->successful()) {
             // GitHub says why ("Validation failed" + field errors, e.g. a taken name): log it and show it.
             // A refused conversion carries no secrets; never log a successful body (it has the private key).
@@ -227,10 +227,19 @@ final class GithubApi
         return self::http()->baseUrl(self::API)->accept('application/vnd.github+json');
     }
 
+    /**
+     * A POST without data: Laravel would send the JSON body `[]`, which GitHub refuses with 422
+     * ("For 'links/0/schema', [] is not a null or object", seen on brainitive.app 2026-10-27).
+     */
+    private static function emptyBody(PendingRequest $client): PendingRequest
+    {
+        return $client->withBody('{}', 'application/json');
+    }
+
     private function send(PendingRequest $client, string $method, string $path, array $query = []): Response
     {
         try {
-            $response = $method === 'get' ? $client->get($path, $query) : $client->post($path);
+            $response = $method === 'get' ? $client->get($path, $query) : self::emptyBody($client)->post($path);
         } catch (ConnectionException) {
             throw new GithubApiException("GitHub could not be reached ({$path}).");
         }
