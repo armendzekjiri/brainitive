@@ -72,6 +72,9 @@ class BookingGuestNotification extends Notification implements ShouldQueue
             if ($this->token !== null) {
                 $mail->footerLink('Reschedule or cancel', route('booking.manage', $this->token));
             }
+            if ($this->kind === 'reminder') {
+                $mail->line('Need to change it? Use the “Reschedule or cancel” link in your confirmation email.');
+            }
             if ($this->kind !== 'reminder') {
                 $mail->attachData($this->ics(), 'booking.ics', ['mime' => 'text/calendar; charset=UTF-8; method=PUBLISH']);
             }

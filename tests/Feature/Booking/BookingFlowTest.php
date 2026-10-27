@@ -347,4 +347,45 @@ class BookingFlowTest extends TestCase
         $this->actingAs($this->host)->getJson(route('booking-types.preview', [$this->page->uuid, $this->type->id]))
             ->assertOk()->assertJsonPath('slots.0', '2027-01-04T08:00:00Z');
     }
+
+    public function test_guests_get_one_reminder_a_day_before_but_not_for_last_minute_bookings(): void
+    {
+        $this->book()->assertOk(); // booked Friday 08:00 UTC for Monday 08:00 UTC: 72 h ahead
+        $this->travelTo(CarbonImmutable::parse('2027-01-03 09:00', 'UTC')); // 23 h before
+
+        $this->artisan('app:send-booking-reminders')->assertSuccessful();
+        $this->artisan('app:send-booking-reminders')->assertSuccessful();
+
+        Notification::assertSentTimes(BookingGuestNotification::class, 2); // the confirmation + one reminder
+        $this->assertNotNull(Booking::sole()->reminded_at);
+
+        // booked 30 h ahead: no reminder
+        $this->travelTo(CarbonImmutable::parse('2027-01-03 02:00', 'UTC'));
+        $this->book('2027-01-04T08:30:00Z', ['email' => 'ann@example.test'])->assertOk();
+        $this->travelTo(CarbonImmutable::parse('2027-01-03 09:00', 'UTC'));
+        $this->artisan('app:send-booking-reminders')->assertSuccessful();
+        Notification::assertSentTimes(BookingGuestNotification::class, 3); // only Ann's confirmation
+    }
+
+    public function test_bookings_show_in_the_hosts_calendar_once(): void
+    {
+        $this->book()->assertOk(); // written to the fake calendar as event "new-1"
+        $this->type->update(['target_connection_id' => null]);
+        $this->book('2027-01-04T09:00:00Z', ['email' => 'ann@example.test', 'name' => 'Ann'])->assertOk(); // only in Brainitive
+
+        FakeCalendarProvider::$events = [NormalizedEvent::timed('new-1', 'Intro call: Gus Guest', CarbonImmutable::parse('2027-01-04 08:00', 'UTC'), CarbonImmutable::parse('2027-01-04 08:30', 'UTC'), 'UTC')];
+        $this->actingAs($this->host)->get(route('calendar.index', ['view' => 'week', 'date' => '2027-01-04']))
+            ->assertInertia(fn ($p) => $p
+                ->where('events', function ($events) {
+                    $bookings = collect($events)->where('type', 'booking')->values();
+                    $this->assertSame(['Intro call: Gus Guest'], collect($events)->where('type', 'external_event')->pluck('title')->values()->all());
+                    $this->assertSame([['Intro call: Ann', '10:00']], $bookings->map(fn ($e) => [$e['title'], $e['start_time']])->all());
+
+                    return true;
+                }));
+
+        // switched off in the filter
+        $this->actingAs($this->host)->get(route('calendar.index', ['view' => 'week', 'date' => '2027-01-04', 'sources' => ['board', 'list', 'external']]))
+            ->assertInertia(fn ($p) => $p->where('events', fn ($events) => collect($events)->where('type', 'booking')->isEmpty()));
+    }
 }

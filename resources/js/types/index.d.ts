@@ -1090,7 +1090,8 @@ export interface CalendarConnectionRow {
 export interface CalendarEvent {
     id: number | string;
     /** external_event = an event of any connected calendar provider; google_task = a Google Tasks task. */
-    type: 'board_item' | 'task_list_item' | 'external_event' | 'google_task';
+    /** booking = a booking on one of your booking pages (BRAI-158), read-only */
+    type: 'board_item' | 'task_list_item' | 'external_event' | 'google_task' | 'booking';
     key: string;
     title: string;
     start_date: string | null;
@@ -1978,7 +1979,7 @@ export interface WebhookDelivery {
 
 // ── Customisable sidebar (BRAI-106) ─────────────────────────────────────────
 /** Top-level sidebar entries a user may hide (Home and Inbox are always shown). */
-export type SidebarNavKey = 'my_work' | 'captures' | 'timesheet' | 'billing' | 'insights' | 'calendar' | 'bookmarks' | 'snippets';
+export type SidebarNavKey = 'my_work' | 'captures' | 'timesheet' | 'billing' | 'insights' | 'calendar' | 'booking_pages' | 'bookmarks' | 'snippets';
 /** Project groups in the sidebar. */
 export type SidebarGroupKey = 'boards' | 'lists' | 'plans' | 'helpdesks' | 'lead_forms' | 'pages' | 'whiteboards' | 'folders';
 /** What can be pinned; "page" covers pages, whiteboards and folders. */
@@ -3098,4 +3099,162 @@ export interface DataExportState {
     exports: DataExportData[];
     /** seconds until a new request is allowed (0 = now) */
     available_in: number;
+}
+
+// ── Booking pages (v1.45.0, BRAI-158) ─────────────────────────────────────
+
+export type BookingLocationKind = 'none' | 'google_meet' | 'teams' | 'phone' | 'in_person' | 'link';
+
+export type BookingDay = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+/** [start, end] as "HH:MM" wall-clock in the page's timezone ("24:00" = midnight) */
+export type BookingRange = [string, string];
+
+export interface BookingAvailability {
+    weekly: Partial<Record<BookingDay, BookingRange[]>>;
+    /** 'Y-m-d' → ranges; [] = day off */
+    overrides: Record<string, BookingRange[]>;
+}
+
+export interface BookingRulesData {
+    step_minutes: number;
+    buffer_before: number;
+    buffer_after: number;
+    min_notice_minutes: number;
+    horizon_days: number;
+    daily_max: number | null;
+}
+
+export interface BookingQuestion {
+    id: string;
+    label: string;
+    type: 'text' | 'textarea' | 'phone' | 'choice';
+    required: boolean;
+    options: string[];
+}
+
+export interface BookingTypeData {
+    id: number;
+    slug: string;
+    name: string;
+    description: string | null;
+    duration_minutes: number;
+    location: { kind: BookingLocationKind; value: string | null };
+    availability: BookingAvailability;
+    rules: BookingRulesData;
+    target_connection_id: number | null;
+    questions: BookingQuestion[];
+    enabled: boolean;
+    position: number;
+}
+
+export interface BookingBusySources {
+    connections: 'all' | number[];
+    issues: boolean;
+    tasks: boolean;
+    all_day_blocks: boolean;
+}
+
+export interface BookingPageData {
+    uuid: string;
+    title: string;
+    intro: string | null;
+    timezone: string;
+    enabled: boolean;
+    public_slug: string;
+    public_url: string;
+    embed_url: string;
+    workspace: string;
+    busy_sources: BookingBusySources;
+    card_board_id: number | null;
+    card_column_id: number | null;
+    consent: 'off' | 'optional' | 'required';
+    consent_text: string | null;
+}
+
+export interface BookingPageListItem {
+    uuid: string;
+    title: string;
+    enabled: boolean;
+    public_url: string;
+    workspace: string;
+    types_count: number;
+    upcoming_count: number;
+}
+
+export interface BookingTemplateData {
+    key: string;
+    name: string;
+    description: string;
+    /** "Intro call · 15 min" */
+    types: string[];
+}
+
+export interface BookingConnectionData {
+    id: number;
+    name: string;
+    account: string | null;
+    provider: string;
+    writable: boolean;
+    conference_providers: ('google_meet' | 'teams')[];
+    sync_error: string | null;
+    blocks: boolean;
+}
+
+export interface BookingBoardData {
+    id: number;
+    name: string;
+    project: string | null;
+    columns: { id: number; name: string }[];
+}
+
+export interface BookingRow {
+    uuid: string;
+    type: string | null;
+    starts_at: string;
+    ends_at: string;
+    guest_name: string;
+    guest_email: string;
+    guest_timezone: string | null;
+    answers: [string, string][];
+    status: 'confirmed' | 'cancelled';
+    cancelled_by: 'host' | 'guest' | null;
+    cancel_reason: string | null;
+    conference_url: string | null;
+    in_calendar: boolean;
+    /** calendars that couldn't be checked when it was booked */
+    unchecked: string[];
+    card: { key: string; url: string } | null;
+}
+
+/** What the public page knows about a booking page (never anything about the host's events). */
+export interface PublicBookingPageData {
+    slug: string;
+    title: string;
+    intro: string | null;
+    timezone: string;
+    host: { name: string; avatar: string | null };
+    consent: 'off' | 'optional' | 'required';
+    consent_text: string | null;
+    types: {
+        slug: string;
+        name: string;
+        description: string | null;
+        duration_minutes: number;
+        location_kind: BookingLocationKind;
+        location: string | null;
+        questions: BookingQuestion[];
+        horizon_days: number;
+    }[];
+}
+
+export interface PublicBookingData {
+    type: string;
+    starts_at: string;
+    ends_at: string;
+    guest_name: string;
+    guest_email: string;
+    status: 'confirmed' | 'cancelled';
+    location: string | null;
+    conference_url: string | null;
 }

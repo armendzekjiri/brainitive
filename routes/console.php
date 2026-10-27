@@ -29,6 +29,11 @@ Schedule::command('app:send-calendar-reminders')
     ->everyFiveMinutes()
     ->withoutOverlapping();
 
+// Booking pages (BRAI-158): email guests a reminder about a day before their booking.
+Schedule::command('app:send-booking-reminders')
+    ->everyFifteenMinutes()
+    ->withoutOverlapping();
+
 // Push bell + browser reminders for board / task-list items reaching their start time.
 Schedule::command('app:send-item-reminders')
     ->everyFiveMinutes()

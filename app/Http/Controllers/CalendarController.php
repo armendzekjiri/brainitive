@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Booking;
 use App\Models\CalendarConnection;
 use App\Models\Item;
 use App\Models\Project;
 use App\Models\TaskListItem;
+use App\Models\User;
 use App\Services\GoogleTasksService;
 use App\Support\Calendar\CalendarProvider;
 use App\Support\Calendar\CalendarProviderException;
@@ -23,7 +25,7 @@ class CalendarController extends Controller
     private const CALENDAR_VIEWS = ['month', 'week', 'day'];
 
     /** Source filter keys; 'external' = every connected calendar (any provider). */
-    private const SOURCES = ['board', 'list', 'external'];
+    private const SOURCES = ['board', 'list', 'external', 'booking'];
 
     private function accessibleProjectIds(Request $request): array
     {
@@ -300,6 +302,10 @@ class CalendarController extends Controller
             }
         }
 
+        if (in_array('booking', $sourceFilter, true)) {
+            array_push($events, ...$this->bookingEvents($request->user(), $rangeStart, $rangeEnd, $events, $displayTimezone ?? $request->user()->localTimezone()));
+        }
+
         // Projects + boards + task lists for filter dropdown AND quick-create form.
         $accessibleProjects = Project::query()
             ->whereIn('id', $accessibleIds)
@@ -469,6 +475,59 @@ class CalendarController extends Controller
 
             return [];
         }
+    }
+
+    /**
+     * The user's own bookings (booking pages, BRAI-158) as read-only events. A booking whose event is
+     * already shown from its connected calendar isn't listed twice.
+     *
+     * @param  list<array<string, mixed>>  $shown  events built so far
+     * @return list<array<string, mixed>>
+     */
+    private function bookingEvents(User $user, Carbon $rangeStart, Carbon $rangeEnd, array $shown, string $timezone): array
+    {
+        $external = [];
+        foreach ($shown as $event) {
+            if (($event['type'] ?? null) === 'external_event') {
+                $external[($event['connection_id'] ?? '').':'.$event['id']] = true;
+            }
+        }
+
+        return Booking::confirmed()
+            ->where('user_id', $user->id)
+            ->where('starts_at', '<', $rangeEnd->copy()->endOfDay())
+            ->where('ends_at', '>', $rangeStart->copy()->startOfDay())
+            ->whereHas('type.page', fn ($q) => $q->where('user_id', $user->id))
+            ->with('type.page:id,uuid,title')
+            ->get()
+            ->reject(fn (Booking $b) => $b->external_event_id !== null && isset($external[$b->calendar_connection_id.':'.$b->external_event_id]))
+            ->map(function (Booking $b) use ($timezone) {
+                $start = $b->starts_at->setTimezone($timezone);
+                $end = $b->ends_at->setTimezone($timezone);
+
+                return [
+                    'id' => 'booking-'.$b->uuid,
+                    'type' => 'booking',
+                    'key' => '',
+                    'title' => $b->type->name.': '.$b->guest_name,
+                    'start_date' => $start->toDateString(),
+                    'start_time' => $start->format('H:i'),
+                    'due_date' => $end->toDateString(),
+                    'due_time' => $end->format('H:i'),
+                    'is_completed' => false,
+                    'color' => '#0E83DC',
+                    'assignee' => null,
+                    'project' => null,
+                    'source' => ['type' => 'booking', 'id' => $b->type->page->id, 'name' => $b->type->page->title, 'slug' => $b->type->page->uuid],
+                    'href_params' => ['bookingPage' => $b->type->page->uuid, 'tab' => 'bookings'],
+                    'item_type' => null,
+                    'priority' => null,
+                    'read_only' => true,
+                    'conference_url' => $b->conference_url,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /**
