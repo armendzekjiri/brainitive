@@ -31,7 +31,7 @@ use Illuminate\Support\Facades\DB;
 class SidebarPreferences
 {
     /** Top-level entries a user may hide. Home and Inbox are always shown. */
-    public const NAV = ['my_work', 'captures', 'timesheet', 'billing', 'insights', 'calendar', 'bookmarks', 'snippets'];
+    public const NAV = ['my_work', 'captures', 'timesheet', 'billing', 'insights', 'calendar', 'booking_pages', 'bookmarks', 'snippets'];
 
     /** Project groups in the sidebar, in their sidebar order. */
     public const GROUPS = ['boards', 'lists', 'plans', 'helpdesks', 'lead_forms', 'pages', 'whiteboards', 'folders'];

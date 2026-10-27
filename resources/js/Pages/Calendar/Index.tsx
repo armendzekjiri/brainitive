@@ -61,8 +61,8 @@ interface Props extends PageProps {
 }
 
 /** Source filter keys; 'external' = every connected calendar (any provider). */
-const ALL_SOURCES = ['board', 'list', 'external'] as const;
-const SOURCE_LABELS: Record<(typeof ALL_SOURCES)[number], string> = { board: 'Board', list: 'Lists', external: 'Calendars' };
+const ALL_SOURCES = ['board', 'list', 'external', 'booking'] as const;
+const SOURCE_LABELS: Record<(typeof ALL_SOURCES)[number], string> = { board: 'Board', list: 'Lists', external: 'Calendars', booking: 'Bookings' };
 
 /** Show a calendar provider's refusal (read-only, expired access, …) from Inertia errors. */
 function toastCalendarError(errors: Record<string, string>, fallback: string) {
@@ -76,6 +76,7 @@ const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 function eventHref(e: CalendarEvent): string {
     if (e.type === 'board_item') return route('boards.items.show', e.href_params);
     if (e.type === 'task_list_item') return route('task-lists.show', e.href_params);
+    if (e.type === 'booking') return route('booking-pages.show', e.href_params);
     return safeExternalHref(e.external_url) || '#';
 }
 

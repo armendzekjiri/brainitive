@@ -21,7 +21,7 @@ class LegalInfo
      * the terms version is stored with each new account (users.terms_version).
      */
     public const DOCUMENTS = [
-        'privacy' => ['version' => '2.1', 'updated' => '2026-10-27'],
+        'privacy' => ['version' => '2.2', 'updated' => '2026-10-27'], // v1.45.0: booking pages
         'terms' => ['version' => '2.0', 'updated' => '2026-10-26'],
         'cookies' => ['version' => '2.1', 'updated' => '2026-10-27'],
         'imprint' => ['version' => '1.0', 'updated' => '2026-10-26'],

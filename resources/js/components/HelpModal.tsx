@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { LayoutGrid, FileText, PencilRuler, BookMarked, BrainCircuit, X, History, Sparkles, GanttChart, ListChecks, CalendarDays, Bot, Magnet } from 'lucide-react';
+import { LayoutGrid, FileText, PencilRuler, BookMarked, BrainCircuit, X, History, Sparkles, GanttChart, ListChecks, CalendarDays, CalendarClock, Bot, Magnet } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface HelpModalProps {
@@ -59,6 +59,14 @@ const WELCOME_FEATURES = [
         where: 'Sidebar → Calendar',
     },
     {
+        icon: CalendarClock,
+        tone: 'bg-sky-500/10 text-sky-500',
+        title: 'Booking pages',
+        description: 'Share a link and let people book a free time with you — your hours minus what’s in your calendars, with your own meeting types and lengths.',
+        where: 'Sidebar → Booking pages',
+        isNew: true,
+    },
+    {
         icon: BookMarked,
         tone: 'bg-amber-500/10 text-amber-500',
         title: 'Bookmarks & Snippets',
@@ -82,6 +90,23 @@ const WELCOME_FEATURES = [
 ];
 
 const CHANGELOG = [
+    {
+        version: 'v1.45.0',
+        title: 'Booking pages: let people book a time with you',
+        tag: 'Major Feature',
+        date: '2026-10-27',
+        items: [
+            'Booking pages (sidebar → Booking pages): share a link and people outside Brainitive pick a free time with you — no account, no back-and-forth emails. Free times are your working hours minus what is in your calendars.',
+            'As many pages as you need ("Clients", "Emergency", "Hiring"), each with its own link and its own meeting types: you name them and choose the length — 15, 45 or any number of minutes.',
+            'Per page you choose what blocks your time: each connected calendar (Google, Outlook, iCloud / CalDAV, calendar links), your issues and tasks with a time, all-day events. Bookings on any of your pages always block, so you are never booked twice.',
+            'Templates for sales calls, consulting, support, job interviews, emergencies, office hours and coaching fill in meeting types, hours, rules and questions — everything stays editable.',
+            'Weekly hours with breaks, days off and extra hours on single dates, buffers before and after, minimum notice, how far ahead, start times every N minutes and a daily maximum.',
+            'A booking lands in the calendar you pick with the guest invited (and a Google Meet or Teams link), in your Brainitive calendar, in the page\'s Bookings tab and — if you want — as a card on a board. You get a notification; the guest gets a confirmation with a calendar file, a link to reschedule or cancel, and a reminder a day before.',
+            'Visitors see times in their own time zone, on any screen size; the page can be embedded on your website. Only free times ever leave Brainitive — never what is in your calendar.',
+            'If a calendar can\'t be read, the page keeps working without it and tells you that bookings may overlap its events.',
+            'Fixed: instance admins can create the GitHub App again (Admin → GitHub App) — GitHub refused it with "HTTP 422". If GitHub refuses for another reason, such as a name that is already taken, the page now says why.',
+        ]
+    },
     {
         version: 'v1.44.0',
         title: 'Everything live, branded emails, privacy by default',

@@ -5,6 +5,8 @@ use App\Http\Controllers\AiController;
 use App\Http\Controllers\BoardBulkItemController;
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BoardViewController;
+use App\Http\Controllers\BookingPageController;
+use App\Http\Controllers\BookingTypeController;
 use App\Http\Controllers\BookmarkController;
 use App\Http\Controllers\CalendarConnectionController;
 use App\Http\Controllers\CalendarController;
@@ -184,6 +186,9 @@ require __DIR__.'/portal.php';
 // Private calendar feed for Apple / Outlook / Google Calendar (BRAI-142): public .ics + owner JSON
 require __DIR__.'/calendar-feed.php';
 
+// Public booking pages (v1.45.0, BRAI-158): /book/{slug}, free slots, booking, the guest's manage link
+require __DIR__.'/booking.php';
+
 // Workspace invitation (guest can view; auth user with matching email can accept)
 Route::get('/invite/{token}', [InvitationController::class, 'show'])->name('invitations.show');
 
@@ -239,6 +244,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Calendar — personal calendar across all workspaces
     Route::get('/calendar', [CalendarController::class, 'index'])->name('calendar.index');
+
+    // Booking pages, host side (v1.45.0, BRAI-158)
+    Route::prefix('booking-pages')->group(function () {
+        Route::get('/', [BookingPageController::class, 'index'])->name('booking-pages.index');
+        Route::post('/', [BookingPageController::class, 'store'])->middleware('throttle:20,1,booking-pages.store')->name('booking-pages.store');
+        Route::get('{bookingPage}', [BookingPageController::class, 'show'])->name('booking-pages.show');
+        Route::put('{bookingPage}', [BookingPageController::class, 'update'])->name('booking-pages.update');
+        Route::delete('{bookingPage}', [BookingPageController::class, 'destroy'])->name('booking-pages.destroy');
+        Route::post('{bookingPage}/types', [BookingTypeController::class, 'store'])->name('booking-types.store');
+        Route::put('{bookingPage}/types/order', [BookingTypeController::class, 'reorder'])->name('booking-types.reorder');
+        Route::put('{bookingPage}/types/{bookingType}', [BookingTypeController::class, 'update'])->name('booking-types.update');
+        Route::post('{bookingPage}/types/{bookingType}/duplicate', [BookingTypeController::class, 'duplicate'])->name('booking-types.duplicate');
+        Route::delete('{bookingPage}/types/{bookingType}', [BookingTypeController::class, 'destroy'])->name('booking-types.destroy');
+        Route::get('{bookingPage}/types/{bookingType}/preview', [BookingPageController::class, 'preview'])->middleware('throttle:60,1,booking-types.preview')->name('booking-types.preview');
+    });
+    Route::post('/bookings/{booking}/cancel', [BookingPageController::class, 'cancelBooking'])->name('bookings.cancel');
     Route::patch('/calendar/view', [CalendarController::class, 'updateView'])->name('calendar.view.update');
     Route::patch('/calendar/reschedule', [CalendarController::class, 'reschedule'])->name('calendar.reschedule');
     // Calendars that can add a Google Meet / Teams call, for quick create (BRAI-147)
