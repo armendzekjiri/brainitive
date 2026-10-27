@@ -200,7 +200,8 @@ test.describe('smart links', () => {
 
         const dialog = await openDeepLink(page, urls.board(), issueId);
         await dialog.getByText('Add a description…').dblclick();
-        const description = dialog.locator('.lexical-editor-content[contenteditable="true"]').first();
+        // the description editor (it opens after a short live-editing check; the comment box is an editor too)
+        const description = dialog.locator('[contenteditable="true"][aria-placeholder="Add a description…"]');
         await description.click();
         await page.keyboard.type('Spec: ');
         await pasteText(description, new URL(pageUrl(secretUuid), page.url()).href);

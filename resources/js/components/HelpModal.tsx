@@ -96,7 +96,9 @@ const CHANGELOG = [
             'Every email Brainitive sends has one branded look: logo, dark mode and phone friendly, "Manage notifications" for members; helpdesk customers see your helpdesk\'s name. Instance admins can preview every email (Admin → Emails).',
             'Privacy: no more requests to Google Fonts or other CDNs (video and design embeds load on click), no cookie banner, and our own visit statistics run only if you allow them, a new imprint, sub-processor list and data processing agreement, and rewritten privacy policy, terms and cookie pages.',
             'Your public pages: workspaces can name their legal entity and link their own privacy policy and imprint on support pages, forms and portals; lead forms get an optional or required consent checkbox that is saved with the lead.',
+            '"Download my data" (Profile → Your data): a ZIP with everything Brainitive holds about your account — profile, settings, the issues, comments, pages, whiteboards and tasks you created, time entries, notifications, devices, connected calendars and apps, and your uploaded files. The link arrives in the app and by email and works for 24 hours, only for you.',
             'Fixed: deleting your account no longer removes work you created in shared workspaces — it is handed to the workspace owner.',
+            'Security: on instances that don\'t require email verification, an unconfirmed account can no longer take over the guest identity (client and feedback portals) of the same email address.',
         ]
     },
     {
