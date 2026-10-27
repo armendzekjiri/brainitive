@@ -3078,3 +3078,24 @@ export interface WorkspaceLegalFields {
     legal_privacy_url?: string | null;
     legal_imprint_url?: string | null;
 }
+
+/** "Download my data" (BRAI-156): DataExport::present() — status like ProjectExportData */
+export interface DataExportData {
+    uuid: string;
+    status: ProjectExportStatus;
+    file_size: number;
+    counts: Record<string, number> | null;
+    error: string | null;
+    created_at: string | null;
+    finished_at: string | null;
+    expires_at: string | null;
+    /** signed, only for the account owner, until expires_at */
+    download_url: string | null;
+}
+
+/** GET/POST profile.data-export.index|store */
+export interface DataExportState {
+    exports: DataExportData[];
+    /** seconds until a new request is allowed (0 = now) */
+    available_in: number;
+}

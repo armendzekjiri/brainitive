@@ -11,6 +11,7 @@ use App\Http\Controllers\CalendarController;
 use App\Http\Controllers\CaptureInboxController;
 use App\Http\Controllers\CommandPaletteController;
 use App\Http\Controllers\ContentReferenceController;
+use App\Http\Controllers\DataExportController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\HelpdeskController;
 use App\Http\Controllers\HelpdeskForwardingController;
@@ -638,6 +639,10 @@ Route::middleware('auth')->group(function () {
     Route::patch('/sidebar/preferences', [SidebarPreferencesController::class, 'update'])->name('sidebar.preferences');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::delete('/profile/connected-apps/{clientId}', [ProfileController::class, 'disconnectApp'])->name('profile.connected-apps.destroy');
+    // "Download my data" (GDPR Art. 15 + 20, BRAI-156): queued ZIP, signed 24 h link for its owner only
+    Route::get('/data-exports', [DataExportController::class, 'index'])->middleware(ReadOnlySession::class)->name('profile.data-export.index');
+    Route::post('/data-exports', [DataExportController::class, 'store'])->middleware('throttle:5,1,profile.data-export.store')->name('profile.data-export.store');
+    Route::get('/data-exports/{dataExport}/download', [DataExportController::class, 'download'])->whereUuid('dataExport')->middleware('throttle:30,1,profile.data-export.download')->name('profile.data-export.download');
 
     // File uploads
     Route::post('/upload/image', [FileController::class, 'uploadImage'])->name('upload.image');

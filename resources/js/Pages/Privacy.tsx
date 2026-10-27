@@ -409,10 +409,15 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                     </li>
                 </ul>
                 <p>
-                    You can change or delete most data yourself in your profile and workspace settings, and export projects. For anything else —
-                    including a copy of all data about your account — write to <ContactEmail legal={legal} />. We answer within one month (Art. 12
-                    (3) GDPR). For content a workspace or a customer’s page is responsible for, we pass your request on to that organisation and
-                    support it.
+                    You can change or delete most data yourself in your profile and workspace settings, and export projects.{' '}
+                    <strong>Download my data</strong> (Profile → Your data) gives you a copy of the data about your account at any time, as a
+                    ZIP of machine-readable JSON files with an explanation: your profile and settings, the content you created in the workspaces
+                    you belong to, your time entries, notifications, devices, connected calendars and apps, and the files you uploaded — never
+                    passwords, tokens or other people’s data. We prepare it in the background and send you a link that works for 24 hours and
+                    only when you are signed in; then the file is deleted (the record that you asked for it after 30 days). You can request a new
+                    copy once an hour. For anything else, write to <ContactEmail legal={legal} />. We answer within one month (Art. 12 (3) GDPR).
+                    For content a workspace or a customer’s page is responsible for — including content in workspaces you no longer belong to —
+                    we pass your request on to that organisation and support it.
                 </p>
                 <p>We make no decisions based solely on automated processing, including profiling (Art. 22 GDPR).</p>
             </LegalSection>

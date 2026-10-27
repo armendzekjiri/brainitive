@@ -12,6 +12,7 @@ use App\Models\ClientDeliverableComment;
 use App\Models\ClientDeliverableDecision;
 use App\Models\ClientPortal;
 use App\Models\Comment;
+use App\Models\DataExport;
 use App\Models\FeedbackPortal;
 use App\Models\FeedbackPost;
 use App\Models\GithubConnection;
@@ -39,6 +40,7 @@ use App\Notifications\AutomationNoticeNotification;
 use App\Notifications\ClientCommentedNotification;
 use App\Notifications\ClientDecisionNotification;
 use App\Notifications\ClientPortalGuestNotification;
+use App\Notifications\DataExportReadyNotification;
 use App\Notifications\FeedbackStatusChangedNotification;
 use App\Notifications\FeedbackSubmittedNotification;
 use App\Notifications\GithubSyncFailedNotification;
@@ -163,6 +165,9 @@ final class EmailPreviews
             // account & admin
             'verify-email' => ['label' => 'Verify email', 'group' => 'account', 'recipient' => 'New account', 'build' => fn () => [new VerifyEmailNotification, $s->alex()]],
             'reset-password' => ['label' => 'Reset password', 'group' => 'account', 'recipient' => 'Account holder', 'build' => fn () => [new ResetPassword(Str::random(64)), $s->alex()]],
+            'data-export-ready' => ['label' => 'Your data is ready (Download my data)', 'group' => 'account', 'recipient' => 'Account holder', 'build' => fn () => [new DataExportReadyNotification($s->make(DataExport::class, [
+                'uuid' => (string) Str::uuid(), 'status' => DataExport::READY, 'file_path' => 'data-exports/sample.zip', 'file_size' => 2_318_000, 'expires_at' => now()->addHours(DataExport::TTL_HOURS),
+            ])), $s->alex()]],
             'workspace-invitation' => ['label' => 'Workspace invitation', 'group' => 'account', 'recipient' => 'Invitee', 'build' => fn () => [new WorkspaceInvitationNotification($s->make(WorkspaceInvitation::class, ['token' => Str::random(64), 'role' => 'editor']), $s->workspace(), $s->sam()), (new AnonymousNotifiable)->route('mail', 'jordan@example.com')]],
             'instance-test' => ['label' => 'Admin test email', 'group' => 'account', 'recipient' => 'Instance admin', 'build' => fn () => [new InstanceTestMail('smtp'), null]],
         ];
