@@ -22,7 +22,7 @@ final class AppManifest
     /** @return array<string, mixed> */
     public static function build(string $name, bool $public): array
     {
-        $setup = route('github.app.setup');
+        $callback = route('github.app.setup');
 
         return [
             'name' => $name,
@@ -31,10 +31,10 @@ final class AppManifest
             'hook_attributes' => ['url' => route('webhooks.github.app'), 'active' => true],
             'redirect_url' => route('admin.github-app.callback'),
             // "Request user authorization (OAuth) during installation": GitHub sends the person back to
-            // the callback with a code, which proves the installation is theirs.
-            'callback_urls' => [$setup],
-            'setup_url' => $setup,
-            'setup_on_update' => true,
+            // the callback with a code, which proves the installation is theirs. No setup_url /
+            // setup_on_update: GitHub refuses them together with OAuth on install (HTTP 422 on the
+            // manifest conversion, seen on brainitive.app 2026-10-27) — the callback does both jobs.
+            'callback_urls' => [$callback],
             'request_oauth_on_install' => true,
             'public' => $public,
             'default_permissions' => self::PERMISSIONS,

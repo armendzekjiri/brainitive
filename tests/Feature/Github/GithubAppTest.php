@@ -24,6 +24,7 @@ use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
@@ -161,6 +162,26 @@ class GithubAppTest extends TestCase
 
     // ── Instance admin: the manifest flow ────────────────────────────────────
 
+    public function test_a_refused_manifest_conversion_shows_and_logs_githubs_reason(): void
+    {
+        $instanceAdmin = User::factory()->create();
+        InstanceAdmin::create(['user_id' => $instanceAdmin->id]);
+        $start = $this->actingAs($instanceAdmin)->postJson(route('admin.github-app.manifest'), ['name' => 'Brainitive test'])->assertOk();
+        parse_str((string) parse_url($start->json('url'), PHP_URL_QUERY), $query);
+        Http::fake(['api.github.com/app-manifests/one-time-code/conversions' => Http::response([
+            'message' => 'Validation failed',
+            'errors' => [['resource' => 'Integration', 'field' => 'name', 'code' => 'custom', 'message' => 'Name has already been taken']],
+        ], 422)]);
+        Log::spy();
+
+        $this->actingAs($instanceAdmin)->get(route('admin.github-app.callback', ['code' => 'one-time-code', 'state' => $query['state']]))
+            ->assertRedirect(route('admin.github-app.show'))
+            ->assertSessionHas('error', 'GitHub could not create the app (HTTP 422): Validation failed — name: Name has already been taken');
+
+        Log::shouldHaveReceived('warning')->withArgs(fn ($message, $context) => $message === 'GitHub App manifest conversion refused' && $context['status'] === 422);
+        $this->assertSame(0, GithubApp::count());
+    }
+
     public function test_instance_admin_creates_the_app_with_the_manifest_flow(): void
     {
         $instanceAdmin = User::factory()->create();
@@ -175,6 +196,9 @@ class GithubAppTest extends TestCase
         $this->assertSame(route('webhooks.github.app'), $manifest['hook_attributes']['url']);
         $this->assertSame([route('github.app.setup')], $manifest['callback_urls']);
         $this->assertTrue($manifest['request_oauth_on_install']);
+        // GitHub refuses a setup URL / redirect-on-update together with OAuth on install (HTTP 422)
+        $this->assertArrayNotHasKey('setup_url', $manifest);
+        $this->assertArrayNotHasKey('setup_on_update', $manifest);
         $this->assertSame(['metadata' => 'read', 'contents' => 'read', 'issues' => 'read', 'pull_requests' => 'read', 'deployments' => 'read'], $manifest['default_permissions']);
         parse_str((string) parse_url($start->json('url'), PHP_URL_QUERY), $query);
 

@@ -196,7 +196,7 @@ export default function GithubApp({ app, fromEnv, stats, defaults }: Props) {
                         </div>
                         <div className="grid gap-4 sm:grid-cols-2">
                             <ReadOnly id="gh-webhook-url" label="Webhook URL" value={defaults.webhook_url} />
-                            <ReadOnly id="gh-setup-url" label="Setup URL + callback URL" value={defaults.setup_url} />
+                            <ReadOnly id="gh-setup-url" label="Callback URL (with “Request user authorization during installation”; leave Setup URL empty)" value={defaults.setup_url} />
                         </div>
                         <p className="text-muted-foreground">Turn on “Request user authorization (OAuth) during installation” — it proves an installation belongs to the person connecting it.</p>
                     </CardContent>
