@@ -85,7 +85,8 @@ jobs:
     # explicit: a skipped test gate upstream would otherwise skip this job too
     if: ${{ !cancelled() && needs.deploy-dev.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # v1.44.0: 256 journeys on dev's small PHP pool need ~45 min (v1.43.0: 220 in 18 min)
+    timeout-minutes: 60
     env:
       # all journeys + the dev smoke against the deployed server (no local app, no reset; the
       # deploy above pruned the last run's test data and seeded the test users)

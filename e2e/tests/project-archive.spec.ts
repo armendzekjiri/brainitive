@@ -45,10 +45,10 @@ test('a project export downloads as a ZIP and restores as a new project', async 
     await expect(page.getByRole('list', { name: 'Contents' })).toContainText('issues');
     await expect(page.getByRole('list', { name: 'Not in the export' })).toContainText('Helpdesk tickets and contacts');
     await expect(page.getByRole('combobox', { name: 'Max Member is' })).toHaveText('Max Member'); // matched by email
-    await expect(page.getByLabel('Key')).not.toHaveValue(SEED.key); // WEB is taken: a free key is suggested
+    await expect(page.getByLabel('Key', { exact: true })).not.toHaveValue(SEED.key); // WEB is taken: a free key is suggested
 
     await page.getByLabel('New project name').fill(name);
-    await page.getByLabel('Key').fill(key);
+    await page.getByLabel('Key', { exact: true }).fill(key);
     await page.getByRole('button', { name: 'Restore as a new project', exact: true }).click();
     await expect(page.getByTestId('import-status')).toHaveText('Done', { timeout: 120_000 });
     await expect(page.getByTestId('import-report')).toContainText('issues');

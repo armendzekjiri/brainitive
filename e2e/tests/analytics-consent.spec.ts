@@ -1,5 +1,6 @@
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 import { expect, test, uid } from '../fixtures';
+import { REMOTE } from '../env';
 import { createHelpdesk } from '../helpers/helpdesk';
 
 /**
@@ -83,6 +84,8 @@ async function visitor(browser: Browser, opts: { signal?: 'gpc' | 'dnt'; optIn?:
 const notice = (page: Page) => page.getByTestId('analytics-consent');
 
 test.describe('analytics consent', () => {
+    test.skip(REMOTE, 'the X-E2E-Analytics opt-in exists only in the local e2e app (APP_ENV=e2e)');
+
     test('without a choice nothing loads; the notice asks with two equal answers', async ({ browser }) => {
         const v = await visitor(browser);
         await v.page.goto('/');
