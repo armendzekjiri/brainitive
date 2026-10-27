@@ -49,7 +49,7 @@ test.describe('AI replace in the issue description', () => {
         await ai.getByRole('button', { name: 'Generate prompt' }).click();
         await page.getByRole('button', { name: 'Replace', exact: true }).click();
 
-        const editor = dialog.locator('[contenteditable="true"]').first();
+        const editor = dialog.locator('[contenteditable="true"][aria-placeholder="Add a description…"]');
         await expect(editor).toContainText(`${marker}: You are a senior Laravel developer.`);
         await expect(editor.getByText('Write a failing test first')).toBeVisible();
 

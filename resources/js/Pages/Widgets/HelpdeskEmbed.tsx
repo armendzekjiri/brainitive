@@ -1,3 +1,5 @@
+import { OperatorNotice, SubmitPrivacyLine } from '@/components/legal/OperatorNotice';
+import type { PublicOperatorData } from '@/types';
 import EmbedLayout from '@/Layouts/EmbedLayout';
 import { Button } from '@/components/ui/button';
 import {
@@ -124,6 +126,7 @@ export default function HelpdeskEmbed({
     ticket_uuid: initialTicketUuid = null,
     token: initialToken = null,
     page,
+    operator = null,
 }: {
     helpdesk_uuid: string;
     base_url: string;
@@ -131,6 +134,8 @@ export default function HelpdeskEmbed({
     token?: string | null;
     /** Set on the shareable support page (/support/{slug}): full page with a branded header. */
     page?: { title: string; organization?: string | null; logo_url?: string | null; brand_color?: string };
+    /** Who runs this helpdesk (BRAI-156): the workspace, with its privacy / imprint links. */
+    operator?: PublicOperatorData | null;
 }) {
     const baseUrl = base_url.replace(/\/$/, '');
     const [formConfig, setFormConfig] = useState<FormConfig | null>(null);
@@ -694,10 +699,12 @@ export default function HelpdeskEmbed({
                                 ) : null}
                                 {texts?.submit_label ?? 'Submit'}
                             </Button>
+                            <SubmitPrivacyLine operator={operator} />
                         </form>
                     </CardContent>
                 </Card>
             )}
+            {page && <OperatorNotice operator={operator} className="mt-8 text-center" />}
         </EmbedLayout>
     );
 }

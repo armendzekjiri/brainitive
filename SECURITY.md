@@ -4,8 +4,9 @@
 
 Please **do not** open a public issue for security problems.
 
-Send the details to **security@brainitive.app** (or use GitHub's
-"Report a vulnerability" button under the Security tab). Include steps to reproduce and the
+Report it privately through **[brainitive.app/support/security-issue](https://www.brainitive.app/support/security-issue)**,
+or send the details to **security@brainitive.app** (or use GitHub's "Report a vulnerability"
+button under the Security tab). Include steps to reproduce and the
 version or commit you tested. We aim to confirm within 3 working days and to ship a fix for
 confirmed issues as quickly as possible. We credit reporters in the release notes unless
 you prefer to stay anonymous.

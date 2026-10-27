@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ProfileUpdateRequest;
 use App\Models\InstanceSettings;
 use App\Notifications\NotificationCatalog;
+use App\Support\Admin\UserDeletion;
 use App\Support\Uploads;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
@@ -12,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -88,9 +90,21 @@ class ProfileController extends Controller
 
         $user = $request->user();
 
+        // Art. 17 GDPR without destroying other people's work (BRAI-156): a workspace other people
+        // still work in must be handed over or deleted first; the user's own one-person workspaces go
+        // with the account. Content created in other people's workspaces is handed to their owners.
+        $shared = $user->ownedWorkspaces()
+            ->whereHas('users', fn ($q) => $q->where('users.id', '!=', $user->id))
+            ->pluck('name');
+        if ($shared->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'password' => 'You own '.($shared->count() === 1 ? 'a workspace' : 'workspaces').' other people use ('.$shared->implode(', ').'). Transfer ownership or delete '.($shared->count() === 1 ? 'it' : 'them').' first.',
+            ]);
+        }
+
         Auth::logout();
 
-        $user->delete();
+        UserDeletion::delete($user);
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

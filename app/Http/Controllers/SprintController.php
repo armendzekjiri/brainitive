@@ -9,6 +9,7 @@ use App\Models\Sprint;
 use App\Models\Workspace;
 use App\Support\Boards\SprintLifecycle;
 use App\Support\Boards\SprintReport;
+use App\Support\Live\BoardLive;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -215,6 +216,7 @@ class SprintController extends Controller
                 Item::whereKey($itemId)->update(['backlog_position' => $index + 1]);
             }
         });
+        BoardLive::itemIds($validated['item_ids'], ['backlog_position'], $board->id);
 
         return back();
     }

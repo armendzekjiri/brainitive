@@ -8,6 +8,12 @@
     <meta http-equiv="Permissions-Policy" content="unload=(self)">
     <title>Whiteboard – {{ $page->name }}</title>
     <link rel="stylesheet" href="{{ asset('js/excalidraw-dist/excalidraw-bundle.css') }}">
+    {{-- Excalidraw fonts from our own build, not its third-party CDN fallback (BRAI-156, vite.config.js) --}}
+    <script>window.EXCALIDRAW_ASSET_PATH = @json(asset('build/excalidraw-assets').'/');</script>
+    @if (! empty($excalidrawConfig['live']))
+        {{-- Live drawing (BRAI-153): Yjs + the realtime connection, resources/js/whiteboard-live.ts --}}
+        @vite('resources/js/whiteboard-live.ts')
+    @endif
     <style>
         * { box-sizing: border-box; }
         body { margin: 0; font-family: system-ui, sans-serif; color: #1f2937; }
@@ -58,6 +64,24 @@
         .conflict-banner.open { display: flex; }
         body.has-banner #app { height: calc(100vh - 52px - 49px); }
 
+        /* Live drawing (BRAI-153): who's here, connection notices */
+        .live-peers { display: flex; align-items: center; list-style: none; margin: 0; padding: 0; }
+        .live-peers[hidden] { display: none; }
+        .live-peers li { width: 26px; height: 26px; margin-left: -6px; border: 2px solid #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #1f2937; font-size: 11px; font-weight: 600; flex: none; }
+        .live-peers li:first-child { margin-left: 0; }
+        .live-peers li.more { background: #e5e7eb; color: #374151; }
+        .live-banner { display: none; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; background: #eff6ff; border-bottom: 1px solid #bfdbfe; font-size: 14px; }
+        .live-banner.open { display: flex; }
+        body.has-live-banner #app { height: calc(100vh - 52px - 49px); }
+        body.has-live-banner.has-banner #app { height: calc(100vh - 52px - 98px); }
+        @media (max-width: 640px) {
+            .excalidraw-toolbar { padding: 0 8px; gap: 8px; }
+            .excalidraw-toolbar-title { gap: 8px; flex: 0 1 auto; min-width: 0; max-width: 45%; }
+            .excalidraw-toolbar-actions { flex: 1 1 auto; min-width: 0; overflow-x: auto; justify-content: flex-start; }
+            #saveStatus { display: none; }
+            .live-peers li:nth-child(n+3):not(.more) { display: none; }
+        }
+
         .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(17, 24, 39, .45); z-index: 50; align-items: center; justify-content: center; padding: 16px; }
         .modal-backdrop.open { display: flex; }
         .modal { background: #fff; border-radius: 10px; width: min(860px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; box-shadow: 0 20px 50px rgba(0, 0, 0, .25); }
@@ -97,6 +121,7 @@
     <div class="excalidraw-toolbar">
         <div class="excalidraw-toolbar-title">
             <h1>{{ $page->name }}</h1>
+            <ul class="live-peers" id="livePeers" aria-label="Drawing live with you" hidden></ul>
             <span id="saveStatus" aria-live="polite"></span>
         </div>
         <div class="excalidraw-toolbar-actions">
@@ -114,6 +139,10 @@
             <button type="button" class="btn" id="loadLatestBtn">Load latest</button>
             <button type="button" class="btn" id="overwriteBtn">Overwrite with mine</button>
         </span>
+    </div>
+    <div class="live-banner" id="liveBanner" role="status">
+        <span id="liveBannerText"></span>
+        <button type="button" class="btn" id="liveRetryBtn">Try again</button>
     </div>
     <div id="app">
         <div id="loading">Loading Excalidraw…</div>
@@ -185,6 +214,12 @@
             var RETRY_DELAY = 10000;
 
             var excalidrawAPI = null;
+            // Live drawing (BRAI-153): the realtime connection stores the scene; the single-user autosave
+            // only runs without it (not configured, or unreachable → fallback)
+            var liveConfig = (!isEmbed && config.live) || null;
+            var live = null;
+            var liveState = null;
+            var singleUser = !liveConfig;
             var savedSignature = null;   // scene signature that is known to be on the server
             var saving = false;
             var conflict = false;
@@ -244,6 +279,12 @@
             }
 
             function refreshUi() {
+                if (!singleUser) {
+                    var canSave = !!(liveState && liveState.mode === 'live' && liveState.edit && liveState.ready);
+                    $('saveBtn').disabled = !canSave || saving;
+                    $('saveAndExitBtn').disabled = !canSave || saving;
+                    return;
+                }
                 var dirty = isDirty();
                 $('saveBtn').disabled = !dirty || saving || conflict;
                 $('saveAndExitBtn').disabled = saving || conflict || (!dirty && !autosave);
@@ -324,7 +365,7 @@
             }
 
             function scheduleAutosave() {
-                if (!autosave || conflict) return;
+                if (!autosave || conflict || !singleUser) return;
                 clearTimeout(autosaveTimer);
                 autosaveTimer = setTimeout(function() { saveScene(false, false); }, AUTOSAVE_DELAY);
             }
@@ -332,6 +373,7 @@
             /** "Save & exit": also uploads a preview image and records a history checkpoint. */
             function saveAndExit() {
                 if (!excalidrawAPI || saving) return;
+                if (!singleUser) return liveSaveAndExit();
                 saving = true;
                 clearTimeout(autosaveTimer);
                 var btn = $('saveAndExitBtn');
@@ -370,7 +412,10 @@
 
             // Embeds only save together with their image ("Save & exit")
             $('saveBtn').hidden = !autosave;
-            $('saveBtn').addEventListener('click', function() { saveScene(false, true); });
+            $('saveBtn').addEventListener('click', function() {
+                if (!singleUser) return liveSave();
+                saveScene(false, true);
+            });
             $('saveAndExitBtn').addEventListener('click', saveAndExit);
             $('overwriteBtn').addEventListener('click', function() { saveScene(true, false); });
             $('loadLatestBtn').addEventListener('click', function() {
@@ -381,6 +426,10 @@
 
             window.addEventListener('beforeunload', function(e) {
                 if (leaving || !(isDirty() || saving)) return;
+                // live: safe once the drawing is in the shared document and on the server or this device's copy
+                // (it's also stored on the way out); not while connecting, without access or without a copy offline
+                if (!singleUser && liveState && liveState.mode === 'live' && liveState.ready
+                    && (liveState.persisted || (liveState.connection === 'online' && !liveState.pending))) return;
                 e.preventDefault();
                 e.returnValue = '';
             });
@@ -599,6 +648,131 @@
                 $('historyBtn').href = config.historyUrl;
             }
 
+
+            // ── Live drawing (BRAI-153) ───────────────────────────────────
+
+            function renderPeers(peers) {
+                var list = $('livePeers');
+                list.innerHTML = '';
+                list.hidden = peers.length === 0;
+                peers.slice(0, 4).forEach(function(peer) {
+                    var li = document.createElement('li');
+                    li.setAttribute('aria-label', peer.name);
+                    li.title = peer.name + (peer.edit ? ' (drawing)' : ' (watching)');
+                    li.style.background = peer.color;
+                    li.textContent = peer.name.charAt(0);
+                    list.appendChild(li);
+                });
+                if (peers.length > 4) {
+                    var more = document.createElement('li');
+                    more.className = 'more';
+                    more.textContent = '+' + (peers.length - 4);
+                    more.title = peers.slice(4).map(function(peer) { return peer.name; }).join(', ');
+                    list.appendChild(more);
+                }
+            }
+
+            function showLiveBanner(text, retry) {
+                $('liveBannerText').textContent = text || '';
+                $('liveRetryBtn').hidden = !retry;
+                $('liveBanner').classList.toggle('open', !!text);
+                document.body.classList.toggle('has-live-banner', !!text);
+            }
+
+            function renderLive(next) {
+                var previous = liveState;
+                liveState = next;
+                renderPeers(next.peers || []);
+                if (next.mode === 'fallback') {
+                    // today's single-user editing from here on
+                    if (!singleUser) {
+                        singleUser = true;
+                        showLiveBanner(next.notice, true);
+                        if (isDirty()) scheduleAutosave();
+                    }
+                    refreshUi();
+                    return;
+                }
+                if (next.mode === 'replaced') {
+                    if (!previous || previous.mode !== 'replaced') {
+                        conflict = true;
+                        $('conflictText').textContent = next.notice;
+                        $('overwriteBtn').hidden = true;
+                        $('conflictBanner').classList.add('open');
+                        document.body.classList.add('has-banner');
+                        setStatus('Not saved — replaced', true);
+                    }
+                    refreshUi();
+                    return;
+                }
+                if (next.mode === 'off') {
+                    setStatus(next.notice || 'Live drawing isn’t available', true);
+                    refreshUi();
+                    return;
+                }
+                showLiveBanner(next.edit ? null : next.notice, false);
+                if (next.mode === 'connecting') setStatus('Connecting…');
+                else if (next.connection === 'offline') setStatus(next.persisted ? 'Offline — changes kept on this device' : 'Offline — keep this tab open', !next.persisted);
+                else if (next.saveFailed) setStatus(next.saveFailed, true);
+                else if (next.pending) setStatus('Saving…');
+                else setStatus(next.edit ? 'All changes saved' : 'Watching live');
+                if (next.editRevision != null) editRevision = next.editRevision;
+                refreshUi();
+            }
+
+            function liveSave() {
+                if (!live || saving) return Promise.resolve(null);
+                saving = true;
+                refreshUi();
+                return live.flush({ checkpoint: true }).then(function(result) {
+                    if (result) setStatus('All changes saved');
+                    return result;
+                }).finally(function() {
+                    saving = false;
+                    refreshUi();
+                });
+            }
+
+            function liveSaveAndExit() {
+                if (!live) return;
+                saving = true;
+                var btn = $('saveAndExitBtn');
+                btn.textContent = 'Saving…';
+                refreshUi();
+                previewBlob(sceneData())
+                    .then(function(blob) { return live.flush({ checkpoint: true, image: blob }); })
+                    .then(function(result) {
+                        if (!result) throw new Error((liveState && liveState.saveFailed) || 'Save failed');
+                        leaving = true;
+                        window.location.href = returnUrl;
+                    })
+                    .catch(function(e) {
+                        alert('Error: ' + (e.message || 'Save failed'));
+                        btn.textContent = 'Save & exit';
+                        saving = false;
+                        refreshUi();
+                    });
+            }
+
+            $('liveRetryBtn').addEventListener('click', function() {
+                // the single-user autosave stores what's drawn first; the reload connects again
+                var go = function() { leaving = true; window.location.reload(); };
+                if (saving) return;
+                if (!isDirty()) return go();
+                if (conflict) return; // the conflict banner decides first (load latest / overwrite)
+                // reload only once the drawing is really stored
+                saveScene(false, false).then(function() { if (!conflict && !isDirty()) go(); });
+            });
+
+            function startLive() {
+                if (!liveConfig) return;
+                if (!window.BrainitiveWhiteboardLive || !excalidrawAPI.whenReady) {
+                    singleUser = true; // the live module didn't load: draw alone, as before
+                    return;
+                }
+                live = window.BrainitiveWhiteboardLive.start(excalidrawAPI, window.BrainitiveExcalidraw, liveConfig, renderLive);
+            }
+
             // ── Boot ──────────────────────────────────────────────────────
 
             window.addEventListener('DOMContentLoaded', function() {
@@ -612,6 +786,9 @@
                         if (!Array.isArray(safe.elements)) safe.elements = [];
                         if (!safe.appState) safe.appState = {};
                         excalidrawAPI = window.BrainitiveExcalidraw.init('app', { initialData: safe, theme: theme });
+                        // for debugging and the e2e suite: the canvas and the live connection of this tab
+                        window.BrainitiveWhiteboard = { canvas: excalidrawAPI, live: function() { return live; } };
+                        startLive();
                         $('loading').style.display = 'none';
                         setTimeout(function() {
                             if (!excalidrawAPI) return;

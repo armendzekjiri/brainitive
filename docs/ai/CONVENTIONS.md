@@ -125,7 +125,8 @@ class Example extends Model
   `hasProjectAccess()`, `isInstanceAdmin()`.
 
 ### Routes
-- Public: `/`, `/privacy`, `/terms`, `/cookies`, `/refund`, `/share/*` (public bookmark/snippet shares).
+- Public: `/`, `/privacy`, `/terms`, `/cookies`, `/refund`, `/imprint`, `/legal/*` (all `LegalController`,
+  v1.44.0), `/share/*` (public bookmark/snippet shares).
 - App: inside `middleware(['auth', 'verified'])`, nested under workspace/project prefixes.
 - Helpdesk **public** widget/portal: `widget/*` + `portal/*` use the `cors` middleware and are
   CSRF-exempt (`bootstrap/app.php`).
@@ -171,6 +172,9 @@ database driver before using raw engine-specific SQL such as constraint changes 
   Push messages via `SendsWebPush::webPush()`; ticket contacts get mail only. DB payload via
   `toDatabase()` with the contract keys (`type`, `title`, `body`, `url`, `actor_*`, `project_name`,
   `subject_key`). See the [skill](./skills/add-notification.md).
+- **Push is sent only through `WebPushChannel` / `PushTester`** (both use `App\Support\Push\WebPushClient`);
+  never build a `Minishlink\WebPush\WebPush` elsewhere (v1.44.0, BRAI-154).
+- **Mail is branded** — see "Email" below.
 - **Time-based notifications** (reminders, digests) compute dates and times in the recipient's
   `User::localTimezone()`, never the app's UTC, and dedup through `sent_item_reminders` with a
   key that contains the absolute time (or the local date for once-a-day messages). Personal
@@ -405,6 +409,60 @@ Pages work like Confluence. Keep these rules when touching pages:
   cleared on sign-out / another account. Nothing offline-related is stored on the user row.
 - `public/sw.js` stays network-only for everything except the shell, failed navigations / full Inertia visits
   and `/build/assets`; documents and live routes are never intercepted.
+
+## Live (v1.44.0, BRAI-151/152/153)
+
+- **Publish live events only through `Live::publish()` with allow-listed keys, never content.** Payloads carry
+  ids / uuids, counts, revisions, positions, `*_at`, status / type keys and `fields` (`Live::KEY`) — never
+  titles, names, bodies or labels. Clients refetch through the normal permission-checked endpoints. A new
+  payload key is a deliberate change of `Live::KEY` plus a test. Signals carry `{}` or a field name at most.
+- **Channels are authorized in one place:** a new type is an entry in `LiveChannels::TYPES` + an arm in
+  `load()` running the existing `view` policy (parents not trashed) + cases in `LiveChannelsTest`. Never add
+  a permission rule in `realtime/` (channel names are opaque there).
+- **Publish where the change happens, from model events when you can** (`LiveThreads`, `BoardLive`), so every
+  write path (UI, MCP, automations, imports, offline sync, portal, inbound mail) is covered; a write that
+  bypasses model events calls `BoardLive::itemIds()` / `columnsReordered()` / `itemsLeft()`.
+- **Subscribers handle `onResync`** (refetch after a reconnect gap), ignore their own echo (`X-Live-Client`
+  + actor), and never apply remote changes over a user's in-progress gesture (drag, open editor, pending
+  save) — apply after, or let the existing conflict guard (409 banner) decide.
+- **Live documents (Yjs) keep Laravel as the source of truth:** live saves go through the same model method
+  as the single-user path with `collabWrite` set (`Page::saveDraft`, `Page::saveWhiteboard`,
+  `$item->update`); any other content write resets the epoch. Every live feature has a single-user fallback
+  when `COLLAB_URL` / live is off or the server is unreachable.
+- Every live change adds e2e coverage with two browser contexts; specs with their own realtime server take
+  their own port offset (KNOWLEDGE → "Live channels").
+
+## Email (v1.44.0, BRAI-155)
+
+- **Every new email uses `brandedMail()` / `BrandedMailMessage` and is added to `EmailPreviews`.** Member
+  notifications go through `CatalogNotification` or `$this->brandedMail($notifiable, TYPE)`
+  (`RespectsPreferences`) so they get "Manage notifications"; mail to customers / guests uses
+  `BrandedMailMessage::guest($n, 'You get this email because …')`; account mail `::account()`. Mailables
+  use `markdown:` with `<x-mail::message>`. Add the email to `EmailPreviews::entries()` —
+  `EmailTemplatesTest` renders every entry and Admin → Emails previews it.
+- User text goes into `->quote()` or plain lines (secured encoding escapes it); never build Markdown links in
+  lines — use `->action()` or `->footerLink()`. Links come from APP_URL (`BrandedMail::appRoute()`), never
+  the request host.
+- Mail to a workspace's visitors (lead confirmation, portal / ticket contact mail) appends
+  `PublicOperator::mailLine()`.
+
+## Legal & privacy (v1.44.0, BRAI-156)
+
+- **Public pages a customer runs show `PublicOperator`:** pass `operator` (`PublicOperator::for($workspace)`;
+  `nameFallback: true` only where the page already showed the organisation — support page, widget, lead
+  forms; token links stay generic) and render `OperatorNotice` (`PortalLayout` does it for portal pages).
+  Add the page's path prefix to `Analytics::EXCLUDED_PREFIXES`.
+- **No third-party requests from the browser without consent.** Self-host fonts and libraries (bundle them
+  with Vite / @fontsource, copy assets into `public/build`), no CDN `<script>` / `<link>`; iframes or scripts
+  from other services in content render inside `ExternalEmbedGate` (click to load). `LegalPagesTest` fails on
+  known CDN hosts.
+- **Every new processor / integration / outbound host, cookie or storage key → update
+  `docs/legal/data-inventory.md`, the sub-processor list (`Pages/Legal/Subprocessors.tsx` /
+  `LegalInfo::providers()`) and the privacy policy (`Pages/Privacy.tsx`, cookies / storage in
+  `Pages/Cookies.tsx`), and bump the document version in `LegalInfo::DOCUMENTS`.**
+- Legal facts come from `config/legal.php` through `LegalInfo` only; Cloud-only facts live in
+  `LegalInfo::CLOUD_DEFAULTS`, never in config defaults (self-hosted installs must not show them).
+- Accounts are deleted through `App\Support\Admin\UserDeletion`, never `$user->delete()`.
 
 ## Licence & dependencies
 

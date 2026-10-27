@@ -45,14 +45,16 @@ class NewLeadNotification extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         $form = $this->lead->form;
-        $mail = (new MailMessage)
+        $mail = $this->brandedMail($notifiable, 'lead_created')
             ->subject("New lead #{$this->lead->number} — {$form->name}")
+            ->eyebrow($form->project?->name)
+            ->headline("New lead #{$this->lead->number} in {$form->name}")
             ->line("{$this->title()} filled in **".self::plain($form->name).'**.');
 
         $answers = LeadFormDefinition::readable($form->definition ?? [], $this->lead->answers ?? []);
         foreach (array_slice($answers, 0, 12) as $answer) {
             if ($answer['display'] !== '') {
-                $mail->line(self::plain($answer['label']).': '.self::plain(Str::limit($answer['display'], 300)));
+                $mail->line('**'.self::plain($answer['label']).':** '.self::plain(Str::limit($answer['display'], 300)));
             }
         }
 

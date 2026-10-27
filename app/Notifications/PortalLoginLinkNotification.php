@@ -2,6 +2,8 @@
 
 namespace App\Notifications;
 
+use App\Notifications\Messages\BrandedMailMessage;
+use App\Support\Legal\PublicOperator;
 use App\Support\Portal\PortalAuth;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -26,13 +28,14 @@ class PortalLoginLinkNotification extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
-        $app = config('app.name');
-
-        return (new MailMessage)
-            ->subject("Your sign-in link — {$app}")
-            ->greeting('Hi '.$notifiable->displayName().',')
+        return BrandedMailMessage::guest($notifiable, 'You get this email because someone asked for a sign-in link to a Brainitive portal with this address.')
+            ->subject('Your sign-in link — Brainitive')
+            ->headline('Your sign-in link')
+            ->preheader('It works once and for '.PortalAuth::LINK_MINUTES.' minutes.')
             ->line('Use this button to sign in. It works once and for '.PortalAuth::LINK_MINUTES.' minutes.')
             ->action('Sign in', route('guest.login.show', ['token' => $this->token], true))
-            ->line("If you didn't ask for it, ignore this email: nobody can sign in without the link.");
+            ->line("If you didn't ask for it, ignore this email: nobody can sign in without the link.")
+            // the guest sign-in is run by the platform; the portals by the organisations that share them (BRAI-156)
+            ->line(PublicOperator::platformName().' keeps your email address to sign you in to portals shared with you. Privacy policy: '.route('privacy'));
     }
 }

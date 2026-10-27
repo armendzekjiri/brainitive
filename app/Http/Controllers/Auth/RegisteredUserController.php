@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\InstanceSettings;
 use App\Models\User;
 use App\Models\WorkspaceInvitation;
+use App\Support\Legal\LegalInfo;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -51,6 +52,8 @@ class RegisteredUserController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            // the form says that creating the account accepts the Terms (BRAI-156)
+            ...LegalInfo::termsAcceptance(),
         ]);
 
         // Pending invitations are accepted once the address is proven: when the email is verified

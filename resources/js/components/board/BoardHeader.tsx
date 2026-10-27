@@ -4,6 +4,7 @@ import { Calendar, GanttChart, Kanban, LineChart, List, ListOrdered, MoreHorizon
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { RecurringIssuesDialog } from '@/components/recurring/RecurringIssuesDialog';
+import { LiveAvatars } from '@/components/live/LiveAvatars';
 import { Board, Project, Workspace } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -62,10 +63,12 @@ export function BoardHeader({
                 </Link>
             </nav>
             <div className="flex items-center justify-between gap-4 mt-2">
-                <h1 className="m-0 text-2xl font-semibold tracking-[-0.01em] text-foreground truncate">
+                <h1 className="m-0 min-w-0 text-2xl font-semibold tracking-[-0.01em] text-foreground truncate">
                     {activeTab === 'backlog' ? 'Backlog' : activeTab === 'reports' ? 'Reports' : board.name}
                 </h1>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
+                    {/* Who else is on this board (BRAI-151) */}
+                    <LiveAvatars channel={`board.${board.id}`} />
                     {actions}
                     {canCreateItems && (
                         <DropdownMenu>

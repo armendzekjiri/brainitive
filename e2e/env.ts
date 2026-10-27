@@ -43,6 +43,15 @@ export const OUTLOOK_E2E = { clientId: 'e2e-outlook-client' } as const;
  */
 export const COLLAB = { port: PORT + 100, secret: 'e2e-collab-secret' } as const;
 
+/** Web push in the local e2e app (BRAI-154): test-only VAPID public key (the private one is in appEnv). */
+export const PUSH_E2E = { vapidPublicKey: 'BDk2GPkD9AFgfvh6G-rXWxZTv1MEdII6HUA_5Eqj9ExwaiTarukhiYVdWBaHOKwLYMEVVid2DA5o7jg3q1gIxKY' } as const;
+/**
+ * Live channels (BRAI-151): global-setup starts one realtime server on this port for the whole run
+ * (live-docs.spec.ts keeps its own on COLLAB.port: it stops / restarts it). Specs opt their browser
+ * contexts in with `X-E2E-Live: 1` (e2e/helpers/live.ts); every other journey runs without live.
+ */
+export const LIVE = { port: PORT + 101 } as const;
+
 /** Seeded workspace / project / board (slugs). */
 export const SEED = { workspace: 'e2e-workspace', project: 'website', board: 'main-board', key: 'WEB' } as const;
 
@@ -105,6 +114,20 @@ export function appEnv(): Record<string, string> {
         COLLAB_URL: `ws://127.0.0.1:${COLLAB.port}`,
         COLLAB_SECRET: COLLAB.secret,
         COLLAB_E2E_OPT_IN: 'true',
+        // push-devices.spec.ts (BRAI-154): a test-only VAPID pair (signs nothing real) + the fake push service;
+        // WEBPUSH_FAKE is honoured only with APP_ENV=e2e
+        VAPID_SUBJECT: 'mailto:e2e@example.test',
+        VAPID_PUBLIC_KEY: PUSH_E2E.vapidPublicKey,
+        VAPID_PRIVATE_KEY: 'icnBIwSAna7_jPM3xbRAe9fYjkjZUzGkdb-gzFfHMQA',
+        WEBPUSH_FAKE: 'true',
+        // live channels: the server global-setup starts; browsers only with the `X-E2E-Live: 1` opt-in
+        LIVE_URL: `ws://127.0.0.1:${LIVE.port}/live`,
+        LIVE_PUBLISH_URL: `http://127.0.0.1:${LIVE.port}`,
+        // legal.spec.ts (BRAI-156): Brainitive Cloud's legal pages (imprint, DPA, sub-processors) like production
+        LEGAL_CLOUD: 'true',
+        // analytics-consent.spec.ts: requests with `X-E2E-Analytics: 1` count as brainitive.app for analytics (consent
+        // notice + Umami config); honoured only with APP_ENV=e2e. The spec intercepts the stats host: nothing leaves.
+        ANALYTICS_E2E_OPT_IN: 'true',
         PHP_CLI_SERVER_WORKERS: process.env.E2E_SERVER_WORKERS ?? '4',
     };
 }

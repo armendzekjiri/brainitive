@@ -10,7 +10,7 @@ import {
     CHOICE_TYPES, FIELD_TYPES, TYPE_ICONS, LeadField, LeadFieldType, LeadFormDefinition, LeadFormPayload, LeadFormSettings, LeadFormTheme, LeadStep,
     describeCondition, fieldsBefore, newField, newId, newStep,
 } from '@/lib/leadForms';
-import LeadFormRenderer from './LeadFormRenderer';
+import LeadFormRenderer, { DEFAULT_CONSENT_TEXT } from './LeadFormRenderer';
 import { ConditionEditor, Field, OptionsEditor, Section, Segmented, Toggle } from './BuilderControls';
 
 
@@ -35,8 +35,8 @@ function withServerKeys(local: LeadFormDefinition, server: LeadFormDefinition): 
     return { ...local, steps: local.steps.map((s) => ({ ...s, fields: s.fields.map((f) => (!f.key && keys.get(f.id) ? { ...f, key: keys.get(f.id)! } : f)) })) };
 }
 
-type Texts = Pick<LeadFormSettings, 'intro_title' | 'intro_text' | 'next_label' | 'back_label' | 'submit_label' | 'after_submit' | 'thank_you_title' | 'thank_you_message' | 'redirect_url' | 'show_branding'>;
-const TEXT_KEYS: (keyof Texts)[] = ['intro_title', 'intro_text', 'next_label', 'back_label', 'submit_label', 'after_submit', 'thank_you_title', 'thank_you_message', 'redirect_url', 'show_branding'];
+type Texts = Pick<LeadFormSettings, 'intro_title' | 'intro_text' | 'next_label' | 'back_label' | 'submit_label' | 'after_submit' | 'thank_you_title' | 'thank_you_message' | 'redirect_url' | 'show_branding' | 'consent' | 'consent_text'>;
+const TEXT_KEYS: (keyof Texts)[] = ['intro_title', 'intro_text', 'next_label', 'back_label', 'submit_label', 'after_submit', 'thank_you_title', 'thank_you_message', 'redirect_url', 'show_branding', 'consent', 'consent_text'];
 
 interface Props {
     form: LeadFormPayload;
@@ -568,6 +568,33 @@ export default function FormBuilder({ form, routeParams, canUpdate, onSaved }: P
                                             <Textarea rows={3} value={texts.thank_you_message ?? ''} onChange={(e) => setText('thank_you_message', e.target.value || null)} maxLength={2000} className="text-sm" />
                                         </Field>
                                     </>
+                                )}
+                            </Section>
+                            <Section title="Consent checkbox">
+                                <Segmented
+                                    value={texts.consent ?? 'off'}
+                                    onChange={(v) => setText('consent', v)}
+                                    options={[
+                                        { value: 'off', label: 'None' },
+                                        { value: 'optional', label: 'Optional' },
+                                        { value: 'required', label: 'Required' },
+                                    ]}
+                                />
+                                {(texts.consent ?? 'off') !== 'off' && (
+                                    <Field
+                                        label="Checkbox text"
+                                        hint="Shown above the submit button and saved with each lead. {organization} = your workspace's legal name. Add your privacy policy link in Workspace settings → Legal."
+                                    >
+                                        <Textarea
+                                            rows={3}
+                                            value={texts.consent_text ?? ''}
+                                            onChange={(e) => setText('consent_text', e.target.value || null)}
+                                            placeholder={DEFAULT_CONSENT_TEXT}
+                                            maxLength={1000}
+                                            className="text-sm"
+                                            data-testid="lead-consent-text"
+                                        />
+                                    </Field>
                                 )}
                             </Section>
                             <Section title="Branding">

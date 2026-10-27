@@ -8,6 +8,7 @@ use App\Http\Controllers\GithubAppWebhookController;
 use App\Http\Controllers\GithubWebhookController;
 use App\Http\Controllers\InboundMailController;
 use App\Http\Controllers\LeadFormInboundController;
+use App\Http\Controllers\LiveInternalController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\RejectCaptureTokens;
 use App\Http\Middleware\VerifyCollabSecret;
@@ -96,4 +97,6 @@ Route::prefix('internal/collab')
         Route::get('documents/{document}', [CollabInternalController::class, 'show'])->name('documents.show');
         Route::put('documents/{document}', [CollabInternalController::class, 'store'])->name('documents.store');
         Route::post('access', [CollabInternalController::class, 'access'])->name('access');
+        // Live channels (BRAI-151): which channels connected users may still use (every minute)
+        Route::post('live/access', [LiveInternalController::class, 'access'])->name('live.access');
     });

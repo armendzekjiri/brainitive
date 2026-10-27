@@ -13,6 +13,8 @@ import {
     visibleAnswers,
     visibleSteps,
 } from '@/lib/leadForms';
+import { OperatorNotice } from '@/components/legal/OperatorNotice';
+import type { PublicOperatorData } from '@/types';
 
 export type SubmitResult =
     | { ok: true; thank_you_title?: string | null; thank_you_message?: string | null }
@@ -29,11 +31,19 @@ interface Props {
     /** Builder: show this step (index in definition.steps) and reset when it changes. */
     previewStep?: number;
     /** Without it the form only shows the thank-you screen (builder preview). */
-    onSubmit?: (answers: LeadAnswers) => Promise<SubmitResult>;
+    onSubmit?: (answers: LeadAnswers, extra: { consent: boolean }) => Promise<SubmitResult>;
     onEvent?: (type: 'start' | 'step', step?: number) => void;
     /** Fill the whole viewport (public page) or the container (builder preview, embed). */
     fullPage?: boolean;
+    /** The consent checkbox text (server-rendered, BRAI-156); falls back to the default text. */
+    consentText?: string | null;
+    /** Who runs the form (the workspace) — privacy link and operator line (BRAI-156). */
+    operator?: PublicOperatorData | null;
 }
+
+/** Same text as LeadFormOptions::DEFAULT_CONSENT_TEXT (builder preview without a server text). */
+export const DEFAULT_CONSENT_TEXT =
+    'I agree that {organization} stores and uses my details to respond to my request. I can withdraw this consent at any time.';
 
 const AUTOCOMPLETE: Record<string, string> = { name: 'name', email: 'email', phone: 'tel', company: 'organization' };
 
@@ -68,12 +78,21 @@ export default function LeadFormRenderer({
     onSubmit,
     onEvent,
     fullPage = false,
+    consentText,
+    operator,
 }: Props) {
     const [answers, setAnswers] = useState<LeadAnswers>(initialAnswers ?? {});
     const [position, setPosition] = useState(0);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [formError, setFormError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [consent, setConsent] = useState(false);
+    const consentMode = settings.consent ?? 'off';
+    const consentLabel =
+        consentMode === 'off'
+            ? null
+            : consentText ??
+              (settings.consent_text?.trim() || DEFAULT_CONSENT_TEXT).replace('{organization}', organization || 'the organisation running this form');
     const [done, setDone] = useState<{ title: string | null; message: string | null } | null>(null);
     const started = useRef(false);
     const reported = useRef(new Set<number>());
@@ -85,8 +104,8 @@ export default function LeadFormRenderer({
     const current = steps[at];
     const isLast = at >= steps.length - 1;
     // Latest values for timers and async handlers (a pick advances 220 ms later)
-    const live = useRef({ answers, position: at });
-    live.current = { answers, position: at };
+    const live = useRef({ answers, position: at, consent: false });
+    live.current = { answers, position: at, consent };
 
     useEffect(() => () => window.clearTimeout(advanceTimer.current), []);
     const isPreview = previewStep !== undefined;
@@ -158,6 +177,10 @@ export default function LeadFormRenderer({
             scrollTop();
             return;
         }
+        if (consentMode === 'required' && !live.current.consent) {
+            setErrors({ consent: 'Please confirm to send the form.' });
+            return;
+        }
         if (!onSubmit) {
             setDone({ title: settings.thank_you_title, message: settings.thank_you_message });
             return;
@@ -165,7 +188,7 @@ export default function LeadFormRenderer({
         setSubmitting(true);
         setFormError(null);
         try {
-            const result = await onSubmit(visibleAnswers(definition, now));
+            const result = await onSubmit(visibleAnswers(definition, now), { consent: consentMode !== 'off' && live.current.consent });
             if (result.ok) {
                 setDone({ title: result.thank_you_title ?? settings.thank_you_title, message: result.thank_you_message ?? settings.thank_you_message });
             } else {
@@ -174,7 +197,7 @@ export default function LeadFormRenderer({
                 setErrors(byField);
                 const firstStep = stepsNow.findIndex((s) => s.fields.some((f) => byField[f.id]));
                 if (firstStep >= 0) setPosition(firstStep);
-                setFormError(result.message ?? (firstStep < 0 ? 'Something went wrong. Please try again.' : null));
+                setFormError(result.message ?? (firstStep < 0 && !byField.consent ? 'Something went wrong. Please try again.' : null));
             }
         } catch {
             setFormError('Could not send the form. Check your connection and try again.');
@@ -273,6 +296,41 @@ export default function LeadFormRenderer({
                 ))}
             </div>
 
+            {isLast && consentLabel && (
+                <div className="mt-6">
+                    <label className="flex cursor-pointer items-start gap-2.5 text-sm" data-testid="lead-consent">
+                        <input
+                            type="checkbox"
+                            checked={consent}
+                            onChange={(e) => {
+                                setConsent(e.target.checked);
+                                setErrors((prev) => {
+                                    const rest = { ...prev };
+                                    delete rest.consent;
+                                    return rest;
+                                });
+                            }}
+                            className="mt-0.5 size-4 shrink-0"
+                            style={{ accentColor: theme.primary }}
+                            aria-invalid={!!errors.consent}
+                        />
+                        <span>
+                            {consentLabel}
+                            {consentMode === 'optional' && <span style={{ color: 'var(--lf-muted)' }}> (optional)</span>}
+                            {operator?.privacy_url && (
+                                <>
+                                    {' '}
+                                    <a href={operator.privacy_url} target="_blank" rel="noopener noreferrer nofollow" className="underline underline-offset-2">
+                                        Privacy policy
+                                    </a>
+                                </>
+                            )}
+                        </span>
+                    </label>
+                    {errors.consent && <p className="mt-1.5 text-sm font-medium text-red-600">{errors.consent}</p>}
+                </div>
+            )}
+
             {formError && <p className="mt-5 text-sm font-medium text-red-600">{formError}</p>}
 
             <div className="mt-8 flex items-center gap-3">
@@ -331,10 +389,15 @@ export default function LeadFormRenderer({
         </div>
     );
 
-    const footer = settings.show_branding && (
-        <p className="mt-8 text-center text-xs" style={{ color: 'var(--lf-muted)' }}>
-            Powered by <span className="font-semibold">Brainitive</span>
-        </p>
+    const footer = (
+        <>
+            {operator && <OperatorNotice operator={operator} className="mt-8 text-center" style={{ color: 'var(--lf-muted)' }} />}
+            {settings.show_branding && (
+                <p className="mt-4 text-center text-xs" style={{ color: 'var(--lf-muted)' }}>
+                    Powered by <span className="font-semibold">Brainitive</span>
+                </p>
+            )}
+        </>
     );
 
     const minH = fullPage ? 'min-h-screen' : 'min-h-full';

@@ -1,3 +1,5 @@
+import { OperatorNotice } from '@/components/legal/OperatorNotice';
+import type { PublicOperatorData } from '@/types';
 import { Head } from '@inertiajs/react';
 import { GanttChart } from 'lucide-react';
 import ApplicationLogo from '@/components/ApplicationLogo';
@@ -14,12 +16,13 @@ interface Props {
         settings: PlanSettings;
         updated_at: string | null;
     };
+    operator?: PublicOperatorData | null;
 }
 
 /**
  * Plan behind a share link: read-only, no login, zoom and filter work locally.
  */
-export default function PlanPublic({ plan }: Props) {
+export default function PlanPublic({ plan, operator = null }: Props) {
     return (
         <div className="flex h-screen flex-col bg-background text-foreground">
             <Head title={plan.name} />
@@ -40,6 +43,7 @@ export default function PlanPublic({ plan }: Props) {
             </header>
             {plan.description && <p className="shrink-0 px-4 pt-2 text-sm text-muted-foreground sm:px-6">{plan.description}</p>}
             <PlanChart doc={{ data: plan.data, settings: plan.settings }} className="min-h-0 flex-1" />
+            <OperatorNotice operator={operator} className="shrink-0 border-t px-4 py-2 text-center sm:px-6" />
         </div>
     );
 }

@@ -1,9 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import { DB, MAIL_LOG, REMOTE, ROOT, appEnv } from './env';
+import { startLiveServer } from './helpers/live';
 
-/** Fresh, seeded e2e database before every local run (guarded: e2e databases only). */
-export default function globalSetup() {
+/**
+ * Fresh, seeded e2e database before every local run (guarded: e2e databases only), and the live
+ * channel server (BRAI-151) for the run; the returned function stops it.
+ */
+export default async function globalSetup() {
     if (REMOTE) return;
     if (!process.env.E2E_DB_DATABASE) {
         // local: this port's own database on the local PostgreSQL (CI's service database exists already)
@@ -14,5 +18,9 @@ export default function globalSetup() {
         if (psql(`select 1 from pg_database where datname = '${DB.database}'`) !== '1') psql(`create database "${DB.database}"`);
     }
     fs.rmSync(MAIL_LOG, { force: true });
+    // live server first: seeding already publishes (cards, notifications); a refused publish makes
+    // Live pause 15 s in the shared cache, so journeys starting right away would miss their events
+    const stopLive = await startLiveServer();
     execFileSync('php', ['artisan', 'e2e:reset'], { cwd: ROOT, env: appEnv(), stdio: 'inherit' });
+    return stopLive;
 }

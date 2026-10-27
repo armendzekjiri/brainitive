@@ -523,6 +523,14 @@ function LeadSheet({
                         </div>
                     )}
 
+                    {lead.consent_at && (
+                        <div data-testid="lead-consent-record">
+                            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Consent</h3>
+                            <p className="text-xs text-muted-foreground">Given {new Date(lead.consent_at).toLocaleString()}</p>
+                            {lead.consent_text && <p className="mt-1 whitespace-pre-line break-words text-sm">“{lead.consent_text}”</p>}
+                        </div>
+                    )}
+
                     {canManage && (
                         <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setConfirm(true)}>
                             <Trash2 className="mr-1.5 size-4" />

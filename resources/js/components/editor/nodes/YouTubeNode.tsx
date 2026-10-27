@@ -21,6 +21,7 @@ import {
     KEY_BACKSPACE_COMMAND,
     KEY_DELETE_COMMAND,
 } from 'lexical';
+import { ExternalEmbedGate } from '@/components/legal/ExternalEmbedGate';
 
 export interface YouTubePayload {
     videoID: string;
@@ -169,7 +170,9 @@ export class YouTubeNode extends DecoratorNode<JSX.Element> {
     decorate(): JSX.Element {
         return (
             <Suspense fallback={<div className="aspect-video max-w-2xl mx-auto bg-muted rounded-lg animate-pulse" />}>
-                <YouTubeComponent videoID={this.__id} nodeKey={this.getKey()} />
+                <ExternalEmbedGate providerId="youtube" providerName="YouTube (Google)" url={`https://www.youtube.com/watch?v=${this.__id}`}>
+                    <YouTubeComponent videoID={this.__id} nodeKey={this.getKey()} />
+                </ExternalEmbedGate>
             </Suspense>
         );
     }

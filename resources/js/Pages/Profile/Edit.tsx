@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import OfflineSettingCard from '@/components/offline/OfflineSettingCard';
 import ConnectedAppsForm, { ConnectedApp } from './Partials/ConnectedAppsForm';
 import DeleteUserForm from './Partials/DeleteUserForm';
+import DownloadDataForm from './Partials/DownloadDataForm';
 import NotificationPreferencesForm from './Partials/NotificationPreferencesForm';
 import NotificationSettingsForm from './Partials/NotificationSettingsForm';
 import TaskDigestSetting from './Partials/TaskDigestSetting';
@@ -80,6 +81,16 @@ export default function Edit({
                     </CardHeader>
                     <CardContent>
                         <ConnectedAppsForm apps={connectedApps} className="max-w-xl" />
+                    </CardContent>
+                </Card>
+
+                <Card id="your-data" className="scroll-mt-20">
+                    <CardHeader>
+                        <CardTitle>Your data</CardTitle>
+                        <CardDescription>Get a copy of the data Brainitive holds about you (GDPR Art. 15 and 20).</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <DownloadDataForm className="max-w-xl" />
                     </CardContent>
                 </Card>
 

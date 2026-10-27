@@ -2,7 +2,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import { cn } from '@/lib/utils';
 import { PageProps } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { Building2, Github, LayoutDashboard, ScrollText, Settings, ShieldCheck, Users } from 'lucide-react';
+import { Building2, Github, LayoutDashboard, Mail, ScrollText, Settings, ShieldCheck, Users } from 'lucide-react';
 import { ReactNode, useEffect } from 'react';
 import { toast } from 'sonner';
 
@@ -12,6 +12,7 @@ const TABS = [
     { route: 'admin.workspaces.index', match: 'admin.workspaces.*', label: 'Workspaces', icon: Building2 },
     { route: 'admin.settings.edit', match: 'admin.settings.*', label: 'Settings', icon: Settings },
     { route: 'admin.github-app.show', match: 'admin.github-app.*', label: 'GitHub App', icon: Github },
+    { route: 'admin.emails.index', match: 'admin.emails.*', label: 'Emails', icon: Mail },
     { route: 'admin.audit-log', match: 'admin.audit-log', label: 'Audit log', icon: ScrollText },
 ] as const;
 
@@ -21,13 +22,12 @@ const TABS = [
 export default function AdminShell({ title, actions, children }: { title: string; actions?: ReactNode; children: ReactNode }) {
     const { flash } = usePage<PageProps>().props;
 
+    // keyed on the flash object (new on every visit), so the same message twice in a row
+    // ("Test email sent to …" on Emails) still shows each time
     useEffect(() => {
         if (flash?.success) toast.success(flash.success);
-    }, [flash?.success]);
-
-    useEffect(() => {
         if (flash?.error) toast.error(flash.error);
-    }, [flash?.error]);
+    }, [flash]);
 
     return (
         <AppLayout>

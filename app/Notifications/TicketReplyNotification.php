@@ -8,9 +8,9 @@ use App\Models\TicketReply;
 use App\Models\User;
 use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
+use App\Support\Mail\BrandedMail;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Str;
 
@@ -85,26 +85,30 @@ class TicketReplyNotification extends Notification implements ShouldQueue
     }
 
     /**
-     * Get the mail representation.
+     * Get the mail representation: the customer's copy (signed by the helpdesk, portal link) or a
+     * watcher's (internal link).
      */
     public function toMail(object $notifiable)
     {
         $helpdesk = $this->ticket->helpdesk;
         $project = $helpdesk->project;
         $workspace = $project->workspace;
+        $excerpt = Str::limit(trim(html_entity_decode(strip_tags(str_replace(['</p>', '<br>', '<br/>', '<br />'], "\n", (string) $this->reply->body)), ENT_QUOTES | ENT_HTML5)), 1000);
 
         if ($notifiable instanceof TicketContact) {
             // Client: link to this ticket in the portal
-            $url = $this->ticket->publicUrl();
-            $subject = "Reply on ticket {$this->ticket->key}: {$this->plainSubject()}";
-            $line = 'Support has replied to your ticket.';
+            $sender = BrandedMail::helpdeskName($helpdesk);
 
-            return (new MailMessage)
-                ->subject($subject)
-                ->line($line)
+            return $this->brandedMail($notifiable, 'ticket_reply', "You get this email because you have a ticket with {$sender}.")
+                ->subject("Reply on ticket {$this->ticket->key}: {$this->plainSubject()}")
+                ->eyebrow("{$sender} · {$this->ticket->key}")
+                ->headline('New reply on your ticket')
+                ->line('Support has replied to your ticket.')
                 ->line('Ticket: '.$this->plainSubject())
-                ->line(NewLeadNotification::plain(Str::limit(strip_tags($this->reply->body), 200)))
-                ->action('View ticket', $url);
+                ->quote($excerpt)
+                ->action('View ticket', $this->ticket->publicUrl())
+                ->context($sender)
+                ->signOff($sender);
         }
 
         // User (watcher): link to internal ticket view
@@ -119,13 +123,14 @@ class TicketReplyNotification extends Notification implements ShouldQueue
             : ($this->author instanceof TicketContact
                 ? ($this->author->name ?: $this->author->email)
                 : 'A user');
-        $subject = "Reply on ticket {$this->ticket->key}: {$this->plainSubject()}";
-        $line = "{$actorName} replied to this ticket.";
 
-        return (new MailMessage)
-            ->subject($subject)
-            ->line($line)
-            ->line(NewLeadNotification::plain(Str::limit(strip_tags($this->reply->body), 200)))
+        return $this->brandedMail($notifiable, 'ticket_reply')
+            ->subject("Reply on ticket {$this->ticket->key}: {$this->plainSubject()}")
+            ->eyebrow("{$project->name} · {$helpdesk->name}")
+            ->headline("New reply on {$this->ticket->key}")
+            ->line(NewLeadNotification::plain((string) $actorName).' replied to this ticket.')
+            ->quote($excerpt)
+            ->context($workspace->name)
             ->action('View ticket', $url);
     }
 

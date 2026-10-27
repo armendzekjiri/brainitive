@@ -33,6 +33,15 @@ final class CollabConfig
 
     public static function url(): string
     {
+        // e2e only: a spec with its own realtime server names its port (`X-E2E-Collab-Port`), so
+        // live-docs and live-whiteboards can each stop / restart theirs while running in parallel
+        if (config('collab.e2e_opt_in') && app()->environment('e2e')) {
+            $port = (string) request()->header('X-E2E-Collab-Port', '');
+            if (preg_match('/^\d{4,5}$/', $port)) {
+                return 'ws://127.0.0.1:'.$port;
+            }
+        }
+
         return (string) config('collab.url');
     }
 

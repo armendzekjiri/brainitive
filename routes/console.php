@@ -2,6 +2,7 @@
 
 use App\Jobs\RunImport;
 use App\Models\AutomationRun;
+use App\Models\DataExport;
 use App\Models\GithubAppDelivery;
 use App\Models\GithubDelivery;
 use App\Models\HelpdeskInboundEmail;
@@ -12,6 +13,7 @@ use App\Models\McpRequest;
 use App\Models\OfflineMutation;
 use App\Models\PortalLoginToken;
 use App\Models\ProjectExport;
+use App\Models\PushSubscription;
 use App\Models\WebhookDelivery;
 use App\Support\GithubStars;
 use Illuminate\Foundation\Inspiring;
@@ -87,8 +89,13 @@ Schedule::call(function () {
     // an export that never finished (a lost worker) leaves its work folder behind
     ProjectExport::query()->whereIn('status', [ProjectExport::QUEUED, ProjectExport::RUNNING])->where('updated_at', '<', now()->subDay())
         ->each(fn (ProjectExport $export) => $export->expire());
+    // "Download my data" (BRAI-156): the same 24 h life
+    // lazyById: expire() changes the filtered columns, an offset walk would skip rows
+    DataExport::query()->whereNotNull('file_path')->where('expires_at', '<', now())->lazyById()->each(fn (DataExport $export) => $export->expire());
+    DataExport::query()->whereIn('status', [DataExport::QUEUED, DataExport::RUNNING])->where('updated_at', '<', now()->subDay())
+        ->lazyById()->each(fn (DataExport $export) => $export->expire());
 })->name('exports:cleanup')->hourly()->withoutOverlapping();
-Schedule::command('model:prune', ['--model' => [ProjectExport::class]])->dailyAt('04:25');
+Schedule::command('model:prune', ['--model' => [ProjectExport::class, DataExport::class]])->dailyAt('04:25');
 
 // v1.42.0: spent / expired guest sign-in links
 Schedule::command('model:prune', ['--model' => [PortalLoginToken::class]])->dailyAt('04:30');
@@ -98,6 +105,13 @@ Schedule::call(fn () => GithubStars::refresh())->hourly()->name('github-stars')-
 
 // Offline sync (BRAI-82): forget the outcome of a device's change after 30 days.
 Schedule::command('model:prune', ['--model' => [OfflineMutation::class]])->dailyAt('04:35');
+// Web push (BRAI-154): forget subscriptions the push service reported as expired 30 days ago.
+Schedule::command('model:prune', ['--model' => [PushSubscription::class]])->dailyAt('04:40');
+// Retention (BRAI-156, docs/legal/data-inventory.md): expired password-reset tokens, revoked / expired
+// OAuth tokens and codes (after Passport's 7-day grace), failed queue jobs (which hold payloads) after 30 days.
+Schedule::command('auth:clear-resets')->dailyAt('04:45');
+Schedule::command('passport:purge')->dailyAt('04:50');
+Schedule::command('queue:prune-failed', ['--hours' => 720])->dailyAt('04:55');
 // v1.43.0 (BRAI-55): build the search index in the background when this index version was never
 // built (fresh install, update) — nobody runs search:reindex by hand. One small query otherwise.
 Schedule::command('search:ensure')->everyFiveMinutes()->withoutOverlapping()->runInBackground();

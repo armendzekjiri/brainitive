@@ -50,9 +50,9 @@ class MentionNotification extends Notification
     {
         $where = $this->contextType === 'page' ? 'on a page' : 'in an issue';
 
-        return (new MailMessage)
+        return $this->brandedMail($notifiable, 'mentioned')
             ->subject("{$this->actor->name} mentioned you: ".NewLeadNotification::plain($this->contextTitle))
-            ->line("{$this->actor->name} mentioned you {$where}.")
+            ->headline("{$this->actor->name} mentioned you {$where}")
             ->line(NewLeadNotification::plain($this->contextTitle))
             ->action('Open', url($this->contextUrl));
     }

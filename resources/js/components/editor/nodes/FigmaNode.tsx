@@ -21,6 +21,7 @@ import {
     KEY_BACKSPACE_COMMAND,
     KEY_DELETE_COMMAND,
 } from 'lexical';
+import { ExternalEmbedGate } from '@/components/legal/ExternalEmbedGate';
 
 export interface FigmaPayload {
     documentID: string;
@@ -161,7 +162,9 @@ export class FigmaNode extends DecoratorNode<JSX.Element> {
     decorate(): JSX.Element {
         return (
             <Suspense fallback={<div className="aspect-[4/3] max-w-3xl mx-auto bg-muted rounded-lg animate-pulse" />}>
-                <FigmaComponent documentID={this.__id} nodeKey={this.getKey()} />
+                <ExternalEmbedGate providerId="figma" providerName="Figma" url={this.__id}>
+                    <FigmaComponent documentID={this.__id} nodeKey={this.getKey()} />
+                </ExternalEmbedGate>
             </Suspense>
         );
     }

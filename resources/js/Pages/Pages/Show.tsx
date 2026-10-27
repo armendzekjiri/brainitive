@@ -1,7 +1,7 @@
 import AppLayout from '@/Layouts/AppLayout';
 import { safeHtml } from '@/lib/sanitize';
 import { Head, useForm, router, Link, usePage } from '@inertiajs/react';
-import { PageProps, Workspace, Project, Page as PageType, PageDraftState, PageDraftHashState, PageReviewShowState, PageCollabProps, PagePresenceCollabState, User } from '@/types';
+import { PageProps, Workspace, Project, Page as PageType, PageDraftState, PageDraftHashState, PageReviewShowState, PageCollabProps, PagePresenceCollabState, User, WhiteboardCollabProps } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -88,6 +88,8 @@ import { usePagePresence } from '@/hooks/usePagePresence';
 import { useLiveDocument } from '@/components/editor/collab/useLiveDocument';
 import { PageHistoryDialog } from '@/components/page/PageHistoryDialog';
 import { ExcalidrawViewMode } from '@/components/page/ExcalidrawViewMode';
+import { useLiveWhiteboardView } from '@/hooks/useLiveWhiteboardView';
+import type { ExcalidrawStatics, WhiteboardHandle } from '@/lib/whiteboard/live';
 import RelatedContent from '@/components/references/RelatedContent';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -134,6 +136,8 @@ interface Props extends PageProps {
     review: PageReviewShowState | null;
     /** live co-editing (BRAI-54); null = the single-user editor */
     collab: PageCollabProps | null;
+    /** live whiteboard preview (BRAI-153); null = a static preview */
+    whiteboardCollab?: WhiteboardCollabProps | null;
 }
 
 // Detect if page content is Excalidraw (full-page whiteboard)
@@ -667,7 +671,7 @@ const EXPORT_HTML_STYLES = `
 
 type DraftChanges = { content?: string; name?: string; icon?: string };
 
-export default function PageShow({ workspace, project, page, breadcrumbs, can, review, collab }: Props) {
+export default function PageShow({ workspace, project, page, breadcrumbs, can, review, collab, whiteboardCollab = null }: Props) {
     // New whiteboards: redirect straight to the Excalidraw editor.
     // We arrive here (pages.show?new=1) because Inertia can't follow a redirect
     // to a non-Inertia blade view directly from a form post.
@@ -746,6 +750,16 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
 
     // Watchers
     const currentUser = usePage<PageProps>().props.auth.user;
+    // Live whiteboards (BRAI-153): the preview shows everyone's drawing and cursors as they happen
+    // (a reload mounts a new canvas for a new revision: never reconnect the old, detached one)
+    const [whiteboardCanvas, setWhiteboardCanvas] = useState<{ handle: WhiteboardHandle; statics: ExcalidrawStatics; revision: number } | null>(null);
+    const onWhiteboardReady = useCallback((handle: WhiteboardHandle, statics: ExcalidrawStatics) => setWhiteboardCanvas({ handle, statics, revision: page.edit_revision ?? 0 }), [page.edit_revision]);
+    const liveBoard = useLiveWhiteboardView({
+        canvas: whiteboardCanvas?.revision === (page.edit_revision ?? 0) ? whiteboardCanvas : null,
+        collab: whiteboardCollab,
+        routeParams,
+        user: { id: currentUser.id, name: currentUser.name },
+    });
     const isWatching = page.watchers?.some(w => w.id === currentUser.id) ?? false;
     const otherWatcherCount = page.watchers?.filter(w => w.id !== currentUser.id).length ?? 0;
 
@@ -1688,9 +1702,40 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
                             {page.type === 'page' && isExcalidrawPage(page.content) && (
                                 <div className="mb-8">
                                     <div className="rounded-lg border border-border overflow-hidden bg-white dark:bg-card">
-                                        <ExcalidrawViewMode key={page.edit_revision} id={`excalidraw-preview-${page.uuid}-${page.edit_revision}`} content={page.content} />
-                                        <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center justify-between gap-3">
-                                            <span className="text-sm text-muted-foreground">View mode · pan and zoom freely</span>
+                                        <ExcalidrawViewMode key={page.edit_revision} id={`excalidraw-preview-${page.uuid}-${page.edit_revision}`} content={page.content} onReady={onWhiteboardReady} />
+                                        <div className="px-4 py-3 border-t border-border bg-muted/20 flex flex-wrap items-center justify-between gap-3">
+                                            <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+                                                {liveBoard?.mode === 'live' && (
+                                                    <span className={cn('size-2 shrink-0 rounded-full', liveBoard.connection === 'online' ? 'bg-emerald-500' : 'bg-amber-500')} aria-hidden="true" />
+                                                )}
+                                                {/* one live region for every state: announced when it changes, not when people come and go */}
+                                                <span role="status" className={cn('truncate', liveBoard?.mode === 'live' && 'font-medium text-foreground')}>
+                                                    {liveBoard?.mode === 'live'
+                                                        ? (liveBoard.connection === 'online' ? 'Live' : 'Reconnecting…')
+                                                        : liveBoard?.mode === 'replaced'
+                                                            ? 'This whiteboard changed.'
+                                                            : 'View mode · pan and zoom freely'}
+                                                </span>
+                                                {liveBoard?.mode === 'replaced' && (
+                                                    <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => router.reload({ only: ['page', 'whiteboardCollab'] })}>Show the latest</button>
+                                                )}
+                                                {liveBoard?.mode === 'live' && (liveBoard.peers.length > 0 ? (
+                                                    <ul className="flex -space-x-1.5" aria-label="Drawing live now">
+                                                        {liveBoard.peers.slice(0, 5).map((peer) => (
+                                                            <li key={peer.userId} aria-label={`${peer.name}, ${peer.edit ? 'drawing' : 'watching'}`} title={`${peer.name}${peer.edit ? ' (drawing)' : ' (watching)'}`}>
+                                                                <Avatar className="size-6 border-2 border-card" style={{ boxShadow: `0 0 0 2px ${peer.color}` }}>
+                                                                    <AvatarFallback className="text-[10px] font-semibold text-gray-900" style={{ backgroundColor: peer.color }}>{peer.name.charAt(0)}</AvatarFallback>
+                                                                </Avatar>
+                                                            </li>
+                                                        ))}
+                                                        {liveBoard.peers.length > 5 && (
+                                                            <li aria-label={`${liveBoard.peers.length - 5} more`} title={liveBoard.peers.slice(5).map((peer) => peer.name).join(', ')} className="size-6 rounded-full border-2 border-card bg-muted flex items-center justify-center text-[10px] font-medium text-muted-foreground">+{liveBoard.peers.length - 5}</li>
+                                                        )}
+                                                    </ul>
+                                                ) : (
+                                                    <span className="hidden truncate sm:inline">Changes appear as people draw</span>
+                                                ))}
+                                            </div>
                                             {can.update && <a
                                                 href={route('pages.excalidraw', [workspace.slug, project.slug, page.uuid])}
                                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"

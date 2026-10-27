@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Live\LiveThreads;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -17,6 +18,18 @@ class Comment extends Model
         'parent_id',
         'body',
     ];
+
+    protected static function booted(): void
+    {
+        // Live comments (BRAI-151): open issue views refetch (ids only)
+        static::created(fn (Comment $comment) => LiveThreads::comment($comment, 'created'));
+        static::updated(function (Comment $comment) {
+            if ($comment->wasChanged(['body', 'parent_id'])) {
+                LiveThreads::comment($comment, 'updated');
+            }
+        });
+        static::deleted(fn (Comment $comment) => LiveThreads::comment($comment, 'deleted'));
+    }
 
     /**
      * Get the item this comment belongs to.

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Notifications\VerifyEmailNotification;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -43,6 +44,8 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
         'task_digest',
         'notification_preferences',
         'sidebar_preferences',
+        'terms_accepted_at',
+        'terms_version',
     ];
 
     protected $appends = ['avatar_display'];
@@ -68,6 +71,7 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
             'email_verified_at' => 'datetime',
             'suspended_at' => 'datetime',
             'last_login_at' => 'datetime',
+            'terms_accepted_at' => 'datetime',
             'password' => 'hashed',
             'onboarding_state' => 'array',
             'task_digest' => 'boolean',
@@ -86,6 +90,16 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
         return $this->timezone && in_array($this->timezone, \DateTimeZone::listIdentifiers(\DateTimeZone::ALL_WITH_BC), true)
             ? $this->timezone
             : config('app.timezone');
+    }
+
+    /**
+     * Push subscriptions a notification goes to: not the ones the push service reported as
+     * expired (404 / 410, BRAI-154) — those stay listed in Profile until removed or pruned.
+     * Overrides HasPushSubscriptions::routeNotificationForWebPush().
+     */
+    public function routeNotificationForWebPush(): Collection
+    {
+        return $this->pushSubscriptions()->whereNull('expired_at')->get();
     }
 
     /** Full URL for profile picture (avatar). */

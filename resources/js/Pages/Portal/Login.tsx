@@ -63,6 +63,14 @@ export default function PortalLogin({ mode, returnTo, email, token, identity }: 
                         <Button type="submit" className="w-full" disabled={form.processing}>
                             Email me a sign-in link
                         </Button>
+                        {/* Platform notice (BRAI-156): the guest sign-in itself is run by the platform */}
+                        <p className="text-xs leading-relaxed text-muted-foreground" data-testid="guest-privacy-notice">
+                            We store your email address (and name, if you give one) to sign you in to portals shared with you.
+                            What you post in a portal is handled by the organisation that runs it.{' '}
+                            <a href={route('privacy')} target="_blank" rel="noopener" className="underline underline-offset-2">
+                                Privacy policy
+                            </a>
+                        </p>
                         <p className="text-center text-xs text-muted-foreground">
                             Part of the team?{' '}
                             <Link href={route('login')} className="underline underline-offset-2">

@@ -78,8 +78,12 @@ class ItemStatusChangedNotification extends Notification
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
+        $board = $this->item->board;
+
+        return $this->brandedMail($notifiable, 'item_status_changed')
             ->subject("{$this->item->key} moved to {$this->newColumn->name}")
+            ->eyebrow($board ? trim(($board->project?->name ? $board->project->name.' · ' : '').$board->name) : null)
+            ->headline("{$this->item->key} moved to {$this->newColumn->name}")
             ->line("{$this->actor->name} moved {$this->item->key} from {$this->oldColumn->name} to {$this->newColumn->name}.")
             ->line(NewLeadNotification::plain((string) $this->item->title))
             ->action('Open issue', $this->toDatabase($notifiable)['item_url']);

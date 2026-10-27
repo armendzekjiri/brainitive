@@ -2,12 +2,14 @@
 
 namespace App\Support\Imports;
 
+use App\Support\Live\BoardLive;
 use Closure;
 
 /**
  * "An import is writing right now" (v1.41.0). While active, per-record side effects that would
  * flood people or systems are off: assignment notifications (Assignments), webhooks and automation
- * rules (DomainEvents). History entries are still written. An import may send one summary later.
+ * rules (DomainEvents), per-record live events (BoardLive: one refresh per board / plan at the end).
+ * History entries are still written. An import may send one summary later.
  */
 final class ImportScope
 {
@@ -20,6 +22,10 @@ final class ImportScope
             return $work();
         } finally {
             self::$depth--;
+            if (self::$depth === 0) {
+                // live boards (BRAI-152): one "refresh" per board / plan the import touched, not one per record
+                BoardLive::importFinished();
+            }
         }
     }
 

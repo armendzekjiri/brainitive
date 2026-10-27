@@ -3,6 +3,10 @@
 namespace App\Models;
 
 use App\Observers\ItemObserver;
+use App\Support\Collab\ItemCollab;
+use App\Support\Imports\ImportScope;
+use App\Support\Live\BoardLive;
+use App\Support\Live\Live;
 use App\Support\References\ContentReferences;
 use App\Support\References\SmartLinks;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
@@ -20,6 +24,9 @@ use Illuminate\Support\Str;
 class Item extends Model
 {
     use HasFactory, SoftDeletes;
+
+    /** Set while a live description save writes (BRAI-151): that one doesn't reset the live document. */
+    public bool $collabWrite = false;
 
     protected $fillable = [
         'board_id',
@@ -91,6 +98,18 @@ class Item extends Model
         static::saved(function (Item $item) {
             if ($item->wasRecentlyCreated ? (string) $item->description !== '' : $item->wasChanged('description')) {
                 SmartLinks::syncItem($item);
+            }
+        });
+
+        // Live issue view (BRAI-151): a description changed outside the live document starts a new one
+        // (epoch + 1); open views hear which fields changed (ids / field names only) and refetch
+        static::updated(function (Item $item) {
+            if ($item->wasChanged('description') && ! $item->collabWrite) {
+                ItemCollab::reset($item);
+            }
+            $fields = array_values(array_filter(['title', 'description'], fn (string $field) => $item->wasChanged($field)));
+            if ($fields !== [] && ! ImportScope::active()) { // imports: no per-record live events (BRAI-152)
+                Live::publish("item.{$item->id}", 'item.updated', ['id' => $item->id, 'fields' => $fields]);
             }
         });
 
@@ -245,7 +264,9 @@ class Item extends Model
      */
     public function addWatcher(User $user): void
     {
-        $this->watchers()->syncWithoutDetaching([$user->id]);
+        if ($this->watchers()->syncWithoutDetaching([$user->id])['attached'] !== []) {
+            BoardLive::itemIds([$this->id], ['watchers'], (int) $this->board_id);
+        }
     }
 
     /**
@@ -253,7 +274,9 @@ class Item extends Model
      */
     public function removeWatcher(User $user): void
     {
-        $this->watchers()->detach($user->id);
+        if ($this->watchers()->detach($user->id) > 0) {
+            BoardLive::itemIds([$this->id], ['watchers'], (int) $this->board_id);
+        }
     }
 
     /**
@@ -357,7 +380,9 @@ class Item extends Model
         $this->update(['sprint_id' => $targetId, 'backlog_position' => $last + 1]);
 
         // The whole subtree travels with its issue.
-        static::whereIn('id', $this->descendantIds())->update(['sprint_id' => $targetId]);
+        $descendants = $this->descendantIds();
+        static::whereIn('id', $descendants)->update(['sprint_id' => $targetId]);
+        BoardLive::itemIds($descendants, ['sprint_id'], (int) $this->board_id);
     }
 
     /** Working-day / week length used by durations, as in Jira (1d = 8h, 1w = 5d). */

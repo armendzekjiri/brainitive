@@ -30,3 +30,14 @@ export async function mailLink(address: string, pattern: RegExp): Promise<string
     }
     throw new Error(`no mail to ${address} with a link matching ${pattern} in ${MAIL_LOG}`);
 }
+
+/** The newest mail to `address` whose raw text matches `pattern` (waits up to 10 s): headers + both parts. */
+export async function newestMail(address: string, pattern: RegExp): Promise<string> {
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+        const mail = messagesTo(address).filter((m) => pattern.test(m)).at(-1);
+        if (mail) return mail;
+        await new Promise((r) => setTimeout(r, 250));
+    }
+    throw new Error(`no mail to ${address} matching ${pattern} in ${MAIL_LOG}`);
+}

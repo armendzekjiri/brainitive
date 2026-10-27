@@ -115,4 +115,25 @@ return [
         'name' => env('MAIL_FROM_NAME', 'Example'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Markdown Mail Settings
+    |--------------------------------------------------------------------------
+    |
+    | Every Markdown mail and notification uses the Brainitive layout (BRAI-155):
+    | resources/views/vendor/mail/{html,text} and the theme
+    | resources/views/vendor/mail/html/themes/brainitive.css (inlined when sent).
+    |
+    */
+
+    'markdown' => [
+        'theme' => env('MAIL_MARKDOWN_THEME', 'brainitive'),
+
+        'paths' => [
+            resource_path('views/vendor/mail'),
+        ],
+
+        'extensions' => [],
+    ],
+
 ];

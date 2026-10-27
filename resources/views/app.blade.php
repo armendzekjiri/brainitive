@@ -50,16 +50,22 @@
             })();
         </script>
 
+        <!-- Excalidraw fonts from our own build, not its third-party CDN fallback (BRAI-156, vite.config.js) -->
+        <script>window.EXCALIDRAW_ASSET_PATH = @json(asset('build/excalidraw-assets').'/');</script>
+
+        <!-- Analytics: the operator's self-hosted, cookieless Umami — ONLY with the visitor's consent (§ 25 (1) TDDDG).
+             No tracker here: where analytics may run (brainitive.app, never dev / e2e / local / self-hosted installs,
+             customers' public pages or token links — Analytics::enabledFor) the browser gets this config, asks
+             (components/legal/AnalyticsConsentNotice) and loads the script only after "Allow" (lib/analytics). -->
+        @if (\App\Support\Legal\Analytics::enabledFor(request()))
+            <script>window.brainitiveAnalytics = @json(\App\Support\Legal\Analytics::clientConfig());</script>
+        @endif
+
         <!-- Scripts -->
         @routes
         @viteReactRefresh
         @vite(['resources/js/app.tsx', "resources/js/Pages/{$page['component']}.tsx"])
         @inertiaHead
-
-        <!-- Analytics (Nova Brain Hub): brainitive.app only, never dev / e2e / local / self-hosted installs -->
-        @if (in_array(request()->getHost(), ['brainitive.app', 'www.brainitive.app'], true))
-            <script defer src="https://stats.novabrainhub.de/script.js" data-website-id="e6d93341-8b10-4d6a-8629-b9599635909e"></script>
-        @endif
     </head>
     <body class="font-sans antialiased">
         @inertia

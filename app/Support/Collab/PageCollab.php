@@ -104,9 +104,30 @@ final class PageCollab
      */
     public static function claimBootstrap(Page $page, int $epoch, string $claim): array
     {
+        return self::claim($page, $epoch, $claim, function (Page $page) {
+            $draft = $page->fresh()?->draftState() ?? ['name' => $page->name, 'icon' => $page->icon, 'content' => null];
+            $content = $draft['content'];
+
+            return [
+                'html' => is_array($content) && ($content['type'] ?? null) === 'lexical' && is_string($content['html'] ?? null) ? $content['html'] : null,
+                'name' => $draft['name'],
+                'icon' => $draft['icon'],
+            ];
+        });
+    }
+
+    /**
+     * The claim behind every bootstrap (documents, whiteboards — BRAI-153): under the state row lock one
+     * claim per lease wins and gets `$payload($page)`; refused once the server stored any state.
+     *
+     * @param  callable(Page): array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public static function claim(Page $page, int $epoch, string $claim, callable $payload): array
+    {
         self::ensureState($page);
 
-        return DB::transaction(function () use ($page, $epoch, $claim) {
+        return DB::transaction(function () use ($page, $epoch, $claim, $payload) {
             $state = PageCollabState::where('page_id', $page->id)->lockForUpdate()
                 ->firstOrFail(['id', 'epoch', 'state_bytes', 'bootstrap_claim', 'bootstrap_claimed_at']);
             if ($state->epoch !== $epoch) {
@@ -118,15 +139,7 @@ final class PageCollab
             }
             $state->update(['bootstrap_claim' => $claim, 'bootstrap_claimed_at' => now()]);
 
-            $draft = $page->fresh()?->draftState() ?? ['name' => $page->name, 'icon' => $page->icon, 'content' => null];
-            $content = $draft['content'];
-
-            return [
-                'status' => 'granted',
-                'html' => is_array($content) && ($content['type'] ?? null) === 'lexical' && is_string($content['html'] ?? null) ? $content['html'] : null,
-                'name' => $draft['name'],
-                'icon' => $draft['icon'],
-            ];
+            return ['status' => 'granted'] + $payload($page);
         });
     }
 

@@ -7,9 +7,11 @@ use App\Models\LeadFormEvent;
 use App\Support\LeadForms\LeadFormDefinition;
 use App\Support\LeadForms\LeadFormOptions;
 use App\Support\LeadForms\LeadIntake;
+use App\Support\Legal\PublicOperator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -43,6 +45,7 @@ class PublicLeadFormController extends Controller
             'utm.*' => 'nullable|string|max:200',
             'referrer' => 'nullable|string|max:500',
             'website' => 'nullable', // honeypot: people never see it, bots fill it in
+            'consent' => 'nullable|boolean', // the consent checkbox (BRAI-156)
         ]);
 
         $settings = LeadFormOptions::settings($form->settings);
@@ -60,11 +63,20 @@ class PublicLeadFormController extends Controller
 
         $answers = LeadFormDefinition::validateAnswers($form->definition ?? [], $validated['answers']);
 
+        // Consent checkbox (BRAI-156): a required one must be ticked; when ticked, the exact text
+        // the visitor saw is stored with the lead as proof (Art. 7 (1) GDPR)
+        $form->loadMissing('project.workspace');
+        $consentText = LeadFormOptions::consentText($settings, PublicOperator::for($form->project?->workspace, nameFallback: true)['name']);
+        $consented = $consentText !== null && (bool) ($validated['consent'] ?? false);
+        if ($settings['consent'] === 'required' && ! $consented) {
+            throw ValidationException::withMessages(['consent' => 'Please confirm to send the form.']);
+        }
+
         $referrer = $validated['referrer'] ?? null;
         LeadIntake::create($form, $answers, 'form', [
             'utm' => array_filter($validated['utm'] ?? [], fn ($v) => filled($v)) ?: null,
             'referrer' => $referrer && preg_match('#^https?://#i', $referrer) ? $referrer : null,
-        ]);
+        ], consent: $consented ? ['consent_at' => now(), 'consent_text' => $consentText] : []);
 
         if (! empty($validated['session_id'])) {
             $this->record($form, $validated['session_id'], 'submit');
@@ -111,6 +123,8 @@ class PublicLeadFormController extends Controller
     private function render(Request $request, LeadForm $form, bool $embed): Response
     {
         $form->loadMissing('project.workspace');
+        $operator = PublicOperator::for($form->project?->workspace, nameFallback: true);
+        $settings = LeadFormOptions::settings($form->settings);
 
         return Inertia::render('LeadForms/Public', [
             'form' => [
@@ -118,9 +132,11 @@ class PublicLeadFormController extends Controller
                 'public_slug' => $form->public_slug,
                 'definition' => $form->definition,
                 'theme' => LeadFormOptions::theme($form->theme),
-                'settings' => LeadFormOptions::publicSettings(LeadFormOptions::settings($form->settings)),
+                'settings' => LeadFormOptions::publicSettings($settings),
                 'organization' => $form->project?->workspace?->name,
+                'consent_text' => LeadFormOptions::consentText($settings, $operator['name']),
             ],
+            'operator' => $operator,
             'embed' => $embed,
             'submitUrl' => route('lead-forms.submit', $form->public_slug),
             'eventsUrl' => route('lead-forms.events', $form->public_slug),

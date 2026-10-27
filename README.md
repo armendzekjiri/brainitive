@@ -78,6 +78,12 @@ composer run dev
 Architecture, conventions and pitfalls are documented in [`docs/ai/`](docs/ai/README.md).
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
+## Security
+
+Found a security issue? Please **don't** open a public issue — report it privately at
+**[brainitive.app/support/security-issue](https://www.brainitive.app/support/security-issue)**.
+Details and scope: [SECURITY.md](SECURITY.md).
+
 ## Licence
 
 Brainitive is free software under the [GNU Affero General Public License v3.0](LICENSE). If

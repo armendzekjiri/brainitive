@@ -105,7 +105,7 @@ self.addEventListener('push', (event) => {
   const title = payload.title || 'Brainitive';
   const options = {
     body: payload.body || '',
-    icon: payload.icon || '/apple-touch-icon.png',
+    icon: payload.icon || '/android-chrome-192x192.png',
     badge: payload.badge || '/favicon-32x32.png',
     data: payload.data || {},
     tag: payload.tag,
