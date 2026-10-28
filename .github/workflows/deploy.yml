@@ -24,14 +24,29 @@ jobs:
     with:
       proven-by: pre-release.yml
 
+  # Only docs-site/ changed since the last successful production deploy: production already runs
+  # exactly this app, so nothing is deployed here (docs.yml publishes docs.brainitive.app).
+  docs-only:
+    uses: ./.github/workflows/docs-only.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      base: before
+      proven-by: deploy.yml
+
   tests:
-    needs: already-tested
-    if: needs.already-tested.outputs.tested != 'true'
+    needs: [already-tested, docs-only]
+    if: ${{ !cancelled() && needs.already-tested.result == 'success' && needs.docs-only.result == 'success' && needs.already-tested.outputs.tested != 'true' && needs.docs-only.outputs.docs-only != 'true' }}
     uses: ./.github/workflows/tests.yml
+    # tests.yml's own docs-only check needs to read workflow runs (it is skipped on main)
+    permissions:
+      contents: read
+      actions: read
 
   deploy:
-    needs: [already-tested, tests]
-    if: ${{ !cancelled() && needs.already-tested.result == 'success' && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
+    needs: [already-tested, docs-only, tests]
+    if: ${{ !cancelled() && needs.already-tested.result == 'success' && needs.docs-only.result == 'success' && needs.docs-only.outputs.docs-only != 'true' && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
     runs-on: ubuntu-latest
     # Makes GitHub record a deployment, so issues linked via commits show "Deployed to production".
     environment:

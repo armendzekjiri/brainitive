@@ -1042,6 +1042,17 @@ also wait for read / archive actions in flight (a page older than the action is 
 
 ## Architectural decisions
 
+### Public docs: VitePress in the same repo, not in the app (2026-10-28)
+docs.brainitive.app is a static VitePress site in `docs-site/` (own `package.json`, not part of the
+app build). **Why:** static HTML ranks well (the app is a client-rendered Inertia SPA without SSR or
+a sitemap), docs change in the same PR as the code they describe, and docs-only pushes skip the
+app pipeline (`docs-only.yml`) while `docs.yml` publishes them on their own. A separate repo or a
+docs SaaS was rejected (drift / lock-in); "public project docs" inside Brainitive may come later as
+a customer feature. The app links it via `@/lib/docs` (account menu, help window, command palette,
+homepage). Gotchas: `cleanUrls` needs nginx `try_files $uri $uri.html $uri/`; a `[x](./page)` to a
+page that doesn't exist fails the build; never put Cloud server details (IPs, paths, other apps'
+ports) or real client IDs in the docs.
+
 ### Inline validation over FormRequest classes
 Controllers use inline `$request->validate([...])` rather than dedicated FormRequest
 classes (only `ProfileUpdateRequest` exists). **Why:** keeps validation co-located with the

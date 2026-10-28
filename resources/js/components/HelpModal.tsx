@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { LayoutGrid, FileText, PencilRuler, BookMarked, BrainCircuit, X, History, Sparkles, GanttChart, ListChecks, CalendarDays, CalendarClock, Bot, Magnet } from 'lucide-react';
+import { LayoutGrid, FileText, PencilRuler, BookMarked, BrainCircuit, X, History, Sparkles, GanttChart, ListChecks, CalendarDays, CalendarClock, Bot, Magnet, BookOpen } from 'lucide-react';
+import { DOCS_URL } from '@/lib/docs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface HelpModalProps {
@@ -1299,9 +1300,18 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
                             <span className="hidden sm:inline">Changelog</span>
                         </button>
                     </div>
-                    <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={() => onOpenChange(false)}>
-                        <X className="size-4" /><span className="sr-only">Close</span>
-                    </Button>
+                    <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" className="h-8 gap-1.5 text-muted-foreground" asChild>
+                            <a href={DOCS_URL} target="_blank" rel="noopener">
+                                <BookOpen className="size-4" />
+                                <span className="hidden sm:inline">Documentation</span>
+                                <span className="sr-only sm:hidden">Documentation</span>
+                            </a>
+                        </Button>
+                        <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={() => onOpenChange(false)}>
+                            <X className="size-4" /><span className="sr-only">Close</span>
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Main Content Area */}

@@ -1,0 +1,20 @@
+/* Brainitive's primary (resources/css/app.css: --primary 206 88% 46%, dark 206 85% 55%) */
+:root {
+    --vp-c-brand-1: #0e83dd;
+    --vp-c-brand-2: #2b93e3;
+    --vp-c-brand-3: #0e83dd;
+    --vp-c-brand-soft: rgba(14, 131, 221, 0.14);
+    --vp-home-hero-name-color: transparent;
+    --vp-home-hero-name-background: linear-gradient(120deg, #0e83dd 30%, #6aa84f);
+}
+
+.dark {
+    --vp-c-brand-1: #4aa8f0;
+    --vp-c-brand-2: #2b99ee;
+    --vp-c-brand-3: #1a7fcc;
+    --vp-c-brand-soft: rgba(43, 153, 238, 0.16);
+}
+
+.VPNavBarTitle .logo {
+    height: 28px;
+}

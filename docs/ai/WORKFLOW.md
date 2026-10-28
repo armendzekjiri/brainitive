@@ -39,6 +39,13 @@ We work in releases, not single PRs:
 matching `featureGroups` group (`isNew: true`, drop it from older ones), a `SPOTLIGHT` card for the
 big one, and the title list in `e2e/tests/homepage.spec.ts` — see "Homepage + Welcome tab" below.
 
+**Every release also updates the public docs** (`docs-site/`, published at
+**https://docs.brainitive.app**): a user-facing feature gets or updates its page in `guide/`, a new
+env variable goes into `self-hosting/configuration.md`, a new OAuth app / redirect URI / scope into
+`integrations/`, a new admin page into `admin/`. Pages are Markdown with `title` / `description`
+(SEO) / `order` frontmatter; the sidebar builds itself from the files. Check with
+`cd docs-site && npm ci && npm run build` (a dead link fails the build).
+
 **Every feature or change ships with e2e tests:** journeys in `e2e/tests/` for what a user can now
 do, or what was broken, next to PHPUnit. See `e2e/README.md`; use `npm run e2e:ui` to watch them.
 Parallel checkouts (worktrees) use their own databases: `TEST_DB_SUFFIX=<name>` for PHPUnit
@@ -80,6 +87,13 @@ feature branch ──PR──▶ pre-release ──(green)──PR──▶ main
     (`gh api repos/{owner}/{repo}/branches/<b>/protection`).
 - **Hotfix** straight into `main` (emergencies only): merge `main` back into `pre-release`
   right away.
+- **Docs-only changes** (only files under `docs-site/`) skip the app pipeline:
+  `docs-only.yml` makes tests.yml report its jobs as *skipped* (required checks accept that),
+  pre-release.yml skips tests, the dev deploy and the dev e2e but still opens the release PR, and
+  deploy.yml deploys nothing. **`docs.yml`** builds the docs on every docs push and, on `main`,
+  publishes them to docs.brainitive.app (server: `/var/www/brainitive-docs`, `current` →
+  `releases/<sha>`, last 5 kept). Docs-only also requires that the compared base already passed
+  the pipeline, so a docs commit can never carry untested app code.
 
 > **Tracking lives in Brainitive.** When the Brainitive MCP server is connected, the project
 > board on Brainitive.app is the source of truth for *status*: every task gets a card, and
