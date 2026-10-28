@@ -28,10 +28,10 @@ export function NotificationsDropdown() {
         <Button
             variant="ghost"
             size="icon"
-            className="relative size-8 text-muted-foreground hover:text-foreground"
+            className="relative size-10 text-muted-foreground hover:text-foreground md:size-8"
             aria-label={count > 0 ? `Notifications (${count} unread)` : 'Notifications'}
         >
-            <Bell className="size-4" />
+            <Bell className="size-5 md:size-4" />
             {count > 0 && (
                 <span
                     aria-hidden

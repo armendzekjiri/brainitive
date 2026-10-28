@@ -64,7 +64,7 @@ export function PushPrompt() {
     if (!show) return null;
 
     return (
-        <div className="fixed bottom-4 right-4 z-50 w-[340px] rounded-lg border bg-background p-4 shadow-lg">
+        <div className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-4 z-50 w-[min(340px,calc(100vw-2rem))] rounded-lg border bg-background p-4 shadow-lg">
             <button
                 onClick={dismiss}
                 className="absolute right-2 top-2 rounded-sm p-1 text-muted-foreground hover:text-foreground"
