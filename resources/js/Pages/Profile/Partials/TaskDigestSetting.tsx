@@ -21,7 +21,7 @@ export default function TaskDigestSetting({ className = '' }: { className?: stri
     };
 
     return (
-        <div className={className}>
+        <div className={className} data-testid="task-digest-setting">
             <div className="flex items-center justify-between gap-4">
                 <div className="space-y-1">
                     <p className="text-sm font-medium">Morning task summary</p>

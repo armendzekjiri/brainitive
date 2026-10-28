@@ -30,6 +30,10 @@ async function newDoc(page: Page, name: string): Promise<string> {
 }
 
 /** Paste plain text into a contenteditable, like Ctrl+V of a copied URL. */
+// Firefox hands scripted paste events an empty clipboard (a real Ctrl+V works): tests that paste
+// skip it there; Chromium covers them.
+const skipScriptedPasteInFirefox = () => test.skip(test.info().project.name === 'firefox', 'Firefox ignores the data of a scripted paste event');
+
 async function pasteText(target: Locator, text: string) {
     await target.evaluate((el, value) => {
         const data = new DataTransfer();
@@ -45,6 +49,7 @@ test.describe('smart links', () => {
     test.describe.configure({ mode: 'default' });
 
     test('paste an issue URL into a doc: a live chip, a card, the new status after a reload, and a backlink', async ({ page }) => {
+        skipScriptedPasteInFirefox();
         const issue = uid('smart-issue');
         const doc = uid('smart-doc');
         const issueId = await newIssue(page, issue);
@@ -90,6 +95,7 @@ test.describe('smart links', () => {
     });
 
     test('"/link" inserts a doc link; the linked doc shows it under "Referenced by"; Undo to plain link keeps a URL plain', async ({ page }) => {
+        skipScriptedPasteInFirefox();
         const target = uid('smart-target');
         const source = uid('smart-source');
         const targetUuid = await newDoc(page, target);
@@ -193,6 +199,7 @@ test.describe('smart links', () => {
     });
 
     test('a smart link in an issue description; a private draft shows as "Restricted" to others', async ({ page, memberPage }) => {
+        skipScriptedPasteInFirefox();
         const issue = uid('desc-issue');
         const secret = uid('secret-draft');
         const issueId = await newIssue(page, issue);
