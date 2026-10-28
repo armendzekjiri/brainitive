@@ -48,6 +48,8 @@ export default defineConfig({
     cleanUrls: true,
     lastUpdated: true,
     sitemap: { hostname: HOST },
+    // an inline PostCSS config: never pick up the app's postcss.config.js (Tailwind) from the repo root
+    vite: { css: { postcss: {} } },
     head: [
         ['link', { rel: 'icon', href: '/favicon.ico', sizes: 'any' }],
         ['link', { rel: 'icon', type: 'image/png', href: '/favicon-32x32.png', sizes: '32x32' }],
