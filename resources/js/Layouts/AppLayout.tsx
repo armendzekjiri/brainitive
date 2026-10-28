@@ -1733,9 +1733,11 @@ function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: 
     const { resolvedTheme, toggleTheme } = useTheme();
     const { currentWorkspace } = usePage<PageProps>().props;
 
+    // pages scroll inside <main>, the bar stays put; on phones it clears the status bar / Dynamic
+    // Island (installed app) and its buttons are 40 px touch targets
     return (
-        <header className="flex h-12 shrink-0 items-center gap-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
-            <SidebarTrigger className="-ml-1 size-8" />
+        <header className="flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-2 border-b bg-background/95 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] backdrop-blur supports-[backdrop-filter]:bg-background/60 md:h-12 md:gap-3 md:px-4 md:pt-0">
+            <SidebarTrigger className="-ml-1 size-10 md:size-8" />
 
             {/* Breadcrumb */}
             <nav className="flex items-center gap-1.5 text-sm min-w-0">
@@ -1751,8 +1753,11 @@ function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: 
 
             <div className="flex-1" />
 
-            {/* Search trigger */}
-            <div className="w-full max-w-sm">
+            {/* Search trigger: an icon on phones, the field from md up */}
+            <Button variant="ghost" size="icon" className="size-10 text-muted-foreground md:hidden" onClick={() => onSearchClick?.()} aria-label="Search">
+                <Search className="size-5" />
+            </Button>
+            <div className="hidden w-full max-w-sm md:block">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                     <Input
@@ -1770,21 +1775,22 @@ function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: 
             </div>
 
             {/* Utilities */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-0.5 md:gap-1.5">
                 <OfflineIndicator />
                 <WorkTimerPill />
                 <NotificationsDropdown />
+                {/* phones: light / dark lives in the account menu (Theme), the bar keeps its room for touch */}
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="size-8"
+                    className="hidden size-8 md:inline-flex"
                     onClick={toggleTheme}
                     title={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
                 >
                     {resolvedTheme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
                 </Button>
-                <Button variant="ghost" size="icon" className="size-8" onClick={() => onOpenHelp?.()} aria-label="Help & what’s new">
-                    <HelpCircle className="size-4" />
+                <Button variant="ghost" size="icon" className="size-10 md:size-8" onClick={() => onOpenHelp?.()} aria-label="Help & what’s new">
+                    <HelpCircle className="size-5 md:size-4" />
                 </Button>
                 <Button
                     variant="outline"
@@ -1796,7 +1802,7 @@ function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: 
                     <Lightbulb className="size-3.5" />
                     Capture
                 </Button>
-                <Button size="sm" className="h-8 px-3 gap-1.5" onClick={onCreateClick}>
+                <Button size="sm" className="ml-1 h-10 gap-1.5 px-3 md:ml-0 md:h-8" onClick={onCreateClick} aria-label="Create">
                     <Plus className="size-3.5" />
                     <span className="hidden sm:inline">Create</span>
                 </Button>
@@ -2060,7 +2066,9 @@ export default function AppLayout({ children, title }: Props) {
                     onOpenHelp={() => setHelpModalOpen(true)}
                 />
                 <SidebarResizer width={sidebarWidth} onWidthChange={setSidebarWidth} />
-                <SidebarInset className="flex flex-col h-screen overflow-hidden">
+                {/* 100dvh, not 100vh: on iPhones 100vh includes the area behind Safari's toolbars, so the whole
+                    page could shift and push the top bar under the status / address bar, out of reach */}
+                <SidebarInset className="flex h-dvh flex-col overflow-hidden">
                     <TopBar onCreateClick={() => openCreateTaskModal()} onSearchClick={onOpenSearch} onOpenHelp={() => setHelpModalOpen(true)} />
                     <main className="flex-1 overflow-auto bg-muted/30">
                         {children}

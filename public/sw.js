@@ -71,7 +71,12 @@ async function navigation(request) {
 
 async function inertiaVisit(request) {
   try {
-    return await fetch(request);
+    const response = await fetch(request);
+    // Firefox never hands a redirected response to the page's XHR (Workspace → Billing redirects
+    // to its first tab): the visit hung and the click did nothing. A fresh copy isn't "redirected";
+    // Inertia takes the new address from the page JSON, not from the response URL.
+    if (!response.redirected) return response;
+    return new Response(await response.blob(), { status: response.status, statusText: response.statusText, headers: response.headers });
   } catch (error) {
     return new Response('', { status: 409, headers: { 'X-Inertia-Location': request.url } });
   }
