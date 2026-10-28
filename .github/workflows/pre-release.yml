@@ -30,15 +30,31 @@ jobs:
     with:
       proven-by: tests.yml
 
+  # Only docs-site/ changed since the last green pre-release run: dev already runs exactly this app,
+  # so tests, deploy and the dev e2e are skipped; the release PR is still opened (docs.yml publishes
+  # the docs once they reach main).
+  docs-only:
+    uses: ./.github/workflows/docs-only.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      base: before
+      proven-by: pre-release.yml
+
   tests:
-    needs: already-tested
-    if: needs.already-tested.outputs.tested != 'true'
+    needs: [already-tested, docs-only]
+    if: ${{ !cancelled() && needs.already-tested.result == 'success' && needs.docs-only.result == 'success' && needs.already-tested.outputs.tested != 'true' && needs.docs-only.outputs.docs-only != 'true' }}
     uses: ./.github/workflows/tests.yml
+    # tests.yml's own docs-only check needs to read workflow runs (it is skipped on pre-release)
+    permissions:
+      contents: read
+      actions: read
 
   deploy-dev:
     name: Deploy to dev.brainitive.app
-    needs: [already-tested, tests]
-    if: ${{ !cancelled() && needs.already-tested.result == 'success' && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
+    needs: [already-tested, docs-only, tests]
+    if: ${{ !cancelled() && needs.already-tested.result == 'success' && needs.docs-only.result == 'success' && needs.docs-only.outputs.docs-only != 'true' && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
     runs-on: ubuntu-latest
     environment:
       name: dev
@@ -117,8 +133,8 @@ jobs:
 
   ready:
     name: Ready for main
-    needs: e2e-dev
-    if: ${{ !cancelled() && needs.e2e-dev.result == 'success' }}
+    needs: [docs-only, e2e-dev]
+    if: ${{ !cancelled() && (needs.e2e-dev.result == 'success' || (needs.docs-only.outputs.docs-only == 'true' && needs.e2e-dev.result == 'skipped')) }}
     runs-on: ubuntu-latest
     # only this job may open the release PR (repo setting: Actions can create PRs)
     permissions:
@@ -127,14 +143,20 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
+      DOCS_ONLY: ${{ needs.docs-only.outputs.docs-only }}
     steps:
       - name: Open or update the PR pre-release → main
         run: |
           # what main doesn't have yet, newest first (merge commits = the PRs that came in)
           changes=$(gh api "repos/$GH_REPO/compare/main...$GITHUB_SHA" --jq '[.commits[] | select(.parents | length > 1) | .commit.message | split("\n") | select(.[0] | startswith("Merge pull request")) | "- #" + (.[0] | capture("#(?<n>[0-9]+)").n) + " " + (.[2] // "")] | reverse | .[]')
           [ -n "$changes" ] || changes="- (no merged PRs, direct commits only)"
+          if [ "$DOCS_ONLY" = true ]; then
+            summary="Only the docs site (docs-site/) changed on \`${GITHUB_SHA::7}\` since the last green run: the app on dev is unchanged. Merging publishes the docs to https://docs.brainitive.app (the app deploy is skipped)."
+          else
+            summary="All checks passed on \`${GITHUB_SHA::7}\`: tests, e2e, deploy to https://dev.brainitive.app and all e2e journeys live on dev."
+          fi
           body=$(printf '%s\n\n%s\n\n%s\n%s\n' \
-            "All checks passed on \`${GITHUB_SHA::7}\`: tests, e2e, deploy to https://dev.brainitive.app and all e2e journeys live on dev." \
+            "$summary" \
             "**Merging this deploys to production.**" \
             "### Coming to production" \
             "$changes")

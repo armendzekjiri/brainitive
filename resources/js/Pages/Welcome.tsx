@@ -85,6 +85,7 @@ import { Button } from '@/components/ui/button';
 import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks';
 import { TermsNotice } from '@/components/legal/TermsNotice';
 import GitHubStarButton from '@/components/GitHubStarButton';
+import { DOCS_URL, SELF_HOSTING_DOCS_URL } from '@/lib/docs';
 
 /*
  * Brand palette
@@ -150,7 +151,7 @@ function RevealSection({
 }
 
 const REPO_URL = 'https://github.com/armendzekjiri/brainitive';
-const SELF_HOSTING_URL = `${REPO_URL}/blob/main/docs/self-hosting.md`;
+const SELF_HOSTING_URL = SELF_HOSTING_DOCS_URL;
 
 type Billing = 'monthly' | 'yearly';
 
@@ -1741,6 +1742,14 @@ export default function Welcome({
                                     Pricing
                                 </a>
                                 <GitHubStarButton variant="link" className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium" />
+                                <a
+                                    href={DOCS_URL}
+                                    target="_blank"
+                                    rel="noopener"
+                                    className="text-[#485E72]/60 dark:text-slate-400 hover:text-[#0E83DC] transition-colors font-medium"
+                                >
+                                    Docs
+                                </a>
                                 <a
                                     href={SELF_HOSTING_URL}
                                     target="_blank"

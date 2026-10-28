@@ -9,7 +9,8 @@
 <p align="center">
   <a href="https://www.brainitive.app">Website</a> ·
   <a href="https://www.brainitive.app/#pricing">Cloud</a> ·
-  <a href="docs/self-hosting.md">Self-hosting</a> ·
+  <a href="https://docs.brainitive.app">Docs</a> ·
+  <a href="https://docs.brainitive.app/self-hosting/">Self-hosting</a> ·
   <a href="CONTRIBUTING.md">Contributing</a> ·
   <a href="LICENSE">AGPL-3.0</a>
 </p>
@@ -39,7 +40,9 @@ curl -fsSL https://raw.githubusercontent.com/armendzekjiri/brainitive/main/.env.
 docker compose up -d                           # open http://localhost:8080
 ```
 
-HTTPS, backups, updates and optional features: [docs/self-hosting.md](docs/self-hosting.md).
+HTTPS, backups, updates and optional features: **[docs.brainitive.app/self-hosting](https://docs.brainitive.app/self-hosting/)**
+(configuration, sign-in with Google / Microsoft / GitHub, calendars, the GitHub App and more — the
+short version lives in [docs/self-hosting.md](docs/self-hosting.md)).
 
 ![Gantt plans in Brainitive](public/images/screenshots/plans.jpg)
 

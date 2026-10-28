@@ -17,8 +17,23 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
+  # A feature branch that only changes the docs site (docs-site/) on top of proven code skips the
+  # gate: the jobs below report "skipped", which satisfies the required checks. When pre-release.yml
+  # / deploy.yml call this workflow they decide that themselves, so the check doesn't run there.
+  docs-only:
+    if: github.ref_name != 'main' && github.ref_name != 'pre-release'
+    uses: ./.github/workflows/docs-only.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      base: pre-release
+      proven-by: pre-release.yml deploy.yml tests.yml
+
   frontend:
     name: Frontend (types + build)
+    needs: docs-only
+    if: ${{ !cancelled() && needs.docs-only.outputs.docs-only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -46,6 +61,8 @@ jobs:
 
   pint:
     name: Pint
+    needs: docs-only
+    if: ${{ !cancelled() && needs.docs-only.outputs.docs-only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -64,6 +81,7 @@ jobs:
   phpunit:
     name: PHPUnit (PostgreSQL)
     needs: frontend
+    if: ${{ !cancelled() && needs.frontend.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -110,6 +128,7 @@ jobs:
   e2e:
     name: E2E (Chromium)
     needs: frontend
+    if: ${{ !cancelled() && needs.frontend.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:

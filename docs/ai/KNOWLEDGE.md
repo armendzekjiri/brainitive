@@ -737,11 +737,13 @@ Plan + production setup: [`tasks/feat-github-app.md`](./tasks/feat-github-app.md
   can read ONE of its repositories, so a project may only follow repositories the connecting person can
   read (`GET /user/installations/{id}/repositories` → `github_connections.allowed_repository_ids`).
 - The GitHub App is separate from GitHub social login (`services.github`) — never widen login scopes.
-- **The manifest must not set `setup_url` / `setup_on_update` together with `request_oauth_on_install`.**
-  GitHub shows the create screen but refuses the conversion with HTTP 422 (hit on brainitive.app,
-  2026-10-27); `callback_urls` alone brings people back to `/github/app/setup`. A refused conversion is
-  logged and shown with GitHub's reason (`GithubApi::refusalReason`); `FakeGithub` / `Http::fake` don't
-  enforce GitHub's rules, so check real-GitHub constraints in their docs.
+- **A POST to the GitHub API without data must send `{}`, never Laravel's default `[]`.** The manifest
+  conversion answered 422 "For 'links/0/schema', [] is not a null or object" (brainitive.app,
+  2026-10-27): `PendingRequest::post($url)` JSON-encodes its empty `$data` array. `GithubApi::emptyBody()`
+  sends `{}` (conversion + installation tokens). The manifest uses `callback_urls` alone (no `setup_url`)
+  to bring people back to `/github/app/setup`. A refused conversion is logged and shown with GitHub's
+  reason (`GithubApi::refusalReason`); `FakeGithub` / `Http::fake` don't enforce GitHub's rules, so assert
+  the exact request (`Http::assertSent`) when GitHub is strict about it.
   Installation tokens are cached encrypted (`github-app:installation-token:*`), never shown.
 - **Merge transitions don't notify watchers.** The move is a model save (history via `ItemObserver`
   marked `ActivityLog::via('github')`, outgoing webhooks, automations), but `item_status_changed` to
@@ -1039,6 +1041,17 @@ also wait for read / archive actions in flight (a page older than the action is 
   members, then hands their content in other workspaces to those owners.
 
 ## Architectural decisions
+
+### Public docs: VitePress in the same repo, not in the app (2026-10-28)
+docs.brainitive.app is a static VitePress site in `docs-site/` (own `package.json`, not part of the
+app build). **Why:** static HTML ranks well (the app is a client-rendered Inertia SPA without SSR or
+a sitemap), docs change in the same PR as the code they describe, and docs-only pushes skip the
+app pipeline (`docs-only.yml`) while `docs.yml` publishes them on their own. A separate repo or a
+docs SaaS was rejected (drift / lock-in); "public project docs" inside Brainitive may come later as
+a customer feature. The app links it via `@/lib/docs` (account menu, help window, command palette,
+homepage). Gotchas: `cleanUrls` needs nginx `try_files $uri $uri.html $uri/`; a `[x](./page)` to a
+page that doesn't exist fails the build; never put Cloud server details (IPs, paths, other apps'
+ports) or real client IDs in the docs.
 
 ### Inline validation over FormRequest classes
 Controllers use inline `$request->validate([...])` rather than dedicated FormRequest

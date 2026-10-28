@@ -95,7 +95,9 @@ import {
     PanelLeft,
     PackageOpen,
     ArrowRight,
+    BookOpen,
 } from 'lucide-react';
+import { DOCS_URL } from '@/lib/docs';
 import { useTheme } from '@/hooks/useTheme';
 import { ThemeMenu } from '@/components/ThemeMenu';
 import { WelcomeModal } from '@/components/Onboarding/WelcomeModal';
@@ -1683,6 +1685,12 @@ function AppSidebar({
                                 <HelpCircle className="size-4" />
                                 <span className="text-sm">Help & support</span>
                             </DropdownMenuItem>
+                            <DropdownMenuItem asChild className="cursor-pointer">
+                                <a href={DOCS_URL} target="_blank" rel="noopener" className="flex items-center gap-3 p-2">
+                                    <BookOpen className="size-4" />
+                                    <span className="text-sm">Documentation</span>
+                                </a>
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <ThemeMenu />
                             <DropdownMenuSeparator />
@@ -1775,7 +1783,7 @@ function TopBar({ onCreateClick, onSearchClick, onOpenHelp }: { onCreateClick?: 
                 >
                     {resolvedTheme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
                 </Button>
-                <Button variant="ghost" size="icon" className="size-8" onClick={() => onOpenHelp?.()}>
+                <Button variant="ghost" size="icon" className="size-8" onClick={() => onOpenHelp?.()} aria-label="Help & what’s new">
                     <HelpCircle className="size-4" />
                 </Button>
                 <Button
@@ -2014,6 +2022,15 @@ export default function AppLayout({ children, title }: Props) {
             icon: <CmdIcon><HelpCircle className="size-4" /></CmdIcon>,
             group: 'Actions',
             action: () => setHelpModalOpen(true),
+        },
+        {
+            id: 'open-docs',
+            label: 'Documentation',
+            description: 'Guides, self-hosting and integrations on docs.brainitive.app',
+            keywords: 'docs help guide manual self-hosting setup',
+            icon: <CmdIcon><BookOpen className="size-4" /></CmdIcon>,
+            group: 'Actions',
+            action: () => window.open(DOCS_URL, '_blank', 'noopener'),
         },
         {
             id: 'account-settings',
