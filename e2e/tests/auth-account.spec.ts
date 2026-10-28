@@ -195,13 +195,14 @@ test.describe('a new account', () => {
         // the sidebar's account button shows the new name
         await expect(page.getByRole('button', { name: new RegExp(name) })).toBeVisible();
 
-        // morning task summary: off, and back on
-        await page.getByRole('button', { name: 'Turn off' }).click();
+        // morning task summary: off, and back on (browsers with push support show push's own "Turn on")
+        const digest = page.getByTestId('task-digest-setting');
+        await digest.getByRole('button', { name: 'Turn off' }).click();
         await expect(page.getByText('Morning task summary turned off')).toBeVisible();
         await page.reload();
-        await page.getByRole('button', { name: 'Turn on' }).click();
+        await digest.getByRole('button', { name: 'Turn on' }).click();
         await expect(page.getByText('Morning task summary turned on')).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Turn off' })).toBeVisible();
+        await expect(digest.getByRole('button', { name: 'Turn off' })).toBeVisible();
 
         await context.close();
     });

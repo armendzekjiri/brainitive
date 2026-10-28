@@ -62,6 +62,10 @@ const issueUrl = (id: number) => `${projectPath()}/boards/${SEED.board}/items/${
 const indicator = (page: Page) => page.getByRole('button', { name: /^(Offline|All changes synced|\d+ changes? waiting to sync|\d+ sync conflicts?)/ });
 
 test.describe('offline mode', () => {
+    // Playwright's offline switch in Firefox blocks the service worker as well (NS_ERROR_OFFLINE on
+    // every navigation); a real offline Firefox gets the cached shell from it. Chromium covers these.
+    test.skip(({ browserName }) => browserName === 'firefox', "Playwright's Firefox offline mode bypasses the service worker");
+
     test('a task, a capture and an issue edit made offline sync when the connection is back', async ({ page, context }) => {
         test.slow(); // a list, an issue, the app cache and three round trips
         const listName = uid('Offline list');

@@ -92,6 +92,17 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.45.2',
+        title: 'Phones and Firefox',
+        tag: 'Fix',
+        date: '2026-10-28',
+        items: [
+            'Phones: the top bar always stays in reach — on iPhones it could slide under Safari\'s bars and the bell, search or "+" couldn\'t be tapped. Its buttons are bigger touch targets now, and search is a magnifier icon (light / dark is in the account menu).',
+            'Phones: panels and dialogs keep clear of the notch, Dynamic Island and home indicator, with bigger close buttons; quick capture and the notifications prompt sit above the home indicator.',
+            'Firefox: links that forward to another page — like Billing, which opens its first tab — work again (they did nothing since offline mode).',
+        ]
+    },
+    {
         version: 'v1.45.1',
         title: 'GitHub App: creating it works',
         tag: 'Fix',
