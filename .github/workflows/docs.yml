@@ -1,0 +1,71 @@
+# docs.brainitive.app (VitePress, docs-site/). Every push that touches the docs builds them (a dead
+# link fails the build); on main the build is published on the server, independent of the app's
+# pipeline (docs-only pushes skip tests and deploys there, see docs-only.yml).
+# Server layout (/var/www/brainitive-docs): repo/ = a sparse clone (docs-site only, full history for
+# "last updated"), releases/<sha>/ = one build each, current → the live release (atomic switch;
+# nginx serves current/). The last 5 releases are kept for a quick rollback (ln -sfn).
+name: Docs
+
+on:
+  push:
+    paths: ['docs-site/**', '.github/workflows/docs.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  build:
+    name: Docs build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # "last updated" on every page comes from git
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs-site/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: docs-site
+      - run: npm run build
+        working-directory: docs-site
+
+  publish:
+    name: Publish to docs.brainitive.app
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: docs
+      url: https://docs.brainitive.app
+    steps:
+      - name: Build and switch on the server
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          fingerprint: ${{ secrets.DEPLOY_FINGERPRINT }}
+          script: |
+            set -e
+            cd /var/www/brainitive-docs
+            git -C repo fetch -q origin main
+            git -C repo reset -q --hard ${{ github.sha }}
+            cd repo/docs-site
+            npm ci --no-audit --no-fund --silent
+            out=/var/www/brainitive-docs/releases/${{ github.sha }}
+            rm -rf "$out"
+            npx vitepress build . --outDir "$out" > /dev/null
+            ln -sfn "$out" /var/www/brainitive-docs/current
+            # keep the 5 newest releases
+            ls -1dt /var/www/brainitive-docs/releases/*/ | tail -n +6 | xargs -r rm -rf
+            echo ">>> docs.brainitive.app is on ${{ github.sha }}"

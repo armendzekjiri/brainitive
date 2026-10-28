@@ -1,0 +1,62 @@
+# "Did this push change only the docs site (docs-site/)?" — used by tests.yml, pre-release.yml and
+# deploy.yml to skip the app's test gate, dev deploy and production deploy when nothing but the
+# documentation changed (docs.yml builds and publishes docs.brainitive.app on its own).
+# Docs-only means BOTH: every changed file is under docs-site/ (compared with the merge base of
+# `base`), AND that merge base itself passed one of `proven-by` — so the app code is exactly what
+# already went green there. Anything else (or any API hiccup) → "false" and the full gate runs.
+name: Docs only
+
+on:
+  workflow_call:
+    inputs:
+      base:
+        description: '"before" (the commit this push replaced) or a branch name to compare with'
+        required: true
+        type: string
+      proven-by:
+        description: Space-separated workflow files; the merge base must have a successful run of one of them
+        required: true
+        type: string
+    outputs:
+      docs-only:
+        description: '"true" when only docs-site/ changed on top of proven code'
+        value: ${{ jobs.check.outputs.docs-only }}
+
+jobs:
+  check:
+    name: Docs only?
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs-only: ${{ steps.check.outputs.docs-only }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      BASE: ${{ inputs.base == 'before' && github.event.before || inputs.base }}
+      PROVEN_BY: ${{ inputs.proven-by }}
+    steps:
+      - id: check
+        run: |
+          answer() {
+            echo "docs-only=$1" >> "$GITHUB_OUTPUT"
+            echo "$2" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
+          [ "$GITHUB_EVENT_NAME" = push ] || answer false "Not a push: the full pipeline runs."
+          case "$BASE" in ""|0000000000000000000000000000000000000000) answer false "No previous commit to compare with: the full pipeline runs." ;; esac
+
+          compare=$(gh api "repos/$GH_REPO/compare/$BASE...$GITHUB_SHA") || answer false "Compare failed: the full pipeline runs."
+          merge_base=$(jq -r .merge_base_commit.sha <<<"$compare")
+          count=$(jq '.files | length' <<<"$compare")
+          other=$(jq -r '.files[].filename | select(startswith("docs-site/") | not)' <<<"$compare" | head -5)
+          # the compare API lists at most 300 files: a bigger change is never treated as docs-only
+          [ "$count" -lt 300 ] || answer false "300+ changed files: the full pipeline runs."
+          [ -z "$other" ] || answer false "App files changed (e.g. \`$(head -1 <<<"$other")\`): the full pipeline runs."
+
+          for wf in $PROVEN_BY; do
+            n=$(gh api "repos/$GH_REPO/actions/workflows/$wf/runs?head_sha=$merge_base&status=success&per_page=1" --jq .total_count 2>/dev/null) || continue
+            if [ "${n:-0}" -gt 0 ]; then
+              answer true "Only docs-site/ changed since \`${merge_base::7}\`, which passed \`$wf\`: the app pipeline is skipped (docs.yml publishes the docs)."
+            fi
+          done
+          answer false "Only docs changed, but \`${merge_base::7}\` hasn't passed \`$PROVEN_BY\`: the full pipeline runs."

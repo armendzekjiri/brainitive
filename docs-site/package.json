@@ -1,0 +1,14 @@
+{
+  "name": "brainitive-docs",
+  "private": true,
+  "type": "module",
+  "description": "docs.brainitive.app: self-hosting, configuration, integrations and the user guide (VitePress)",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "1.6.4"
+  }
+}

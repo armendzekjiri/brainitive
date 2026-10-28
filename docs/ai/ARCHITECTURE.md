@@ -23,6 +23,7 @@ React page  ◀─────┘  resources/js/Pages/**  (props are typed in ty
 AI client ──OAuth2.1/Bearer──▶ routes/ai.php  ──▶ BrainitiveServer ──▶ app/Mcp/Tools/*
 CLI       ──Bearer token────▶ routes/api.php  ──▶ CliController
 Browser extension ──OAuth2.1 (capture scope)──▶ routes/api.php /api/ext/v1 ──▶ Extension\*Controller
+Public docs ── docs.brainitive.app ◀── docs-site/ (VitePress, own package.json; .github/workflows/docs.yml)
 External site ──▶ routes/web.php (cors, no CSRF) ──▶ Helpdesk widget/portal
 Visitor / iframe ──▶ routes/web.php /f/{slug} (no CSRF) ──▶ PublicLeadFormController
 Guest (email link) ──▶ routes/portal.php /guest/login, /feedback/{slug}, /client/{slug} ──▶ PortalAuth + portal controllers
