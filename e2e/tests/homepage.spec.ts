@@ -121,6 +121,21 @@ test.describe('homepage', () => {
         await context.close();
     });
 
+    test('the browser extension section leads to the Chrome Web Store, Firefox gets the download', async ({ browser }) => {
+        const { context, page, errors } = await guestPage(browser, { viewport: { width: 1280, height: 900 } });
+        await page.goto('/#extension');
+        const store = page.getByRole('link', { name: 'Add to Chrome' });
+        await expect(store).toBeVisible();
+        await expect(store).toHaveAttribute('href', /^https:\/\/chromewebstore\.google\.com\/detail\/brainitive\/[a-p]{32}$/);
+        await expect(store).toHaveAttribute('target', '_blank');
+        await expect(page.getByRole('link', { name: 'Firefox download' })).toHaveAttribute('href', /brainitive-extension-firefox\.zip$/);
+        // the manual "Load unpacked" steps for Chrome are gone
+        await expect(page.getByText('Load unpacked')).toHaveCount(0);
+
+        expect(errors, 'uncaught errors on the homepage').toEqual([]);
+        await context.close();
+    });
+
     test('"Star on GitHub" buttons lead to the repository (top bar, hero, open-source card, footer)', async ({ browser }) => {
         const { context, page, errors } = await guestPage(browser, { viewport: { width: 1280, height: 900 } });
         await page.goto('/');

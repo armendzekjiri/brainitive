@@ -627,8 +627,10 @@ function ProductTour() {
 }
 
 const EXTENSION_DOWNLOAD = 'https://github.com/armendzekjiri/brainitive/releases/latest/download';
+/** The Chrome Web Store listing (Edge installs Chrome Web Store extensions too). */
+export const CHROME_STORE_URL = 'https://chromewebstore.google.com/detail/brainitive/mnnkcbjdgphgiiapdfegpgdmjekofmjn';
 
-/** Browser extension: what it does + download until the store listings are live. */
+/** Browser extension: what it does, the Chrome Web Store listing, and the Firefox download until it's on AMO. */
 function ExtensionSection() {
     const features = [
         { icon: MousePointerClick, title: 'Issue from any page', text: 'Link, selected text and a screenshot of an area, in two clicks.' },
@@ -666,27 +668,26 @@ function ExtensionSection() {
 
                 <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-sm border border-[#C0C5C0]/30 dark:border-slate-700/60 rounded-2xl p-6 sm:p-8">
                     <p className="font-semibold text-[#485E72] dark:text-slate-100 mb-1">Get the extension</p>
-                    <p className="text-sm text-[#485E72]/60 dark:text-slate-400 mb-5">Store listings are on the way. Until then, install the download:</p>
-                    <div className="flex flex-wrap gap-3 mb-6">
-                        <a href={`${EXTENSION_DOWNLOAD}/brainitive-extension-chrome.zip`} className="inline-flex items-center gap-2 rounded-xl bg-[#0E83DC] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#0E83DC]/20 hover:bg-[#0b6fbf]">
-                            <Download className="h-4 w-4" /> Chrome &amp; Edge
-                        </a>
-                        <a href={`${EXTENSION_DOWNLOAD}/brainitive-extension-firefox.zip`} className="inline-flex items-center gap-2 rounded-xl border border-[#C0C5C0]/60 dark:border-slate-600 px-5 py-2.5 text-sm font-semibold text-[#485E72] dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800">
-                            <Download className="h-4 w-4" /> Firefox
+                    <p className="text-sm text-[#485E72]/60 dark:text-slate-400 mb-5">Free in the Chrome Web Store — it works in Microsoft Edge too.</p>
+                    <a
+                        href={CHROME_STORE_URL}
+                        target="_blank"
+                        rel="noopener"
+                        className="inline-flex items-center gap-2 rounded-xl bg-[#0E83DC] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-[#0E83DC]/20 hover:bg-[#0b6fbf]"
+                    >
+                        <Puzzle className="h-4 w-4" /> Add to Chrome
+                    </a>
+                    <p className="mt-2 text-xs text-[#485E72]/60 dark:text-slate-400">Chrome, Edge, Brave and other Chromium browsers · then pin Brainitive from the puzzle icon</p>
+
+                    <div className="mt-6 border-t border-[#C0C5C0]/30 dark:border-slate-700/60 pt-5">
+                        <p className="text-sm font-semibold text-[#485E72] dark:text-slate-100 mb-1">Firefox</p>
+                        <p className="text-sm text-[#485E72]/60 dark:text-slate-400 mb-3">
+                            Until it’s on Firefox Add-ons: download it, open <code className="rounded bg-[#485E72]/10 px-1">about:debugging</code> → This Firefox → <strong>Load Temporary Add-on</strong> and pick the zip.
+                        </p>
+                        <a href={`${EXTENSION_DOWNLOAD}/brainitive-extension-firefox.zip`} className="inline-flex items-center gap-2 rounded-xl border border-[#C0C5C0]/60 dark:border-slate-600 px-4 py-2 text-sm font-semibold text-[#485E72] dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800">
+                            <Download className="h-4 w-4" /> Firefox download
                         </a>
                     </div>
-                    <ol className="space-y-2 text-sm text-[#485E72]/80 dark:text-slate-300 list-decimal pl-5">
-                        <li>Unzip the download.</li>
-                        <li>
-                            Open <code className="rounded bg-[#485E72]/10 px-1">chrome://extensions</code> (Edge: <code className="rounded bg-[#485E72]/10 px-1">edge://extensions</code>) and turn on <strong>Developer mode</strong>.
-                        </li>
-                        <li>
-                            Click <strong>Load unpacked</strong> and choose the unzipped folder. Pin Brainitive from the puzzle icon.
-                        </li>
-                        <li>
-                            Firefox: <code className="rounded bg-[#485E72]/10 px-1">about:debugging</code> → This Firefox → <strong>Load Temporary Add-on</strong> → pick the zip (until it’s on Firefox Add-ons).
-                        </li>
-                    </ol>
                 </div>
             </RevealSection>
         </section>
