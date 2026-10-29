@@ -5,8 +5,10 @@
  * shell (`/offline` + the built files it needs) in SHELL_CACHE; this worker only reads it:
  * - a navigation that fails (no network) gets the cached shell, which renders My Day, recently
  *   opened task lists / issues and quick capture from IndexedDB — or a plain "you're offline" page;
- * - an Inertia visit that fails gets `409 + X-Inertia-Location`, so Inertia does a full navigation
- *   (→ the shell) instead of showing an error;
+ * - an Inertia visit (XHR) is never touched: when it fails for lack of network, the page itself
+ *   switches to a full navigation (lib/offline/session.ts), which lands here and gets the shell.
+ *   (Answering Inertia XHRs here broke Firefox: it never hands a redirected, intercepted response to
+ *   the page — after a save or a link that redirects, the visit hung.)
  * - built assets come from the shell cache first (hashed, immutable).
  * Everything else — documents, live co-editing, API calls, POST/PUT — goes straight to the network:
  * no respondWith, so those requests behave exactly as without a service worker.
@@ -46,11 +48,6 @@ self.addEventListener('fetch', (event) => {
   }
   if (request.mode === 'navigate') {
     event.respondWith(navigation(request));
-    return;
-  }
-  // A full Inertia visit (not a partial reload / prefetch / poll): offline → hard navigation.
-  if (request.headers.get('X-Inertia') && !request.headers.get('X-Inertia-Partial-Component') && request.headers.get('Purpose') !== 'prefetch') {
-    event.respondWith(inertiaVisit(request));
   }
 });
 
@@ -66,19 +63,6 @@ async function navigation(request) {
   } catch (error) {
     const shell = await caches.match(SHELL_URL, { cacheName: SHELL_CACHE });
     return shell || offlinePage();
-  }
-}
-
-async function inertiaVisit(request) {
-  try {
-    const response = await fetch(request);
-    // Firefox never hands a redirected response to the page's XHR (Workspace → Billing redirects
-    // to its first tab): the visit hung and the click did nothing. A fresh copy isn't "redirected";
-    // Inertia takes the new address from the page JSON, not from the response URL.
-    if (!response.redirected) return response;
-    return new Response(await response.blob(), { status: response.status, statusText: response.statusText, headers: response.headers });
-  } catch (error) {
-    return new Response('', { status: 409, headers: { 'X-Inertia-Location': request.url } });
   }
 }
 
