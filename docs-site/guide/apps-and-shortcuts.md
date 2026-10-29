@@ -41,12 +41,10 @@ things and search titles — it can't read your documents. You can disconnect it
 
 ### Get the extension
 
-Until it is listed in the browser stores, download it from the **Get the extension** section of the Brainitive homepage
-(or the latest GitHub release), unzip it and load it:
-
-- **Chrome / Edge** – open `chrome://extensions` (Edge: `edge://extensions`), turn on **Developer mode** and click
-  **Load unpacked**.
-- **Firefox** – open `about:debugging` → **This Firefox** → **Load Temporary Add-on**.
+- **Chrome, Edge, Brave** – install [Brainitive from the Chrome Web Store](https://chromewebstore.google.com/detail/brainitive/mnnkcbjdgphgiiapdfegpgdmjekofmjn)
+  with **Add to Chrome**, then pin it from the puzzle icon.
+- **Firefox** – until it's on Firefox Add-ons, download it from the **Get the extension** section of the Brainitive
+  homepage, open `about:debugging` → **This Firefox** → **Load Temporary Add-on** and pick the zip.
 
 ### Extension shortcuts
 

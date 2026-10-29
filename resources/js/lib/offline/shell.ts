@@ -79,12 +79,22 @@ export async function cacheShell(force = false): Promise<void> {
         if (results.some((r) => r.status === 'rejected')) throw new Error('Could not download all app files.');
         await staging.put(MANIFEST_MARK, new Response(version));
 
-        // swap: a new build replaces the old files (so old chunks don't pile up)
-        await caches.delete(SHELL_CACHE);
+        // swap without a gap: the new files go in first, the shell page and the build mark last, and
+        // only then are the old build's files removed. A page that closes or navigates halfway (a
+        // copy takes a while in Safari) always leaves a working shell — the old one or the new one.
         const live = await caches.open(SHELL_CACHE);
-        for (const request of await staging.keys()) {
+        const fresh = await staging.keys();
+        const last = (request: Request) => {
+            const path = new URL(request.url).pathname;
+            return path === SHELL_URL || path === MANIFEST_MARK;
+        };
+        for (const request of [...fresh.filter((r) => !last(r)), ...fresh.filter(last)]) {
             const response = await staging.match(request);
             if (response) await live.put(request, response);
+        }
+        const keep = new Set(fresh.map((r) => r.url));
+        for (const request of await live.keys()) {
+            if (!keep.has(request.url)) await live.delete(request);
         }
     } finally {
         await caches.delete(STAGING_CACHE);

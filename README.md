@@ -44,6 +44,11 @@ HTTPS, backups, updates and optional features: **[docs.brainitive.app/self-hosti
 (configuration, sign-in with Google / Microsoft / GitHub, calendars, the GitHub App and more — the
 short version lives in [docs/self-hosting.md](docs/self-hosting.md)).
 
+**Browser extension** — save pages, links, screenshots and snippets to Brainitive from any tab, for
+Cloud or your own server →
+[Chrome Web Store](https://chromewebstore.google.com/detail/brainitive/mnnkcbjdgphgiiapdfegpgdmjekofmjn)
+(Chrome, Edge, Brave).
+
 ![Gantt plans in Brainitive](public/images/screenshots/plans.jpg)
 
 ## What's inside
