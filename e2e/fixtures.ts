@@ -55,7 +55,7 @@ type Fixtures = {
  * Browsers with web push (Firefox, WebKit) show the "Turn on notifications?" prompt bottom right,
  * where it covers Save buttons: journeys run as someone who already answered it (PushPrompt.tsx).
  */
-async function answeredPushPrompt(context: BrowserContext) {
+async function answeredPushPrompt(context: BrowserContext, browserName: string) {
     await context.addInitScript(() => {
         try {
             localStorage.setItem('push-prompt-dismissed', '1');
@@ -63,6 +63,16 @@ async function answeredPushPrompt(context: BrowserContext) {
             /* storage blocked: the prompt may show */
         }
     });
+    // Playwright's WebKit has no push service: PushManager.getSubscription() never settles and
+    // freezes the page (Profile → Notifications looks up this browser's subscription). Real Safari
+    // has one. Here push answers "not subscribed"; subscribing reports it isn't available.
+    if (browserName === 'webkit') {
+        await context.addInitScript(() => {
+            if (typeof PushManager === 'undefined') return;
+            PushManager.prototype.getSubscription = () => Promise.resolve(null);
+            PushManager.prototype.subscribe = () => Promise.reject(new DOMException('No push service in this test browser', 'NotAllowedError'));
+        });
+    }
 }
 
 export const test = base.extend<Fixtures, WorkerFixtures>({
@@ -76,21 +86,33 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         await signIn('member', file);
         await use(file);
     }, { scope: 'worker' }],
+    // every context a spec opens itself (guests, new accounts, a second person) gets the same
+    // browser preparation as the default one — the push prompt answered, WebKit's push stubbed
+    browser: [async ({ browser, browserName }, use) => {
+        const newContext = browser.newContext.bind(browser);
+        browser.newContext = async (options) => {
+            const context = await newContext(options);
+            await answeredPushPrompt(context, browserName);
+            return context;
+        };
+        await use(browser);
+    }, { scope: 'worker' }],
     // specs run as the owner, in this worker's session
     storageState: async ({ ownerState }, use) => use(ownerState),
     // every context serves the (immutable) built assets from memory — see assets.ts
-    context: async ({ context }, use) => {
-        await answeredPushPrompt(context);
+    context: async ({ context, browserName }, use) => {
+        await answeredPushPrompt(context, browserName);
         await cacheBuildAssets(context);
         if (process.env.E2E_SHOW_CURSOR) await showCursor(context);
         await use(context);
     },
-    memberPage: async ({ browser, memberState }, use) => {
+    memberPage: async ({ browser, browserName, memberState, serviceWorkers }, use) => {
         const context = await browser.newContext({
+            serviceWorkers,
             storageState: memberState,
             httpCredentials: process.env.E2E_HTTP_USER ? { username: process.env.E2E_HTTP_USER, password: process.env.E2E_HTTP_PASSWORD ?? '' } : undefined,
         });
-        await answeredPushPrompt(context);
+        await answeredPushPrompt(context, browserName);
         await cacheBuildAssets(context);
         if (process.env.E2E_SHOW_CURSOR) await showCursor(context);
         const page = await context.newPage();
@@ -100,7 +122,12 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
     pageErrors: [
         async ({ page }, use) => {
             const errors: string[] = [];
-            page.on('pageerror', (error) => errors.push(error.message));
+            page.on('pageerror', (error) => {
+                // WebKit reports a same-origin request it cancelled (page reload / navigation) as
+                // "… due to access control checks"; there is no CORS on our own origin
+                if (/due to access control checks\.?$/.test(error.message) && error.message.includes(new URL(BASE_URL).host)) return;
+                errors.push(error.message);
+            });
             await use();
             expect(errors, 'uncaught errors in the page').toEqual([]);
         },

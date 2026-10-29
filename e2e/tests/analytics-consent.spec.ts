@@ -26,7 +26,9 @@ const FAKE_TRACKER = `(() => {
             if (typeof arg === 'function') payload = arg(payload);
             const filter = filterName && window[filterName];
             if (filter) { payload = filter('event', payload); if (!payload) return; }
-            fetch('${STATS}/api/send', { method: 'POST', mode: 'no-cors', body: JSON.stringify({ type: 'event', payload }) });
+            const body = JSON.stringify({ type: 'event', payload });
+            // the payload rides in the URL too: Playwright's WebKit doesn't expose no-cors POST bodies
+            fetch('${STATS}/api/send?e=' + encodeURIComponent(body), { method: 'POST', mode: 'no-cors', body });
         },
     };
 })();`;
@@ -43,6 +45,9 @@ interface Visitor {
 
 async function visitor(browser: Browser, opts: { signal?: 'gpc' | 'dnt'; optIn?: boolean; colorScheme?: 'dark'; viewport?: { width: number; height: number } } = {}): Promise<Visitor> {
     const context = await browser.newContext({
+        // the stats host is faked with route(): with a service worker controlling the page, WebKit
+        // sends such requests past Playwright's routing — to the real Umami
+        serviceWorkers: 'block',
         storageState: { cookies: [], origins: [] },
         extraHTTPHeaders: opts.optIn === false ? {} : { 'X-E2E-Analytics': '1' },
         colorScheme: opts.colorScheme,
@@ -63,7 +68,9 @@ async function visitor(browser: Browser, opts: { signal?: 'gpc' | 'dnt'; optIn?:
             await route.fulfill({ status: 200, contentType: 'application/javascript', body: FAKE_TRACKER });
             return;
         }
-        if (request.url().endsWith('/api/send')) views.push(JSON.parse(request.postData() ?? '{}').payload);
+        if (new URL(request.url()).pathname === '/api/send') {
+            views.push(JSON.parse(request.postData() || new URL(request.url()).searchParams.get('e') || '{}').payload);
+        }
         await route.fulfill({ status: 200, body: '{}' });
     });
     const page = await context.newPage();

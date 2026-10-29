@@ -92,6 +92,16 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.45.3',
+        title: 'Safari and offline',
+        tag: 'Fix',
+        date: '2026-10-29',
+        items: [
+            'Offline mode: updating the offline copy of the app can no longer leave a device without it — if you leave the page while it updates (Safari takes a moment), the previous copy keeps working.',
+            'Safari and Firefox: requests the browser cancels when you reload or leave a page are no longer reported as errors.',
+        ]
+    },
+    {
         version: 'v1.45.2',
         title: 'Phones and Firefox',
         tag: 'Fix',
