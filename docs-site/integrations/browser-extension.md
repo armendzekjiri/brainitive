@@ -22,14 +22,13 @@ Brainitive Cloud and with self-hosted instances.
 
 ## Install
 
-Store listings are coming. Until then, download the extension from the latest
-[GitHub release](https://github.com/armendzekjiri/brainitive/releases/latest):
-
-- **Chrome & Edge:** download `brainitive-extension-chrome.zip` and unzip it. Open `chrome://extensions`
-  (Edge: `edge://extensions`), turn on **Developer mode**, click **Load unpacked** and choose the unzipped folder.
-  Then pin Brainitive from the puzzle icon.
-- **Firefox:** download `brainitive-extension-firefox.zip`. Open `about:debugging` → **This Firefox** →
-  **Load Temporary Add-on**, then pick the zip.
+- **Chrome, Edge, Brave and other Chromium browsers:** install
+  [Brainitive from the Chrome Web Store](https://chromewebstore.google.com/detail/brainitive/mnnkcbjdgphgiiapdfegpgdmjekofmjn)
+  (**Add to Chrome**; Edge asks you to allow extensions from other stores once). Then pin Brainitive from the
+  puzzle icon.
+- **Firefox:** until it's on Firefox Add-ons, download `brainitive-extension-firefox.zip` from the latest
+  [GitHub release](https://github.com/armendzekjiri/brainitive/releases/latest). Open `about:debugging` →
+  **This Firefox** → **Load Temporary Add-on**, then pick the zip.
 
 ## Sign in
 

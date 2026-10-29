@@ -63,7 +63,8 @@ npm run zip:firefox    # also writes the sources zip AMO asks for
 
 Bump `version` in `package.json` for every store upload.
 
-**Direct download (until the stores list it):** the Release workflow attaches
+**Live:** [Chrome Web Store](https://chromewebstore.google.com/detail/brainitive/mnnkcbjdgphgiiapdfegpgdmjekofmjn)
+(also installs in Edge). **Direct download (Firefox, until AMO lists it):** the Release workflow attaches
 `brainitive-extension-chrome.zip` / `-firefox.zip` to the current GitHub release on every
 push to `main`; the homepage (`#extension` in `Pages/Welcome.tsx`) links to
 `releases/latest/download/…`.
