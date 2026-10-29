@@ -120,6 +120,7 @@ test.describe('live co-editing of documents', () => {
     });
 
     test('edits made while the server is down are kept and merged when it comes back', async ({ page, memberPage }) => {
+        test.slow(); // a server restart, a reload and a reconnect after back-off
         await optIn(page);
         await optIn(memberPage);
 
@@ -146,10 +147,11 @@ test.describe('live co-editing of documents', () => {
         await page.getByRole('button', { name: /^(Continue editing|Edit)$/ }).first().click();
         await expect(docEditor(page)).toContainText('Erin offline.');
 
-        // back up: both versions merge, nothing is lost
+        // back up: both versions merge, nothing is lost. Clients retry with a growing back-off (up to
+        // 30 s apart), so on a slow machine the next attempt can come well after the restart.
         await startRealtime();
-        await expect(docEditor(page)).toContainText('Max offline.', { timeout: 20_000 });
-        await expect(docEditor(memberPage)).toContainText('Erin offline.', { timeout: 20_000 });
+        await expect(docEditor(page)).toContainText('Max offline.', { timeout: 45_000 });
+        await expect(docEditor(memberPage)).toContainText('Erin offline.', { timeout: 45_000 });
         await expect(liveSaved(page)).toBeVisible();
 
         // and the draft (what Update publishes) has both

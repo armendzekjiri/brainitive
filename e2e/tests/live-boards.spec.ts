@@ -49,6 +49,10 @@ const notReloaded = (page: Page) => page.evaluate(() => (window as unknown as { 
 const listRow = (page: Page, title: string): Locator => page.getByRole('row').filter({ hasText: title });
 
 test.describe('live boards + plans', () => {
+    // the Gantt journey holds Max's save back with route(); in WebKit a controlling service worker
+    // sends requests past Playwright's routing. Nothing here needs the worker.
+    test.use({ serviceWorkers: 'block' });
+
     test.skip(REMOTE, 'needs the local realtime server');
     test.skip(!liveServerAvailable(), 'run `npm run collab:install` first');
 
