@@ -63,7 +63,8 @@ test.describe('the top bar on a phone', () => {
             main.scrollTop = 3000;
         });
         await expect.poll(() => content.evaluate((main) => main.scrollTop)).toBeGreaterThan(1000);
-        await page.mouse.wheel(0, 2000);
+        // try to scroll the page itself (mobile WebKit has no mouse wheel)
+        await page.evaluate(() => window.scrollBy(0, 2000));
         expect(await page.evaluate(() => window.scrollY)).toBe(0);
         expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(0);
         await expect.poll(async () => (await bar.boundingBox())?.y).toBe(0);

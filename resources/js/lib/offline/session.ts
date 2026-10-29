@@ -7,6 +7,7 @@
  * - A session that merely expired keeps it: the same person signs in again and it syncs.
  */
 import { router } from '@inertiajs/react';
+import axios from 'axios';
 import { deleteDb, isSupported, listOfflineDbUserIds } from './db';
 import {
     activeOfflineUser, forgetOfflineUser, isOfflineEnabled, knownOfflineUsers, setActiveOfflineUser, setOfflineEnabled,
@@ -104,6 +105,19 @@ export function watchOfflineSession(): void {
                 void cacheShell().catch(() => undefined);
             });
         }
+    });
+
+    // No network during a page visit: a full navigation instead, which the service worker answers
+    // with the offline shell (or its "you're offline" page). Only real network failures of full GET
+    // visits — not partial reloads, prefetches, or requests the browser cancelled while leaving.
+    router.on('exception', (event) => {
+        const error = event.detail.exception;
+        if (!axios.isAxiosError(error) || error.response || error.code !== 'ERR_NETWORK') return;
+        const config = error.config;
+        const header = (name: string) => config?.headers?.get?.(name) ?? config?.headers?.[name];
+        if (!config?.url || (config.method ?? 'get').toLowerCase() !== 'get' || header('X-Inertia-Partial-Component') || header('Purpose') === 'prefetch') return;
+        event.preventDefault();
+        window.location.href = new URL(config.url, window.location.origin).href;
     });
 
     router.on('before', (event) => {

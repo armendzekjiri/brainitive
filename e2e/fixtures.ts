@@ -1,4 +1,4 @@
-import { test as base, expect, request, type Page } from '@playwright/test';
+import { test as base, expect, request, type BrowserContext, type Page } from '@playwright/test';
 import { cacheBuildAssets } from './assets';
 import { showCursor } from './cursor';
 import { BASE_URL, PASSWORD, SEED, USERS, authFile, type Role } from './env';
@@ -51,6 +51,20 @@ type Fixtures = {
     pageErrors: void;
 };
 
+/**
+ * Browsers with web push (Firefox, WebKit) show the "Turn on notifications?" prompt bottom right,
+ * where it covers Save buttons: journeys run as someone who already answered it (PushPrompt.tsx).
+ */
+async function answeredPushPrompt(context: BrowserContext) {
+    await context.addInitScript(() => {
+        try {
+            localStorage.setItem('push-prompt-dismissed', '1');
+        } catch {
+            /* storage blocked: the prompt may show */
+        }
+    });
+}
+
 export const test = base.extend<Fixtures, WorkerFixtures>({
     ownerState: [async ({}, use, workerInfo) => {
         const file = authFile('owner', workerInfo.parallelIndex);
@@ -66,6 +80,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
     storageState: async ({ ownerState }, use) => use(ownerState),
     // every context serves the (immutable) built assets from memory — see assets.ts
     context: async ({ context }, use) => {
+        await answeredPushPrompt(context);
         await cacheBuildAssets(context);
         if (process.env.E2E_SHOW_CURSOR) await showCursor(context);
         await use(context);
@@ -75,6 +90,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
             storageState: memberState,
             httpCredentials: process.env.E2E_HTTP_USER ? { username: process.env.E2E_HTTP_USER, password: process.env.E2E_HTTP_PASSWORD ?? '' } : undefined,
         });
+        await answeredPushPrompt(context);
         await cacheBuildAssets(context);
         if (process.env.E2E_SHOW_CURSOR) await showCursor(context);
         const page = await context.newPage();

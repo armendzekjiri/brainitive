@@ -14,7 +14,8 @@ jobs:
   e2e:
     name: E2E (${{ matrix.browser }})
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # WebKit / Firefox are slower than Chromium on the runners; 40 min was cut off on 2026-10-28
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -40,7 +41,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: pre-release
+          # the schedule tests what's on its way to production; a manual run tests the branch it was
+          # started on (gh workflow run e2e-nightly.yml --ref <branch>)
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || 'pre-release' }}
       - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.4'

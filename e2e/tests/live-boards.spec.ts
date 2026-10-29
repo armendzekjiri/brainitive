@@ -131,9 +131,6 @@ test.describe('live boards + plans', () => {
     });
 
     test('Gantt: Erin’s new row and moved bar reach Max; his pending edit gets the conflict, never overwritten', async ({ page, memberPage }) => {
-        // Firefox: the drawn bar is gone after it is dragged (seen in the nightly since v1.44) — an open
-        // bug in the plan editor, tracked on the board; Chromium and WebKit still run this journey
-        test.fixme(test.info().project.name === 'firefox', 'Gantt bar drag loses the bar in Firefox (open bug)');
         await optInLive(page);
         await optInLive(memberPage);
         const planName = uid('live-plan');
@@ -178,10 +175,14 @@ test.describe('live boards + plans', () => {
             const box = (await bar(page).boundingBox())!;
             const before = await bar(page).getAttribute('title');
             const done = page.waitForResponse((r) => r.url().includes('/document') && r.request().method() === 'PUT' && r.ok());
-            await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+            // to the right while there's room, else to the left: a pointer dragged out of the window
+            // ends the gesture differently per browser (Firefox lost the bar off-screen)
+            const x = box.x + box.width / 2;
+            const dir = x + 200 < page.viewportSize()!.width ? 1 : -1;
+            await page.mouse.move(x, box.y + box.height / 2);
             await page.mouse.down();
-            await page.mouse.move(box.x + box.width / 2 + 80, box.y + box.height / 2, { steps: 10 });
-            await page.mouse.move(box.x + box.width / 2 + 160, box.y + box.height / 2, { steps: 10 });
+            await page.mouse.move(x + dir * 80, box.y + box.height / 2, { steps: 10 });
+            await page.mouse.move(x + dir * 160, box.y + box.height / 2, { steps: 10 });
             await page.mouse.up();
             await expect(bar(page)).not.toHaveAttribute('title', before!);
             await done;
