@@ -192,6 +192,39 @@ class SidebarPreferencesTest extends TestCase
             ->assertJsonPath("sidebarPreferences.projects.{$this->project->id}.pins", [['type' => 'page', 'id' => $ownersDraft->id]]);
     }
 
+    public function test_reordering_pins_stores_the_new_order_and_keeps_the_other_settings(): void
+    {
+        $board = Board::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->owner->id]);
+        $list = TaskList::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->owner->id]);
+        $page = Page::factory()->published()->create(['project_id' => $this->project->id, 'created_by' => $this->owner->id]);
+        $key = "sidebarPreferences.projects.{$this->project->id}";
+
+        $this->save($this->editor, ['project' => ['id' => $this->project->id, 'pinned_only' => true, 'pins' => [
+            ['type' => 'board', 'id' => $board->id],
+            ['type' => 'list', 'id' => $list->id],
+            ['type' => 'page', 'id' => $page->id],
+        ]]])->assertOk();
+
+        // BRAI-284: the same pins in a new order (what drag & drop / Move up / down sends)
+        $reordered = [
+            ['type' => 'page', 'id' => $page->id],
+            ['type' => 'board', 'id' => $board->id],
+            ['type' => 'list', 'id' => $list->id],
+        ];
+        $this->save($this->editor, ['project' => ['id' => $this->project->id, 'pins' => $reordered]])
+            ->assertOk()
+            ->assertJsonPath("{$key}.pins", $reordered)
+            ->assertJsonPath("{$key}.pinned_only", true);
+
+        $this->assertSame($reordered, $this->editor->fresh()->sidebar_preferences['projects'][(string) $this->project->id]['pins']);
+
+        // BRAI-285: turning "pinned only" off keeps the pins in their order
+        $this->save($this->editor, ['project' => ['id' => $this->project->id, 'pinned_only' => false]])
+            ->assertOk()
+            ->assertJsonPath("{$key}.pins", $reordered)
+            ->assertJsonPath("{$key}.pinned_only", false);
+    }
+
     public function test_projects_the_user_lost_access_to_are_pruned_on_save(): void
     {
         $second = Project::factory()->create(['workspace_id' => $this->workspace->id, 'created_by' => $this->owner->id]);

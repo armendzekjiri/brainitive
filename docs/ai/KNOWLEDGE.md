@@ -372,6 +372,17 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
 - **Store hydration is silent.** `useSidebarPreferences()` assigns the new server value during render
   (no listener notification) to avoid "update a component while rendering another"; while a write is
   in flight the optimistic state wins over the incoming prop.
+- **Pins never hide groups; only "Show only pinned" does (BRAI-285).** The first version hid every
+  project group as soon as one item was pinned, so switching "Show only pinned" off did nothing until
+  all pins were removed. `ProjectContent`: the Pinned group shows with pins or `pinned_only`; `shows()`
+  checks `pinned_only` + the group switch only.
+- **Pin reorder (BRAI-284) saves the whole `pins` array** (no extra endpoint). `reorderPins` keeps
+  stored pins the user can't see after the visible ones, but the server drops them on any pin save
+  (`visiblePins`). The sidebar drag uses the page tree's native HTML5 pattern (`DraggableItem`, grip
+  enables `draggable` on mousedown; the repo has no dnd library) and saves once on drop. In e2e,
+  Playwright's `dragTo` does not start that drag: use `mouse.down` on the grip, `mouse.move(…, { steps })`,
+  `mouse.up` (passes in Chromium and Firefox). Page rows start with the page's emoji icon, so match
+  their text with a regex (`new RegExp(\`${name}$\`)`), not the exact name.
 
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
