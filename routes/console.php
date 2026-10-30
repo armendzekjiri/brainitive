@@ -120,3 +120,7 @@ Schedule::command('queue:prune-failed', ['--hours' => 720])->dailyAt('04:55');
 // v1.43.0 (BRAI-55): build the search index in the background when this index version was never
 // built (fresh install, update) — nobody runs search:reindex by hand. One small query otherwise.
 Schedule::command('search:ensure')->everyFiveMinutes()->withoutOverlapping()->runInBackground();
+// v1.46.0 (Cloud plans, BRAI-160): measure what each workspace uses (content / files for LimitGate and
+// the usage bars), then prune doc / plan versions past the plan's history. Both do nothing self-hosted.
+Schedule::command('usage:measure')->dailyAt('02:30')->withoutOverlapping();
+Schedule::command('versions:prune')->dailyAt('02:50')->withoutOverlapping();
