@@ -1,7 +1,21 @@
 import axios from 'axios';
+import { limitReachedOf, showLimitReached } from '@/lib/entitlements';
 window.axios = axios;
 
 window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+
+/**
+ * A plan limit stopped a JSON request (LimitReached → 402 with `limit_reached`, Cloud v1.46.0):
+ * open the upgrade dialog. The error still reaches the caller, whose own handling stays as it was
+ * (callers may skip their error toast with isLimitReachedError()).
+ */
+axios.interceptors.response.use(undefined, (error) => {
+    if (axios.isAxiosError(error) && error.response?.status === 402) {
+        const payload = limitReachedOf(error.response.data);
+        if (payload) showLimitReached(payload);
+    }
+    return Promise.reject(error);
+});
 
 /**
  * Browsers cancel running requests as soon as the page reloads or navigates away, and axios then

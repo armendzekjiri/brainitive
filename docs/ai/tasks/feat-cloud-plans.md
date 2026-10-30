@@ -3,7 +3,7 @@
 **Branch:** feat/cloud-plans-foundation (release/v1.46.0)
 **Status:** in progress — foundation committed, parallel tickets running
 **Started:** 2026-10-30
-**Board card:** —
+**Board card:** [BRAI-160](https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-433)
 **Builds on:** [chore-relicense-bsl.md](./chore-relicense-bsl.md), old pricing in [feat-open-source-cloud.md](./feat-open-source-cloud.md)
 
 ## Goal

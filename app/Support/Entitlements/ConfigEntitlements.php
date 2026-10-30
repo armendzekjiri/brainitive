@@ -22,8 +22,7 @@ final class ConfigEntitlements implements Entitlements
 
     public function limits(Workspace $workspace): Limits
     {
-        $prefix = (string) ($this->config['only_slug_prefix'] ?? '');
-        if ($prefix !== '' && ! Str::startsWith((string) $workspace->slug, $prefix)) {
+        if (! $this->applies($workspace)) {
             return Limits::unlimited();
         }
 
@@ -43,9 +42,17 @@ final class ConfigEntitlements implements Entitlements
         return $this->int('free_workspaces_per_owner');
     }
 
+    /** Only the matching workspaces have billing: the others stay like self-hosted (no plan UI). */
     public function billingUrl(Workspace $workspace): ?string
     {
-        return $this->config['billing_url'] ?? null;
+        return $this->applies($workspace) ? ($this->config['billing_url'] ?? null) : null;
+    }
+
+    private function applies(Workspace $workspace): bool
+    {
+        $prefix = (string) ($this->config['only_slug_prefix'] ?? '');
+
+        return $prefix === '' || Str::startsWith((string) $workspace->slug, $prefix);
     }
 
     private function int(string $key): ?int
