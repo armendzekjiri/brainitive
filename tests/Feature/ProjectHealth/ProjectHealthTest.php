@@ -91,7 +91,8 @@ class ProjectHealthTest extends TestCase
         $this->item(['title' => 'D due in seven days', 'due_date' => '2026-10-31'] + $assigned);
         $this->item(['title' => 'E no due date, unassigned']);
         $this->item(['title' => 'F done in period', 'column_id' => $done, 'completed_at' => '2026-10-20 12:00:00', 'due_date' => '2026-10-01']);
-        $this->item(['title' => 'G done column, no completion date', 'column_id' => $done, 'created_at' => '2026-09-01 00:00:00']);
+        // legacy data: creating in a done column sets completed_at since BRAI-346, so clear it afterwards
+        $this->item(['title' => 'G done column, no completion date', 'column_id' => $done, 'created_at' => '2026-09-01 00:00:00'])->update(['completed_at' => null]);
         $this->item(['title' => 'H completed long ago', 'completed_at' => '2026-09-01 12:00:00', 'created_at' => '2026-09-01 00:00:00']);
         $this->item(['title' => 'I deleted', 'due_date' => '2026-10-01'])->delete();
         $trashedBoard = Board::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->editor->id]);

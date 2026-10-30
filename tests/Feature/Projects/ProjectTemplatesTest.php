@@ -161,7 +161,7 @@ class ProjectTemplatesTest extends TestCase
         $type = $source->itemTypes()->create(['name' => 'Request', 'slug' => 'request', 'color' => '#14b8a6', 'is_active' => true]);
         $field = $source->itemFields()->create(['name' => 'Tier', 'type' => 'select', 'board_ids' => [$board->id]]);
         $gold = $field->options()->create(['label' => 'Gold', 'position' => 1]);
-        $board->update(['settings' => ['swimlanes' => ['mode' => 'custom', 'rest_name' => 'Rest', 'lanes' => [
+        $board->update(['settings' => ['done_retention_days' => 30, 'swimlanes' => ['mode' => 'custom', 'rest_name' => 'Rest', 'lanes' => [
             ['id' => 'lane-a', 'name' => 'Urgent', 'color' => '#ef4444', 'rules' => ['label_ids' => [$label->id], 'assignee_ids' => [0, $this->admin->id]]],
         ]]]]);
 
@@ -216,6 +216,7 @@ class ProjectTemplatesTest extends TestCase
         $this->assertSame('Urgent', $label->name);
         $this->assertSame([$label->id], $board->settings['swimlanes']['lanes'][0]['rules']['label_ids']);
         $this->assertSame([0], $board->settings['swimlanes']['lanes'][0]['rules']['assignee_ids'], 'People never come along.');
+        $this->assertSame(30, $board->doneRetentionSetting(), 'done retention (BRAI-346) comes along');
         $field = $project->itemFields()->firstOrFail();
         $this->assertSame([$board->id], $field->board_ids);
 
