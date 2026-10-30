@@ -93,13 +93,13 @@ export default function SnippetsShowPublic({ collection, snippet, isPublic, sing
                     style={{ borderBottom: '1px solid #30363d', background: 'rgba(22,27,34,0.95)' }}
                 >
                     <div className="max-w-3xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-                        <Link href="/" className="flex items-center gap-2.5 shrink-0">
+                        <a href="/" className="flex items-center gap-2.5 shrink-0">
                             <img
                                 src="/images/logo-dark.png"
                                 alt="Brainitive"
                                 className="h-7 w-auto object-contain"
                             />
-                        </Link>
+                        </a>
                         <span
                             className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
                             style={{ border: '1px solid #30363d', color: '#58a6ff', background: 'rgba(88,166,255,0.08)' }}
@@ -231,7 +231,7 @@ export default function SnippetsShowPublic({ collection, snippet, isPublic, sing
                 {/* ── Footer ──────────────────────────────────── */}
                 <footer className="mt-12 py-8" style={{ borderTop: '1px solid #30363d' }}>
                     <div className="max-w-3xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-                        <Link href="/">
+                        <a href="/">
                             <img
                                 src="/images/logo-dark.png"
                                 alt="Brainitive"
@@ -240,12 +240,12 @@ export default function SnippetsShowPublic({ collection, snippet, isPublic, sing
                                 onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
                                 onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
                             />
-                        </Link>
+                        </a>
                         <p className="text-xs" style={{ color: '#8b949e' }}>
                             Shared via{' '}
-                            <Link href="/" className="font-semibold hover:text-white transition-colors" style={{ color: '#e6edf3' }}>
+                            <a href="/" className="font-semibold hover:text-white transition-colors" style={{ color: '#e6edf3' }}>
                                 Brainitive
-                            </Link>
+                            </a>
                             {' '}— your team's second brain
                         </p>
                     </div>

@@ -1698,3 +1698,9 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   then `createToken('x', ['mcp:use', 'capture'])`), `php artisan serve --port 8099`, and run the binary
   with `BRAINITIVE_TOKEN` / `BRAINITIVE_SERVER`. `php artisan tinker <file>` drops into the REPL and
   hangs in a non-interactive shell — use `--execute="include '...';"`.
+
+### CLI Cloud OAuth origin
+The Cloud CLI defaults to `https://www.brainitive.app`, matching the OAuth metadata. Keep strict same-origin checks for all servers; the non-www Cloud alias can be normalized explicitly, while existing signed-in configurations stay untouched until sign-in.
+
+### Marketing homepage may be outside Inertia
+On Brainitive Cloud nginx can serve `/` from the separate website. Links from Laravel pages to `/` must use a native `<a>` so the browser performs a full navigation; Inertia links can display the website HTML in an error modal. Self-hosted installations work with the same anchors.

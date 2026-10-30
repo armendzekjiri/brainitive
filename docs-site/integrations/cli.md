@@ -31,6 +31,23 @@ The script downloads the latest release for your machine from GitHub, checks its
 (or `.zip`) from the [latest release](https://github.com/armendzekjiri/brainitive/releases/latest).
 Later, `brainitive update` upgrades in place.
 
+The installer also adds `bi` as a short command when that name is available, so `bi login` and `brainitive login` do the same thing. It never replaces an existing `bi` command. Use `bi -s "search words"` to search or `bi -c "a quick note"` to capture.
+
+### Quick shortcuts
+
+| Command | Action |
+|---|---|
+| `bi -s "search words"` | Search everything you can access |
+| `bi -c "a quick note"` | Capture a note in your inbox |
+| `bi -W` | List workspaces |
+| `bi -P` | List projects in the current workspace |
+| `bi -B` | List boards in the current project |
+| `bi -i` | List issues on the current board |
+| `bi -t` | List open tasks in the current task list |
+| `bi -s "search words" -j` | Return JSON, also available as `--json` |
+
+Use `-w`, `-p` and `-b` to choose a workspace, project and board, or set defaults with `bi use`. Each quick action runs separately; use the full commands for more options.
+
 ## Sign in
 
 ```sh

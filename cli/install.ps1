@@ -36,6 +36,14 @@ try {
     Move-Item -Path $exe.FullName -Destination $target -Force
     Remove-Item -Path "$target.old" -Force -ErrorAction SilentlyContinue
 
+    $shortcut = Join-Path $dir 'bi.cmd'
+    if (-not (Get-Command bi -ErrorAction SilentlyContinue) -and -not (Test-Path $shortcut) -and -not (Test-Path (Join-Path $dir 'bi.exe')) -and -not (Test-Path (Join-Path $dir 'bi.bat'))) {
+        [System.IO.File]::WriteAllText($shortcut, '@"%~dp0brainitive.exe" %*' + "`r`n", [System.Text.Encoding]::ASCII)
+        Write-Host 'Short command: bi'
+    } else {
+        Write-Host 'Skipped bi: a command with that name already exists.'
+    }
+
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if (($userPath -split ';') -notcontains $dir) {
         [Environment]::SetEnvironmentVariable('Path', "$dir;$userPath", 'User')

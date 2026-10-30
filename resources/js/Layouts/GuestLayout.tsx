@@ -1,6 +1,5 @@
 import ApplicationLogo from '@/components/ApplicationLogo';
 import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks';
-import { Link } from '@inertiajs/react';
 import { PropsWithChildren } from 'react';
 import { Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -24,9 +23,9 @@ export default function Guest({ children }: PropsWithChildren) {
             </div>
 
             <div>
-                <Link href="/" className="block">
+                <a href="/" className="block">
                     <ApplicationLogo className="h-20 w-20 object-contain" />
-                </Link>
+                </a>
             </div>
 
             <div className="mt-6 w-full overflow-hidden bg-card px-6 py-4 shadow-md sm:max-w-md sm:rounded-lg border border-border">

@@ -112,7 +112,8 @@ class UsageMeterTest extends TestCase
         $this->app->instance(Entitlements::class, new ConfigEntitlements(['enforced' => false, 'members' => 3]));
         $first = $this->workspace('first');
         $second = $this->workspace('second');
-        Project::factory()->count(2)->create(['workspace_id' => $second->id]);
+        Project::factory()->create(['workspace_id' => $second->id, 'key' => 'ONE']);
+        Project::factory()->create(['workspace_id' => $second->id, 'key' => 'TWO']);
 
         $this->artisan('usage:measure')->expectsOutputToContain('Measured 2 workspace(s).')->assertSuccessful();
 

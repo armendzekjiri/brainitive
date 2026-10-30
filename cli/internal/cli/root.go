@@ -44,6 +44,11 @@ func Execute(version string) error {
 }
 
 func (a *App) rootCommand() *cobra.Command {
+	var quickSearch, quickCapture string
+	var quickWorkspaces, quickProjects, quickBoards, quickIssues, quickTasks bool
+	search, capture := a.searchCommand(), a.captureCommand()
+	workspaces, projects, boards := a.workspacesCommand(), a.projectsCommand(), a.boardsCommand()
+	issues, tasks := a.issuesCommand(), a.tasksCommand()
 	root := &cobra.Command{
 		Use:   "brainitive",
 		Short: "Brainitive from your terminal: capture, issues, tasks, snippets, docs, search — and an MCP bridge for AI agents",
@@ -56,6 +61,8 @@ bookmarks, search everything, and give AI agents the whole workspace with "brain
 Defaults: set them once with "brainitive use <workspace>[/<project>[/<board>]]" or pass
 --workspace / --project / --board. With only one workspace or project, nothing is needed.
 
+Quick shortcuts: -s search, -c capture, -W workspaces, -P projects, -B boards,
+-i issues and -t tasks. Add -j for JSON output.
 Every command prints a table for people, or the raw result with --json for scripts.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -69,7 +76,58 @@ Every command prints a table for people, or the raw result with --json for scrip
 			return nil
 		},
 	}
-	root.PersistentFlags().BoolVar(&a.jsonOut, "json", false, "print the raw result as JSON (for scripts)")
+	root.Flags().StringVarP(&quickSearch, "quick-search", "s", "", "search for text")
+	root.Flags().StringVarP(&quickCapture, "quick-capture", "c", "", "capture text to your inbox")
+	root.Flags().BoolVarP(&quickWorkspaces, "quick-workspaces", "W", false, "list workspaces")
+	root.Flags().BoolVarP(&quickProjects, "quick-projects", "P", false, "list projects")
+	root.Flags().BoolVarP(&quickBoards, "quick-boards", "B", false, "list boards")
+	root.Flags().BoolVarP(&quickIssues, "quick-issues", "i", false, "list board issues")
+	root.Flags().BoolVarP(&quickTasks, "quick-tasks", "t", false, "list open tasks")
+	root.RunE = func(cmd *cobra.Command, args []string) error {
+		searchSet := cmd.Flags().Changed("quick-search")
+		captureSet := cmd.Flags().Changed("quick-capture")
+		selected := 0
+		for _, enabled := range []bool{searchSet, captureSet, quickWorkspaces, quickProjects, quickBoards, quickIssues, quickTasks} {
+			if enabled {
+				selected++
+			}
+		}
+		if selected > 1 {
+			return errors.New("choose one quick action at a time")
+		}
+		if selected == 0 {
+			return cmd.Help()
+		}
+		if len(args) != 0 {
+			return errors.New("quick actions do not accept extra arguments")
+		}
+		for _, action := range []struct {
+			enabled bool
+			command *cobra.Command
+		}{
+			{quickWorkspaces, workspaces}, {quickProjects, projects}, {quickBoards, boards},
+			{quickIssues, issues}, {quickTasks, tasks},
+		} {
+			if action.enabled {
+				action.command.SetContext(cmd.Context())
+				return action.command.RunE(action.command, nil)
+			}
+		}
+
+		if searchSet {
+			if strings.TrimSpace(quickSearch) == "" {
+				return errors.New("search text cannot be empty")
+			}
+			search.SetContext(cmd.Context())
+			return search.RunE(search, []string{quickSearch})
+		}
+		if strings.TrimSpace(quickCapture) == "" {
+			return errors.New("capture text cannot be empty")
+		}
+		capture.SetContext(cmd.Context())
+		return capture.RunE(capture, []string{quickCapture})
+	}
+	root.PersistentFlags().BoolVarP(&a.jsonOut, "json", "j", false, "print the raw result as JSON (for scripts)")
 	root.PersistentFlags().StringVar(&a.server, "server", "", "Brainitive server (default: the one you signed in to, or $BRAINITIVE_SERVER)")
 	root.PersistentFlags().StringVarP(&a.workspace, "workspace", "w", "", "workspace slug (default: from brainitive use)")
 	root.PersistentFlags().StringVarP(&a.project, "project", "p", "", "project slug")
@@ -77,11 +135,11 @@ Every command prints a table for people, or the raw result with --json for scrip
 
 	root.AddCommand(
 		a.loginCommand(), a.logoutCommand(), a.whoamiCommand(), a.useCommand(), a.configCommand(),
-		a.workspacesCommand(), a.projectsCommand(), a.projectCommand(), a.boardsCommand(), a.pagesCommand(), a.pageCommand(),
-		a.searchCommand(), a.captureCommand(),
+		workspaces, projects, a.projectCommand(), boards, a.pagesCommand(), a.pageCommand(),
+		search, capture,
 		a.snippetsCommand(), a.snippetCommand(), a.bookmarksCommand(), a.bookmarkCommand(),
-		a.tasksCommand(), a.taskCommand(),
-		a.issuesCommand(), a.issueCommand(), a.sprintsCommand(),
+		tasks, a.taskCommand(),
+		issues, a.issueCommand(), a.sprintsCommand(),
 		a.toolsCommand(), a.toolCommand(), a.mcpCommand(),
 		a.updateCommand(), a.versionCommand(),
 	)
