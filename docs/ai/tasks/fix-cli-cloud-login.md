@@ -15,3 +15,6 @@ Go tests for URL, existing config handling and shortcut dispatch, with Go tests 
 
 ## Docs
 Update CLI usage and shared knowledge.
+
+## Pre-release website split follow-up
+Account deletion must navigate to the external homepage as a full page, and live homepage checks must validate the Astro site while self-hosted checks continue covering Laravel's homepage.
