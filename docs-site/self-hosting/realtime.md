@@ -164,6 +164,7 @@ Then `php artisan optimize` and `php artisan queue:restart`.
 | `COLLAB_SECRET` | derived from `APP_KEY` | Shared secret, same value as in the app. If it's not set, the server derives it from `APP_KEY` the same way the app does |
 | `COLLAB_SECRET_FILE` | – | Read the secret from this file instead (Docker uses this) |
 | `COLLAB_APP_URL` | `APP_URL` | Where the server reaches Brainitive's internal API |
+| `COLLAB_APP_HOST` | – | Host name to send when `COLLAB_APP_URL` is a loopback address, e.g. `COLLAB_APP_URL=https://127.0.0.1` + `COLLAB_APP_HOST=brainitive.example.com`. Use it when a firewall stops the server from reaching its own public address ("Live editing unavailable" with *the live editing server can't reach Brainitive*). nginx must listen on 127.0.0.1:443 (`listen 443 ssl;` does) |
 | `LIVE_PUBLISH_FROM` | loopback only | `private` also accepts publishes from private networks (Docker) |
 | `COLLAB_ACCESS_INTERVAL_MS` | `60000` | How often access is re-checked, in milliseconds |
 

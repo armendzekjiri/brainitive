@@ -16,7 +16,7 @@ instantly for everyone.
 - You edit the doc's **draft** together. Draft, publish and [review](./client-portal#document-review) work as before:
   readers only see the new version once someone publishes it.
 - If you lose your connection, keep writing — your changes are kept on your device and merged when you're back.
-- If live editing can't be reached, you see *"Live editing unavailable — editing alone"* and can keep editing on your own.
+- If live editing can't be reached, you see *"Live editing unavailable — editing alone"* with the reason (server unreachable, connection refused, timeout, or the live server can't reach Brainitive). Keep editing on your own: your changes save as usual. Brainitive keeps retrying in the background and switches back to live editing by itself; anything you wrote alone is saved first. **Try again** reconnects right away.
 
 ## Issue descriptions
 
