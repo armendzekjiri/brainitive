@@ -119,7 +119,8 @@ import LeadFormTemplatePicker from '@/components/leadForms/LeadFormTemplatePicke
 import { CustomizeSidebarSheet } from '@/components/sidebar/CustomizeSidebarSheet';
 import { PinButton } from '@/components/sidebar/PinButton';
 import { useSidebarNavItems } from '@/components/sidebar/navItems';
-import { PinIcon, resolvePins, type SidebarProject } from '@/components/sidebar/pins';
+import { PinIcon, resolvePins, type ResolvedPin, type SidebarProject } from '@/components/sidebar/pins';
+import { reorderPins } from '@/lib/sidebarPreferences';
 import { SIDEBAR_GROUPS, openCustomizeSidebar, projectPreferences, useSidebarPreferences } from '@/lib/sidebarPreferences';
 import GitHubStarButton from '@/components/GitHubStarButton';
 import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks';
@@ -360,11 +361,14 @@ function DraggableItem({
     onDragStart,
     onDragEnter,
     onDragEnd,
+    handleTitle,
 }: {
     children: React.ReactNode;
     onDragStart: () => void;
     onDragEnter: () => void;
     onDragEnd: () => void;
+    /** Tooltip of the grip handle. */
+    handleTitle?: string;
 }) {
     const divRef = useRef<HTMLDivElement>(null);
     const enableDrag = () => { if (divRef.current) divRef.current.draggable = true; };
@@ -382,6 +386,7 @@ function DraggableItem({
             {/* Grip handle - mousedown enables drag on this item only */}
             <div
                 className="absolute left-0.5 top-1/2 -translate-y-1/2 opacity-0 group-hover/drag:opacity-100 cursor-grab z-10 select-none"
+                title={handleTitle}
                 onMouseDown={enableDrag}
                 onMouseUp={disableDrag}
             >
@@ -513,6 +518,48 @@ function SidebarItemRow({
     );
 }
 
+// Rows of the Pinned group (BRAI-284): drag a row by its grip to reorder, saved once on drop.
+// The keyboard way is "Move up / down" in Customize sidebar.
+function PinnedSidebarRows({ projectId, pinned }: { projectId: number; pinned: ResolvedPin[] }) {
+    // the order while dragging; null = the stored order
+    const [dragOrder, setDragOrder] = useState<ResolvedPin[] | null>(null);
+    const dragIndexRef = useRef<number | null>(null);
+    const rows = dragOrder ?? pinned;
+
+    const handleDragEnter = (index: number) => {
+        const from = dragIndexRef.current;
+        if (from === null || from === index) return;
+        const next = [...rows];
+        const [dragged] = next.splice(from, 1);
+        next.splice(index, 0, dragged);
+        dragIndexRef.current = index;
+        setDragOrder(next);
+    };
+
+    const handleDragEnd = () => {
+        if (dragIndexRef.current === null) return;
+        dragIndexRef.current = null;
+        if (dragOrder) reorderPins(projectId, dragOrder.map((entry) => entry.pin));
+        setDragOrder(null);
+    };
+
+    return (
+        <>
+            {rows.map((entry, index) => (
+                <DraggableItem
+                    key={`${entry.pin.type}-${entry.pin.id}`}
+                    handleTitle="Drag to reorder"
+                    onDragStart={() => { dragIndexRef.current = index; }}
+                    onDragEnter={() => handleDragEnter(index)}
+                    onDragEnd={handleDragEnd}
+                >
+                    <SidebarItemRow href={entry.href} icon={<PinIcon entry={entry} />} name={entry.name} projectId={projectId} pin={entry.pin} hoverOnlyPin />
+                </DraggableItem>
+            ))}
+        </>
+    );
+}
+
 function ProjectContent({
     project,
     workspace,
@@ -535,12 +582,13 @@ function ProjectContent({
     const [helpdesksOpen, setHelpdesksOpen] = useExpandedState(`project-${project.id}-helpdesks`, true);
     const [leadFormsOpen, setLeadFormsOpen] = useExpandedState(`project-${project.id}-lead-forms`, true);
 
-    // Customisable sidebar (BRAI-106): pins first; with pins (or "pinned only") the groups collapse
+    // Customisable sidebar (BRAI-106): pins first. Only "Show only pinned" collapses the groups into
+    // "Show all in project"; pins alone keep them (BRAI-285).
     const prefs = projectPreferences(useSidebarPreferences(), project.id);
     const pinned = resolvePins(workspace.slug, project, prefs.pins);
     const showPinned = pinned.length > 0 || prefs.pinned_only;
-    const shows = (group: SidebarGroupKey) => !showPinned && prefs.groups[group] !== false;
-    const somethingHidden = showPinned || SIDEBAR_GROUPS.some((group) => prefs.groups[group.key] === false);
+    const shows = (group: SidebarGroupKey) => !prefs.pinned_only && prefs.groups[group] !== false;
+    const somethingHidden = prefs.pinned_only || SIDEBAR_GROUPS.some((group) => prefs.groups[group.key] === false);
 
     if (!hasContent) {
         return (
@@ -674,17 +722,7 @@ function ProjectContent({
             {showPinned && (
                 <div role="group" aria-label="Pinned">
                     <SidebarGroupToggle label="Pinned" open={pinnedOpen} onToggle={setPinnedOpen} />
-                    {pinnedOpen && pinned.map((entry) => (
-                        <SidebarItemRow
-                            key={`${entry.pin.type}-${entry.pin.id}`}
-                            href={entry.href}
-                            icon={<PinIcon entry={entry} />}
-                            name={entry.name}
-                            projectId={project.id}
-                            pin={entry.pin}
-                            hoverOnlyPin
-                        />
-                    ))}
+                    {pinnedOpen && <PinnedSidebarRows projectId={project.id} pinned={pinned} />}
                     {pinnedOpen && pinned.length === 0 && (
                         <p className="pl-7 pr-2 py-1.5 text-xs text-muted-foreground">Nothing pinned yet</p>
                     )}
@@ -693,7 +731,7 @@ function ProjectContent({
 
             {groups.map((group, index) => (
                 <React.Fragment key={group.key}>
-                    {index > 0 && <div className="border-t border-border/50 my-1.5" />}
+                    {(index > 0 || showPinned) && <div className="border-t border-border/50 my-1.5" />}
                     {group.node}
                 </React.Fragment>
             ))}

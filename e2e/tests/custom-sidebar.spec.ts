@@ -1,7 +1,7 @@
 import { expect, test, uid, urls } from '../fixtures';
 import { createBlankProject } from '../helpers/workspaces-projects';
 import {
-    createDocPage, createTaskList, mainNav, openCustomize, pinnedGroup, resetSidebarPreferences, sidebar, sidebarSaved, toggle,
+    createDocPage, createTaskList, mainNav, openCustomize, pin, pinnedGroup, resetSidebarPreferences, sidebar, sidebarSaved, toggle,
 } from '../helpers/custom-sidebar';
 
 /*
@@ -97,9 +97,9 @@ test.describe('customisable sidebar', () => {
         const pinnedItems = page.getByRole('list', { name: 'Pinned items' });
         await expect(pinnedItems.getByRole('link', { name: new RegExp(doc) })).toBeVisible();
         await expect(pinnedGroup(page).getByRole('link', { name: doc, exact: true })).toBeVisible();
-        // with pins, the other groups collapse into a link to the project page
-        await expect(sidebar(page).getByRole('button', { name: 'Boards', exact: true })).toHaveCount(0);
-        await expect(sidebar(page).getByRole('link', { name: 'Show all in project' })).toBeVisible();
+        // pins go on top; the other groups stay (only "Show only pinned" collapses them, BRAI-285)
+        await expect(sidebar(page).getByRole('button', { name: 'Boards', exact: true })).toBeVisible();
+        await expect(sidebar(page).getByRole('link', { name: 'Show all in project' })).toHaveCount(0);
 
         await page.reload();
         await expect(pinnedGroup(page).getByRole('link', { name: doc, exact: true })).toBeVisible();
@@ -129,6 +129,89 @@ test.describe('customisable sidebar', () => {
         // pin the board from its card on the project page
         await page.getByRole('main').getByRole('button', { name: 'Pin Main Board', exact: true }).click();
         await expect(pinnedGroup(page).getByRole('link', { name: 'Main Board', exact: true })).toBeVisible();
+    });
+
+    test('"Show only pinned" off brings the groups back, with the pins still on top (BRAI-285)', async ({ page }) => {
+        const project = await createBlankProject(page, 'e2e-workspace');
+        const doc = await createDocPage(page, project.slug, uid('Handbook'));
+        await page.goto(urls.project(project.slug));
+
+        await pin(page, 'Main Board');
+        await pin(page, doc);
+        const boardsGroup = sidebar(page).getByRole('button', { name: 'Boards', exact: true });
+        const pagesGroup = sidebar(page).getByRole('button', { name: 'Pages', exact: true });
+        const showAll = sidebar(page).getByRole('link', { name: 'Show all in project' });
+        await expect(pinnedGroup(page).getByRole('link')).toHaveText(['Main Board', doc]);
+        await expect(boardsGroup).toBeVisible();
+        await expect(pagesGroup).toBeVisible();
+        await expect(showAll).toHaveCount(0);
+
+        let panel = await openCustomize(page);
+        await toggle(page, panel, 'Show only pinned', true);
+        await page.keyboard.press('Escape');
+        await expect(boardsGroup).toHaveCount(0);
+        await expect(pagesGroup).toHaveCount(0);
+        await expect(showAll).toBeVisible();
+        await expect(pinnedGroup(page).getByRole('link')).toHaveText(['Main Board', doc]);
+
+        panel = await openCustomize(page);
+        await toggle(page, panel, 'Show only pinned', false);
+        await page.keyboard.press('Escape');
+        await expect(boardsGroup).toBeVisible();
+        await expect(pagesGroup).toBeVisible();
+        await expect(showAll).toHaveCount(0);
+        await expect(pinnedGroup(page).getByRole('link')).toHaveText(['Main Board', doc]);
+
+        await page.reload();
+        await expect(boardsGroup).toBeVisible();
+        await expect(pagesGroup).toBeVisible();
+        await expect(pinnedGroup(page).getByRole('link')).toHaveText(['Main Board', doc]);
+    });
+
+    test('reorder pins with Move up / down and by dragging: the order survives a reload (BRAI-284)', async ({ page }) => {
+        const project = await createBlankProject(page, 'e2e-workspace');
+        const doc = await createDocPage(page, project.slug, uid('Roadmap'));
+        const list = await createTaskList(page, project.slug, uid('Chores'));
+        await page.goto(urls.project(project.slug));
+
+        await pin(page, 'Main Board');
+        await pin(page, doc);
+        await pin(page, list);
+        const sidebarPins = pinnedGroup(page).getByRole('link');
+        await expect(sidebarPins).toHaveText(['Main Board', doc, list]);
+
+        // keyboard way: Customize sidebar → Move up / down
+        const panel = await openCustomize(page);
+        const panelPins = panel.getByRole('list', { name: 'Pinned items' });
+        await expect(panelPins.getByRole('button', { name: 'Move Main Board up' })).toBeDisabled();
+        await expect(panelPins.getByRole('button', { name: `Move ${list} down` })).toBeDisabled();
+        let saved = sidebarSaved(page);
+        await panelPins.getByRole('button', { name: `Move ${list} up` }).click();
+        await saved;
+        await expect(panelPins.getByRole('listitem')).toHaveText([/Main Board/, new RegExp(list), new RegExp(doc)]);
+        // focus stays on the moved pin, so it can be moved again with the keyboard
+        await expect(panelPins.getByRole('button', { name: `Move ${list} up` })).toBeFocused();
+        saved = sidebarSaved(page);
+        await page.keyboard.press('Enter');
+        await saved;
+        await expect(panelPins.getByRole('listitem')).toHaveText([new RegExp(list), /Main Board/, new RegExp(doc)]);
+        // at the top: focus moves to the other arrow
+        await expect(panelPins.getByRole('button', { name: `Move ${list} down` })).toBeFocused();
+        await page.keyboard.press('Escape');
+        await expect(sidebarPins).toHaveText([list, 'Main Board', doc]);
+
+        // drag & drop in the sidebar: grab the doc's grip and drop it on the first pin
+        await pinnedGroup(page).getByRole('link', { name: doc, exact: true }).hover();
+        saved = sidebarSaved(page);
+        await pinnedGroup(page).getByTitle('Drag to reorder').nth(2).dragTo(pinnedGroup(page).getByRole('link', { name: list, exact: true }));
+        await saved;
+        await expect(sidebarPins).toHaveText([doc, list, 'Main Board']);
+
+        await page.reload();
+        await expect(sidebarPins).toHaveText([doc, list, 'Main Board']);
+        // the project page lists the pins in the same order
+        await expect(page.getByRole('main').getByRole('list', { name: 'Pinned items' }).getByRole('link'))
+            .toHaveText([new RegExp(doc), new RegExp(list), /Main Board/]);
     });
 });
 
