@@ -363,6 +363,12 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
   unique. Every sidebar row now has a `Pin <name>` button, so a non-exact
   `getByRole('button', { name: 'Share' })` also matches "Pin Shared doc…": use `exact: true` for
   generic button names (content.spec's Share button was the one case).
+- **New group keys default to visible (BRAI-286).** `health`, `workload` and `releases` were added
+  to `GROUPS` after people had saved preferences; `normalizeProject` (and `projectPreferences` in
+  the frontend) fill a missing key with `true`, so old values keep working without a migration.
+  Add any future group the same way: append the key, never rename one. In e2e, check the sidebar
+  with the Customize sheet **closed**: the open modal sheet hides the sidebar from the
+  accessibility tree, so `getByRole` there finds nothing and a `toHaveCount(0)` passes vacuously.
 - **Store hydration is silent.** `useSidebarPreferences()` assigns the new server value during render
   (no listener notification) to avoid "update a component while rendering another"; while a write is
   in flight the optimistic state wins over the incoming prop.

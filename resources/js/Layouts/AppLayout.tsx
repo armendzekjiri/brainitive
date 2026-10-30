@@ -613,6 +613,35 @@ function ProjectContent({
     const params = [workspace.slug, project.slug];
 
     const groups: { key: string; node: React.ReactNode }[] = [];
+    // Project views (BRAI-286): one top-level row each, hideable one by one. They work on the
+    // project's issues, so (as before) they only show once the project has a board.
+    const tools = project.boards?.length > 0
+        ? ([
+            ['health', 'Health', route('projects.health', params), HeartPulse],
+            ['workload', 'Workload', route('workload.index', params), Gauge],
+            ['releases', 'Releases', route('releases.index', params), Rocket],
+        ] as const).filter(([key]) => shows(key))
+        : [];
+    if (tools.length > 0) {
+        groups.push({
+            key: 'tools',
+            node: (
+                <div role="group" aria-label="Project tools" className="space-y-0.5">
+                    {tools.map(([key, name, href, Icon]) => (
+                        <SidebarMenuItem key={key}>
+                            <Link
+                                href={href}
+                                className="flex min-w-0 items-center gap-2.5 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                            >
+                                <Icon className="size-4 shrink-0" />
+                                <span className="min-w-0 flex-1 truncate">{name}</span>
+                            </Link>
+                        </SidebarMenuItem>
+                    ))}
+                </div>
+            ),
+        });
+    }
     if (shows('boards') && project.boards?.length > 0) {
         groups.push({
             key: 'boards',
@@ -622,9 +651,6 @@ function ProjectContent({
                     {boardsOpen && project.boards.map((board) => (
                         <SidebarItemRow key={board.id} href={route('boards.show', [...params, board.slug])} icon={<LayoutGrid className="size-4 shrink-0" />} name={board.name} projectId={project.id} pin={{ type: 'board', id: board.id }} />
                     ))}
-                    {boardsOpen && <SidebarItemRow href={route('releases.index', params)} icon={<Rocket className="size-4 shrink-0" />} name="Releases" projectId={project.id} />}
-                    {boardsOpen && <SidebarItemRow href={route('projects.health', params)} icon={<HeartPulse className="size-4 shrink-0" />} name="Health" projectId={project.id} />}
-                    {boardsOpen && <SidebarItemRow href={route('workload.index', params)} icon={<Gauge className="size-4 shrink-0" />} name="Workload" projectId={project.id} />}
                 </>
             ),
         });
