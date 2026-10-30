@@ -3,7 +3,7 @@
  * IndexedDB names and the adapter that gives Lexical's CollaborationPlugin the provider shape it
  * expects. Plan: docs/ai/tasks/feat-live-docs.md.
  */
-import type { HocuspocusProvider } from '@hocuspocus/provider';
+import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import type { Provider } from '@lexical/yjs';
 import * as Y from 'yjs';
 import type { Doc } from 'yjs';
@@ -158,4 +158,143 @@ export interface LiveEditorBinding {
     onEditor: (editor: import('lexical').LexicalEditor | null) => void;
     /** Local vs remote change (remote = arrived from someone else through Yjs). */
     onChange: (remote: boolean) => void;
+}
+
+// ── Why live editing is unavailable, and getting it back (BRAI-345) ──────────────────────────────
+
+/**
+ * - `unreachable`: no WebSocket to the realtime server (process down, nginx `/collab`, network);
+ * - `timeout`: connected, but no answer in time (the server waits for Brainitive's access check / load);
+ * - `refused`: the server refused this browser (token, access);
+ * - `app`: the server can't reach Brainitive's internal API (COLLAB_APP_URL / COLLAB_APP_HOST, firewall);
+ * - `session`: Brainitive itself didn't hand out a live session (offline, HTTP error, timeout).
+ */
+export type LiveFailureReason = 'unreachable' | 'timeout' | 'refused' | 'app' | 'session';
+
+export interface LiveFailure {
+    reason: LiveFailureReason;
+    /** short technical detail for the notice and the console (close code, server reason, HTTP status) */
+    detail: string;
+}
+
+const REFUSALS: Record<string, string> = {
+    'invalid-token': 'sign-in token rejected',
+    'expired-token': 'sign-in token expired',
+    'wrong-document': 'token for another document',
+    'invalid-document': 'unknown document',
+    'document-replaced': 'the document was replaced',
+    'access-denied': 'no access',
+};
+
+/** A permission-denied / close reason from realtime/src/server.js → what it means. */
+export function refusalFailure(serverReason: string | undefined): LiveFailure {
+    const reason = String(serverReason ?? '').replace(/^Unauthorized: /, '');
+    if (reason === 'app-unreachable') return { reason: 'app', detail: 'it can’t reach Brainitive' };
+    const appError = reason.match(/^app-error-(\d{3})$/);
+    if (appError) return { reason: 'app', detail: `Brainitive answered ${appError[1]}` };
+    return { reason: 'refused', detail: REFUSALS[reason] ?? (reason || 'permission denied') };
+}
+
+/** An axios error of a session request → what it means. */
+export function sessionFailure(error: unknown): LiveFailure {
+    const e = error as { code?: string; response?: { status?: number } };
+    if (e?.response?.status) return { reason: 'session', detail: `HTTP ${e.response.status}` };
+    if (e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT') return { reason: 'session', detail: 'no answer in time' };
+    return { reason: 'session', detail: typeof navigator !== 'undefined' && navigator.onLine === false ? 'you’re offline' : 'no connection' };
+}
+
+/** One sentence for the notice, e.g. "The live editing server can’t be reached (no connection)." */
+export function describeLiveFailure(failure: LiveFailure | null): string {
+    if (!failure) return '';
+    const what = {
+        unreachable: 'The live editing server can’t be reached',
+        timeout: 'The live editing server didn’t answer in time',
+        refused: 'The live editing server refused the connection',
+        app: 'The live editing server can’t reach Brainitive',
+        session: 'Brainitive couldn’t start live editing',
+    }[failure.reason];
+    return failure.detail ? `${what} (${failure.detail}).` : `${what}.`;
+}
+
+/** Waits between automatic attempts to get live editing back (then 60 s each). */
+export const RECOVERY_DELAYS_MS = [5_000, 10_000, 20_000, 40_000, 60_000];
+
+/**
+ * Run `attempt` with backoff until it returns true — also right away when the browser comes back
+ * online or the tab becomes visible again (a laptop waking up). Returns the stop function.
+ */
+export function retryWithBackoff(attempt: () => Promise<boolean>, delays = RECOVERY_DELAYS_MS): () => void {
+    let stopped = false;
+    let running = false;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const run = async () => {
+        if (stopped || running) return;
+        running = true;
+        if (timer) clearTimeout(timer);
+        timer = null;
+        let done = false;
+        try {
+            done = await attempt();
+        } catch {
+            done = false;
+        }
+        running = false;
+        if (stopped) return;
+        if (done) {
+            stop();
+            return;
+        }
+        tries += 1;
+        schedule();
+    };
+    const schedule = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => { void run(); }, delays[Math.min(tries, delays.length - 1)]);
+    };
+    const now = () => { if (document.visibilityState !== 'hidden') void run(); };
+    const stop = () => {
+        stopped = true;
+        if (timer) clearTimeout(timer);
+        window.removeEventListener('online', now);
+        document.removeEventListener('visibilitychange', now);
+    };
+    window.addEventListener('online', now);
+    document.addEventListener('visibilitychange', now);
+    schedule();
+    return stop;
+}
+
+/**
+ * One connection attempt to see whether live editing works again (fallback mode): a throw-away
+ * provider (own Y doc, no awareness, no IndexedDB) that only waits for the first sync. Null = works.
+ */
+export function probeLiveConnection(url: string, documentName: string, token: string, timeoutMs = 10_000): Promise<LiveFailure | null> {
+    return new Promise((resolve) => {
+        const websocketProvider = new HocuspocusProviderWebsocket({ url });
+        const doc = new Y.Doc();
+        const provider = new HocuspocusProvider({ websocketProvider, name: documentName, document: doc, token, awareness: null });
+        let opened = false;
+        let finished = false;
+        const finish = (result: LiveFailure | null) => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
+            provider.destroy();
+            websocketProvider.destroy();
+            doc.destroy();
+            resolve(result);
+        };
+        const timer = setTimeout(() => finish(opened
+            ? { reason: 'timeout', detail: `no answer within ${Math.round(timeoutMs / 1000)} s` }
+            : { reason: 'unreachable', detail: 'no connection' }), timeoutMs);
+        provider.on('open', () => { opened = true; });
+        provider.on('synced', () => finish(null));
+        provider.on('authenticationFailed', ({ reason }: { reason: string }) => finish(refusalFailure(reason)));
+        websocketProvider.on('disconnect', ({ event }: { event?: CloseEvent }) => {
+            if (event?.reason?.startsWith('Unauthorized: ')) finish(refusalFailure(event.reason));
+            else finish({ reason: 'unreachable', detail: opened ? `connection closed (${event?.code ?? '?'})` : `no connection (${event?.code ?? '?'})` });
+        });
+        provider.attach();
+    });
 }
