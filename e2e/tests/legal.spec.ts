@@ -33,6 +33,26 @@ async function visitor(browser: Browser, options: { colorScheme?: 'light' | 'dar
 }
 
 test.describe('legal pages', () => {
+    test('home links navigate to a separately served website', async ({ browser }) => {
+        const context = await browser.newContext({ serviceWorkers: 'block' });
+        const page = await context.newPage();
+        for (const name of ['Back to home', 'Home']) {
+            await page.goto('/privacy');
+            await page.route('**/*', async (route) => {
+                if (route.request().isNavigationRequest() && new URL(route.request().url()).pathname === '/') {
+                    await route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Website</title><h1>Marketing website</h1>' });
+                } else {
+                    await route.continue();
+                }
+            });
+            await page.getByRole('link', { name, exact: true }).click();
+            await expect(page).toHaveURL(`${BASE_URL}/`);
+            await expect(page.getByRole('heading', { name: 'Marketing website' })).toBeVisible();
+            await page.unroute('**/*');
+        }
+        await context.close();
+    });
+
     test('the homepage footer links every legal page, and each one renders with its version', async ({ browser }) => {
         const guest = await visitor(browser);
         await guest.page.goto('/');
