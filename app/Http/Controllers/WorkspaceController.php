@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
 use App\Notifications\WorkspaceInvitationNotification;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Notifications\WorkspaceNotifications;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -66,6 +67,9 @@ class WorkspaceController extends Controller
             ],
             'description' => 'nullable|string|max:1000',
         ]);
+
+        // Cloud plans: a new workspace starts free, and one person may own only so many free ones
+        app(LimitGate::class)->ensureCanCreateWorkspace($request->user());
 
         $workspace = Workspace::create([
             'name' => $validated['name'],
@@ -439,12 +443,17 @@ class WorkspaceController extends Controller
         $email = strtolower($validated['email']);
         $user = User::where('email', $email)->first();
 
+        if ($user && $workspace->users()->where('user_id', $user->id)->exists()) {
+            return redirect()->back()
+                ->withErrors(['email' => 'This user is already a member of this workspace.']);
+        }
+
+        // Member limit (Cloud plans), before the "send invitation?" question: an open invitation to
+        // this address is already counted
+        app(LimitGate::class)->ensureCanAddMembers($workspace, $workspace->invitations()->forEmail($email)->valid()->exists() ? 0 : 1);
+
         if ($user) {
-            // Existing user: add to workspace if not already a member
-            if ($workspace->users()->where('user_id', $user->id)->exists()) {
-                return redirect()->back()
-                    ->withErrors(['email' => 'This user is already a member of this workspace.']);
-            }
+            // Existing user: add to the workspace
             $workspace->addUser($user, $validated['role'], $request->user());
             $workspace->invitations()->forEmail($email)->whereNull('accepted_at')->update(['accepted_at' => now()]);
 
@@ -526,7 +535,7 @@ class WorkspaceController extends Controller
                 ->withErrors(['user' => 'Cannot remove the workspace owner.']);
         }
 
-        $workspace->users()->detach($user->id);
+        $workspace->removeUser($user);
 
         return redirect()->back()
             ->with('success', "Removed {$user->name} from the workspace.");

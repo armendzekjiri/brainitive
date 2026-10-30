@@ -9,6 +9,7 @@ use App\Models\FeedbackPost;
 use App\Models\Item;
 use App\Models\User;
 use App\Support\Boards\ProjectIssues;
+use App\Support\Entitlements\LimitGate;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -152,6 +153,7 @@ final class FeedbackModeration
             if ($board->project_id !== $portal->project_id) {
                 throw ValidationException::withMessages(['board_id' => 'Pick a board of this project.']);
             }
+            app(LimitGate::class)->ensureContentRoom($portal->project->workspace);
 
             try {
                 $item = ProjectIssues::create($board, $portal->project, $actor, [[

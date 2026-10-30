@@ -11,6 +11,8 @@ use App\Models\TicketEmailMessage;
 use App\Models\TicketReply;
 use App\Notifications\TicketCreatedNotification;
 use App\Notifications\TicketReplyNotification;
+use App\Support\Entitlements\LimitGate;
+use App\Support\Entitlements\LimitReached;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Helpdesks\Mail\TicketMailer;
@@ -273,6 +275,10 @@ final class InboundMail
         $maxBytes = (int) config('helpdesk_mail.max_attachment_bytes');
         $room = min((int) config('helpdesk_mail.max_attachments'),
             self::MAX_CONTACT_FILES_PER_TICKET - TicketAttachment::where('ticket_id', $ticket->id)->where('uploaded_by_contact', true)->count());
+        // Cloud plans: the files count against the helpdesk's workspace
+        $gate = app(LimitGate::class);
+        $workspace = $helpdesk->project->workspace;
+        $adding = 0;
 
         foreach ($message->attachments as $attachment) {
             if (! is_file($attachment['path'])) {
@@ -294,6 +300,13 @@ final class InboundMail
 
                 continue;
             }
+            try {
+                $gate->ensureCanStoreFiles($workspace, $adding + $attachment['size']);
+            } catch (LimitReached) {
+                $refused[] = Uploads::displayName($file).' (no storage left)';
+
+                continue;
+            }
 
             $name = Uploads::name($file);
             $path = Storage::disk('public')->putFileAs('ticket-attachments/'.$ticket->id, $file, $name);
@@ -302,6 +315,7 @@ final class InboundMail
             }
             $stored[] = $path;
             $room--;
+            $adding += $attachment['size'];
 
             TicketAttachment::create([
                 'ticket_id' => $ticket->id,

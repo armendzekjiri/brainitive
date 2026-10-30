@@ -8,6 +8,7 @@ use App\Models\PlanVersion;
 use App\Models\Project;
 use App\Models\Workspace;
 use App\Support\Boards\ProjectIssues;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Plans\PlanDocument;
 use App\Support\Plans\PlanIssueSync;
 use App\Support\Plans\PlanTemplates;
@@ -276,6 +277,7 @@ class PlanController extends Controller
     public function storeIssues(Request $request, Workspace $workspace, Project $project, Plan $plan): JsonResponse
     {
         $this->authorize('update', $plan);
+        app(LimitGate::class)->ensureContentRoom($workspace);
 
         $validated = $request->validate([
             'board_id' => ['required', 'integer', Rule::exists('boards', 'id')->where('project_id', $project->id)],

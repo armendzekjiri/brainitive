@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Models\ProjectTemplate;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Projects\ProjectTransfer;
 use App\Support\Projects\RecentContent;
 use App\Support\Templates\TemplateDocument;
@@ -105,6 +106,11 @@ class ProjectController extends Controller
             'include.*' => Rule::in([...TemplateDocument::SECTIONS, 'none']),
             'request_id' => 'nullable|uuid',
         ]);
+
+        // Cloud plans: project count and content storage (also covers "from a template")
+        $gate = app(LimitGate::class);
+        $gate->ensureCanCreateProject($workspace);
+        $gate->ensureContentRoom($workspace);
 
         if (! empty($validated['template'])) {
             if (isset($validated['include'])) {
@@ -213,6 +219,11 @@ class ProjectController extends Controller
                 $fail('Type the project name exactly to confirm.');
             }
         }]]);
+
+        // The project and its content count towards the target workspace's plan from now on
+        $gate = app(LimitGate::class);
+        $gate->ensureCanCreateProject($target);
+        $gate->ensureContentRoom($target);
 
         try {
             $moved = ProjectTransfer::move($project, $target);
