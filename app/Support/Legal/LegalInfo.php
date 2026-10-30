@@ -21,8 +21,8 @@ class LegalInfo
      * the terms version is stored with each new account (users.terms_version).
      */
     public const DOCUMENTS = [
-        'privacy' => ['version' => '2.2', 'updated' => '2026-10-27'], // v1.45.0: booking pages
-        'terms' => ['version' => '2.0', 'updated' => '2026-10-26'],
+        'privacy' => ['version' => '2.3', 'updated' => '2026-10-30'], // v1.46.0: paid plans (Paddle)
+        'terms' => ['version' => '3.0', 'updated' => '2026-10-30'], // v1.46.0: paid plans via Paddle, BSL 1.1 licence
         'cookies' => ['version' => '2.1', 'updated' => '2026-10-27'],
         'imprint' => ['version' => '1.0', 'updated' => '2026-10-26'],
         'subprocessors' => ['version' => '1.0', 'updated' => '2026-10-26'],

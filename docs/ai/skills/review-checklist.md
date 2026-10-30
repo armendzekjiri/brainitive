@@ -196,7 +196,7 @@ these first:
   every role that can open the page (viewers included) may see it
 - `fillable` that now includes ownership or role columns a user can set
 - Errors that echo internal details to the user
-- New dependency: AGPL-compatible licence (CONVENTIONS *Licence & dependencies*), and
+- New dependency: permissive or LGPL licence, no GPL / AGPL (CONVENTIONS *Licence & dependencies*), and
   `composer audit` / `npm audit` are clean for it
 
 ---

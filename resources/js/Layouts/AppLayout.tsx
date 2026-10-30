@@ -12,6 +12,8 @@ import { QuickCreateSnippetModal } from '@/components/QuickCreateSnippetModal';
 import { QuickCreateBookmarkModal } from '@/components/QuickCreateBookmarkModal';
 import { GlobalStickyNotes } from '@/components/GlobalStickyNotes';
 import { PushPrompt } from '@/components/PushPrompt';
+import { UpgradeDialog } from '@/components/entitlements/UpgradeDialog';
+import { UsageWarningBanner } from '@/components/entitlements/UsageWarningBanner';
 import { SidebarResizer, getInitialSidebarWidth } from '@/components/SidebarResizer';
 import { HelpModal } from '@/components/HelpModal';
 import { NotificationsDropdown } from '@/components/NotificationsDropdown';
@@ -2070,6 +2072,7 @@ export default function AppLayout({ children, title }: Props) {
                     page could shift and push the top bar under the status / address bar, out of reach */}
                 <SidebarInset className="flex h-dvh flex-col overflow-hidden">
                     <TopBar onCreateClick={() => openCreateTaskModal()} onSearchClick={onOpenSearch} onOpenHelp={() => setHelpModalOpen(true)} />
+                    <UsageWarningBanner />
                     <main className="flex-1 overflow-auto bg-muted/30">
                         {children}
                     </main>
@@ -2112,6 +2115,8 @@ export default function AppLayout({ children, title }: Props) {
             <GlobalStickyNotes />
             <WelcomeModal />
             <PushPrompt />
+            {/* a plan limit stopped an action (Cloud plans): flash.limit_reached or a 402 */}
+            <UpgradeDialog />
             <Toaster richColors position="bottom-right" closeButton />
         </GlobalCreateModalContext.Provider>
     );

@@ -466,10 +466,16 @@ Pages work like Confluence. Keep these rules when touching pages:
 
 ## Licence & dependencies
 
-- Brainitive is **AGPL-3.0-only** (`LICENSE`); contributions need the CLA (`CLA.md`, bot in
-  `.github/workflows/cla.yml`) so the project can also be licensed commercially.
-- **New dependencies must be AGPL-compatible** (MIT, BSD, Apache-2.0, LGPL, MPL-2.0, GPL-3.0,
-  AGPL-3.0). No "pro"/paid packages, no SSPL / BUSL / Commons Clause / non-commercial licences.
+- Brainitive is licensed under the **Business Source License 1.1** since v1.46.0 (`LICENSE`: free
+  production use under €2M annual revenue, no competing hosted service, each version AGPL-3.0 after
+  four years; v1.14.0–v1.45.3 stay AGPL-3.0). Contributions need the CLA (`CLA.md`, bot in
+  `.github/workflows/cla.yml`) so the project can also be licensed commercially. Licence fields in
+  `composer.json` / `package.json` say `BUSL-1.1`. We still call it "open source" in marketing; the
+  README, docs (`docs-site/self-hosting/licence.md`) and Terms name the BSL and its terms exactly.
+- **New dependencies must allow use in a source-available / commercial product:** MIT, BSD, ISC,
+  Apache-2.0, MPL-2.0, LGPL (used as a library). **No GPL / AGPL** (they'd force our code under
+  their licence), no SSPL / BUSL / Commons Clause / non-commercial licences, no "pro"/paid packages.
+  Dual-licensed packages are fine when one option is permissive (nette: BSD or GPL).
   Dependency changes still need the maintainer's approval.
 - Anything that only makes sense for Brainitive Cloud (billing, plan limits) must be optional
   and off by default, so self-hosted instances keep every feature.

@@ -13,6 +13,7 @@ use App\Models\Workspace;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Board issues as other modules see them (whiteboard cards, plan rows): one query, one
@@ -124,8 +125,15 @@ class ProjectIssues
      * Create issues in the given column — default the board's first — (and the backlog on
      * Scrum boards).
      *
-     * @param  list<array{title: string, description?: string|null, start_date?: string|null, due_date?: string|null, assigned_to?: int|null, priority_id?: int|null}>  $issues
+     * Per issue (all optional): `column_id` (else the given / first column), `item_type_id`,
+     * `priority_id`, `label_ids`, `story_points`, `parent_id` (an issue of this board — the
+     * subtask joins its parent's sprint, like the issue dialog), `start_time` / `due_time`,
+     * `fields` (`[fieldId => value]`, validated by `ItemFieldValues`).
+     *
+     * @param  list<array{title: string, description?: string|null, start_date?: string|null, due_date?: string|null, assigned_to?: int|null, priority_id?: int|null, column_id?: int|null, item_type_id?: int|null, label_ids?: list<int>|null, story_points?: int|null, parent_id?: int|null, fields?: array<int, mixed>|null}>  $issues
      * @return Collection<int, Item> in the given order
+     *
+     * @throws ValidationException for an invalid custom field value
      */
     public static function create(Board $board, Project $project, User $user, array $issues, ?BoardColumn $column = null): Collection
     {
@@ -138,27 +146,46 @@ class ProjectIssues
         $priorityId = ItemPriority::where('is_default', true)->value('id');
 
         $ids = DB::transaction(function () use ($issues, $board, $column, $project, $typeId, $priorityId, $user) {
-            $position = Item::where('column_id', $column->id)->max('position') ?? 0;
+            $positions = [$column->id => Item::where('column_id', $column->id)->max('position') ?? 0];
             $backlogPosition = Item::where('board_id', $board->id)->whereNull('sprint_id')->max('backlog_position') ?? 0;
 
             $ids = [];
             foreach ($issues as $issue) {
-                $ids[] = $board->items()->create([
+                $columnId = $issue['column_id'] ?? $column->id;
+                $positions[$columnId] ??= Item::where('column_id', $columnId)->max('position') ?? 0;
+                // Subtasks follow their parent (the whole subtree travels with its issue).
+                $sprintId = ! empty($issue['parent_id']) ? Item::whereKey($issue['parent_id'])->value('sprint_id') : null;
+
+                $item = $board->items()->create([
                     'title' => trim($issue['title']),
                     'description' => $issue['description'] ?? null,
                     'project_id' => $project->id,
-                    'column_id' => $column->id,
-                    'item_type_id' => $typeId,
+                    'column_id' => $columnId,
+                    'parent_id' => $issue['parent_id'] ?? null,
+                    'sprint_id' => $sprintId,
+                    'item_type_id' => $issue['item_type_id'] ?? $typeId,
                     'priority_id' => $issue['priority_id'] ?? $priorityId,
                     'key' => $project->getNextItemKey(),
                     'start_date' => $issue['start_date'] ?? null,
+                    'start_time' => $issue['start_time'] ?? null,
                     'due_date' => $issue['due_date'] ?? null,
+                    'due_time' => $issue['due_time'] ?? null,
                     'assigned_to' => $issue['assigned_to'] ?? null,
+                    'story_points' => $issue['story_points'] ?? null,
                     'created_by' => $user->id,
                     'reporter_id' => $user->id,
-                    'position' => ++$position,
+                    'position' => ++$positions[$columnId],
                     'backlog_position' => ++$backlogPosition,
-                ])->id;
+                ]);
+
+                if (! empty($issue['label_ids'])) {
+                    $item->labels()->sync($issue['label_ids']);
+                }
+                if (! empty($issue['fields'])) {
+                    ItemFieldValues::apply($item->setRelation('board', $board), $issue['fields']);
+                }
+
+                $ids[] = $item->id;
             }
 
             return $ids;

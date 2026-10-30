@@ -46,6 +46,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Save, Plus, Pencil, Trash2, Tag, Users, ListTodo, Power, PowerOff, Settings, Shield, Plug, SlidersHorizontal, Workflow } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { openIfLimitReached } from '@/lib/entitlements';
 
 export type ProjectMemberRole = 'admin' | 'editor' | 'viewer';
 
@@ -264,7 +265,10 @@ function ItemTypeForm({
                             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                         });
                         const json = await res.json().catch(() => ({}));
-                        if (!res.ok) throw new Error(json.message ?? 'Icon upload failed');
+                        if (!res.ok) {
+                            openIfLimitReached(json);
+                            throw new Error(json.message ?? 'Icon upload failed');
+                        }
                         return json.icon;
                     }}
                 />
@@ -327,7 +331,7 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-            toast.error(data.message ?? 'Icon upload failed');
+            if (!openIfLimitReached(data)) toast.error(data.message ?? 'Icon upload failed');
             throw new Error(data.message ?? 'Upload failed');
         }
         return data.icon_display;

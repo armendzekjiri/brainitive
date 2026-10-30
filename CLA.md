@@ -19,8 +19,8 @@ request, a patch or an issue comment containing code.
 You grant us and recipients of software distributed by us a perpetual, worldwide,
 non-exclusive, no-charge, royalty-free, irrevocable copyright licence to reproduce, prepare
 derivative works of, publicly display, publicly perform, sublicense and distribute your
-Contributions and such derivative works, **under any licence terms, including the GNU
-Affero General Public License and proprietary commercial licences**.
+Contributions and such derivative works, **under any licence terms, including the Business
+Source License, the GNU Affero General Public License and proprietary commercial licences**.
 
 ## 3. Patent licence
 

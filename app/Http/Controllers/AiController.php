@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\Workspace;
+use App\Support\Entitlements\LimitGate;
 use App\Support\OutboundUrl;
 use App\Support\SafeHtml;
 use Illuminate\Http\Request;
@@ -294,6 +295,7 @@ class AiController extends Controller
     {
         abort_unless($project->workspace_id === $workspace->id, 404);
         $this->authorize('create', [Page::class, $project]);
+        app(LimitGate::class)->ensureContentRoom($workspace);
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',

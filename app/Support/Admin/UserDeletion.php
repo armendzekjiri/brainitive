@@ -5,6 +5,8 @@ namespace App\Support\Admin;
 use App\Models\DataExport;
 use App\Models\InstanceAdmin;
 use App\Models\User;
+use App\Models\Workspace;
+use App\Support\Entitlements\WorkspaceMembershipChanged;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -68,6 +70,9 @@ class UserDeletion
 
     public static function delete(User $user): void
     {
+        // Workspaces the user leaves (owned ones go with the account): their seat count changes
+        $leaves = DB::table('workspace_user')->where('user_id', $user->id)->pluck('workspace_id');
+
         DB::transaction(function () use ($user) {
             foreach (static::ownedContent($user) as $table => $query) {
                 $query->get(['t.id', 'w.owner_id'])
@@ -88,6 +93,8 @@ class UserDeletion
             DataExport::where('user_id', $user->id)->get()->each->expire();
             $user->delete();
         });
+
+        Workspace::whereIn('id', $leaves)->get()->each(fn (Workspace $workspace) => WorkspaceMembershipChanged::dispatch($workspace));
     }
 
     /**

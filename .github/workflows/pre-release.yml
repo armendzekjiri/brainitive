@@ -83,6 +83,15 @@ jobs:
             git fetch -q origin pre-release
             git reset -q --hard ${{ github.sha }}
             composer install --no-dev --optimize-autoloader --no-interaction -q
+            # Brainitive Cloud (v1.46.0): the private brainitive/cloud package, only when its checkout
+            # exists on the server (its README: server-only composer.cloud.json, nothing public changes)
+            CLOUD_DIR=/var/www/brainitive-cloud-dev
+            if [ -x "$CLOUD_DIR/scripts/composer-cloud.sh" ]; then
+              echo ">>> brainitive/cloud from $CLOUD_DIR (main)..."
+              git -C "$CLOUD_DIR" fetch -q origin main
+              git -C "$CLOUD_DIR" reset -q --hard origin/main
+              "$CLOUD_DIR/scripts/composer-cloud.sh" "$PWD" --no-dev --optimize-autoloader
+            fi
             npm ci --silent
             npm run build --silent > /dev/null
             echo ">>> Migrating the existing dev data (what production will do)..."

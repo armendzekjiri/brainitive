@@ -52,6 +52,9 @@ export const PUSH_E2E = { vapidPublicKey: 'BDk2GPkD9AFgfvh6G-rXWxZTv1MEdII6HUA_5
  */
 export const LIVE = { port: PORT + 101 } as const;
 
+/** Cloud plan limits in the local e2e app (config driver): only for workspaces named `plan-limit-…`. */
+export const PLAN_LIMITS = { slugPrefix: 'plan-limit-', plan: 'Free', members: 3, projects: 5, billingUrl: '/billing-e2e' } as const;
+
 /** Seeded workspace / project / board (slugs). */
 export const SEED = { workspace: 'e2e-workspace', project: 'website', board: 'main-board', key: 'WEB' } as const;
 
@@ -128,6 +131,14 @@ export function appEnv(): Record<string, string> {
         // analytics-consent.spec.ts: requests with `X-E2E-Analytics: 1` count as brainitive.app for analytics (consent
         // notice + Umami config); honoured only with APP_ENV=e2e. The spec intercepts the stats host: nothing leaves.
         ANALYTICS_E2E_OPT_IN: 'true',
+        // plan-limits.spec.ts (Cloud plans, v1.46.0): fixed Free limits, but only for workspaces whose slug starts with
+        // PLAN_LIMITS.slugPrefix — every other journey (and the seeded workspace) stays unlimited
+        ENTITLEMENTS_DRIVER: 'config',
+        ENTITLEMENTS_ONLY_SLUG_PREFIX: PLAN_LIMITS.slugPrefix,
+        ENTITLEMENTS_PLAN: PLAN_LIMITS.plan,
+        ENTITLEMENTS_MEMBERS: String(PLAN_LIMITS.members),
+        ENTITLEMENTS_PROJECTS: String(PLAN_LIMITS.projects),
+        ENTITLEMENTS_BILLING_URL: PLAN_LIMITS.billingUrl,
         PHP_CLI_SERVER_WORKERS: process.env.E2E_SERVER_WORKERS ?? '4',
     };
 }

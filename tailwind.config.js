@@ -6,6 +6,7 @@ export default {
     darkMode: ['class'],
     content: [
         './vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php',
+        './vendor/brainitive/cloud/resources/js/**/*.tsx', // Brainitive Cloud only (private package)
         './storage/framework/views/*.php',
         './resources/views/**/*.blade.php',
         './resources/js/**/*.tsx',

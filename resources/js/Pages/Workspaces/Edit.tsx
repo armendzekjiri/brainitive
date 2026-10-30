@@ -63,8 +63,11 @@ import {
     Sparkles,
     Webhook as WebhookIcon,
     Scale,
+    Gauge,
 } from 'lucide-react';
 import { WorkspaceLegalSettings } from '@/components/legal/WorkspaceLegalSettings';
+import { WorkspaceUsageCard } from '@/components/entitlements/WorkspaceUsageCard';
+import { isLimitReachedError } from '@/lib/entitlements';
 import { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { Link } from '@inertiajs/react';
 import { toast } from 'sonner';
@@ -349,11 +352,13 @@ export default function WorkspacesEdit({
     companySizes,
 }: Props) {
     const { props } = usePage<Props>();
+    // Cloud plans (v1.46.0): null on self-hosted installs, then there is no "Plan & usage" tab
+    const entitlements = props.entitlements ?? null;
 
     const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
     const [inviteConfirmPending, setInviteConfirmPending] = useState<{ email: string; role: string } | null>(null);
     const [inviteSending, setInviteSending] = useState(false);
-    const [settingsTab, setSettingsTab] = useState<'general' | 'branding' | 'members' | 'ai' | 'legal' | 'danger'>('general');
+    const [settingsTab, setSettingsTab] = useState<'general' | 'branding' | 'members' | 'ai' | 'legal' | 'plan' | 'danger'>('general');
 
     useEffect(() => {
         const message = props.flash?.success;
@@ -456,6 +461,10 @@ export default function WorkspacesEdit({
                         email: err.response.data.email,
                         role: err.response.data.role,
                     });
+                } else if (isLimitReachedError(err)) {
+                    // the upgrade dialog takes over (bootstrap.ts)
+                    setInviteDialogOpen(false);
+                    setInviteConfirmPending(null);
                 } else {
                     toast.error(err.response?.data?.message ?? 'Something went wrong.');
                 }
@@ -496,7 +505,15 @@ export default function WorkspacesEdit({
                     router.reload();
                 }
             })
-            .catch(() => toast.error('Failed to send invitation.'))
+            .catch((err) => {
+                if (isLimitReachedError(err)) {
+                    // the upgrade dialog takes over (bootstrap.ts)
+                    setInviteDialogOpen(false);
+                    setInviteConfirmPending(null);
+                    return;
+                }
+                toast.error('Failed to send invitation.');
+            })
             .finally(() => setInviteSending(false));
     };
 
@@ -651,6 +668,11 @@ export default function WorkspacesEdit({
                                     <TabsTrigger value="legal" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
                                         <Scale className="size-4" />Legal
                                     </TabsTrigger>
+                                    {entitlements && (
+                                        <TabsTrigger value="plan" className="w-full justify-start gap-2 px-3 h-9 data-[state=active]:bg-secondary data-[state=active]:text-foreground data-[state=active]:shadow-none">
+                                            <Gauge className="size-4" />Plan &amp; usage
+                                        </TabsTrigger>
+                                    )}
                                     {/* Webhooks has its own page (v1.39.0, BRAI-104) */}
                                     <Link href={route('webhooks.index', workspace.slug)} className="inline-flex h-9 w-full shrink-0 items-center justify-start gap-2 whitespace-nowrap rounded-sm px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
                                         <WebhookIcon className="size-4" />Webhooks
@@ -1379,6 +1401,13 @@ export default function WorkspacesEdit({
                         <TabsContent value="legal">
                             <WorkspaceLegalSettings workspace={workspace} />
                         </TabsContent>
+
+                        {/* Plan & usage: Cloud plans only (v1.46.0) */}
+                        {entitlements && (
+                            <TabsContent value="plan">
+                                <WorkspaceUsageCard entitlements={entitlements} />
+                            </TabsContent>
+                        )}
 
                         {/* Danger Zone */}
                         <TabsContent value="danger">

@@ -6,6 +6,7 @@ use App\Jobs\RunImport;
 use App\Models\ImportRun;
 use App\Models\Project;
 use App\Models\Workspace;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Imports\ImportFailed;
 use App\Support\Imports\ImportRegistry;
 use Illuminate\Http\JsonResponse;
@@ -61,6 +62,7 @@ class ImportController extends Controller
 
         $project = isset($data['project_id']) ? Project::find($data['project_id']) : null;
         abort_unless($importer::authorize($request->user(), $workspace, $project), 403);
+        $this->ensureRoom($workspace, $importer::needsProject());
 
         $file = $request->file('file');
         $run = ImportRun::create([
@@ -118,6 +120,8 @@ class ImportController extends Controller
         $importer = ImportRegistry::make($importRun->source);
         $project = $importRun->project;
         abort_unless($importer::authorize($request->user(), $workspace, $project), 403);
+        // checked again here, not in the queued run: the user sees the limit, not a failed import
+        $this->ensureRoom($workspace, $importer::needsProject());
 
         if ($importRun->status === ImportRun::PREVIEWED) {
             $options = $request->validate(['options' => ['array'], ...collect($importer->optionRules($importRun))->mapWithKeys(fn ($rules, $key) => ["options.$key" => $rules])->all()])['options'] ?? [];
@@ -156,6 +160,16 @@ class ImportController extends Controller
         }
 
         return redirect()->route('imports.index', $workspace->slug)->with('success', 'Import removed.');
+    }
+
+    /** Cloud plans: every import adds content; a restore (no target project) also adds a project. */
+    private function ensureRoom(Workspace $workspace, bool $needsProject): void
+    {
+        $gate = app(LimitGate::class);
+        if (! $needsProject) {
+            $gate->ensureCanCreateProject($workspace);
+        }
+        $gate->ensureContentRoom($workspace);
     }
 
     private function guard(Request $request, Workspace $workspace, ImportRun $run): void

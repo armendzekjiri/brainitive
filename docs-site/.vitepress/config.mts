@@ -95,7 +95,7 @@ export default defineConfig({
         footer: {
             message:
                 '<a href="https://www.brainitive.app/privacy">Privacy</a> · <a href="https://www.brainitive.app/imprint">Imprint</a> · <a href="https://brainitive.app/support/security-issue">Report a security issue</a>',
-            copyright: 'Brainitive — open source, AGPL-3.0',
+            copyright: 'Brainitive — open source, Business Source License 1.1',
         },
     },
 });

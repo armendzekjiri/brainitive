@@ -75,9 +75,9 @@ import {
     Video,
     CalendarSync,
     WifiOff,
-    Radio,
     MailCheck,
     UsersRound,
+    Terminal,
     type LucideIcon,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -85,7 +85,7 @@ import { Button } from '@/components/ui/button';
 import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks';
 import { TermsNotice } from '@/components/legal/TermsNotice';
 import GitHubStarButton from '@/components/GitHubStarButton';
-import { DOCS_URL, SELF_HOSTING_DOCS_URL } from '@/lib/docs';
+import { DOCS_URL, LICENCE_DOCS_URL, SELF_HOSTING_DOCS_URL } from '@/lib/docs';
 
 /*
  * Brand palette
@@ -156,8 +156,8 @@ const SELF_HOSTING_URL = SELF_HOSTING_DOCS_URL;
 type Billing = 'monthly' | 'yearly';
 
 /**
- * Brainitive Cloud tiers; prices per user and month in EUR (yearly = billed once a year).
- * Planned prices only: Cloud is free during early access and nothing is billed yet.
+ * Brainitive Cloud plans (v1.46.0), priced per user and per workspace in EUR. Yearly prices are
+ * shown per month. The limits match the private brainitive/cloud package's plan table.
  */
 const CLOUD_PLANS: {
     name: string;
@@ -170,45 +170,60 @@ const CLOUD_PLANS: {
 }[] = [
     {
         name: 'Free',
-        description: 'For small teams getting started.',
+        description: 'For trying Brainitive with a small team.',
         price: { monthly: 0, yearly: 0 },
         perUser: false,
         features: [
-            'Up to 5 members',
-            'All features: boards, Scrum, docs, whiteboards, Gantt plans',
-            'Unlimited projects, pages and boards',
-            '1 GB file storage',
-            'Community support',
+            'Up to 3 members per workspace',
+            '5 projects, unlimited docs and boards',
+            '500 MB content · 3 GB files',
+            'Version history: 7 days',
+            'Every feature: boards, Scrum, docs, whiteboards, Gantt plans',
         ],
-        cta: 'Join early access',
+        cta: 'Create a free workspace',
+    },
+    {
+        name: 'Starter',
+        description: 'For small teams that work on Brainitive every day.',
+        price: { monthly: 3, yearly: 20 / 12 },
+        perUser: true,
+        features: [
+            'Up to 25 members per workspace',
+            '30 projects, unlimited docs and boards',
+            '5 GB content · 50 GB files',
+            'Version history: last 5 forever, older ones 30 days',
+            'Everything in Free',
+        ],
+        cta: 'Start with Starter',
     },
     {
         name: 'Team',
         description: 'For teams that run their projects on Brainitive.',
-        price: { monthly: 6, yearly: 5 },
+        price: { monthly: 5, yearly: 50 / 12 },
         perUser: true,
         features: [
-            'Unlimited members and guests by role',
-            'Everything in Free',
-            '100 GB file storage',
+            'Unlimited members and projects',
+            '10 GB content · 100 GB files',
+            'Extra storage when you need it (coming soon)',
+            'Full version history, forever',
             'Email support (within 2 business days)',
         ],
-        cta: 'Join early access',
+        cta: 'Start with Team',
         highlighted: true,
     },
     {
         name: 'Business',
         description: 'For companies with compliance needs.',
-        price: { monthly: 12, yearly: 10 },
+        price: { monthly: 15, yearly: 150 / 12 },
         perUser: true,
         features: [
-            'Everything in Team',
+            'Everything in Team, unlimited storage',
             'Priority support (next business day)',
             'Data processing agreement (DPA / AVV)',
             '99.9% uptime SLA',
             'Daily backups with 30-day restore',
         ],
-        cta: 'Join early access',
+        cta: 'Start with Business',
     },
 ];
 
@@ -228,24 +243,13 @@ function PricingSection() {
                         Pricing
                     </div>
                     <h2 className="text-3xl sm:text-4xl font-bold text-[#485E72] dark:text-slate-100 mb-4">
-                        Open source. Pay only for the cloud.
+                        Open source. Self-host it or let us run it.
                     </h2>
                     <p className="text-[#485E72]/60 dark:text-slate-400 max-w-2xl mx-auto text-lg">
-                        Every feature is free to self-host. Brainitive Cloud runs it for you &mdash;
-                        updates, backups and support included.
+                        Every feature is free to self-host for organizations under &euro;2M annual revenue. Brainitive Cloud
+                        runs it for you &mdash; updates, backups and support included.
                     </p>
 
-                    <div className="mt-8 mx-auto max-w-2xl rounded-2xl border border-[#69A748]/30 bg-[#69A748]/[0.07] px-5 py-4 text-left sm:flex sm:items-start sm:gap-3">
-                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#69A748] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
-                            <Sparkles className="h-3 w-3" />
-                            Early access
-                        </span>
-                        <p className="mt-2 sm:mt-0 text-sm text-[#485E72]/80 dark:text-slate-300">
-                            <strong className="text-[#485E72] dark:text-slate-100">Brainitive Cloud is free while we're in early access</strong> &mdash;
-                            no plan limits, no credit card. The prices below are planned for later. We'll announce them at
-                            least 30 days ahead, and you only pay if you choose a paid plan.
-                        </p>
-                    </div>
 
                     <div className="mt-8 inline-flex items-center rounded-xl border border-border/70 bg-card/70 p-1" role="radiogroup" aria-label="Billing period">
                         {(['monthly', 'yearly'] as Billing[]).map((period) => (
@@ -260,7 +264,7 @@ function PricingSection() {
                                 {period === 'monthly' ? 'Monthly' : 'Yearly'}
                                 {period === 'yearly' && (
                                     <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${billing === 'yearly' ? 'bg-white/20' : 'bg-[#69A748]/15 text-[#69A748]'}`}>
-                                        −17%
+                                        up to −44%
                                     </span>
                                 )}
                             </button>
@@ -269,7 +273,7 @@ function PricingSection() {
                 </RevealSection>
 
                 {/* Cloud tiers */}
-                <div className="grid gap-6 md:grid-cols-3">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                     {CLOUD_PLANS.map((plan, i) => (
                         <RevealSection key={plan.name} delay={i * 80}>
                             <div
@@ -286,15 +290,10 @@ function PricingSection() {
                                 <div className="text-xs font-semibold uppercase tracking-wider text-[#0E83DC]">Cloud</div>
                                 <h3 className="mt-1 font-bold text-xl text-[#485E72] dark:text-slate-100">{plan.name}</h3>
                                 <p className="mt-1 text-sm text-[#485E72]/60 dark:text-slate-400">{plan.description}</p>
-                                {plan.perUser && (
-                                    <span className="mt-4 self-start rounded-full bg-[#69A748]/15 px-2.5 py-0.5 text-[11px] font-bold text-[#69A748]">
-                                        Free during early access
-                                    </span>
-                                )}
-                                <div className={`${plan.perUser ? 'mt-2' : 'mt-5'} flex items-baseline gap-1.5`}>
+                                <div className="mt-5 flex items-baseline gap-1.5">
                                     <span className="text-4xl font-bold text-[#485E72] dark:text-slate-100">€{formatEuro(plan.price[billing])}</span>
                                     <span className="text-sm text-[#485E72]/60 dark:text-slate-400">
-                                        {plan.perUser ? `per user / month${billing === 'yearly' ? ', billed yearly' : ''}, later` : 'forever'}
+                                        {plan.perUser ? `per user / month${billing === 'yearly' ? ', billed yearly' : ''}` : 'forever'}
                                     </span>
                                 </div>
                                 <ul className="mt-6 space-y-2.5 flex-1">
@@ -331,12 +330,16 @@ function PricingSection() {
                                 </div>
                                 <div className="text-right">
                                     <div className="text-3xl font-bold text-[#485E72] dark:text-slate-100">€0</div>
-                                    <div className="text-xs text-[#485E72]/60 dark:text-slate-400">AGPL-3.0</div>
+                                    <div className="text-xs text-[#485E72]/60 dark:text-slate-400">under &euro;2M revenue</div>
                                 </div>
                             </div>
                             <p className="mt-3 text-sm text-[#485E72]/60 dark:text-slate-400 flex-1">
-                                Every feature, unlimited users, on your own server. One Docker command to start,
-                                community support on GitHub.
+                                Every feature, unlimited users, on your own server &mdash; free for organizations under &euro;2M
+                                annual revenue, and always for personal, non-profit and educational use. One Docker command
+                                to start, community support on GitHub.{' '}
+                                <a href={LICENCE_DOCS_URL} target="_blank" rel="noopener" className="font-semibold text-[#0E83DC] hover:underline">
+                                    Licence terms
+                                </a>
                             </p>
                             <div className="mt-5 flex flex-wrap gap-3">
                                 <a href={SELF_HOSTING_URL} target="_blank" rel="noopener" className="inline-flex items-center gap-2 rounded-xl bg-[#485E72] dark:bg-slate-100 px-4 py-2.5 text-sm font-bold text-white dark:text-slate-900 hover:opacity-90 transition-opacity">
@@ -361,7 +364,7 @@ function PricingSection() {
                                 <div className="text-right text-sm font-semibold text-[#485E72]/70 dark:text-slate-300">Custom</div>
                             </div>
                             <ul className="mt-3 grid gap-1.5 text-sm text-[#485E72]/70 dark:text-slate-300 sm:grid-cols-2 flex-1">
-                                {['Commercial licence (no AGPL obligations)', 'Dedicated instance or on-premise', 'SAML SSO & SCIM on request', 'Custom SLA & onboarding'].map((item) => (
+                                {['Commercial licence for €2M+ revenue', 'Dedicated instance or on-premise', 'SAML SSO & SCIM on request', 'Custom SLA & onboarding'].map((item) => (
                                     <li key={item} className="flex items-start gap-2">
                                         <Check className="h-4 w-4 shrink-0 mt-0.5 text-[#69A748]" strokeWidth={2.5} />
                                         {item}
@@ -398,17 +401,17 @@ const SPOTLIGHT: {
     shortcut?: string;
 }[] = [
     {
-        key: 'everything-live',
-        version: 'v1.44',
-        icon: Radio,
-        color: '#0E83DC',
-        title: 'Everything live',
+        key: 'cli',
+        version: 'v1.47',
+        icon: Terminal,
+        color: '#485E72',
+        title: 'Brainitive in your terminal',
         description:
-            'Boards, plans, comments, issue descriptions and whiteboards update the moment a teammate changes them — see who’s here and who’s typing.',
+            'One command installs the CLI on macOS, Linux and Windows. Capture a thought, create an issue with a screenshot, add tasks, save snippets, search — and let AI agents use your workspace.',
         points: [
-            'Cards move on everyone’s board, no reload',
-            'Draw together on whiteboards with named cursors',
-            'Instant notification bell',
+            'curl -fsSL brainitive.app/install.sh | sh',
+            'brainitive capture "ask Dana about Q4"',
+            'brainitive mcp: your account for Claude Code, Cursor & co.',
         ],
     },
     {
@@ -688,6 +691,79 @@ function ExtensionSection() {
                             <Download className="h-4 w-4" /> Firefox download
                         </a>
                     </div>
+                </div>
+            </RevealSection>
+        </section>
+    );
+}
+
+/** The CLI (v1.47.0): one-line install, the everyday commands, and the MCP bridge for local AI tools. */
+function CliSection() {
+    const lines: { prompt?: boolean; text: string }[] = [
+        { prompt: true, text: 'curl -fsSL https://brainitive.app/install.sh | sh' },
+        { text: 'Installed brainitive 1.47.0 to /usr/local/bin/brainitive' },
+        { prompt: true, text: 'brainitive login' },
+        { text: 'Signed in to https://brainitive.app. 1 workspace(s).' },
+        { prompt: true, text: 'brainitive capture "ask Dana about the Q4 budget"' },
+        { text: 'Captured ask Dana about the Q4 budget  (Captures)' },
+        { prompt: true, text: 'brainitive issue create Crash on save --type Bug --screenshot shot.png' },
+        { text: 'Created SHOP-42 with screenshot  (Acme / Shop / Main Board)' },
+        { prompt: true, text: 'claude mcp add brainitive -- brainitive mcp' },
+    ];
+    const features = [
+        { icon: Download, title: 'One command to install', text: 'macOS, Linux and Windows. A single file, nothing else to set up — Cloud or your own server.' },
+        { icon: Inbox, title: 'Capture from anywhere', text: 'A thought, a link, your clipboard or a file goes straight to your inbox to sort later.' },
+        { icon: Code2, title: 'Issues, tasks, snippets, docs', text: 'Create issues with a screenshot, add tasks, save snippets and bookmarks, publish Markdown as a doc, search everything.' },
+        { icon: Bot, title: 'AI agents included', text: '“brainitive mcp” gives Claude Code, Cursor, Codex and co. your whole workspace — and every server tool is one command away.' },
+    ];
+
+    return (
+        <section id="cli" className="relative z-10 px-6 py-24 sm:py-28">
+            <RevealSection className="max-w-6xl mx-auto grid lg:grid-cols-[1fr_1.1fr] gap-10 items-center">
+                <div className="rounded-2xl border border-[#C0C5C0]/30 dark:border-slate-700/60 bg-[#1f2a36] text-slate-100 shadow-xl shadow-[#485E72]/10 overflow-hidden order-2 lg:order-1">
+                    <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-white/10 bg-white/5">
+                        <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+                        <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+                        <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+                        <span className="ml-3 text-xs text-slate-400">Terminal</span>
+                    </div>
+                    <pre className="p-5 text-[13px] leading-6 overflow-x-auto font-mono">
+                        {lines.map((l, i) => (
+                            <div key={i} className={l.prompt ? 'text-white' : 'text-slate-400'}>
+                                {l.prompt ? <span className="text-[#69A748]">$ </span> : '  '}
+                                {l.text}
+                            </div>
+                        ))}
+                    </pre>
+                </div>
+                <div className="order-1 lg:order-2">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-[#485E72]/20 bg-[#485E72]/5 px-4 py-1.5 text-xs font-semibold text-[#485E72] dark:text-slate-300 mb-4">
+                        <Terminal className="h-3.5 w-3.5" />
+                        Command line
+                    </div>
+                    <h2 className="text-3xl sm:text-4xl font-bold text-[#485E72] dark:text-slate-100 mb-4">Brainitive in your terminal</h2>
+                    <p className="text-[#485E72]/60 dark:text-slate-400 text-lg mb-8 max-w-xl">
+                        For people who live in a terminal — and for the AI agents that do. Sign in through your browser once; the CLI then talks to the same server your connectors use.
+                    </p>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                        {features.map((f) => (
+                            <div key={f.title} className="flex gap-3">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#485E72]/10 text-[#485E72] dark:text-slate-300">
+                                    <f.icon className="h-4 w-4" />
+                                </div>
+                                <div>
+                                    <p className="font-semibold text-[#485E72] dark:text-slate-100 text-sm">{f.title}</p>
+                                    <p className="text-sm text-[#485E72]/60 dark:text-slate-400">{f.text}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <a
+                        href={`${DOCS_URL}/integrations/cli`}
+                        className="mt-8 inline-flex items-center gap-2 rounded-xl border border-[#C0C5C0]/60 dark:border-slate-600 px-4 py-2 text-sm font-semibold text-[#485E72] dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800"
+                    >
+                        CLI docs <ArrowRight className="h-4 w-4" />
+                    </a>
                 </div>
             </RevealSection>
         </section>
@@ -1102,7 +1178,15 @@ export default function Welcome({
                     icon: Bot,
                     title: 'AI agents (MCP)',
                     description:
-                        'Connect ChatGPT or Claude over MCP to work with your issues, docs, comments, sprints and Gantt plans.',
+                        'Connect ChatGPT or Claude over MCP to work with issues, docs, sprints and plans — or hand it a Jira export and let it set up the whole project: columns, types, fields, members and cards.',
+                    isNew: true,
+                },
+                {
+                    icon: Terminal,
+                    title: 'Command line (CLI)',
+                    description:
+                        'Install with one command on macOS, Linux or Windows. Capture, issues with screenshots, tasks, snippets, docs and search from the terminal; an MCP bridge for AI tools on your machine.',
+                    isNew: true,
                 },
                 {
                     icon: Sparkles,
@@ -1685,6 +1769,9 @@ export default function Welcome({
 
                 {/* ═══ Browser extension ═══ */}
                 <ExtensionSection />
+
+                {/* ═══ CLI ═══ */}
+                <CliSection />
 
                 {/* ═══ Pricing ═══ */}
                 <PricingSection />

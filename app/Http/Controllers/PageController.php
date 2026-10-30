@@ -10,6 +10,7 @@ use App\Notifications\PageUpdatedNotification;
 use App\Support\Collab\CollabConfig;
 use App\Support\Collab\PageCollab;
 use App\Support\Collab\WhiteboardCollab;
+use App\Support\Entitlements\LimitGate;
 use App\Support\PageReviews\ReviewGate;
 use App\Support\PageReviews\ReviewPresenter;
 use Illuminate\Http\JsonResponse;
@@ -28,6 +29,7 @@ class PageController extends Controller
     public function store(Request $request, Workspace $workspace, Project $project)
     {
         $this->authorize('create', [Page::class, $project]);
+        app(LimitGate::class)->ensureContentRoom($workspace);
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -694,6 +696,7 @@ class PageController extends Controller
     {
         $this->authorize('view', $page);
         $this->authorize('create', [Page::class, $project]);
+        app(LimitGate::class)->ensureContentRoom($workspace);
 
         $validated = $request->validate([
             'with_subpages' => 'boolean',

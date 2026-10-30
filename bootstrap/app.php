@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\AddCorsHeaders;
 use App\Http\Middleware\DeferAutomations;
+use App\Http\Middleware\EnsureFileRoom;
 use App\Http\Middleware\EnsureInstanceAdmin;
 use App\Http\Middleware\EnsurePortalIdentity;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
@@ -45,6 +46,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'cors' => AddCorsHeaders::class,
+            'file.room' => EnsureFileRoom::class, // v1.46.0 Cloud plans: uploads need file storage left
             'instance.admin' => EnsureInstanceAdmin::class,
             'portal.identity' => EnsurePortalIdentity::class, // v1.42.0 guest portals
         ]);

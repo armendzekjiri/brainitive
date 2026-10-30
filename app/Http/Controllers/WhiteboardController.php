@@ -7,6 +7,7 @@ use App\Models\Page;
 use App\Models\Project;
 use App\Models\Workspace;
 use App\Support\Boards\ProjectIssues;
+use App\Support\Entitlements\LimitGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -40,6 +41,7 @@ class WhiteboardController extends Controller
     public function storeIssues(Request $request, Workspace $workspace, Project $project, Page $page): JsonResponse
     {
         $this->authorize('update', $page);
+        app(LimitGate::class)->ensureContentRoom($workspace);
 
         $validated = $request->validate([
             'board_id' => ['required', 'integer', Rule::exists('boards', 'id')->where('project_id', $project->id)],

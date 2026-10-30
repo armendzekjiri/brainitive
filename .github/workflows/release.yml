@@ -78,6 +78,45 @@ jobs:
           cp dist/*-firefox.zip brainitive-extension-firefox.zip
           gh release upload "$TAG" brainitive-extension-chrome.zip brainitive-extension-firefox.zip --clobber
 
+  # The CLI binaries for macOS, Linux and Windows (both architectures) + checksums.txt on the
+  # same release, with stable names: https://github.com/<repo>/releases/latest/download/brainitive_<os>_<arch>.tar.gz
+  # is what cli/install.sh, install.ps1 and `brainitive update` fetch. Replaced on every push.
+  cli:
+    needs: version
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          check-latest: true # newest patch of that Go line, so stdlib security fixes ship in the binaries
+          cache-dependency-path: cli/go.sum
+      - run: go test ./...
+      - env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+            os=${target%/*}; arch=${target#*/}
+            out=brainitive; [ "$os" = windows ] && out=brainitive.exe
+            GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "dist/$out" ./cmd/brainitive
+            cp README.md dist/README.md
+            if [ "$os" = windows ]; then
+              (cd dist && zip -q "brainitive_${os}_${arch}.zip" "$out" README.md)
+            else
+              tar -czf "dist/brainitive_${os}_${arch}.tar.gz" -C dist "$out" README.md
+            fi
+            rm -f "dist/$out" dist/README.md
+          done
+          (cd dist && sha256sum brainitive_* > checksums.txt && cat checksums.txt)
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: gh release upload "$TAG" dist/brainitive_* dist/checksums.txt --clobber
+
   docker:
     needs: version
     uses: ./.github/workflows/docker-publish.yml

@@ -43,6 +43,7 @@ The chosen design; note alternatives if the choice isn't obvious.
 
 | Plan | Status |
 |---|---|
+| [Release v1.47.0: the Brainitive CLI (Go binary, one-line install, MCP client + stdio bridge) and MCP project setup / bulk import tools](./release-v1.47.0.md) | done |
 | [Release v1.38.0: time tracking & client billing (BRAI-99/100/101)](./release-v1.38.0-billing.md) | done |
 | [Release v1.39.0: notifications, webhooks, insights, custom sidebar (BRAI-102…111)](./release-v1.39.0.md) | done |
 | [Release v1.40.0: automate — automation, recurring issues, email → helpdesk, SLA (BRAI-63/79/123/124/125)](./release-v1.40.0.md) | done |

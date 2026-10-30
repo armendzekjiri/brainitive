@@ -5,7 +5,7 @@ description: Run Brainitive on your own server. What you need, Docker or manual 
 
 # Self-hosting
 
-Brainitive is open source (AGPL-3.0) and runs on your own server. This section explains how to install it, configure it, keep it up to date and keep your data safe.
+Brainitive is open source and runs on your own server — free for organizations under €2 million annual revenue (see [Licence](./licence)). This section explains how to install it, configure it, keep it up to date and keep your data safe.
 
 ::: tip Don't want to run a server?
 [Brainitive Cloud](https://www.brainitive.app/#pricing) is the same software, hosted and updated for you.

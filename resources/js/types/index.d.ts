@@ -576,7 +576,11 @@ export type PageProps<
         success?: string;
         error?: string;
         warning?: string | null;
+        /** A plan limit stopped the action (LimitReached) — opens the upgrade dialog. */
+        limit_reached?: LimitReachedPayload | null;
     };
+    /** Cloud plan, limits and usage of the current workspace (v1.46.0); null when unlimited (self-hosted). */
+    entitlements?: WorkspaceEntitlements | null;
     /** Current user may open the current workspace's settings (admin). */
     canManageWorkspace?: boolean;
     /** The open-source repository + cached star count (GithubStars::shared) for the "Star on GitHub" buttons. */
@@ -3257,4 +3261,38 @@ export interface PublicBookingData {
     status: 'confirmed' | 'cancelled';
     location: string | null;
     conference_url: string | null;
+}
+
+/** Cloud plan limits (App\\Support\\Entitlements, v1.46.0). `null` = unlimited. */
+export interface PlanLimits {
+    plan: string;
+    free: boolean;
+    members: number | null;
+    projects: number | null;
+    contentBytes: number | null;
+    fileBytes: number | null;
+    versions: { keepLatest: number; keepDays: number | null };
+    graceUntil: string | null;
+}
+
+export interface WorkspaceEntitlements {
+    /** False until paid plans launch: limits are shown, nothing is blocked. */
+    enforced: boolean;
+    limits: PlanLimits;
+    usage: { members: number; projects: number; contentBytes: number; fileBytes: number; measuredAt: string | null };
+    /** "Plan & billing" page (brainitive/cloud); null hides every billing link. */
+    billingUrl: string | null;
+}
+
+export type LimitKind = 'members' | 'projects' | 'workspaces' | 'content' | 'files';
+
+/** LimitReached::payload() — the 402 JSON `limit_reached` and the `flash.limit_reached` prop. */
+export interface LimitReachedPayload {
+    kind: LimitKind;
+    limit: number;
+    usage: number;
+    plan: string;
+    workspace: string | null;
+    billingUrl: string | null;
+    message: string;
 }

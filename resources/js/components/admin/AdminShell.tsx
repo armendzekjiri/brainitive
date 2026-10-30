@@ -2,7 +2,7 @@ import AppLayout from '@/Layouts/AppLayout';
 import { cn } from '@/lib/utils';
 import { PageProps } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { Building2, Github, LayoutDashboard, Mail, ScrollText, Settings, ShieldCheck, Users } from 'lucide-react';
+import { Building2, CreditCard, Github, LayoutDashboard, Mail, ScrollText, Settings, ShieldCheck, Users } from 'lucide-react';
 import { ReactNode, useEffect } from 'react';
 import { toast } from 'sonner';
 
@@ -14,6 +14,8 @@ const TABS = [
     { route: 'admin.github-app.show', match: 'admin.github-app.*', label: 'GitHub App', icon: Github },
     { route: 'admin.emails.index', match: 'admin.emails.*', label: 'Emails', icon: Mail },
     { route: 'admin.audit-log', match: 'admin.audit-log', label: 'Audit log', icon: ScrollText },
+    // Brainitive Cloud only: the route comes from the private brainitive/cloud package
+    { route: 'admin.customers.index', match: 'admin.customers.*', label: 'Customers', icon: CreditCard },
 ] as const;
 
 /**
@@ -51,7 +53,7 @@ export default function AdminShell({ title, actions, children }: { title: string
                 </div>
 
                 <nav className="mb-6 flex gap-1 overflow-x-auto border-b" aria-label="Admin sections">
-                    {TABS.map(({ route: name, match, label, icon: Icon }) => {
+                    {TABS.filter((tab) => route().has(tab.route)).map(({ route: name, match, label, icon: Icon }) => {
                         const active = route().current(match);
                         return (
                             <Link

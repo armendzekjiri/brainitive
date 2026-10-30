@@ -1042,6 +1042,43 @@ also wait for read / archive actions in flight (a page older than the action is 
 
 ## Architectural decisions
 
+### Cloud plan limits: traps (v1.46.0, BRAI-160)
+- **Package binding wins through `singletonIf`:** package providers register before `bootstrap/providers.php`, so
+  `EntitlementsServiceProvider` must never use `singleton()` for `Entitlements`. With brainitive/cloud installed,
+  `EntitlementsFoundationTest::test_self_hosted_is_unlimited…` fails by design (`CLOUD_ENTITLEMENTS=false` turns
+  the package binding off).
+- **Callers check the member limit, not `Workspace::addUser`:** creating your own workspace (owner = first member)
+  stays exempt. Accepting an invitation checks with `adding = 0` (the open invitation already counts). Sign-up
+  acceptance (`acceptPendingForUser`) skips a full workspace instead of failing registration.
+- **Content size is `pg_column_size` (compressed / TOAST) over a fixed table list** — add a new user-content table
+  to `WorkspaceUsageMeter::CONTENT`. 0 on SQLite. Editor uploads (`uploads/images|documents`) have no size column
+  and don't count as files yet.
+- **Pruning never deletes:** before `enforced()`, during grace, the newest version, the `current_version`, or a
+  `client_deliverables.page_version_id`. A new feature that points at a version must be added to `VersionPruner`.
+  `Page::versions()` / `Plan::versions()` are ordered `version desc` — use `reorder()` in queries.
+- **fetch() doesn't hit the axios 402 interceptor:** call `openIfLimitReached(await res.json())` (editor image
+  upload, icon uploads do). New upload routes outside `workspaces/{workspace}` need the `file.room` middleware.
+- **MCP tools must catch `LimitReached`** and return `Response::error(message)` — an exception there is a 500.
+- **e2e:** limits apply only to slugs starting with `plan-limit-`; never set `ENTITLEMENTS_FREE_WORKSPACES_PER_OWNER`
+  in e2e (the shared owner creates hundreds of workspaces). Several upload endpoints answer 302 even to JSON — assert
+  on the session in PHPUnit.
+
+### Licence: Business Source License 1.1 instead of AGPL-3.0 (v1.46.0, 2026-10-30)
+- **Why:** the AGPL let anyone resell Brainitive as a hosted service and let big companies self-host for
+  free. BSL 1.1 (MariaDB's template, as Outline uses) with our Additional Use Grant: production use is free
+  under €2M annual revenue (group counted together) and always for personal / non-profit / education;
+  agencies may run it for a client (client's revenue counts); a competing **Hosted Service** needs a
+  commercial licence. Each version becomes AGPL-3.0 four years after release (BSL requires a
+  GPL-compatible Change Licence). Plan: [`tasks/chore-relicense-bsl.md`](./tasks/chore-relicense-bsl.md).
+- **Only the template's Parameters block may change** — the BSL covenants forbid editing the Terms. The
+  grant, Change Date and Change Licence live there.
+- **v1.14.0–v1.45.3 stay AGPL-3.0 forever** (a licence can't be withdrawn from copies already released);
+  the README, docs and LICENSE say so.
+- **Relicensing was possible because every commit is the maintainer's** (plus bots / AI agents) and the
+  CLA allows any licence. Re-check `git shortlog -sne` + signed CLAs before any future licence change.
+- **We still say "open source"** (not an OSI term; Outline does the same under BSL) but never "OSI
+  approved", and the exact terms are in README / docs / Terms. The grant and CLA still need a lawyer.
+
 ### Public docs: VitePress in the same repo, not in the app (2026-10-28)
 docs.brainitive.app is a static VitePress site in `docs-site/` (own `package.json`, not part of the
 app build). **Why:** static HTML ranks well (the app is a client-rendered Inertia SPA without SSR or
@@ -1618,3 +1655,46 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `unchecked_connection_ids` for a "look for an overlap" hint.
 - Recurring task-list tasks block only their first occurrence (the recurrence projection is private to
   `CalendarController`).
+
+### The CLI is an MCP client; project setup over MCP (v1.47.0)
+- **Why Go, why MCP.** The ask was a binary people install with one `curl | sh` and use without any
+  runtime, on macOS, Linux and Windows. Go gives a cgo-free static binary per target from one
+  `go build` matrix (~8 MB). Instead of growing the old `/api/cli` REST surface (8 endpoints, password
+  login that can't work for Google / GitHub / Microsoft accounts), the CLI calls the MCP tools: the 71
+  tools *are* the API, and `brainitive tool <name>` reaches a new tool the moment it is registered.
+  Trade-off: rich tables need the tool's output shape, so the friendly commands are typed wrappers.
+- **Tool names on the wire are the class names in kebab case** (`create-board-item-tool`), not the
+  `create_board_item` the server instructions use — except `search` and `fetch`, which carry
+  `#[Name]` for the ChatGPT deep-research contract. `mcp.ToolName()` in the CLI normalises both.
+- **Laravel MCP over HTTP needs no session for `tools/call`**: a bare POST with a Bearer token works
+  (that's how the PHPUnit tests post too). `initialize` hands out an `MCP-Session-Id`, which the proxy
+  forwards; responses are JSON unless the server streams, so the client also parses the last SSE
+  `data:` event.
+- **Loopback OAuth is allowed by `GuardOAuthFlows`** (`127.0.0.1` / `localhost` / `::1`), so the CLI
+  registers a client per login with `http://127.0.0.1:<port>/callback` (ports 52817–52819, then any).
+  A Passport refresh token is single use; the CLI saves the rotated pair after every refresh.
+- **`list-projects` 500ed for non-admins**: `->get(['id', 'name', …])` dropped `workspace_id`, so
+  `hasProjectAccess()` got a null workspace. Found by running the binary against a real server; any
+  `get([...columns])` feeding a policy must keep the foreign keys.
+- **Bulk create resolves everything first, writes inside one `IdempotentRequest` transaction.** A bad
+  label / column / option in card 37 fails the whole batch with the valid values and nothing is created;
+  the same `request_id` returns the stored result, so a timeout retry never duplicates. Parents by
+  `parent_external_key` are a second pass after the ids exist (same transaction).
+- **Uniqueness checks must include soft-deleted rows.** `projects`, `boards` and `task_lists` keep
+  their unique name / key / slug after a soft delete; a tool that checks with the default scope
+  passes and then hits the index. Inside `IdempotentRequest` that used to surface as a
+  `ModelNotFoundException` (the wrapper assumed every unique violation was its own retry race); it
+  now rethrows when no `mcp_requests` row exists. Use `withTrashed()` for these checks.
+- **Subtasks follow their parent's sprint** (`ProjectIssues::create` reads `sprint_id` from the
+  parent), as the issue dialog does; `update_board` refuses `kanban` while a sprint is active.
+- **`brainitive logout` revokes on the server** through the old `DELETE /api/cli/logout`, which now
+  revokes the refresh token too. Each `brainitive login` registers a fresh OAuth client (loopback
+  port in the redirect URI), so Connected apps lists one "Brainitive CLI" per login.
+- **"Same name again returns the existing one"** for labels, types, priorities and fields (no
+  `request_id`): an AI rerunning a setup step must not create duplicates, and names are what it has.
+  `Epic` / `Bug` / `Story` / `Task` / `Subtask` already exist instance-wide, so `create_item_type`
+  for those answers `created: false, scope: instance`.
+- **Live check without a browser**: seed a throwaway DB (`php artisan passport:client --personal`,
+  then `createToken('x', ['mcp:use', 'capture'])`), `php artisan serve --port 8099`, and run the binary
+  with `BRAINITIVE_TOKEN` / `BRAINITIVE_SERVER`. `php artisan tinker <file>` drops into the REPL and
+  hangs in a non-interactive shell — use `--execute="include '...';"`.
