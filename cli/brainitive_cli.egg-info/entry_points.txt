@@ -1,2 +1,0 @@
-[console_scripts]
-brainitive = brainitive_cli.main:main

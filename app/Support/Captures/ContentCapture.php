@@ -15,6 +15,7 @@ use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\User;
 use App\Support\Boards\ProjectIssues;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Mcp\PageContentConverter;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Model;
@@ -114,6 +115,13 @@ class ContentCapture
      */
     public static function create(User $user, string $type, Model $destination, array $data): Model
     {
+        // Cloud plans: issues and docs count as content (browser extension, captures inbox)
+        match ($type) {
+            'issue' => app(LimitGate::class)->ensureContentRoom($destination->project->workspace),
+            'page' => app(LimitGate::class)->ensureContentRoom($destination->workspace),
+            default => null,
+        };
+
         return match ($type) {
             'issue' => self::issue($user, $destination, $data),
             'task' => self::task($user, $destination, $data),

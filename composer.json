@@ -4,7 +4,7 @@
     "type": "project",
     "description": "Brainitive: boards, docs, whiteboards and Gantt plans in one open-source workspace.",
     "keywords": ["project-management", "kanban", "scrum", "wiki", "whiteboard", "gantt", "laravel"],
-    "license": "AGPL-3.0-only",
+    "license": "BUSL-1.1",
     "require": {
         "php": "^8.2",
         "barryvdh/laravel-dompdf": "^3.1",

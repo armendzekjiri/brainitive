@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Support\Entitlements\WorkspaceMembershipChanged;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
@@ -187,6 +189,12 @@ class Workspace extends Model
         return $this->hasMany(SnippetCollection::class)->orderBy('position');
     }
 
+    /** Nightly measured usage for the Cloud plan limits (usage:measure, v1.46.0). */
+    public function usage(): HasOne
+    {
+        return $this->hasOne(WorkspaceUsage::class);
+    }
+
     /**
      * Get pending invitations for this workspace.
      */
@@ -196,7 +204,8 @@ class Workspace extends Model
     }
 
     /**
-     * Add a user to this workspace with a role.
+     * Add a user to this workspace with a role. Callers that add someone else check the member
+     * limit first (LimitGate::ensureCanAddMembers); the seat count follows the event.
      */
     public function addUser(User $user, string $role = 'viewer', ?User $invitedBy = null): void
     {
@@ -206,6 +215,7 @@ class Workspace extends Model
             'accepted_at' => now(),
             'invited_by' => $invitedBy?->id,
         ]);
+        WorkspaceMembershipChanged::dispatch($this);
     }
 
     /**
@@ -222,6 +232,7 @@ class Workspace extends Model
     public function removeUser(User $user): void
     {
         $this->users()->detach($user->id);
+        WorkspaceMembershipChanged::dispatch($this);
     }
 
     /**

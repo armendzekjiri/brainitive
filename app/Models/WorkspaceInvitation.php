@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\Entitlements\LimitGate;
+use App\Support\Entitlements\LimitReached;
 use App\Support\Notifications\WorkspaceNotifications;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -134,6 +136,14 @@ class WorkspaceInvitation extends Model
             ->get();
 
         foreach ($invitations as $invitation) {
+            // A workspace over its member limit (Cloud plans) keeps the invitation open: the link in
+            // the email still works once the workspace is upgraded. Registration itself never fails.
+            try {
+                app(LimitGate::class)->ensureCanAddMembers($invitation->workspace, 0);
+            } catch (LimitReached) {
+                continue;
+            }
+
             $invitation->markAsAccepted();
             // already a member (added directly meanwhile): the invitation is simply done
             if (! $invitation->workspace->users()->where('users.id', $user->id)->exists()) {

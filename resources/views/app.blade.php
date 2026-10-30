@@ -64,7 +64,10 @@
         <!-- Scripts -->
         @routes
         @viteReactRefresh
-        @vite(['resources/js/app.tsx', "resources/js/Pages/{$page['component']}.tsx"])
+        {{-- "Cloud/…" pages come from the private brainitive/cloud package (Brainitive Cloud only, resources/js/app.tsx) --}}
+        @vite(['resources/js/app.tsx', str_starts_with($page['component'], 'Cloud/')
+            ? 'vendor/brainitive/cloud/resources/js/Pages/'.substr($page['component'], strlen('Cloud/')).'.tsx'
+            : "resources/js/Pages/{$page['component']}.tsx"])
         @inertiaHead
     </head>
     <body class="font-sans antialiased">

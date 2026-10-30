@@ -29,6 +29,7 @@ import { toast } from 'sonner';
 const URL_REGEX = /^https?:\/\/[^\s]+/i;
 
 import { EmojiMartIconPicker } from '@/components/EmojiMartIconPicker';
+import { openIfLimitReached } from '@/lib/entitlements';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -120,7 +121,7 @@ export default function BookmarksIndex({ workspace, bookmarks }: Props) {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-            toast.error(data.message ?? 'Icon upload failed');
+            if (!openIfLimitReached(data)) toast.error(data.message ?? 'Icon upload failed');
             throw new Error(data.message ?? 'Upload failed');
         }
         return data.icon_display;
@@ -138,7 +139,7 @@ export default function BookmarksIndex({ workspace, bookmarks }: Props) {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-            toast.error(data.message ?? 'Icon upload failed');
+            if (!openIfLimitReached(data)) toast.error(data.message ?? 'Icon upload failed');
             throw new Error(data.message ?? 'Upload failed');
         }
         return data.icon_display;

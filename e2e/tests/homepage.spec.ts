@@ -5,8 +5,10 @@ import { expect, test } from '../fixtures';
  * The public homepage (Pages/Welcome.tsx) shows what the latest releases shipped (BRAI-98).
  * When a release adds feature cards to the homepage, add their titles here.
  */
-const SPOTLIGHT = ['Everything live', 'Emails that look like Brainitive', 'Privacy by default'];
+const SPOTLIGHT = ['Brainitive in your terminal', 'Emails that look like Brainitive', 'Privacy by default'];
 const NEW_FEATURES = [
+    'Command line (CLI)',
+    'AI agents (MCP)',
     'Project templates',
     'Saved board views',
     'Custom fields',
@@ -93,8 +95,11 @@ test.describe('homepage', () => {
             await expect(card).toBeVisible();
             await expect(card.getByText('New', { exact: true })).toBeVisible();
         }
-        // the MCP card names the connector's newer tools
-        await expect(features.getByText(/comments, sprints and Gantt plans/)).toBeVisible();
+        // the MCP card names the connector's newer tools (v1.47.0: project setup from an export)
+        await expect(features.getByText(/let it set up the whole project/)).toBeVisible();
+        // the CLI section shows the one-line install
+        // v1.47.1: the installer comes from the GitHub release, next to the binaries
+        await expect(page.locator('#cli').getByText('curl -fsSL https://github.com/armendzekjiri/brainitive/releases/latest/download/install.sh | sh')).toBeVisible();
 
         expect(errors, 'uncaught errors on the homepage').toEqual([]);
         await context.close();
@@ -131,6 +136,35 @@ test.describe('homepage', () => {
         await expect(page.getByRole('link', { name: 'Firefox download' })).toHaveAttribute('href', /brainitive-extension-firefox\.zip$/);
         // the manual "Load unpacked" steps for Chrome are gone
         await expect(page.getByText('Load unpacked')).toHaveCount(0);
+
+        expect(errors, 'uncaught errors on the homepage').toEqual([]);
+        await context.close();
+    });
+
+    test('pricing explains who self-hosts for free and links the licence terms (BSL 1.1, v1.46.0)', async ({ browser }) => {
+        const { context, page, errors } = await guestPage(browser, { viewport: { width: 1280, height: 900 } });
+        await page.goto('/#pricing');
+        const pricing = page.locator('#pricing');
+        await expect(pricing.getByRole('heading', { level: 2, name: 'Open source. Self-host it or let us run it.' })).toBeVisible();
+
+        await expect(pricing.getByText('under €2M revenue', { exact: true })).toBeVisible();
+        await expect(pricing.getByText(/always for personal, non-profit and educational use/)).toBeVisible();
+        const terms = pricing.getByRole('link', { name: 'Licence terms' });
+        await expect(terms).toHaveAttribute('href', 'https://docs.brainitive.app/self-hosting/licence');
+        await expect(terms).toHaveAttribute('target', '_blank');
+        await expect(pricing.getByText('Commercial licence for €2M+ revenue')).toBeVisible();
+        await expect(pricing.getByText(/AGPL/)).toHaveCount(0);
+
+        // the four Cloud plans with their prices per user (v1.46.0); no early-access notes any more
+        for (const plan of ['Free', 'Starter', 'Team', 'Business']) {
+            await expect(pricing.getByRole('heading', { level: 3, name: plan, exact: true })).toBeVisible();
+        }
+        await expect(pricing.getByText(/early access/i)).toHaveCount(0);
+        await pricing.getByRole('radio', { name: 'Monthly' }).click();
+        for (const price of ['€3', '€5', '€15']) await expect(pricing.getByText(price, { exact: true })).toBeVisible();
+        await pricing.getByRole('radio', { name: /Yearly/ }).click();
+        for (const price of ['€1.67', '€4.17', '€12.50']) await expect(pricing.getByText(price, { exact: true })).toBeVisible();
+        await expect(pricing.getByText('Up to 3 members per workspace')).toBeVisible();
 
         expect(errors, 'uncaught errors on the homepage').toEqual([]);
         await context.close();

@@ -18,6 +18,7 @@ const TOC = [
     { id: 'analytics', title: 'Visit statistics (Umami, only with your consent)' },
     { id: 'account', title: 'Your account and sign-in' },
     { id: 'content', title: 'Workspaces and content' },
+    { id: 'payments', title: 'Paid plans and payments (Paddle)' },
     { id: 'email', title: 'E-mails and notifications' },
     { id: 'integrations', title: 'Integrations you connect' },
     { id: 'ai', title: 'AI features and AI connectors' },
@@ -227,6 +228,22 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                 </p>
             </LegalSection>
 
+            <LegalSection id="payments" num={n('payments')} title="Paid plans and payments (Paddle)">
+                <p>
+                    Paid plans are sold by our reseller <strong>Paddle.com Market Ltd</strong> (Judd House, 18–29 Mora Street, London EC1V 8BT,
+                    United Kingdom), the merchant of record. When a workspace admin clicks “Upgrade”, Paddle’s checkout opens on our page; its
+                    script is only loaded after that click. Paddle collects the payment details (card or other method, billing address, VAT
+                    number if given) itself and processes them as an independent controller under its own privacy notice (paddle.com/legal/privacy).
+                    We never see card numbers.
+                </p>
+                <p>
+                    From Paddle we receive what we need to run the plan: a customer number, name, e-mail address, country, the plan, the number
+                    of members paid for, the subscription status and payment dates, and the invoices. Legal basis: performance of the contract
+                    (Art. 6(1)(b) GDPR) and our legal obligations to keep business records (Art. 6(1)(c) GDPR). Workspaces on the Free plan send
+                    nothing to Paddle.
+                </p>
+            </LegalSection>
+
             <LegalSection id="email" num={n('email')} title="E-mails and notifications">
                 <p>
                     We send e-mails that belong to the service: address confirmation, password reset, invitations, the notifications and digests
@@ -339,6 +356,7 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                         ['Google, Microsoft, GitHub', 'Sign-in, calendars, tasks, meetings, repositories', 'Only if you use the integration'],
                         ['The push service of your browser (Google, Mozilla, Apple, Microsoft)', 'Delivering push notifications', 'Only if you enable push'],
                         ['The AI service chosen by your workspace', 'AI features', 'Only if your workspace enables them'],
+                        ['Paddle.com Market Ltd (United Kingdom, merchant of record)', 'Selling and billing paid plans', 'Only for workspaces on a paid plan'],
                         ['Members of your workspace', 'Collaboration', 'According to their role'],
                         ['Authorities and courts', 'Legal obligations', 'Only where we are legally obliged'],
                     ]}
@@ -354,7 +372,8 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                     Where a recipient processes data in a country outside the EU/EEA — in particular the US providers of integrations you choose
                     (Google, Microsoft, GitHub) and of browser push services — the transfer is based on an adequacy decision of the European
                     Commission (for the USA: the EU-U.S. Data Privacy Framework, for certified companies) or on the EU Standard Contractual Clauses
-                    (Art. 45, 46 GDPR). The safeguard for each of our processors is listed on the sub-processors page.
+                    (Art. 45, 46 GDPR). Paddle (paid plans) is in the United Kingdom, for which an adequacy decision applies. The safeguard for
+                    each of our processors is listed on the sub-processors page.
                 </p>
             </LegalSection>
 
@@ -363,6 +382,7 @@ export default function Privacy({ legal }: { legal: LegalPageData }) {
                     head={['Data', 'Storage period']}
                     rows={[
                         ['Account and profile', 'Until you delete your account'],
+                        ['Billing records of paid plans (plan, payments, invoices)', '10 years after the end of the year of the payment (commercial and tax law)'],
                         ['Workspace content', 'Until it, its workspace or the account is deleted (deleted projects, documents and issues are first kept marked as deleted)'],
                         ['Session (cookie and session record)', '2 hours of inactivity; “remember me” up to about 400 days or until you sign out'],
                         ['Password reset links', '60 minutes, then deleted daily'],

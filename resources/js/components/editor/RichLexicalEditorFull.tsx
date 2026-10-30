@@ -216,6 +216,7 @@ import { safeHtmlProp } from '@/lib/sanitize';
 import { normalizeAiHtml } from '@/lib/aiHtml';
 import { COLLAB_EXCLUDED_PROPERTIES, RICH_EDITOR_NODES } from './richEditorNodes';
 import type { LiveEditorBinding } from './collab/shared';
+import { openIfLimitReached } from '@/lib/entitlements';
 
 // Custom commands
 export const INSERT_IMAGE_COMMAND: LexicalCommand<{ src: string; altText: string }> = createCommand();
@@ -1068,6 +1069,7 @@ function InsertImageModal({ open, onClose, onInsert }: { open: boolean; onClose:
                 body: formData,
             });
             const data = await res.json();
+            if (openIfLimitReached(data)) return; // the upgrade dialog explains it
             if (data.success && data.file?.url) {
                 setPreview(data.file.url);
                 setSrc(data.file.url);

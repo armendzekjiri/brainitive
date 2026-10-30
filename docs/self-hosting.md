@@ -1,6 +1,6 @@
 # Self-hosting Brainitive
 
-Brainitive is open source (AGPL-3.0) and runs on any machine with Docker. One image runs the
+Brainitive is open source and runs on any machine with Docker. One image runs the
 web app, the queue worker, the scheduler and the realtime server for live co-editing; PostgreSQL
 and Redis run next to it.
 Don't want to run servers? [Brainitive Cloud](https://www.brainitive.app/#pricing) is the same
@@ -329,9 +329,12 @@ Legal); they're shown on its support pages, forms and portals. Details: `docs/le
 
 ## Licence
 
-Self-hosting is free under the [GNU AGPL-3.0](../LICENSE). If you modify Brainitive and offer
-it to others over a network, you must publish your changes under the same licence. For a
-commercial licence without that obligation, contact hello@brainitive.app.
+Brainitive is licensed under the [Business Source License 1.1](../LICENSE). Self-hosting is free,
+also in production, when your organization (with its group companies) has less than €2 million
+annual revenue, and always for personal, non-profit and educational use. An agency may run it for
+a client (the client's revenue counts). Offering Brainitive to others as a hosted service, or
+production use above €2 million revenue, needs a commercial licence: hello@brainitive.app. Each
+version becomes AGPL-3.0 four years after its release.
 
 ## Connecting AI apps (MCP)
 

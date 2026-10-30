@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { LayoutGrid, FileText, PencilRuler, BookMarked, BrainCircuit, X, History, Sparkles, GanttChart, ListChecks, CalendarDays, CalendarClock, Bot, Magnet, BookOpen } from 'lucide-react';
+import { LayoutGrid, FileText, PencilRuler, BookMarked, BrainCircuit, X, History, Sparkles, GanttChart, ListChecks, CalendarDays, CalendarClock, Bot, Magnet, BookOpen, Terminal } from 'lucide-react';
+import { CLI_INSTALL_SH } from '@/lib/cli';
 import { DOCS_URL } from '@/lib/docs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -85,12 +86,56 @@ const WELCOME_FEATURES = [
         icon: Bot,
         tone: 'bg-slate-500/10 text-slate-500',
         title: 'AI & MCP',
-        description: 'Connect Claude or ChatGPT over MCP to read and update your workspace, or use your own AI provider inside docs and issues.',
+        description: 'Connect Claude or ChatGPT over MCP to read and update your workspace — or let it set up a whole project from a Jira export — and use your own AI provider inside docs and issues.',
         where: 'Workspace settings → AI · MCP: add <your Brainitive URL>/mcp as a connector',
+    },
+    {
+        icon: Terminal,
+        tone: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-300',
+        title: 'Command line (CLI)',
+        description: 'Capture, issues with screenshots, tasks, snippets, docs and search from your terminal; "brainitive mcp" gives AI tools on your machine your workspace.',
+        where: `${CLI_INSTALL_SH} · then brainitive login`,
+        isNew: true,
     },
 ];
 
 const CHANGELOG = [
+    {
+        version: 'v1.47.1',
+        title: 'Install the CLI straight from GitHub',
+        tag: 'Fix',
+        date: '2026-10-30',
+        items: [
+            `The CLI installer now ships on the GitHub release next to the programs it downloads, so installing works on every Brainitive server: ${CLI_INSTALL_SH} (Windows: irm …/install.ps1 | iex). brainitive.app/install.sh forwards there.`,
+        ]
+    },
+    {
+        version: 'v1.47.0',
+        title: 'The CLI, and an AI that sets up whole projects',
+        tag: 'Major Feature',
+        date: '2026-10-30',
+        items: [
+            'Brainitive CLI: one command installs it on macOS, Linux or Windows (curl -fsSL https://brainitive.app/install.sh | sh — or irm …/install.ps1 | iex on Windows). No runtime needed, works with Brainitive Cloud and your own server; sign in through your browser with "brainitive login".',
+            'From the terminal: capture a thought, a link, your clipboard or a file to your inbox; create issues (with a screenshot), move, comment and update them; add and complete tasks; save snippets and bookmarks; read and publish docs from Markdown; search everything; see a project\'s whole setup. Tables for people, --json for scripts.',
+            '"brainitive mcp" runs a local MCP server bridged to your account, so Claude Code, Cursor, Codex, Copilot and other tools on your machine get your workspace without their own sign-in. "brainitive tool <name>" calls any of the 70+ server tools directly.',
+            'MCP: AI connectors can now set up a project end to end — create workspaces and projects with their statuses, boards and columns, labels, item types, priorities, custom fields (with options), task lists, add members — and create up to 100 cards in one call with type, priority, labels, assignee, dates, story points, parent and custom fields. Give Claude or ChatGPT a Jira export and let it build and fill the project; names are checked and one bad value fails the batch with the valid choices, so nothing is half-imported.',
+            'MCP: create_board_item / update_board_item take type, priority, labels, story points, parent and custom fields; get_board returns column slugs, colors and done flags; a personal capture_to_inbox tool.',
+            'Fixed: the MCP list_projects tool failed for members who are not workspace admins.',
+            'The old Python CLI (pip install, password login, task lists only) is retired; the new binary replaces it.',
+        ]
+    },
+    {
+        version: 'v1.46.0',
+        title: 'Plans for Brainitive Cloud, and a new licence',
+        tag: 'Major Feature',
+        date: '2026-10-30',
+        items: [
+            'Brainitive Cloud has plans now: Free (up to 3 members, 5 projects), Starter (€3 per user / month or €20 per year), Team (€5 or €50, unlimited members and projects) and Business (€15 or €150). Every feature is in every plan — plans differ in members, projects, storage, version history and support.',
+            'Workspace settings → Plan & usage shows your plan and how much of it you use: members, projects, content and file storage.',
+            'At a limit, Brainitive tells you what is full and how to upgrade, instead of failing. After a downgrade nothing is deleted for 90 days; only adding more is paused until you are back under the limit.',
+            'Self-hosted installs have no limits and no billing. Brainitive is now licensed under the Business Source License 1.1: free to self-host for organizations under €2 million annual revenue, and each version becomes AGPL-3.0 after four years.',
+        ]
+    },
     {
         version: 'v1.45.3',
         title: 'Safari and offline',

@@ -20,6 +20,7 @@ page explains both.
 | [AI and MCP](./ai-and-mcp) | Claude, ChatGPT and other apps over MCP, plus your own AI provider in the editor | Ready (AI: your provider key) | Nothing for MCP (optional `MCP_REDIRECT_HOSTS`). Local models: `AI_ALLOW_PRIVATE_ENDPOINTS` |
 | [Outgoing webhooks](./webhooks) | Signed events for Zapier, Make, n8n or your own service | Ready | A running queue worker |
 | [Browser extension](./browser-extension) | Save pages, issues, bookmarks, docs, tasks and snippets | Install the extension | HTTPS |
+| [Command line (CLI)](./cli) | Capture, issues, tasks, snippets, docs and search from the terminal; an MCP bridge for local AI tools | `curl -fsSL https://github.com/armendzekjiri/brainitive/releases/latest/download/install.sh \| sh` | Nothing |
 | [Imports](./imports) | Jira, Trello, Notion, Brainitive project exports | Ready | A running queue worker |
 
 ::: tip After changing environment variables

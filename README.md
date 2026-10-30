@@ -12,7 +12,7 @@
   <a href="https://docs.brainitive.app">Docs</a> ·
   <a href="https://docs.brainitive.app/self-hosting/">Self-hosting</a> ·
   <a href="CONTRIBUTING.md">Contributing</a> ·
-  <a href="LICENSE">AGPL-3.0</a>
+  <a href="LICENSE">Licence</a>
 </p>
 
 <p align="center">
@@ -49,6 +49,11 @@ Cloud or your own server →
 [Chrome Web Store](https://chromewebstore.google.com/detail/brainitive/mnnkcbjdgphgiiapdfegpgdmjekofmjn)
 (Chrome, Edge, Brave).
 
+**CLI** — capture, issues (with screenshots), tasks, snippets, docs and search from your terminal,
+plus `brainitive mcp` for AI tools on your machine. One command installs it on macOS, Linux or
+Windows: `curl -fsSL https://github.com/armendzekjiri/brainitive/releases/latest/download/install.sh | sh` →
+[docs](https://docs.brainitive.app/integrations/cli), source in [`cli/`](cli/).
+
 ![Gantt plans in Brainitive](public/images/screenshots/plans.jpg)
 
 ## What's inside
@@ -64,8 +69,8 @@ Cloud or your own server →
 - **Lists, My Work, Calendar** — light to-dos, everything assigned to you, Google Calendar &
   Tasks sync.
 - **Helpdesk** — embeddable support widget and ticket portal.
-- **AI** — an MCP server so Claude or ChatGPT can read and update your workspace, plus
-  bring-your-own-key writing helpers.
+- **AI** — an MCP server so Claude or ChatGPT can read and update your workspace — or set up a
+  whole project from a Jira export — plus bring-your-own-key writing helpers.
 - **Snippets & bookmarks**, roles and permissions, notifications and web push.
 
 | Boards | Docs | Whiteboards |
@@ -94,10 +99,21 @@ Details and scope: [SECURITY.md](SECURITY.md).
 
 ## Licence
 
-Brainitive is free software under the [GNU Affero General Public License v3.0](LICENSE). If
-you run a modified version for others over a network, you must make your changes available
-under the same licence. Commercial licences without that obligation are available —
-hello@brainitive.app.
+Brainitive is open source: all of the code is public, and you may read, change and self-host it.
+It is licensed under the [Business Source License 1.1](LICENSE) with these terms:
+
+- **Free to self-host** — also in production and for businesses — if your organization (counted
+  together with its group companies) has **less than €2 million annual revenue**. Personal,
+  non-profit and educational use is always free.
+- **Agencies and IT contractors** may install and run Brainitive for a client; the client's
+  revenue counts.
+- **Not allowed without a commercial licence:** offering Brainitive, or a service based on it, to
+  others as a hosted or subscription service (competing with Brainitive Cloud), or production use
+  by an organization with €2 million or more annual revenue.
+- **Every version becomes AGPL-3.0** four years after its release.
+
+Versions up to and including 1.45.3 were released under the AGPL-3.0 and remain available under
+it. Commercial licences: hello@brainitive.app.
 
 "Brainitive" and the logo are trademarks of the project owners; the licence covers the code,
 not the name.

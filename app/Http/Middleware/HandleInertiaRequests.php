@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkTimer;
+use App\Support\Entitlements\EntitlementsPayload;
 use App\Support\GithubStars;
 use App\Support\Legal\LegalInfo;
 use App\Support\Live\LiveConfig;
@@ -252,6 +253,8 @@ class HandleInertiaRequests extends Middleware
             'currentWorkspace' => $currentWorkspace,
             // workspace settings are admin-only: hide the link for everyone else (it would end in a 403)
             'canManageWorkspace' => fn () => $currentWorkspace && $user ? $user->can('update', $currentWorkspace) : false,
+            // Cloud plan, limits and usage of the current workspace (v1.46.0); null when unlimited (self-hosted)
+            'entitlements' => fn () => EntitlementsPayload::for($currentWorkspace),
             'currentProjectId' => $currentProjectId,
             'currentBoardId' => $currentBoardId,
             'itemTypes' => fn () => $user ? ItemType::orderBy('id')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
@@ -276,6 +279,8 @@ class HandleInertiaRequests extends Middleware
                 'success' => fn () => ($request->hasSession() ? $request->session() : null)?->get('success'),
                 'error' => fn () => ($request->hasSession() ? $request->session() : null)?->get('error'),
                 'warning' => fn () => ($request->hasSession() ? $request->session() : null)?->get('warning'),
+                // a plan limit stopped the action (LimitReached): opens the upgrade dialog
+                'limit_reached' => fn () => ($request->hasSession() ? $request->session() : null)?->get('limit_reached'),
                 'invite_result' => fn () => ($request->hasSession() ? $request->session() : null)?->get('invite_result'),
                 'invite_confirm_required' => fn () => ($request->hasSession() ? $request->session() : null)?->get('invite_confirm_required'),
                 'invite_email' => fn () => ($request->hasSession() ? $request->session() : null)?->get('invite_email'),

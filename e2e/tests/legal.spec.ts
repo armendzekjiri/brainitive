@@ -59,6 +59,28 @@ test.describe('legal pages', () => {
         await guest.close();
     });
 
+    test('paid plans (v1.46.0): terms name Paddle and cancellation, 14-day money-back, privacy lists Paddle', async ({ browser }) => {
+        const guest = await visitor(browser);
+
+        await guest.page.goto('/terms');
+        const plans = guest.page.locator('#plans');
+        await expect(plans.getByRole('heading', { name: /Plans, prices and payment/ })).toBeVisible();
+        await expect(plans.getByText(/merchant of record/)).toBeVisible();
+        await expect(plans.getByText(/takes effect at the end of the period already paid/)).toBeVisible();
+        await expect(guest.page.getByText(/early access/i)).toHaveCount(0);
+
+        await guest.page.goto('/refund');
+        await expect(guest.page.getByRole('heading', { name: /14-day money-back guarantee/ })).toBeVisible();
+        await expect(guest.page.getByRole('heading', { name: /After 14 days: no refunds/ })).toBeVisible();
+        await expect(guest.page.getByText(/7-day/)).toHaveCount(0);
+
+        await guest.page.goto('/privacy');
+        await expect(guest.page.locator('#payments').getByText(/Paddle\.com Market Ltd/).first()).toBeVisible();
+
+        expect(guest.errors).toEqual([]);
+        await guest.close();
+    });
+
     test('the imprint names the operator’s contact; the privacy policy shows no third-party loads', async ({ browser }) => {
         const guest = await visitor(browser);
         const external: string[] = [];

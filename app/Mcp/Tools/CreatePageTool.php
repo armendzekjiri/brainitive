@@ -4,6 +4,8 @@ namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\InteractsWithBrainitive;
 use App\Models\Page;
+use App\Support\Entitlements\LimitGate;
+use App\Support\Entitlements\LimitReached;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\Mcp\ResourceLocator;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -35,7 +37,8 @@ class CreatePageTool extends Tool
         try {
             $project = $this->projectForUser($user, $validated['workspace'], $validated['project']);
             $this->authorizeFor($user, 'create', [Page::class, $project]);
-        } catch (AuthorizationException $e) {
+            app(LimitGate::class)->ensureContentRoom($project->workspace);
+        } catch (AuthorizationException|LimitReached $e) {
             return Response::error($e->getMessage());
         }
 

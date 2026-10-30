@@ -24,6 +24,7 @@ import { Code2, Globe, Lock, MoreVertical, Plus, ArrowRight, Pencil, Trash2 } fr
 import { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { openIfLimitReached } from '@/lib/entitlements';
 
 // Lazy-load emoji-mart (same pattern as page title icon picker)
 const EmojiPickerLazy = lazy(() => import('@emoji-mart/react'));
@@ -219,7 +220,7 @@ export default function SnippetsIndex({ workspace, collections }: Props) {
         });
         const json = await res.json().catch(() => ({}));
         if (!res.ok) {
-            toast.error(json.message ?? 'Icon upload failed');
+            if (!openIfLimitReached(json)) toast.error(json.message ?? 'Icon upload failed');
             throw new Error(json.message ?? 'Upload failed');
         }
         return json.icon_display;
