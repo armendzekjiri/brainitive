@@ -119,6 +119,22 @@ class EntitlementsFoundationTest extends TestCase
         app(LimitGate::class)->ensureCanAddMembers($this->workspaceWithMembers(1, 'plan-limit-test'));
     }
 
+    public function test_only_workspace_admins_get_the_billing_link(): void
+    {
+        $workspace = $this->workspaceWithMembers(1);
+        $viewer = User::factory()->create();
+        $workspace->addUser($viewer, 'viewer');
+        $e = new LimitReached('members', 3, 3, 'Free', $workspace, 'https://example.com/billing');
+
+        $admin = $e->payload($workspace->owner);
+        $this->assertSame('https://example.com/billing', $admin['billingUrl']);
+        $this->assertStringContainsString('Upgrade to invite more people.', $admin['message']);
+
+        $member = $e->payload($viewer);
+        $this->assertNull($member['billingUrl']);
+        $this->assertSame('The Free plan allows up to 3 members per workspace. Ask a workspace admin to upgrade the plan.', $member['message']);
+    }
+
     public function test_limit_reached_is_402_json_or_a_flash_for_inertia(): void
     {
         $e = new LimitReached('members', 3, 3, 'Free', billingUrl: 'https://example.com/billing');

@@ -2,6 +2,7 @@
 
 namespace App\Support\Entitlements;
 
+use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -10,7 +11,8 @@ use RuntimeException;
 
 /**
  * A plan limit stops an action (LimitGate). JSON callers get 402 with `limit_reached`; Inertia
- * visits go back with the `limit_reached` flash, which opens the upgrade dialog.
+ * visits go back with the `limit_reached` flash, which opens the upgrade dialog. Only people who may
+ * manage the workspace get the billing link; everyone else is asked to contact an admin.
  */
 final class LimitReached extends RuntimeException
 {
@@ -28,26 +30,36 @@ final class LimitReached extends RuntimeException
     }
 
     /** @return array<string, mixed> */
-    public function payload(): array
+    public function payload(?User $viewer = null): array
     {
+        $canUpgrade = $this->workspace === null || ($viewer?->can('update', $this->workspace) ?? false);
+
         return [
             'kind' => $this->kind,
             'limit' => $this->limit,
             'usage' => $this->usage,
             'plan' => $this->plan,
             'workspace' => $this->workspace?->slug,
-            'billingUrl' => $this->billingUrl,
-            'message' => $this->getMessage(),
+            'billingUrl' => $canUpgrade ? $this->billingUrl : null,
+            'message' => $canUpgrade ? $this->getMessage() : $this->adminMessage(),
         ];
     }
 
     public function render(Request $request): JsonResponse|RedirectResponse
     {
+        $payload = $this->payload($request->user());
+
         if ($request->expectsJson() && ! $request->header('X-Inertia')) {
-            return response()->json(['message' => $this->getMessage(), 'limit_reached' => $this->payload()], 402);
+            return response()->json(['message' => $payload['message'], 'limit_reached' => $payload], 402);
         }
 
-        return back()->with('error', $this->getMessage())->with('limit_reached', $this->payload());
+        return back()->with('error', $payload['message'])->with('limit_reached', $payload);
+    }
+
+    /** For members who can't upgrade: the same limit, but "ask an admin" instead of "upgrade". */
+    private function adminMessage(): string
+    {
+        return preg_replace('/ Upgrade .*$/', '', $this->getMessage()).' Ask a workspace admin to upgrade the plan.';
     }
 
     private static function sentence(string $kind, int $limit, string $plan): string

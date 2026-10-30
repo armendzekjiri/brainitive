@@ -25,6 +25,13 @@ export function limitReachedOf(data: unknown): LimitReachedPayload | null {
     return payload && typeof payload === 'object' && typeof payload.kind === 'string' && typeof payload.limit === 'number' ? payload : null;
 }
 
+/** fetch() callers: opens the upgrade dialog when the body is a plan limit (402) and returns true. */
+export function openIfLimitReached(data: unknown): boolean {
+    const payload = limitReachedOf(data);
+    if (payload) showLimitReached(payload);
+    return payload !== null;
+}
+
 /** An axios error that is a plan limit (402): the upgrade dialog already shows it, skip the error toast. */
 export function isLimitReachedError(error: unknown): boolean {
     const response = (error as { response?: { status?: number; data?: unknown } } | null)?.response;
