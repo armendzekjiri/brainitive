@@ -98,7 +98,8 @@ test.describe('homepage', () => {
         // the MCP card names the connector's newer tools (v1.47.0: project setup from an export)
         await expect(features.getByText(/let it set up the whole project/)).toBeVisible();
         // the CLI section shows the one-line install
-        await expect(page.locator('#cli').getByText('curl -fsSL https://brainitive.app/install.sh | sh')).toBeVisible();
+        // v1.47.1: the installer comes from the GitHub release, next to the binaries
+        await expect(page.locator('#cli').getByText('curl -fsSL https://github.com/armendzekjiri/brainitive/releases/latest/download/install.sh | sh')).toBeVisible();
 
         expect(errors, 'uncaught errors on the homepage').toEqual([]);
         await context.close();

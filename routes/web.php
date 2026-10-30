@@ -90,18 +90,16 @@ Route::get('/', function () {
     ]]);
 });
 
-// The CLI installers (v1.47.0): `curl -fsSL https://brainitive.app/install.sh | sh` and
-// `irm https://brainitive.app/install.ps1 | iex`. The scripts live in cli/ next to the Go source;
-// they download the binary from the GitHub release, so this only serves the file.
+// The CLI installers (v1.47.0; v1.47.1: hosted on GitHub). install.sh / install.ps1 ship on the GitHub
+// release next to the binaries they download (release.yml, job `cli`); these short addresses forward
+// there, so `curl -fsSL https://brainitive.app/install.sh | sh` always runs the released installer.
 // Session-free like /offline: a `curl | sh` must not create a session row or carry cookies on a public response.
-Route::get('/install.sh', fn () => response()->file(base_path('cli/install.sh'), ['Content-Type' => 'text/x-shellscript; charset=utf-8', 'Cache-Control' => 'public, max-age=300']))
-    ->withoutMiddleware([EncryptCookies::class, StartSession::class, ShareErrorsFromSession::class, ValidateCsrfToken::class])
-    ->middleware('throttle:60,1,cli.install')
-    ->name('cli.install.sh');
-Route::get('/install.ps1', fn () => response()->file(base_path('cli/install.ps1'), ['Content-Type' => 'text/plain; charset=utf-8', 'Cache-Control' => 'public, max-age=300']))
-    ->withoutMiddleware([EncryptCookies::class, StartSession::class, ShareErrorsFromSession::class, ValidateCsrfToken::class])
-    ->middleware('throttle:60,1,cli.install')
-    ->name('cli.install.ps1');
+foreach (['install.sh', 'install.ps1'] as $installer) {
+    Route::get('/'.$installer, fn () => redirect()->away('https://github.com/'.config('services.github.repository').'/releases/latest/download/'.$installer, 302, ['Cache-Control' => 'public, max-age=300']))
+        ->withoutMiddleware([EncryptCookies::class, StartSession::class, ShareErrorsFromSession::class, ValidateCsrfToken::class])
+        ->middleware('throttle:60,1,cli.install')
+        ->name('cli.'.$installer);
+}
 
 // Legal pages (BRAI-156): operator data from config/legal.php via LegalInfo; DPA, sub-processors and
 // refund policy are Brainitive Cloud documents (404 on self-hosted installs), the imprint only exists

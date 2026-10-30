@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { LayoutGrid, FileText, PencilRuler, BookMarked, BrainCircuit, X, History, Sparkles, GanttChart, ListChecks, CalendarDays, CalendarClock, Bot, Magnet, BookOpen, Terminal } from 'lucide-react';
+import { CLI_INSTALL_SH } from '@/lib/cli';
 import { DOCS_URL } from '@/lib/docs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -93,12 +94,21 @@ const WELCOME_FEATURES = [
         tone: 'bg-zinc-500/10 text-zinc-600 dark:text-zinc-300',
         title: 'Command line (CLI)',
         description: 'Capture, issues with screenshots, tasks, snippets, docs and search from your terminal; "brainitive mcp" gives AI tools on your machine your workspace.',
-        where: 'curl -fsSL https://brainitive.app/install.sh | sh · then brainitive login',
+        where: `${CLI_INSTALL_SH} · then brainitive login`,
         isNew: true,
     },
 ];
 
 const CHANGELOG = [
+    {
+        version: 'v1.47.1',
+        title: 'Install the CLI straight from GitHub',
+        tag: 'Fix',
+        date: '2026-10-30',
+        items: [
+            `The CLI installer now ships on the GitHub release next to the programs it downloads, so installing works on every Brainitive server: ${CLI_INSTALL_SH} (Windows: irm …/install.ps1 | iex). brainitive.app/install.sh forwards there.`,
+        ]
+    },
     {
         version: 'v1.47.0',
         title: 'The CLI, and an AI that sets up whole projects',

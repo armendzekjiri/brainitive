@@ -85,6 +85,7 @@ import { Button } from '@/components/ui/button';
 import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks';
 import { TermsNotice } from '@/components/legal/TermsNotice';
 import GitHubStarButton from '@/components/GitHubStarButton';
+import { CLI_INSTALL_SH } from '@/lib/cli';
 import { DOCS_URL, LICENCE_DOCS_URL, SELF_HOSTING_DOCS_URL } from '@/lib/docs';
 
 /*
@@ -409,7 +410,7 @@ const SPOTLIGHT: {
         description:
             'One command installs the CLI on macOS, Linux and Windows. Capture a thought, create an issue with a screenshot, add tasks, save snippets, search — and let AI agents use your workspace.',
         points: [
-            'curl -fsSL brainitive.app/install.sh | sh',
+            CLI_INSTALL_SH,
             'brainitive capture "ask Dana about Q4"',
             'brainitive mcp: your account for Claude Code, Cursor & co.',
         ],
@@ -700,7 +701,7 @@ function ExtensionSection() {
 /** The CLI (v1.47.0): one-line install, the everyday commands, and the MCP bridge for local AI tools. */
 function CliSection() {
     const lines: { prompt?: boolean; text: string }[] = [
-        { prompt: true, text: 'curl -fsSL https://brainitive.app/install.sh | sh' },
+        { prompt: true, text: CLI_INSTALL_SH },
         { text: 'Installed brainitive 1.47.0 to /usr/local/bin/brainitive' },
         { prompt: true, text: 'brainitive login' },
         { text: 'Signed in to https://brainitive.app. 1 workspace(s).' },
