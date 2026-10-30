@@ -386,8 +386,10 @@ Plan [`tasks/feat-legal-compliance.md`](./tasks/feat-legal-compliance.md); human
 - **Every command is an MCP tool call** — there is no CLI-specific REST surface to keep in sync; a new tool is
   reachable through `brainitive tool <name>` the moment it is registered. `brainitive mcp` is a stdio ⇄ HTTP
   proxy (forwards `MCP-Session-Id`) for Claude Code / Cursor / Codex / CI.
-- **Install & release:** `cli/install.sh` and `cli/install.ps1` are served at `/install.sh` and `/install.ps1`
-  (`routes/web.php`, test `tests/Feature/CliInstallScriptTest.php`) and download
+- **Install & release:** `cli/install.sh` and `cli/install.ps1` are uploaded to the GitHub release by the `cli`
+  job of `release.yml` (v1.47.1); `/install.sh` and `/install.ps1` 302 to `releases/latest/download/…`
+  (`routes/web.php`, test `tests/Feature/CliInstallScriptTest.php`; website / docs show the GitHub URL,
+  `resources/js/lib/cli.ts`). They download
   `brainitive_<os>_<arch>.tar.gz|zip` + `checksums.txt` from the **latest GitHub release**; the `cli` job of
   `.github/workflows/release.yml` cross-builds the six binaries (darwin/linux × arm64/amd64, windows × amd64/arm64)
   and uploads them with `--clobber`, so the CLI's version is the app's. `.github/workflows/cli.yml` runs gofmt,

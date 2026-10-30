@@ -17,11 +17,11 @@ servers alike.
 ::: code-group
 
 ```sh [macOS / Linux]
-curl -fsSL https://brainitive.app/install.sh | sh
+curl -fsSL https://github.com/armendzekjiri/brainitive/releases/latest/download/install.sh | sh
 ```
 
 ```powershell [Windows]
-irm https://brainitive.app/install.ps1 | iex
+irm https://github.com/armendzekjiri/brainitive/releases/latest/download/install.ps1 | iex
 ```
 
 :::
@@ -107,6 +107,6 @@ The second form is what Cursor, VS Code, Codex and similar tools read from their
 
 Nothing to switch on: the CLI signs in through the same OAuth server as the connectors
 (`/.well-known/oauth-authorization-server`), registering itself with a loopback redirect
-(`http://127.0.0.1:<port>/callback`), which is always allowed. `/install.sh` and `/install.ps1`
-are served by every instance, so you can also point people at your own address. The binaries
-themselves always come from the GitHub release.
+(`http://127.0.0.1:<port>/callback`), which is always allowed. The installers and the binaries both
+come from the GitHub release; every instance's `/install.sh` and `/install.ps1` forward there, so you
+can also point people at your own address.

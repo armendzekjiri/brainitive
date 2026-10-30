@@ -8,11 +8,11 @@ Cloud and self-hosted servers.
 ## Install
 
 ```sh
-curl -fsSL https://brainitive.app/install.sh | sh        # macOS / Linux
+curl -fsSL https://github.com/armendzekjiri/brainitive/releases/latest/download/install.sh | sh   # macOS / Linux
 ```
 
 ```powershell
-irm https://brainitive.app/install.ps1 | iex              # Windows (PowerShell)
+irm https://github.com/armendzekjiri/brainitive/releases/latest/download/install.ps1 | iex   # Windows (PowerShell)
 ```
 
 Or download `brainitive_<os>_<arch>.tar.gz` / `.zip` from the
