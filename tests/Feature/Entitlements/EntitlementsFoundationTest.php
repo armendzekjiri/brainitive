@@ -108,9 +108,13 @@ class EntitlementsFoundationTest extends TestCase
 
     public function test_limits_can_apply_to_matching_workspaces_only(): void
     {
-        $this->useLimits(['members' => 1, 'only_slug_prefix' => 'plan-limit-']);
+        $this->useLimits(['members' => 1, 'only_slug_prefix' => 'plan-limit-', 'billing_url' => '/billing']);
 
-        app(LimitGate::class)->ensureCanAddMembers($this->workspaceWithMembers(3, 'seeded'));
+        $seeded = $this->workspaceWithMembers(3, 'seeded');
+        app(LimitGate::class)->ensureCanAddMembers($seeded);
+        // no limits and no billing link: no plan UI at all, like self-hosted
+        $this->assertNull(app(Entitlements::class)->billingUrl($seeded));
+        $this->assertNull(EntitlementsPayload::for($seeded));
         $this->expectException(LimitReached::class);
         app(LimitGate::class)->ensureCanAddMembers($this->workspaceWithMembers(1, 'plan-limit-test'));
     }
