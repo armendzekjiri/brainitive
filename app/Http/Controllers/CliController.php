@@ -81,7 +81,10 @@ class CliController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()?->revoke();
+        // Access + refresh token, like Profile → Connected apps (the CLI calls this on `brainitive logout`).
+        $token = $request->user()->currentAccessToken();
+        $token?->revoke();
+        $token?->refreshToken?->revoke();
 
         return response()->json(['message' => 'Logged out.']);
     }

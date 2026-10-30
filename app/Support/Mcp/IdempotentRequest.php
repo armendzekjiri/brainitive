@@ -38,9 +38,15 @@ class IdempotentRequest
 
                 return $result;
             });
-        } catch (UniqueConstraintViolationException) {
-            // A concurrent retry won the race; its write committed, ours rolled back.
-            return self::replay(McpRequest::where($key)->firstOrFail(), $hash);
+        } catch (UniqueConstraintViolationException $e) {
+            // A concurrent retry won the race; its write committed, ours rolled back. Any other
+            // unique violation (the write's own tables) is the write's problem: let it surface.
+            $winner = McpRequest::where($key)->first();
+            if (! $winner) {
+                throw $e;
+            }
+
+            return self::replay($winner, $hash);
         }
 
         return ['result' => $result, 'replayed' => false];

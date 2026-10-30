@@ -1,92 +1,96 @@
-# 🧠 Brainitive CLI
+# Brainitive CLI
 
-A beautiful terminal client for [Brainitive](https://github.com/armendzekjiri/brainitive) — view, add and complete task-list items right from your terminal.
+Brainitive from your terminal: capture thoughts, create issues and tasks, save snippets and
+bookmarks, search everything — and give AI agents your whole workspace with `brainitive mcp`.
+One static binary for macOS, Linux and Windows, no runtime to install. Works with Brainitive
+Cloud and self-hosted servers.
 
-## Installation
+## Install
 
-```bash
-# From the cli/ directory
-pip install -e .
+```sh
+curl -fsSL https://brainitive.app/install.sh | sh        # macOS / Linux
 ```
 
-Or run directly without installing:
-
-```bash
-python -m brainitive_cli.main --help
+```powershell
+irm https://brainitive.app/install.ps1 | iex              # Windows (PowerShell)
 ```
 
-## Quick Start
+Or download `brainitive_<os>_<arch>.tar.gz` / `.zip` from the
+[latest release](https://github.com/armendzekjiri/brainitive/releases/latest) and put the binary
+on your `PATH`. `brainitive update` upgrades in place.
 
-```bash
-# 1. Log in
-brainitive login
-#  App URL: https://your-app.com
-#  Email:   you@example.com
-#  Password: ****
+## Sign in
 
-# 2. See all your task lists
-brainitive lists
-
-# 3. View items in a list
-brainitive show weekly-tasks
-
-# 4. Open the interactive TUI
-brainitive tui weekly-tasks
-
-# 5. Add a recurring item
-brainitive add weekly-tasks "Send weekly report" --due 2026-03-16 --repeat weekly
-
-# 6. Mark an item done (recurring items auto-advance the due date!)
-brainitive done weekly-tasks 42
-
-# 7. Undo a completion
-brainitive undo weekly-tasks 42
-
-# 8. Delete an item
-brainitive rm weekly-tasks 42
+```sh
+brainitive login                                   # Brainitive Cloud
+brainitive login --server brainitive.example.com   # your own server
 ```
 
-## Commands
+Your browser opens, you approve the access, done — the same OAuth flow the browser extension
+uses, nothing to copy. The session lives in `~/.config/brainitive/config.json` (readable only by
+you). For scripts and CI set `BRAINITIVE_TOKEN` and `BRAINITIVE_SERVER` instead (a token from
+*Profile → Connected apps*, or `php artisan mcp:get-token <email>` on the server).
 
-| Command | Description |
-|---------|-------------|
-| `login [--url URL]` | Authenticate and save token to `~/.brainitive.json` |
-| `logout` | Revoke token and clear credentials |
-| `whoami` | Show currently authenticated user |
-| `lists [--workspace SLUG]` | List all accessible task lists |
-| `show <slug> [--filter todo\|done\|all]` | Show items in a list |
-| `add <slug> [TITLE] [--due YYYY-MM-DD] [--repeat FREQ]` | Add a new item |
-| `done <slug> <id>` | Mark item done (recurring items bounce to next date) |
-| `undo <slug> <id>` | Mark item back as to-do |
-| `rm <slug> <id> [--force]` | Delete an item |
-| `tui <slug>` | **Interactive keyboard-driven TUI** |
+## Everyday
 
-## TUI Key Bindings
+```sh
+brainitive use acme/shop/main-board         # defaults for the commands below
+brainitive capture "Ask Dana about Q4"      # → your inbox, sort it later
+pbpaste | brainitive capture
+brainitive issue create Checkout misaligned --type Bug --priority High --label ui --assignee me
+brainitive issue create "Crash on save" -f crash.md --screenshot shot.png
+brainitive issues                           # the board, by column
+brainitive issue move SHOP-12 --to Done
+brainitive issue comment SHOP-12 "Fixed in **PR 12**"
+brainitive task add Renew the domain --due 2026-12-01
+brainitive snippet add "Reset sequence" -f reset.sql
+brainitive bookmark add https://go.dev --title "Go"
+brainitive search "payment failed" --type issues --mine
+brainitive page create "Release notes" -f notes.md --publish
+brainitive project config                   # columns, labels, types, priorities, fields, members
+```
 
-| Key | Action |
-|-----|--------|
-| `j` / `↓` | Move cursor down |
-| `k` / `↑` | Move cursor up |
-| `space` / `enter` | Toggle done/to-do |
-| `a` | Add new item |
-| `D` | Delete current item |
-| `r` | Refresh from server |
-| `q` / `Ctrl+C` | Quit |
+Every command prints a table for people; add `--json` for the raw result in scripts.
 
-## Config
+## Everything else: `brainitive tool`
 
-Credentials are stored at `~/.brainitive.json` (permissions: 600):
+The CLI is a client of the Brainitive MCP server, so every tool the server has is one command
+away — including the project-setup tools (create a project with its statuses, labels, types,
+priorities, custom fields, members; create cards in bulk):
+
+```sh
+brainitive tools                                   # the catalogue (70+)
+brainitive tool create-label --describe            # arguments of one tool
+brainitive tool create-label name=urgent color=#ef4444
+brainitive tool create-board-items --args '{"items":[{"title":"A","column":"Done"}]}'
+```
+
+Values that look like numbers, booleans or JSON are typed; `key:=value` forces a string. The
+workspace / project / board context comes from your defaults.
+
+## AI agents: `brainitive mcp`
+
+Runs a local MCP server on stdio bridged to your account, for tools that only know local
+servers or can't do OAuth themselves:
+
+```sh
+claude mcp add brainitive -- brainitive mcp        # Claude Code
+```
 
 ```json
-{
-  "url":   "https://your-app.com",
-  "token": "1|abc...",
-  "user":  { "id": 1, "name": "You", "email": "you@example.com" }
-}
+{ "mcpServers": { "brainitive": { "command": "brainitive", "args": ["mcp"] } } }
 ```
 
-## Recurrence
+## Development
 
-When you mark a recurring item as done, the due date automatically advances to the next occurrence — **no new item is created**. The item instantly bounces back to "To Do" with the next date.
+```sh
+cd cli
+go test ./...
+go run ./cmd/brainitive --server http://localhost:8000 login
+```
 
-Supported frequencies: `daily`, `weekly`, `monthly`, `yearly`.
+Layout: `cmd/brainitive` (main), `internal/cli` (commands), `internal/mcp` (JSON-RPC client),
+`internal/auth` (OAuth 2.1 + PKCE with dynamic client registration and a loopback redirect),
+`internal/api` (the extension API, for screenshots), `internal/config`, `internal/output`.
+Releases: `.github/workflows/release.yml` builds the six binaries and attaches them to the app's
+GitHub release with `checksums.txt`; `install.sh` / `install.ps1` download from there.

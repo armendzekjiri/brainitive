@@ -83,6 +83,18 @@ class CreateWidgetTool extends Tool
 - Calendar tools (personal Google data) use `ResolvesCalendarConnections` + always take an
   IANA timezone on writes.
 - `#[Description]` is the model-facing doc — make it precise; that's how the AI picks the tool.
+- **Names, not ids, from the AI (v1.47.0):** take columns, priorities, types, labels and custom
+  fields by name and resolve them with `columnFor()`, `priorityIdFor()`, `itemTypeIdFor()`,
+  `labelIdsFor()`, `fieldValuesFor()` from `InteractsWithBrainitive`; they throw a `ToolError`
+  that lists the valid values. Wrap the body in `$this->guard(fn () => …)` and every
+  `AuthorizationException` / `ToolError` / `RequestIdConflict` / `ValidationException` becomes a
+  tool error the AI can act on. Resolve everything *before* writing so a bad value changes nothing.
+- **Creating things by name should be repeatable:** `create_label` & co. return the existing row
+  (`created: false`) for a name that already exists, so an AI that reruns a setup step doesn't
+  duplicate. Keep `get_project_config` complete — it is what an import is mapped against.
+- The CLI (`cli/`) calls tools by their wire name (`create-widget-tool`); a new tool is available as
+  `brainitive tool create-widget` immediately. Add a typed command in `cli/internal/cli/` only for
+  everyday use.
 
 ## 3. Register it — `app/Mcp/Servers/BrainitiveServer.php`
 Add the class to the `$tools` array (group it with related tools). It won't be exposed

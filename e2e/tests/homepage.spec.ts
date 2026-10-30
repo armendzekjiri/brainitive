@@ -5,8 +5,10 @@ import { expect, test } from '../fixtures';
  * The public homepage (Pages/Welcome.tsx) shows what the latest releases shipped (BRAI-98).
  * When a release adds feature cards to the homepage, add their titles here.
  */
-const SPOTLIGHT = ['Everything live', 'Emails that look like Brainitive', 'Privacy by default'];
+const SPOTLIGHT = ['Brainitive in your terminal', 'Emails that look like Brainitive', 'Privacy by default'];
 const NEW_FEATURES = [
+    'Command line (CLI)',
+    'AI agents (MCP)',
     'Project templates',
     'Saved board views',
     'Custom fields',
@@ -93,8 +95,10 @@ test.describe('homepage', () => {
             await expect(card).toBeVisible();
             await expect(card.getByText('New', { exact: true })).toBeVisible();
         }
-        // the MCP card names the connector's newer tools
-        await expect(features.getByText(/comments, sprints and Gantt plans/)).toBeVisible();
+        // the MCP card names the connector's newer tools (v1.47.0: project setup from an export)
+        await expect(features.getByText(/let it set up the whole project/)).toBeVisible();
+        // the CLI section shows the one-line install
+        await expect(page.locator('#cli').getByText('curl -fsSL https://brainitive.app/install.sh | sh')).toBeVisible();
 
         expect(errors, 'uncaught errors on the homepage').toEqual([]);
         await context.close();

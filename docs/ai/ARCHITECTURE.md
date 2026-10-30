@@ -360,8 +360,9 @@ Plan [`tasks/feat-legal-compliance.md`](./tasks/feat-legal-compliance.md); human
 ### AI integrations — MCP server & in-app AI
 - **In-app AI:** `AiController` (`ai/settings`, `ai/models`, `ai/generate` under `workspaces/{workspace}`) — per-workspace AI provider settings.
 - **MCP server:** `routes/ai.php` registers `App\Mcp\Servers\BrainitiveServer` at `/mcp` (Passport `auth:api`) + `Mcp::oauthRoutes()` for OAuth 2.1 discovery/registration.
-  - **Tools:** `app/Mcp/Tools/*Tool.php` (~38), registered in the `$tools` array on `BrainitiveServer`.
-  - **Shared helpers:** `app/Mcp/Tools/Concerns/InteractsWithBrainitive` (slug→model resolution + policy enforcement, so the AI can only touch what the user can), `ResolvesCalendarConnections`.
+  - **Tools:** `app/Mcp/Tools/*Tool.php` (71), registered in the `$tools` array on `BrainitiveServer`.
+  - **Shared helpers:** `app/Mcp/Tools/Concerns/InteractsWithBrainitive` (slug→model resolution + policy enforcement, so the AI can only touch what the user can; since v1.47.0 also the name→id resolvers `columnFor`, `priorityIdFor`, `itemTypeIdFor`, `labelIdsFor`, `fieldValuesFor` that throw a `ToolError` listing the valid values, `guard()` which maps `AuthorizationException` / `ToolError` / `RequestIdConflict` / `ValidationException` to `Response::error`, and `columnSummary()` / `columnSchema()`), `SetsUpBoards` (a board with named columns), `ResolvesCalendarConnections`.
+  - **Project setup (v1.47.0):** `GetProjectConfigTool` (boards + columns, labels, types, priorities, fields with options, members — what an import maps against), `CreateWorkspaceTool`, `CreateProjectTool` (default board, optional `columns`), `UpdateProjectTool`, `AddProjectMemberTool`, `CreateBoardTool` / `UpdateBoardTool`, `CreateBoardColumnTool` / `UpdateBoardColumnTool` / `DeleteBoardColumnTool` (empty only) / `ReorderBoardColumnsTool`, `CreateLabelTool` / `UpdateLabelTool` / `DeleteLabelTool`, `CreateItemTypeTool` / `UpdateItemTypeTool`, `CreatePriorityTool` / `UpdatePriorityTool` (project-scoped rows next to the instance defaults), `CreateItemFieldTool` / `UpdateItemFieldTool` (through `App\Support\Boards\ItemFields`, shared with `ItemFieldController`), `CreateTaskListTool`, `CaptureToInboxTool`, and **`CreateBoardItemsTool`** (≤ 100 cards per call through `ProjectIssues::create`, every name resolved before anything is written, `external_key` echoed, `parent_key` / `parent_external_key` for sub-tasks). `CreateBoardItemTool` / `UpdateBoardItemTool` take `type`, `priority`, `labels`, `story_points`, `parent_id`, `fields`. Tests: `tests/Feature/Mcp/ProjectSetupToolsTest.php`.
   - **Support:** `app/Support/Mcp/` — `ResourceLocator` (the `location` object every write returns), `PageContentConverter` (Markdown↔editor format), `CalendarFormatter`.
   - **Comments / sprints / plans (BRAI-67/68/69):** `ListItemCommentsTool`, `AddItemCommentTool`; `ListSprintsTool`, `GetSprintTool`, `CreateSprintTool`, `UpdateSprintTool`, `MoveItemsToSprintTool`, `StartSprintTool`, `CompleteSprintTool` (trait `InteractsWithSprints`); `ListPlansTool`, `GetPlanTool`, `UpdatePlanTool` (trait `InteractsWithPlans`, engine `App\Support\Plans\PlanOperations`). Shared domain actions with the UI: `Support/Boards/ItemComments`, `ItemMentions`, `SprintLifecycle`.
   - **Search / fetch (v1.43.0, BRAI-55):** `SearchTool` runs the same `SearchService` as `/search` (same visibility; optional `type`, `status`, `assigned_to_me`, `limit`; returns a `snippet` and projects / workspaces by name via `PlaceSearch`). `FetchTool` handles: `item`, `page`, `ticket`, `plan`, `task`, `capture` (policies `TicketPolicy`, `PlanPolicy`, `TaskListPolicy`, captures owner only); comments / issue files → `item:<issue>`, ticket files → `ticket:<ticket>`, snippets / bookmarks → their collection.
@@ -370,8 +371,31 @@ Plan [`tasks/feat-legal-compliance.md`](./tasks/feat-legal-compliance.md); human
 - **In-app AI (workspace AI settings):** `AiController` — `generate` (editor toolbar; optional `project_id` adds the project's name + description as context), `projectAssist` / `saveProjectAssist` (project overview assistant: summary / task / implementation prompt → review → copy, draft doc or replace description). All calls go through the private `chat()` helper (SSRF-guarded via `OutboundUrl`). UI: `components/projects/ProjectAiAssistant.tsx`.
 - **Meeting notes → issues (BRAI-62):** `MeetingNotesController` — `meeting-notes.options` (GET, ReadOnlySession: writable boards, project members, AI state, source doc), `meeting-notes.extract` (proposals only, writes nothing), `meeting-notes.store` (creates the reviewed proposals) under `workspaces/{workspace}/projects/{project}`. Domain in `app/Support/MeetingNotes/`: `MeetingNotesSource` (doc by uuid with `PagePolicy::view`; editors read the draft they see, everyone else the live doc; pasted text; 20 000-char cap), `ActionItemExtractor` (its own OpenAI-compatible call to the workspace BYOK provider through `OutboundUrl`; notes inside a random per-request boundary; `parse()`; `ExtractionFailed` codes), `ProposalReview` (excerpt must be in the notes, assignees only project members / ambiguous / unknown, date rules, visible dedup vs batch + open board issues), `ActionItemCreator` (`ProjectIssues::create` inside `IdempotentRequest::run`, tool `meeting-notes.create`; optional quote + doc link + `ContentReference`). UI: `components/meetingNotes/ExtractActionItemsDialog.tsx` (setup → review → result), opened from the doc's ⋯ menu (`Pages/Pages/Show`) and the "Meeting notes → issues" card on `Pages/Projects/Show` (`canCreateIssues`). Tests: `tests/Feature/MeetingNotes/`, e2e `e2e/tests/meeting-notes.spec.ts`.
 
-### CLI API
-- **Controller:** `CliController` — `routes/api.php`: `/cli/login` issues a Passport token; `auth:api`-guarded `/cli/...` endpoints expose workspaces + task lists (JSON).
+### CLI (v1.47.0)
+- **Source:** `cli/` — a Go module (`github.com/armendzekjiri/brainitive/cli`, stdlib + cobra, no cgo) that
+  builds to one static binary per platform. Layout: `cmd/brainitive` (main, `-X main.version`),
+  `internal/cli` (commands: login/logout/whoami/use/config, workspaces/projects/boards/pages/page, search,
+  capture, snippets/snippet, bookmarks/bookmark, tasks/task, issues/issue, sprints, project config|create,
+  tools/tool, mcp, update, version), `internal/mcp` (JSON-RPC client for `/mcp`: `Call`, `ListTools`,
+  `Forward`; `ToolName()` maps `create_board_item` → `create-board-item-tool`, single words like `search`
+  stay), `internal/auth` (OAuth 2.1 + PKCE, Dynamic Client Registration, loopback redirect
+  `http://127.0.0.1:<port>/callback`, scopes `mcp:use capture`, refresh), `internal/api` (the extension
+  API: `destinations` + issue with screenshot — the one thing MCP can't carry), `internal/config`
+  (`~/.config/brainitive/config.json`, 0600; `BRAINITIVE_CONFIG`, `BRAINITIVE_SERVER`, `BRAINITIVE_TOKEN`,
+  `BRAINITIVE_WORKSPACE|PROJECT|BOARD`), `internal/output` (tables / `--json`).
+- **Every command is an MCP tool call** — there is no CLI-specific REST surface to keep in sync; a new tool is
+  reachable through `brainitive tool <name>` the moment it is registered. `brainitive mcp` is a stdio ⇄ HTTP
+  proxy (forwards `MCP-Session-Id`) for Claude Code / Cursor / Codex / CI.
+- **Install & release:** `cli/install.sh` and `cli/install.ps1` are served at `/install.sh` and `/install.ps1`
+  (`routes/web.php`, test `tests/Feature/CliInstallScriptTest.php`) and download
+  `brainitive_<os>_<arch>.tar.gz|zip` + `checksums.txt` from the **latest GitHub release**; the `cli` job of
+  `.github/workflows/release.yml` cross-builds the six binaries (darwin/linux × arm64/amd64, windows × amd64/arm64)
+  and uploads them with `--clobber`, so the CLI's version is the app's. `.github/workflows/cli.yml` runs gofmt,
+  vet, tests and the cross-build on every push to `cli/`. `brainitive update` does the same download in place.
+- **Docs:** `cli/README.md`, public page `docs-site/integrations/cli.md`.
+- **Replaced:** the Python `brainitive_cli` package that lived in `cli/` (pip install, password login,
+  task lists only) is gone since v1.47.0. Its server side, `CliController` (`routes/api.php`: password
+  `/cli/login`, workspaces + task lists), is still there with no client; removal is a separate decision.
 
 ### Browser extension (Chrome, Edge, Firefox)
 - **Extension source:** `browser-extension/` (WXT + React + TS, own `package.json`, not part of
