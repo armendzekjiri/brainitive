@@ -593,6 +593,9 @@ Code name "entitlements", never "plan" (`App\Models\Plan` is the Gantt plan).
 - **Package (private):** `CloudEntitlements`, `BillingAccount` (Cashier Paddle billable per workspace, `cloud_*`
   tables), Plan & billing page `/workspaces/{workspace}/plan` (`/billing` is the time-tracking module), webhook
   `POST /paddle/webhook`, admin `/admin/customers`. Install / deploy: its README (`scripts/composer-cloud.sh`).
+  `pre-release.yml` installs it on dev when `/var/www/brainitive-cloud-dev` exists (no-op otherwise);
+  `deploy.yml` (production) doesn't yet. Dev runs the Paddle **sandbox**; `CLOUD_COMPLIMENTARY_OWNER_DOMAINS=example.test`
+  keeps the dev e2e users' workspaces unlimited.
 - **Tests:** `tests/Feature/Entitlements/` (foundation, `LimitChecksTest`, `UsageMeterTest`, `VersionPruneTest`),
   e2e `e2e/tests/plan-limits.spec.ts`, homepage pricing in `homepage.spec.ts`.
 
