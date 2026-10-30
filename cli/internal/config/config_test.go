@@ -14,7 +14,8 @@ func TestNormalizeServer(t *testing.T) {
 		"https://brainitive.example.com/mcp": "https://brainitive.example.com",
 		"localhost:8000":                     "http://localhost:8000",
 		"http://127.0.0.1:8000/anything":     "http://127.0.0.1:8000",
-		"  HTTPS://Brainitive.app/x ":        "https://Brainitive.app",
+		"  HTTPS://Brainitive.app/x ":        DefaultServer,
+		"brainitive.app":                     DefaultServer,
 	}
 	for in, want := range cases {
 		if got := NormalizeServer(in); got != want {
@@ -68,5 +69,28 @@ func TestLoadRejectsInvalidJSON(t *testing.T) {
 	}
 	if _, err := Load(); err == nil {
 		t.Fatal("expected an error for invalid JSON")
+	}
+}
+
+func TestLegacyCloudServerMigratesOnlyWithoutSession(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("BRAINITIVE_CONFIG", path)
+	for _, tc := range []struct{ name, contents, want string }{
+		{"unsigned", `{"server":"https://brainitive.app"}`, DefaultServer},
+		{"signed in", `{"server":"https://brainitive.app","session":{"access_token":"existing"}}`, legacyCloudServer},
+		{"self hosted", `{"server":"https://example.test"}`, "https://example.test"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(path, []byte(tc.contents), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Server != tc.want {
+				t.Fatalf("server = %q; want %q", cfg.Server, tc.want)
+			}
+		})
 	}
 }

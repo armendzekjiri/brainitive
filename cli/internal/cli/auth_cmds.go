@@ -41,6 +41,7 @@ Profile → Connected apps, or "php artisan mcp:get-token <email>" on the server
 				target = config.NormalizeServer(os.Getenv("BRAINITIVE_SERVER"))
 			}
 
+			target = config.NormalizeServer(target)
 			ctx, cancel := context.WithTimeout(cmd.Context(), 5*time.Minute)
 			defer cancel()
 			session, err := auth.Login(ctx, target, func(line string) { a.out.Note("%s", line) })

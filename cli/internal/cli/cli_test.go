@@ -105,6 +105,14 @@ func fakeServer(t *testing.T) (*httptest.Server, *[]map[string]any) {
 			reply(map[string]any{"projects": []any{map[string]any{"slug": "shop", "name": "Shop", "key": "SHOP"}}, "count": 1})
 		case "list-boards-tool":
 			reply(map[string]any{"boards": []any{map[string]any{"slug": "main-board", "name": "Main Board"}}, "count": 1})
+		case "get-board-tool":
+			reply(map[string]any{"columns": []any{}})
+		case "list-task-lists-tool":
+			reply(map[string]any{"task_lists": []any{map[string]any{"slug": "todo"}}})
+		case "get-task-list-tool":
+			reply(map[string]any{"tasks": []any{}})
+		case "search":
+			reply(map[string]any{"results": []any{}})
 		case "capture-to-inbox-tool":
 			reply(map[string]any{"created": true, "capture_id": "u1", "location": map[string]any{"title": "Call the bank", "breadcrumb": "Captures", "url": srv0 + "/captures"}})
 		case "create-board-item-tool":
@@ -271,5 +279,60 @@ func TestProxyForwardsRequestsAndSwallowsNotifications(t *testing.T) {
 	}
 	if !strings.Contains(lines[0], `"echo":"initialize"`) || !strings.Contains(lines[1], "Parse error") || !strings.Contains(lines[2], `"id":"abc"`) {
 		t.Fatalf("unexpected proxy output: %s", out.String())
+	}
+}
+
+func TestQuickSearchAndCapture(t *testing.T) {
+	srv, calls := fakeServer(t)
+	defer srv.Close()
+	for _, tc := range []struct{ flag, text, tool, field string }{
+		{"-s", "everything here", "search", "query"},
+		{"-s", "issues", "search", "query"},
+		{"-c", "search", "capture-to-inbox-tool", "text"},
+		{"-c", "Call the bank", "capture-to-inbox-tool", "text"},
+	} {
+		out, err := run(t, srv.URL, tc.flag, tc.text)
+		if err != nil {
+			t.Fatalf("%s: %v (%s)", tc.flag, err, out)
+		}
+		last := (*calls)[len(*calls)-1]
+		args := last["args"].(map[string]any)
+		if last["name"] != tc.tool || args[tc.field] != tc.text {
+			t.Fatalf("%s: %v", tc.flag, last)
+		}
+	}
+	if _, err := run(t, srv.URL, "-s", " "); err == nil {
+		t.Fatal("empty search must fail")
+	}
+	if _, err := run(t, srv.URL, "-c", " "); err == nil {
+		t.Fatal("empty capture must fail")
+	}
+	if _, err := run(t, srv.URL, "-s", "query", "-c", "note"); err == nil {
+		t.Fatal("conflicting shortcuts must fail")
+	}
+}
+
+func TestQuickListActions(t *testing.T) {
+	srv, calls := fakeServer(t)
+	defer srv.Close()
+	for _, tc := range []struct{ flag, tool string }{
+		{"-W", "list-workspaces-tool"}, {"-P", "list-projects-tool"},
+		{"-B", "list-boards-tool"}, {"-i", "get-board-tool"}, {"-t", "get-task-list-tool"},
+	} {
+		out, err := run(t, srv.URL, "-w", "acme", "-p", "shop", "-b", "main-board", tc.flag, "-j")
+		if err != nil {
+			t.Fatalf("%s: %v (%s)", tc.flag, err, out)
+		}
+		last := (*calls)[len(*calls)-1]
+		if last["name"] != tc.tool {
+			t.Fatalf("%s called %v", tc.flag, last)
+		}
+		var parsed map[string]any
+		if json.Unmarshal([]byte(out), &parsed) != nil {
+			t.Fatalf("%s must output JSON: %q", tc.flag, out)
+		}
+	}
+	if _, err := run(t, srv.URL, "-W", "-i"); err == nil {
+		t.Fatal("multiple actions must fail")
 	}
 }

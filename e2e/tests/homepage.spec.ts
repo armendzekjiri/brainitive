@@ -76,6 +76,17 @@ test.describe('homepage', () => {
         await page.goto('/');
         await expect(page.getByRole('link', { name: 'Start for free' })).toBeVisible();
 
+        // The Cloud homepage is a separate Astro website; self-hosted instances still use Welcome.
+        if (await page.locator('astro-island').count()) {
+            const features = page.locator('#features');
+            await expect(features.getByRole('link', { name: /Boards & Scrum/ })).toHaveAttribute('href', '/features/boards');
+            await expect(features.getByRole('link', { name: /Docs & wiki/ })).toHaveAttribute('href', '/features/docs');
+            await expect(page.locator('#everywhere')).toBeAttached();
+            expect(errors, 'uncaught errors on the homepage').toEqual([]);
+            await context.close();
+            return;
+        }
+
         const features = page.locator('#features');
         await features.scrollIntoViewIfNeeded();
         await expect(features.getByRole('heading', { level: 2, name: 'Everything you need, in one place' })).toBeVisible();
@@ -118,7 +129,7 @@ test.describe('homepage', () => {
         expect(tag('property', 'og:type')).toBe('website');
         expect(tag('name', 'twitter:card')).toBe('summary_large_image');
         const image = tag('property', 'og:image');
-        expect(image).toMatch(/\/images\/og-image\.png\?v=\d+$/);
+        expect(image).toMatch(/\/(?:_site\/)?images\/og-image\.png(?:\?v=\d+)?$/);
 
         const png = await page.request.get(new URL(image!).pathname);
         expect(png.status()).toBe(200);
@@ -175,7 +186,7 @@ test.describe('homepage', () => {
         await page.goto('/');
 
         const stars = page.getByTestId('github-star');
-        await expect(stars).toHaveCount(4);
+        await expect(stars).toHaveCount(await page.locator('astro-island').count() ? 3 : 4);
         for (const link of await stars.all()) {
             await expect(link).toHaveAttribute('href', /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/);
             await expect(link).toHaveAttribute('target', '_blank');
@@ -200,6 +211,16 @@ test.describe('homepage', () => {
             const { context, page, errors } = await guestPage(browser, { colorScheme, viewport: { width: 375, height: 812 } });
             await page.goto('/');
             await expect(page.locator('html')).toHaveClass(new RegExp(`\\b${colorScheme}\\b`));
+
+            if (await page.locator('astro-island').count()) {
+                const features = page.locator('#features');
+                await features.scrollIntoViewIfNeeded();
+                await expect(features.getByRole('link', { name: /Boards & Scrum/ })).toBeVisible();
+                await expectNoHorizontalScroll(page);
+                expect(errors, `uncaught errors on the homepage (${colorScheme})`).toEqual([]);
+                await context.close();
+                continue;
+            }
 
             const spotlight = page.getByRole('region', { name: 'New in recent releases' });
             await spotlight.scrollIntoViewIfNeeded();
