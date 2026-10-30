@@ -22,7 +22,7 @@ class LegalInfo
      */
     public const DOCUMENTS = [
         'privacy' => ['version' => '2.2', 'updated' => '2026-10-27'], // v1.45.0: booking pages
-        'terms' => ['version' => '2.0', 'updated' => '2026-10-26'],
+        'terms' => ['version' => '2.1', 'updated' => '2026-10-30'], // v1.46.0: BSL 1.1 licence
         'cookies' => ['version' => '2.1', 'updated' => '2026-10-27'],
         'imprint' => ['version' => '1.0', 'updated' => '2026-10-26'],
         'subprocessors' => ['version' => '1.0', 'updated' => '2026-10-26'],

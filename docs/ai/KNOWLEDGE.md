@@ -1042,6 +1042,22 @@ also wait for read / archive actions in flight (a page older than the action is 
 
 ## Architectural decisions
 
+### Licence: Business Source License 1.1 instead of AGPL-3.0 (v1.46.0, 2026-10-30)
+- **Why:** the AGPL let anyone resell Brainitive as a hosted service and let big companies self-host for
+  free. BSL 1.1 (MariaDB's template, as Outline uses) with our Additional Use Grant: production use is free
+  under €2M annual revenue (group counted together) and always for personal / non-profit / education;
+  agencies may run it for a client (client's revenue counts); a competing **Hosted Service** needs a
+  commercial licence. Each version becomes AGPL-3.0 four years after release (BSL requires a
+  GPL-compatible Change Licence). Plan: [`tasks/chore-relicense-bsl.md`](./tasks/chore-relicense-bsl.md).
+- **Only the template's Parameters block may change** — the BSL covenants forbid editing the Terms. The
+  grant, Change Date and Change Licence live there.
+- **v1.14.0–v1.45.3 stay AGPL-3.0 forever** (a licence can't be withdrawn from copies already released);
+  the README, docs and LICENSE say so.
+- **Relicensing was possible because every commit is the maintainer's** (plus bots / AI agents) and the
+  CLA allows any licence. Re-check `git shortlog -sne` + signed CLAs before any future licence change.
+- **We still say "open source"** (not an OSI term; Outline does the same under BSL) but never "OSI
+  approved", and the exact terms are in README / docs / Terms. The grant and CLA still need a lawyer.
+
 ### Public docs: VitePress in the same repo, not in the app (2026-10-28)
 docs.brainitive.app is a static VitePress site in `docs-site/` (own `package.json`, not part of the
 app build). **Why:** static HTML ranks well (the app is a client-rendered Inertia SPA without SSR or

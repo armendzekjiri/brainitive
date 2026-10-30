@@ -9,8 +9,8 @@ Thanks for helping! Bug reports, ideas and pull requests are all welcome.
 - **Security problems:** please do **not** open an issue — see [SECURITY.md](SECURITY.md).
 - **Contributor License Agreement:** before your first pull request can be merged, the CLA bot
   asks you to sign the [CLA](CLA.md) by leaving a comment. You keep the copyright on your
-  work; the CLA lets us ship Brainitive under the AGPL and under a commercial licence (for
-  the cloud and for companies that can't use AGPL software).
+  work; the CLA lets us ship Brainitive under its [licence](LICENSE) (Business Source License 1.1,
+  each version becoming AGPL-3.0 after four years) and under commercial licences.
 
 ## Development setup
 

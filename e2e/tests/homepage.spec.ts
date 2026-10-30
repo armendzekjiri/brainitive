@@ -136,6 +136,24 @@ test.describe('homepage', () => {
         await context.close();
     });
 
+    test('pricing explains who self-hosts for free and links the licence terms (BSL 1.1, v1.46.0)', async ({ browser }) => {
+        const { context, page, errors } = await guestPage(browser, { viewport: { width: 1280, height: 900 } });
+        await page.goto('/#pricing');
+        const pricing = page.locator('#pricing');
+        await expect(pricing.getByRole('heading', { level: 2, name: 'Open source. Self-host it or let us run it.' })).toBeVisible();
+
+        await expect(pricing.getByText('under €2M revenue', { exact: true })).toBeVisible();
+        await expect(pricing.getByText(/always for personal, non-profit and educational use/)).toBeVisible();
+        const terms = pricing.getByRole('link', { name: 'Licence terms' });
+        await expect(terms).toHaveAttribute('href', 'https://docs.brainitive.app/self-hosting/licence');
+        await expect(terms).toHaveAttribute('target', '_blank');
+        await expect(pricing.getByText('Commercial licence for €2M+ revenue')).toBeVisible();
+        await expect(pricing.getByText(/AGPL/)).toHaveCount(0);
+
+        expect(errors, 'uncaught errors on the homepage').toEqual([]);
+        await context.close();
+    });
+
     test('"Star on GitHub" buttons lead to the repository (top bar, hero, open-source card, footer)', async ({ browser }) => {
         const { context, page, errors } = await guestPage(browser, { viewport: { width: 1280, height: 900 } });
         await page.goto('/');

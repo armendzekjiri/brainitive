@@ -36,7 +36,7 @@ export default function Terms({ legal }: { legal: LegalPageData }) {
                 <SelfHostedNotice legal={legal} document="terms of use" externalUrl={legal.external.terms_url} />
                 <LegalSection id="licence" title="The software">
                     <p>
-                        {legal.app_name} is open-source software licensed under the GNU Affero General Public License v3.0. The licence covers the
+                        {legal.app_name} is open-source software licensed under the Business Source License 1.1. The licence covers the
                         software; the use of this installation is governed by its operator.
                     </p>
                 </LegalSection>
@@ -84,8 +84,9 @@ export default function Terms({ legal }: { legal: LegalPageData }) {
                     connectors. The current feature set is described on our website and in the app.
                 </p>
                 <p>
-                    The Brainitive software is open source under the GNU Affero General Public License v3.0. If you run it on your own servers
-                    (self-hosting), that licence applies instead of these terms, and we provide no service to you.
+                    The Brainitive software is open source under the Business Source License 1.1: self-hosting is free for organizations with
+                    less than €2 million annual revenue, and offering it to others as a hosted service needs a commercial licence. If you
+                    run it on your own servers (self-hosting), that licence applies instead of these terms, and we provide no service to you.
                 </p>
             </LegalSection>
 

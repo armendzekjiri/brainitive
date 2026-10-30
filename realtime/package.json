@@ -1,7 +1,7 @@
 {
     "name": "brainitive-realtime",
     "private": true,
-    "license": "AGPL-3.0-only",
+    "license": "BUSL-1.1",
     "type": "module",
     "description": "Live co-editing server for Brainitive documents (Hocuspocus / Yjs).",
     "engines": {

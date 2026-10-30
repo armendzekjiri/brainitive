@@ -85,7 +85,7 @@ import { Button } from '@/components/ui/button';
 import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks';
 import { TermsNotice } from '@/components/legal/TermsNotice';
 import GitHubStarButton from '@/components/GitHubStarButton';
-import { DOCS_URL, SELF_HOSTING_DOCS_URL } from '@/lib/docs';
+import { DOCS_URL, LICENCE_DOCS_URL, SELF_HOSTING_DOCS_URL } from '@/lib/docs';
 
 /*
  * Brand palette
@@ -228,11 +228,11 @@ function PricingSection() {
                         Pricing
                     </div>
                     <h2 className="text-3xl sm:text-4xl font-bold text-[#485E72] dark:text-slate-100 mb-4">
-                        Open source. Pay only for the cloud.
+                        Open source. Self-host it or let us run it.
                     </h2>
                     <p className="text-[#485E72]/60 dark:text-slate-400 max-w-2xl mx-auto text-lg">
-                        Every feature is free to self-host. Brainitive Cloud runs it for you &mdash;
-                        updates, backups and support included.
+                        Every feature is free to self-host for organizations under &euro;2M annual revenue. Brainitive Cloud
+                        runs it for you &mdash; updates, backups and support included.
                     </p>
 
                     <div className="mt-8 mx-auto max-w-2xl rounded-2xl border border-[#69A748]/30 bg-[#69A748]/[0.07] px-5 py-4 text-left sm:flex sm:items-start sm:gap-3">
@@ -331,12 +331,16 @@ function PricingSection() {
                                 </div>
                                 <div className="text-right">
                                     <div className="text-3xl font-bold text-[#485E72] dark:text-slate-100">€0</div>
-                                    <div className="text-xs text-[#485E72]/60 dark:text-slate-400">AGPL-3.0</div>
+                                    <div className="text-xs text-[#485E72]/60 dark:text-slate-400">under &euro;2M revenue</div>
                                 </div>
                             </div>
                             <p className="mt-3 text-sm text-[#485E72]/60 dark:text-slate-400 flex-1">
-                                Every feature, unlimited users, on your own server. One Docker command to start,
-                                community support on GitHub.
+                                Every feature, unlimited users, on your own server &mdash; free for organizations under &euro;2M
+                                annual revenue, and always for personal, non-profit and educational use. One Docker command
+                                to start, community support on GitHub.{' '}
+                                <a href={LICENCE_DOCS_URL} target="_blank" rel="noopener" className="font-semibold text-[#0E83DC] hover:underline">
+                                    Licence terms
+                                </a>
                             </p>
                             <div className="mt-5 flex flex-wrap gap-3">
                                 <a href={SELF_HOSTING_URL} target="_blank" rel="noopener" className="inline-flex items-center gap-2 rounded-xl bg-[#485E72] dark:bg-slate-100 px-4 py-2.5 text-sm font-bold text-white dark:text-slate-900 hover:opacity-90 transition-opacity">
@@ -361,7 +365,7 @@ function PricingSection() {
                                 <div className="text-right text-sm font-semibold text-[#485E72]/70 dark:text-slate-300">Custom</div>
                             </div>
                             <ul className="mt-3 grid gap-1.5 text-sm text-[#485E72]/70 dark:text-slate-300 sm:grid-cols-2 flex-1">
-                                {['Commercial licence (no AGPL obligations)', 'Dedicated instance or on-premise', 'SAML SSO & SCIM on request', 'Custom SLA & onboarding'].map((item) => (
+                                {['Commercial licence for €2M+ revenue', 'Dedicated instance or on-premise', 'SAML SSO & SCIM on request', 'Custom SLA & onboarding'].map((item) => (
                                     <li key={item} className="flex items-start gap-2">
                                         <Check className="h-4 w-4 shrink-0 mt-0.5 text-[#69A748]" strokeWidth={2.5} />
                                         {item}
