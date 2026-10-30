@@ -1984,8 +1984,8 @@ export interface WebhookDelivery {
 // ── Customisable sidebar (BRAI-106) ─────────────────────────────────────────
 /** Top-level sidebar entries a user may hide (Home and Inbox are always shown). */
 export type SidebarNavKey = 'my_work' | 'captures' | 'timesheet' | 'billing' | 'insights' | 'calendar' | 'booking_pages' | 'bookmarks' | 'snippets';
-/** Project groups in the sidebar. */
-export type SidebarGroupKey = 'boards' | 'lists' | 'plans' | 'helpdesks' | 'lead_forms' | 'pages' | 'whiteboards' | 'folders';
+/** Project groups in the sidebar; health / workload / releases are single rows (BRAI-286). */
+export type SidebarGroupKey = 'health' | 'workload' | 'releases' | 'boards' | 'lists' | 'plans' | 'helpdesks' | 'lead_forms' | 'pages' | 'whiteboards' | 'folders';
 /** What can be pinned; "page" covers pages, whiteboards and folders. */
 export type SidebarPinType = 'board' | 'list' | 'plan' | 'helpdesk' | 'lead_form' | 'page';
 

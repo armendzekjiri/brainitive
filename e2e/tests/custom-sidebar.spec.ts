@@ -81,6 +81,65 @@ test.describe('customisable sidebar', () => {
         await expect(page.getByRole('link').filter({ has: page.getByRole('heading', { level: 3, name: list, exact: true }) })).toBeVisible();
     });
 
+    test('Health, Workload and Releases are their own sidebar entries and can be hidden one by one (BRAI-286)', async ({ page }) => {
+        const project = await createBlankProject(page, 'e2e-workspace');
+        await page.goto(urls.project(project.slug));
+
+        const tools = sidebar(page).getByRole('group', { name: 'Project tools' });
+        await expect(tools.getByRole('link')).toHaveText(['Health', 'Workload', 'Releases']);
+        await expect(tools.getByRole('link', { name: 'Health', exact: true })).toHaveAttribute('href', new RegExp(`/projects/${project.slug}/health$`));
+
+        // not part of the Boards group any more: collapsing Boards keeps them
+        await sidebar(page).getByRole('button', { name: 'Boards', exact: true }).click();
+        await expect(sidebar(page).getByRole('link', { name: 'Main Board', exact: true })).toHaveCount(0);
+        await expect(tools.getByRole('link')).toHaveText(['Health', 'Workload', 'Releases']);
+        await sidebar(page).getByRole('button', { name: 'Boards', exact: true }).click();
+
+        // hide Workload: only that row goes, and it stays gone after a reload
+        const panel = await openCustomize(page);
+        const toolSwitches = panel.getByRole('list', { name: 'Project tools' });
+        await expect(toolSwitches.getByRole('switch')).toHaveCount(3);
+        await toggle(page, toolSwitches, 'Workload', false);
+        await page.keyboard.press('Escape');
+
+        await expect(tools.getByRole('link')).toHaveText(['Health', 'Releases']);
+        await expect(sidebar(page).getByRole('link', { name: 'Main Board', exact: true })).toBeVisible();
+        await expect(sidebar(page).getByRole('link', { name: 'Show all in project' })).toBeVisible();
+        await page.reload();
+        await expect(tools.getByRole('link')).toHaveText(['Health', 'Releases']);
+        await expect(sidebar(page).getByRole('link', { name: 'Workload', exact: true })).toHaveCount(0);
+        // the project page still links to it
+        await expect(page.getByRole('main').getByRole('link', { name: 'Project workload' })).toBeVisible();
+
+        // hiding the Boards group no longer takes the tools with it
+        const again = await openCustomize(page);
+        await toggle(page, again, 'Boards', false);
+        await page.keyboard.press('Escape');
+        await expect(sidebar(page).getByRole('button', { name: 'Boards', exact: true })).toHaveCount(0);
+        await expect(tools.getByRole('link')).toHaveText(['Health', 'Releases']);
+
+        // "Show only pinned" collapses them like every other group (the open sheet hides the
+        // sidebar from the accessibility tree, so check with it closed)
+        let panelAgain = await openCustomize(page);
+        await toggle(page, panelAgain, 'Show only pinned', true);
+        await page.keyboard.press('Escape');
+        await expect(pinnedGroup(page)).toBeVisible();
+        await expect(tools).toHaveCount(0);
+
+        // back to normal, and show Workload (and Boards) again
+        panelAgain = await openCustomize(page);
+        await toggle(page, panelAgain, 'Show only pinned', false);
+        await toggle(page, panelAgain, 'Workload', true);
+        await toggle(page, panelAgain, 'Boards', true);
+        await page.keyboard.press('Escape');
+        await expect(tools.getByRole('link')).toHaveText(['Health', 'Workload', 'Releases']);
+        await expect(sidebar(page).getByRole('link', { name: 'Show all in project' })).toHaveCount(0);
+        await page.reload();
+        await expect(tools.getByRole('link')).toHaveText(['Health', 'Workload', 'Releases']);
+        await tools.getByRole('link', { name: 'Workload', exact: true }).click();
+        await expect(page.getByRole('heading', { level: 1, name: /Workload/ })).toBeVisible();
+    });
+
     test('pin a page: it shows under Pinned in the sidebar and on the project page, then unpin it', async ({ page }) => {
         const project = await createBlankProject(page, 'e2e-workspace');
         const doc = await createDocPage(page, project.slug, uid('Runbook'));

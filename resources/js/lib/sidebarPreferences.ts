@@ -18,16 +18,23 @@ import type {
  * provider: pages that render AppLayout themselves (Projects/Show) read and write the same store.
  */
 
-/** Project groups in sidebar order, with the labels the sidebar shows. */
-export const SIDEBAR_GROUPS: { key: SidebarGroupKey; label: string }[] = [
-    { key: 'boards', label: 'Boards' },
-    { key: 'lists', label: 'Lists' },
-    { key: 'plans', label: 'Plans' },
-    { key: 'helpdesks', label: 'Helpdesk' },
-    { key: 'lead_forms', label: 'Lead forms' },
-    { key: 'pages', label: 'Pages' },
-    { key: 'whiteboards', label: 'Whiteboards' },
-    { key: 'folders', label: 'Folders' },
+/**
+ * Project groups in sidebar order, with the labels the sidebar shows. "tools" are the project
+ * views Health / Workload / Releases, one top-level row each (BRAI-286); "content" groups list
+ * the project's boards, lists, pages, ….
+ */
+export const SIDEBAR_GROUPS: { key: SidebarGroupKey; label: string; section: 'tools' | 'content' }[] = [
+    { key: 'health', label: 'Health', section: 'tools' },
+    { key: 'workload', label: 'Workload', section: 'tools' },
+    { key: 'releases', label: 'Releases', section: 'tools' },
+    { key: 'boards', label: 'Boards', section: 'content' },
+    { key: 'lists', label: 'Lists', section: 'content' },
+    { key: 'plans', label: 'Plans', section: 'content' },
+    { key: 'helpdesks', label: 'Helpdesk', section: 'content' },
+    { key: 'lead_forms', label: 'Lead forms', section: 'content' },
+    { key: 'pages', label: 'Pages', section: 'content' },
+    { key: 'whiteboards', label: 'Whiteboards', section: 'content' },
+    { key: 'folders', label: 'Folders', section: 'content' },
 ];
 
 const DEFAULT_GROUPS = Object.fromEntries(SIDEBAR_GROUPS.map((g) => [g.key, true])) as Record<SidebarGroupKey, boolean>;

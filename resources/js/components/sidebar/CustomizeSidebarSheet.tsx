@@ -135,9 +135,21 @@ export function CustomizeSidebarSheet({ workspaceSlug, project }: { workspaceSlu
                                 />
                             </ul>
 
+                            <p className="mb-1 mt-3 px-2 text-xs font-medium text-muted-foreground">Project tools</p>
+                            <ul className={cn('grid grid-cols-1 gap-0.5 min-[420px]:grid-cols-2', projectPrefs.pinned_only && 'opacity-60')} aria-label="Project tools">
+                                {SIDEBAR_GROUPS.filter((group) => group.section === 'tools').map((group) => (
+                                    <SwitchRow
+                                        key={group.key}
+                                        label={group.label}
+                                        checked={projectPrefs.groups[group.key]}
+                                        onChange={(visible) => setGroupVisible(project.id, group.key, visible)}
+                                    />
+                                ))}
+                            </ul>
+
                             <p className="mb-1 mt-3 px-2 text-xs font-medium text-muted-foreground">Groups</p>
                             <ul className={cn('grid grid-cols-1 gap-0.5 min-[420px]:grid-cols-2', projectPrefs.pinned_only && 'opacity-60')}>
-                                {SIDEBAR_GROUPS.map((group) => (
+                                {SIDEBAR_GROUPS.filter((group) => group.section === 'content').map((group) => (
                                     <SwitchRow
                                         key={group.key}
                                         label={group.label}
