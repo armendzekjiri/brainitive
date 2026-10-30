@@ -79,13 +79,13 @@ export default function Refund() {
 
                 <div className="relative z-10 mx-auto max-w-3xl px-6 py-12">
                     {/* Back link */}
-                    <Link
+                    <a
                         href="/"
                         className="inline-flex items-center gap-2 text-sm font-medium text-[#485E72]/60 hover:text-[#0E83DC] transition-colors mb-10"
                     >
                         <ArrowLeft className="h-4 w-4" />
                         Back to home
-                    </Link>
+                    </a>
 
                     {/* Header */}
                     <div className="flex items-center gap-4 mb-2">
@@ -143,9 +143,9 @@ export default function Refund() {
 
                     {/* Footer links */}
                     <div className="mt-16 pt-8 border-t border-[#C0C5C0]/30 flex flex-wrap items-center gap-6">
-                        <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-[#0E83DC] hover:text-[#0b6fbf] transition-colors">
+                        <a href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-[#0E83DC] hover:text-[#0b6fbf] transition-colors">
                             <ApplicationLogo className="h-5 w-auto" alt="" /> Home
-                        </Link>
+                        </a>
                         <Link href={route('terms')} className="text-sm font-semibold text-[#0E83DC] hover:text-[#0b6fbf] transition-colors">
                             Terms of Service
                         </Link>

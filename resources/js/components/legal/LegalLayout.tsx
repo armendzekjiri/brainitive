@@ -1,4 +1,4 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import { ArrowLeft, type LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import ApplicationLogo from '@/components/ApplicationLogo';
@@ -40,10 +40,10 @@ export function LegalLayout({
             <Head title={`${title} – ${legal.app_name}`} />
             <div className="min-h-screen bg-background text-foreground">
                 <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-12">
-                    <Link href="/" className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
+                    <a href="/" className="mb-8 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-primary">
                         <ArrowLeft className="h-4 w-4" />
                         Back to home
-                    </Link>
+                    </a>
 
                     <header className="flex items-start gap-4">
                         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
@@ -79,9 +79,9 @@ export function LegalLayout({
                     <div className="mt-8 space-y-5">{children}</div>
 
                     <footer className="mt-14 flex flex-col items-center gap-4 border-t pt-8 sm:flex-row sm:justify-between">
-                        <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                        <a href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-primary">
                             <ApplicationLogo className="h-5 w-auto" alt="" /> Home
-                        </Link>
+                        </a>
                         <LegalFooterLinks extended className="text-sm text-muted-foreground" linkClassName="hover:text-foreground" />
                     </footer>
                 </div>
