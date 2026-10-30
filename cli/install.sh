@@ -78,6 +78,12 @@ if [ -z "$dir" ]; then
     say "Installing to /usr/local/bin needs your password (sudo)."
     sudo install -m 0755 "$tmp/$NAME" "/usr/local/bin/$NAME"
     dir=/usr/local/bin
+    if ! command -v bi >/dev/null 2>&1 && [ ! -e "$dir/bi" ] && [ ! -L "$dir/bi" ]; then
+      sudo ln -s "$NAME" "$dir/bi"
+      say "Short command: bi"
+    else
+      say "Skipped bi: a command with that name already exists."
+    fi
     say "Installed $("$dir/$NAME" version) to $dir/$NAME"
     exit 0
   else
@@ -86,6 +92,13 @@ if [ -z "$dir" ]; then
 fi
 mkdir -p "$dir"
 install -m 0755 "$tmp/$NAME" "$dir/$NAME" 2>/dev/null || cp "$tmp/$NAME" "$dir/$NAME"
+
+if ! command -v bi >/dev/null 2>&1 && [ ! -e "$dir/bi" ] && [ ! -L "$dir/bi" ]; then
+  ln -s "$NAME" "$dir/bi"
+  say "Short command: bi"
+else
+  say "Skipped bi: a command with that name already exists."
+fi
 
 say "Installed $("$dir/$NAME" version) to $dir/$NAME"
 case ":$PATH:" in

@@ -101,6 +101,16 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.47.2',
+        title: 'CLI Cloud sign-in and shorter command',
+        tag: 'Fix',
+        date: '2026-10-30',
+        items: [
+            'CLI sign-in now uses the correct Brainitive Cloud address. Self-hosted sign-in continues to use your server address.',
+            'The CLI installer offers the shorter bi command when that name is available; use bi -s to search and bi -c to capture. brainitive still works.',
+        ]
+    },
+    {
         version: 'v1.47.1',
         title: 'Install the CLI straight from GitHub',
         tag: 'Fix',

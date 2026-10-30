@@ -41,7 +41,9 @@ type Config struct {
 }
 
 // DefaultServer is Brainitive Cloud; self-hosters pass --server once.
-const DefaultServer = "https://brainitive.app"
+const DefaultServer = "https://www.brainitive.app"
+
+const legacyCloudServer = "https://brainitive.app"
 
 // Path is where the config lives: $BRAINITIVE_CONFIG, else ~/.config/brainitive/config.json
 // (%APPDATA%\brainitive\config.json on Windows).
@@ -86,7 +88,7 @@ func Load() (*Config, error) {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return cfg, errors.New("config file " + path + " is not valid JSON: " + err.Error())
 	}
-	if cfg.Server == "" {
+	if cfg.Server == "" || (cfg.Server == legacyCloudServer && cfg.Session == nil) {
 		cfg.Server = DefaultServer
 	}
 	return cfg, nil
@@ -131,6 +133,9 @@ func NormalizeServer(input string) string {
 	u, err := url.Parse(s)
 	if err != nil || u.Host == "" {
 		return strings.TrimRight(s, "/")
+	}
+	if strings.EqualFold(u.Scheme, "https") && strings.EqualFold(u.Host, "brainitive.app") {
+		return DefaultServer
 	}
 	return strings.ToLower(u.Scheme) + "://" + u.Host
 }

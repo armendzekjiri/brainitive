@@ -59,6 +59,21 @@ jobs:
           path: public/build
           retention-days: 1
 
+  cli:
+    name: CLI (Go tests)
+    needs: docs-only
+    if: ${{ !cancelled() && needs.docs-only.outputs.docs-only != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+      - run: go test ./...
+        working-directory: cli
+
   pint:
     name: Pint
     needs: docs-only
