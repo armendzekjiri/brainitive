@@ -74,7 +74,7 @@ export function WorkspaceUsageCard({ entitlements }: { entitlements: WorkspaceEn
                 {!enforced && (
                     <p className="flex gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-200">
                         <Info className="mt-0.5 size-4 shrink-0" />
-                        Limits are not enforced yet — Brainitive Cloud is free during early access.
+                        Limits are not enforced yet — nothing is blocked.
                     </p>
                 )}
                 {graceUntil && graceUntil.getTime() > Date.now() && (

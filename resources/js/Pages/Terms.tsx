@@ -12,7 +12,7 @@ import type { LegalPageData } from '@/types';
 const TOC = [
     { id: 'scope', title: 'Scope and parties' },
     { id: 'service', title: 'The service' },
-    { id: 'plans', title: 'Early access, plans and prices' },
+    { id: 'plans', title: 'Plans, prices and payment' },
     { id: 'account', title: 'Your account' },
     { id: 'workspaces', title: 'Workspaces and team access' },
     { id: 'acceptable-use', title: 'Acceptable use' },
@@ -90,16 +90,40 @@ export default function Terms({ legal }: { legal: LegalPageData }) {
                 </p>
             </LegalSection>
 
-            <LegalSection id="plans" num={n('plans')} title="Early access, plans and prices">
+            <LegalSection id="plans" num={n('plans')} title="Plans, prices and payment">
                 <p>
-                    Brainitive Cloud is currently in <strong>early access</strong>: it is free of charge, we offer no paid plans and collect no
-                    payment details. During early access the commitments planned for paid plans (such as an uptime SLA or a backup restore period)
-                    do not apply.
+                    Every workspace has a plan. A new workspace starts on the <strong>Free</strong> plan, which costs nothing and needs no payment
+                    details. The paid plans (<strong>Starter, Team and Business</strong>) and what each plan includes — members, projects,
+                    storage, version history and support — are described on our website and in the app (Workspace settings → Plan &amp; usage).
+                    A plan belongs to a workspace, not to a person, and paid plans are charged <strong>per member of the workspace</strong>,
+                    monthly or yearly in advance. All prices include the statutory VAT where it applies.
                 </p>
                 <p>
-                    We plan to introduce paid plans after early access (currently planned: Free, Team, Business and Enterprise, as shown on our
-                    website). We will announce paid plans at least 30 days before they start. You will only pay if you actively choose a paid plan
-                    and agree to its price; a separate order and, where required, separate terms for it will apply.
+                    <strong>Paddle as reseller.</strong> Paid plans are sold by our reseller Paddle.com Market Ltd (“Paddle”), which acts as the
+                    merchant of record: you conclude the purchase with Paddle under Paddle’s buyer terms, Paddle charges your payment method,
+                    calculates the taxes and sends the invoices. These terms continue to govern your use of Brainitive Cloud.
+                </p>
+                <p>
+                    <strong>Renewal and members.</strong> A paid plan renews automatically for the same period until it is cancelled. When members
+                    join a paid workspace, the additional members are charged right away for the rest of the current period; when members leave,
+                    the difference is credited against the next payment.
+                </p>
+                <p>
+                    <strong>Cancelling and changing plans.</strong> A workspace admin can cancel or change the plan at any time under Plan &amp;
+                    billing. A cancellation takes effect at the end of the period already paid; the workspace then continues on the Free plan.
+                    Within 14 days of the first payment for a plan you can ask for a full refund without giving reasons; after that, amounts
+                    already paid are not refunded, except where the law requires it (see our{' '}
+                    {legal.refund ? <a href={legal.refund}>refund policy</a> : 'refund policy'}).
+                </p>
+                <p>
+                    <strong>Limits.</strong> When a workspace reaches a limit of its plan, adding more (members, projects, uploads, new content) is
+                    paused until there is room again or the plan is upgraded; nothing that already exists is blocked. After a move to a smaller
+                    plan, a failed payment or a cancellation we delete nothing for 90 days; after that, the smaller plan’s rules apply, for example
+                    how long old versions of documents are kept.
+                </p>
+                <p>
+                    <strong>Price changes</strong> for a running subscription are announced at least 30 days in advance and apply only from the
+                    next renewal after you agree; otherwise you can cancel before they take effect.
                 </p>
             </LegalSection>
 
@@ -186,7 +210,8 @@ export default function Terms({ legal }: { legal: LegalPageData }) {
 
             <LegalSection id="availability" num={n('availability')} title="Availability and changes to the service">
                 <p>
-                    We work to keep Brainitive available and secure, but during early access we give no availability guarantee. Maintenance,
+                    We work to keep Brainitive available and secure. An availability commitment (99.9% per month) applies only to workspaces on the
+                    Business plan, as described on our website; for all other plans we give no availability guarantee. Maintenance,
                     updates and events beyond our control can cause interruptions. We may develop the service further and change features,
                     provided the core purpose of the service is preserved and the change is reasonable for you; we announce significant changes in
                     advance.
@@ -218,7 +243,8 @@ export default function Terms({ legal }: { legal: LegalPageData }) {
                     good cause, in particular serious or repeated violations of these terms.
                 </p>
                 <p>
-                    Before you leave, you can export your projects. When your account is deleted, your account data and the workspaces only you
+                    Deleting a workspace with a paid plan cancels its subscription at the end of the period already paid; deleting your account
+                    does the same for the workspaces only you belong to. Before you leave, you can export your projects. When your account is deleted, your account data and the workspaces only you
                     belong to are deleted immediately; workspaces other people use must be transferred or deleted first. Remaining copies in
                     backups are overwritten in the normal backup cycle. If we end the contract, we will give you a reasonable opportunity to
                     export your data, unless this is unacceptable for us because of a serious violation.
@@ -229,8 +255,13 @@ export default function Terms({ legal }: { legal: LegalPageData }) {
                 <p>
                     If you are a consumer, you may withdraw from this contract within 14 days of concluding it without giving reasons. To do so,
                     send us a clear statement (for example an e-mail to <ContactEmail legal={legal} />); sending it before the period ends is
-                    enough. Because Brainitive Cloud is free of charge, a withdrawal has no costs for you; we delete your account when you
-                    withdraw. Independently of this, you can delete your account at any time.
+                    enough. Using the Free plan has no costs for you; we delete your account when you withdraw. Independently of this, you can
+                    delete your account at any time.
+                </p>
+                <p>
+                    For a paid plan, the purchase is made with Paddle, and the right of withdrawal and how it is exercised are set out in Paddle’s
+                    buyer terms. If you ask for a paid plan to start immediately, you agree that the service begins before the withdrawal period
+                    ends, and you may have to pay for the part of the period already provided if you withdraw.
                 </p>
             </LegalSection>
 
