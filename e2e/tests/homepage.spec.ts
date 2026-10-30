@@ -150,6 +150,17 @@ test.describe('homepage', () => {
         await expect(pricing.getByText('Commercial licence for €2M+ revenue')).toBeVisible();
         await expect(pricing.getByText(/AGPL/)).toHaveCount(0);
 
+        // the four Cloud plans with their prices per user (v1.46.0); no early-access notes any more
+        for (const plan of ['Free', 'Starter', 'Team', 'Business']) {
+            await expect(pricing.getByRole('heading', { level: 3, name: plan, exact: true })).toBeVisible();
+        }
+        await expect(pricing.getByText(/early access/i)).toHaveCount(0);
+        await pricing.getByRole('radio', { name: 'Monthly' }).click();
+        for (const price of ['€3', '€5', '€15']) await expect(pricing.getByText(price, { exact: true })).toBeVisible();
+        await pricing.getByRole('radio', { name: /Yearly/ }).click();
+        for (const price of ['€1.67', '€4.17', '€12.50']) await expect(pricing.getByText(price, { exact: true })).toBeVisible();
+        await expect(pricing.getByText('Up to 3 members per workspace')).toBeVisible();
+
         expect(errors, 'uncaught errors on the homepage').toEqual([]);
         await context.close();
     });

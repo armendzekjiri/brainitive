@@ -156,8 +156,8 @@ const SELF_HOSTING_URL = SELF_HOSTING_DOCS_URL;
 type Billing = 'monthly' | 'yearly';
 
 /**
- * Brainitive Cloud tiers; prices per user and month in EUR (yearly = billed once a year).
- * Planned prices only: Cloud is free during early access and nothing is billed yet.
+ * Brainitive Cloud plans (v1.46.0), priced per user and per workspace in EUR. Yearly prices are
+ * shown per month. The limits match the private brainitive/cloud package's plan table.
  */
 const CLOUD_PLANS: {
     name: string;
@@ -170,45 +170,60 @@ const CLOUD_PLANS: {
 }[] = [
     {
         name: 'Free',
-        description: 'For small teams getting started.',
+        description: 'For trying Brainitive with a small team.',
         price: { monthly: 0, yearly: 0 },
         perUser: false,
         features: [
-            'Up to 5 members',
-            'All features: boards, Scrum, docs, whiteboards, Gantt plans',
-            'Unlimited projects, pages and boards',
-            '1 GB file storage',
-            'Community support',
+            'Up to 3 members per workspace',
+            '5 projects, unlimited docs and boards',
+            '500 MB content · 3 GB files',
+            'Version history: 7 days',
+            'Every feature: boards, Scrum, docs, whiteboards, Gantt plans',
         ],
-        cta: 'Join early access',
+        cta: 'Create a free workspace',
+    },
+    {
+        name: 'Starter',
+        description: 'For small teams that work on Brainitive every day.',
+        price: { monthly: 3, yearly: 20 / 12 },
+        perUser: true,
+        features: [
+            'Up to 25 members per workspace',
+            '30 projects, unlimited docs and boards',
+            '5 GB content · 50 GB files',
+            'Version history: last 5 forever, older ones 30 days',
+            'Everything in Free',
+        ],
+        cta: 'Start with Starter',
     },
     {
         name: 'Team',
         description: 'For teams that run their projects on Brainitive.',
-        price: { monthly: 6, yearly: 5 },
+        price: { monthly: 5, yearly: 50 / 12 },
         perUser: true,
         features: [
-            'Unlimited members and guests by role',
-            'Everything in Free',
-            '100 GB file storage',
+            'Unlimited members and projects',
+            '10 GB content · 100 GB files',
+            'Extra storage when you need it (coming soon)',
+            'Full version history, forever',
             'Email support (within 2 business days)',
         ],
-        cta: 'Join early access',
+        cta: 'Start with Team',
         highlighted: true,
     },
     {
         name: 'Business',
         description: 'For companies with compliance needs.',
-        price: { monthly: 12, yearly: 10 },
+        price: { monthly: 15, yearly: 150 / 12 },
         perUser: true,
         features: [
-            'Everything in Team',
+            'Everything in Team, unlimited storage',
             'Priority support (next business day)',
             'Data processing agreement (DPA / AVV)',
             '99.9% uptime SLA',
             'Daily backups with 30-day restore',
         ],
-        cta: 'Join early access',
+        cta: 'Start with Business',
     },
 ];
 
@@ -235,17 +250,6 @@ function PricingSection() {
                         runs it for you &mdash; updates, backups and support included.
                     </p>
 
-                    <div className="mt-8 mx-auto max-w-2xl rounded-2xl border border-[#69A748]/30 bg-[#69A748]/[0.07] px-5 py-4 text-left sm:flex sm:items-start sm:gap-3">
-                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-[#69A748] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
-                            <Sparkles className="h-3 w-3" />
-                            Early access
-                        </span>
-                        <p className="mt-2 sm:mt-0 text-sm text-[#485E72]/80 dark:text-slate-300">
-                            <strong className="text-[#485E72] dark:text-slate-100">Brainitive Cloud is free while we're in early access</strong> &mdash;
-                            no plan limits, no credit card. The prices below are planned for later. We'll announce them at
-                            least 30 days ahead, and you only pay if you choose a paid plan.
-                        </p>
-                    </div>
 
                     <div className="mt-8 inline-flex items-center rounded-xl border border-border/70 bg-card/70 p-1" role="radiogroup" aria-label="Billing period">
                         {(['monthly', 'yearly'] as Billing[]).map((period) => (
@@ -260,7 +264,7 @@ function PricingSection() {
                                 {period === 'monthly' ? 'Monthly' : 'Yearly'}
                                 {period === 'yearly' && (
                                     <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${billing === 'yearly' ? 'bg-white/20' : 'bg-[#69A748]/15 text-[#69A748]'}`}>
-                                        −17%
+                                        up to −44%
                                     </span>
                                 )}
                             </button>
@@ -269,7 +273,7 @@ function PricingSection() {
                 </RevealSection>
 
                 {/* Cloud tiers */}
-                <div className="grid gap-6 md:grid-cols-3">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                     {CLOUD_PLANS.map((plan, i) => (
                         <RevealSection key={plan.name} delay={i * 80}>
                             <div
@@ -286,15 +290,10 @@ function PricingSection() {
                                 <div className="text-xs font-semibold uppercase tracking-wider text-[#0E83DC]">Cloud</div>
                                 <h3 className="mt-1 font-bold text-xl text-[#485E72] dark:text-slate-100">{plan.name}</h3>
                                 <p className="mt-1 text-sm text-[#485E72]/60 dark:text-slate-400">{plan.description}</p>
-                                {plan.perUser && (
-                                    <span className="mt-4 self-start rounded-full bg-[#69A748]/15 px-2.5 py-0.5 text-[11px] font-bold text-[#69A748]">
-                                        Free during early access
-                                    </span>
-                                )}
-                                <div className={`${plan.perUser ? 'mt-2' : 'mt-5'} flex items-baseline gap-1.5`}>
+                                <div className="mt-5 flex items-baseline gap-1.5">
                                     <span className="text-4xl font-bold text-[#485E72] dark:text-slate-100">€{formatEuro(plan.price[billing])}</span>
                                     <span className="text-sm text-[#485E72]/60 dark:text-slate-400">
-                                        {plan.perUser ? `per user / month${billing === 'yearly' ? ', billed yearly' : ''}, later` : 'forever'}
+                                        {plan.perUser ? `per user / month${billing === 'yearly' ? ', billed yearly' : ''}` : 'forever'}
                                     </span>
                                 </div>
                                 <ul className="mt-6 space-y-2.5 flex-1">
