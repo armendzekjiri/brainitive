@@ -28,13 +28,16 @@ const address = env.COLLAB_HOST ?? '127.0.0.1';
 const secret = env.COLLAB_SECRET_FILE ? await secretFromFile(env.COLLAB_SECRET_FILE) : resolveSecret(env);
 // where the realtime server reaches Brainitive's internal API (not the browser URL)
 const appUrl = env.COLLAB_APP_URL || env.APP_URL;
+// BRAI-345: call the app on loopback (COLLAB_APP_URL=https://127.0.0.1) under its public name — for servers
+// that can't reach their own public IP (firewall, no hairpin NAT). See realtime/src/appFetch.js.
+const appHost = env.COLLAB_APP_HOST ?? '';
 const accessIntervalMs = Number(env.COLLAB_ACCESS_INTERVAL_MS ?? 60_000);
 
-const collab = createCollabServer({ port, address, secret, appUrl, accessIntervalMs });
+const collab = createCollabServer({ port, address, secret, appUrl, appHost, accessIntervalMs });
 
 // Live channels (BRAI-151) on the same port: `?live=1` sockets + Brainitive's publish endpoint.
 // LIVE_PUBLISH_FROM=private (Docker): the app container publishes over the private network.
-attachLive(collab.server, { secret, appUrl, accessIntervalMs, publishFrom: env.LIVE_PUBLISH_FROM === 'private' ? 'private' : 'loopback' });
+attachLive(collab.server, { secret, appUrl, appHost, accessIntervalMs, publishFrom: env.LIVE_PUBLISH_FROM === 'private' ? 'private' : 'loopback' });
 
 await collab.listen();
-console.log(`[realtime] Brainitive live editing + live channels on ${address}:${port} → ${env.COLLAB_APP_URL || env.APP_URL}`);
+console.log(`[realtime] Brainitive live editing + live channels on ${address}:${port} → app API ${appUrl}${appHost ? ` (Host ${appHost})` : ''}`);
