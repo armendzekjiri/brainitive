@@ -2,7 +2,7 @@
 
 **Branch:** fix/sidebar-pins (from release/v1.48.0)
 **Tickets:** BRAI-285, BRAI-284
-**Status:** in-progress
+**Status:** done (merged release/v1.48.0 incl. BRAI-286 into the branch; focused tests green)
 **Started:** 2026-10-30
 
 ## Problem / goal
