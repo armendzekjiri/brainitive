@@ -26,6 +26,7 @@ use App\Support\Boards\ItemComments;
 use App\Support\Boards\ItemFieldValues;
 use App\Support\Boards\ItemMentions;
 use App\Support\Boards\Swimlanes;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Github\ItemDevelopment;
 use App\Support\Live\BoardLive;
 use App\Support\References\ContentReferences;
@@ -376,6 +377,7 @@ class BoardController extends Controller
     public function storeItem(Request $request, Workspace $workspace, Project $project, Board $board)
     {
         $this->authorize('createItems', $board);
+        app(LimitGate::class)->ensureContentRoom($workspace);
 
         $subtaskTypeId = ItemType::forProject($project)->where('slug', 'subtask')->value('id');
 
@@ -845,6 +847,7 @@ class BoardController extends Controller
     public function duplicateItem(Request $request, Workspace $workspace, Project $project, Board $board, Item $item)
     {
         $this->authorize('createItems', $board);
+        app(LimitGate::class)->ensureContentRoom($workspace);
 
         $validated = $request->validate([
             'with_subitems' => 'nullable|boolean',

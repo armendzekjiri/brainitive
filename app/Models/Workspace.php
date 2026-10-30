@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Entitlements\WorkspaceMembershipChanged;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -203,7 +204,8 @@ class Workspace extends Model
     }
 
     /**
-     * Add a user to this workspace with a role.
+     * Add a user to this workspace with a role. Callers that add someone else check the member
+     * limit first (LimitGate::ensureCanAddMembers); the seat count follows the event.
      */
     public function addUser(User $user, string $role = 'viewer', ?User $invitedBy = null): void
     {
@@ -213,6 +215,7 @@ class Workspace extends Model
             'accepted_at' => now(),
             'invited_by' => $invitedBy?->id,
         ]);
+        WorkspaceMembershipChanged::dispatch($this);
     }
 
     /**
@@ -229,6 +232,7 @@ class Workspace extends Model
     public function removeUser(User $user): void
     {
         $this->users()->detach($user->id);
+        WorkspaceMembershipChanged::dispatch($this);
     }
 
     /**

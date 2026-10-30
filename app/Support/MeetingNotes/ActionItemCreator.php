@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Boards\ProjectIssues;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Mcp\IdempotentRequest;
 use App\Support\Mcp\RequestIdConflict;
 use App\Support\References\ContentReferences;
@@ -41,6 +42,7 @@ class ActionItemCreator
         ];
 
         $run = IdempotentRequest::run($user, self::TOOL, $idempotencyKey, $payload, function () use ($user, $workspace, $project, $board, $source, $linkSource, $actions) {
+            app(LimitGate::class)->ensureContentRoom($workspace); // a replay returns before this
             $issues = array_map(fn (array $action) => [
                 'title' => $action['title'],
                 'description' => self::description($action, $linkSource, $workspace, $project, $source),

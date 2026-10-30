@@ -171,10 +171,10 @@ Route::prefix('f/{publicSlug}')->where(['publicSlug' => '[a-z0-9-]{3,60}'])->gro
 Route::middleware('cors')->group(function () {
     Route::get('/widget/helpdesks/{helpdesk:uuid}/form', [HelpdeskWidgetController::class, 'formConfig'])->name('helpdesks.widget.form');
     Route::get('/widget/helpdesks/{helpdesk:uuid}/embed', [HelpdeskWidgetController::class, 'embed'])->name('helpdesks.widget.embed');
-    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets', [TicketController::class, 'storePublic'])->middleware('throttle:20,1,helpdesks.tickets.store-public')->name('helpdesks.tickets.store-public');
+    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets', [TicketController::class, 'storePublic'])->middleware(['throttle:20,1,helpdesks.tickets.store-public', 'file.room'])->name('helpdesks.tickets.store-public');
     Route::get('/widget/tickets/{ticket:uuid}', [TicketController::class, 'getPublicTicketJson'])->name('helpdesks.tickets.get-public');
-    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/replies', [TicketController::class, 'storePublicReply'])->middleware('throttle:20,1,helpdesks.tickets.replies.store-public')->name('helpdesks.tickets.replies.store-public');
-    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/attachments', [TicketController::class, 'storePublicAttachment'])->middleware('throttle:20,1,helpdesks.tickets.attachments.store-public')->name('helpdesks.tickets.attachments.store-public');
+    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/replies', [TicketController::class, 'storePublicReply'])->middleware(['throttle:20,1,helpdesks.tickets.replies.store-public', 'file.room'])->name('helpdesks.tickets.replies.store-public');
+    Route::post('/widget/helpdesks/{helpdesk:uuid}/tickets/{ticket:uuid}/attachments', [TicketController::class, 'storePublicAttachment'])->middleware(['throttle:20,1,helpdesks.tickets.attachments.store-public', 'file.room'])->name('helpdesks.tickets.attachments.store-public');
     Route::get('/portal/tickets/{ticket:uuid}', [TicketController::class, 'showPublic'])->name('helpdesks.tickets.show-public');
     Route::get('/support/{publicSlug}', [HelpdeskWidgetController::class, 'supportPage'])->where('publicSlug', '[a-z0-9-]+')->name('helpdesks.support-page');
     Route::get('/portal/tickets/{ticket:uuid}/replies', [TicketController::class, 'publicReplies'])->name('helpdesks.tickets.replies.public');
@@ -293,7 +293,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     // Workspaces
-    Route::resource('workspaces', WorkspaceController::class);
+    Route::resource('workspaces', WorkspaceController::class)->middlewareFor('update', 'file.room'); // logo + header image
 
     // Workspace member management
     Route::post('workspaces/{workspace}/members', [WorkspaceController::class, 'inviteMember'])->name('workspaces.members.invite');
@@ -303,8 +303,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Who runs the workspace's public pages: name + privacy / imprint links (BRAI-156)
     Route::patch('workspaces/{workspace}/legal', [WorkspaceLegalController::class, 'update'])->middleware('throttle:30,1,workspaces.legal.update')->name('workspaces.legal.update');
 
-    // Workspace-scoped routes
-    Route::prefix('workspaces/{workspace}')->group(function () {
+    // Workspace-scoped routes (any upload in here needs file storage left: file.room)
+    Route::prefix('workspaces/{workspace}')->middleware('file.room')->group(function () {
         // Time tracking & client billing (v1.38.0)
         require __DIR__.'/billing.php';
         // Outgoing webhooks + admin insights (v1.39.0)
@@ -666,8 +666,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/data-exports/{dataExport}/download', [DataExportController::class, 'download'])->whereUuid('dataExport')->middleware('throttle:30,1,profile.data-export.download')->name('profile.data-export.download');
 
     // File uploads
-    Route::post('/upload/image', [FileController::class, 'uploadImage'])->name('upload.image');
-    Route::post('/upload/document', [FileController::class, 'uploadDocument'])->name('upload.document');
+    Route::post('/upload/image', [FileController::class, 'uploadImage'])->middleware('file.room')->name('upload.image');
+    Route::post('/upload/document', [FileController::class, 'uploadDocument'])->middleware('file.room')->name('upload.document');
 
     // Page-level sticky notes (per user, per URL)
     // fetched on every page load: must not write the session (it would race form submits)

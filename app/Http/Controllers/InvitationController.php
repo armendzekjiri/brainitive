@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\WorkspaceInvitation;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Notifications\WorkspaceNotifications;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -97,6 +98,9 @@ class InvitationController extends Controller
             return redirect()->back()
                 ->with('error', 'This invitation was sent to a different email address. Please sign in with the account that received the invitation.');
         }
+
+        // The open invitation is already counted: blocked only when the workspace is over its limit
+        app(LimitGate::class)->ensureCanAddMembers($invitation->workspace, 0);
 
         $invitation->markAsAccepted();
         $invitation->workspace->addUser($user, $invitation->role, $invitation->inviter ?? null);

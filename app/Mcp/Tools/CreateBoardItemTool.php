@@ -6,6 +6,8 @@ use App\Mcp\Tools\Concerns\InteractsWithBrainitive;
 use App\Models\Item;
 use App\Models\ItemPriority;
 use App\Models\ItemType;
+use App\Support\Entitlements\LimitGate;
+use App\Support\Entitlements\LimitReached;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\Mcp\ResourceLocator;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -52,7 +54,8 @@ class CreateBoardItemTool extends Tool
 
         try {
             $this->authorizeFor($user, 'createItems', $board);
-        } catch (AuthorizationException $e) {
+            app(LimitGate::class)->ensureContentRoom($project->workspace);
+        } catch (AuthorizationException|LimitReached $e) {
             return Response::error($e->getMessage());
         }
 
