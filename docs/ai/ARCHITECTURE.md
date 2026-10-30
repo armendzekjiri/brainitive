@@ -561,6 +561,41 @@ Plan + self-hosting setup steps: [`tasks/feat-github-app.md`](./tasks/feat-githu
 - **Plans** keep their own `share_token` (`/share/plans/{token}`); bookmarks / snippets have `visibility = public`.
 - **Operator line (v1.44.0, BRAI-156):** share links, public plans and changelogs pass `operator` = `PublicOperator::for($workspace)` **without** the name fallback (token links never reveal internal workspace names) and render `OperatorNotice`.
 
+### Cloud plans: entitlements + limits (v1.46.0, BRAI-160)
+Plan [`tasks/feat-cloud-plans.md`](./tasks/feat-cloud-plans.md). The public app only knows the **contract**;
+plans, prices and Paddle live in the private package `brainitive/cloud` (repo `armendzekjiri/brainitive-cloud`).
+Code name "entitlements", never "plan" (`App\Models\Plan` is the Gantt plan).
+- **Contract:** `app/Support/Entitlements/` — `Entitlements` (`enforced`, `limits(Workspace): Limits`,
+  `freeWorkspacesPerOwner`, `billingUrl`), `Limits` / `VersionRetention` (null = unlimited), `UnlimitedEntitlements`
+  (default = self-hosted), `ConfigEntitlements` (`ENTITLEMENTS_DRIVER=config`, only slugs with
+  `ENTITLEMENTS_ONLY_SLUG_PREFIX`; e2e uses `plan-limit-`), `config/entitlements.php`, `EntitlementsServiceProvider`
+  (`singletonIf`: the package binds first and wins).
+- **Enforcement:** `LimitGate` is the only checker (`ensureCanAddMembers` / `ensureCanCreateProject` /
+  `ensureCanCreateWorkspace` / `ensureContentRoom` / `ensureCanStoreFiles`), no-op unless `enforced()`. Throws
+  `LimitReached` → 402 JSON `limit_reached` or back() + `flash.limit_reached`; the billing link only for people who
+  may update the workspace. Callers: invite (`WorkspaceController`), invitation accept (`InvitationController`,
+  `WorkspaceInvitation::acceptPendingForUser` skips when full), `WorkspaceController::store`,
+  `ProjectController::store` / move, `ImportController::ensureRoom`, page / issue creation (web, MCP tools return
+  `Response::error`, `ContentCapture`), files via middleware `EnsureFileRoom` (`file.room`, on the
+  `workspaces/{workspace}` group, `/upload/*` (workspace field or Referer), public widget POSTs, extension items);
+  inbound helpdesk mail drops attachments that don't fit.
+- **Membership event:** `Workspace::addUser` / `removeUser` (and `UserDeletion`) dispatch
+  `WorkspaceMembershipChanged`; the package syncs Paddle seats from it.
+- **Usage:** `WorkspaceUsageMeter` + `usage:measure` (nightly 02:30) → `workspace_usages` (`WorkspaceUsage`,
+  `Workspace::usage()`); content = `pg_column_size` over `WorkspaceUsageMeter::CONTENT` (0 on SQLite), files = `size`
+  of `attachments` + `ticket_attachments`. **Versions:** `VersionPruner` + `versions:prune` (nightly 02:50).
+- **Frontend:** shared prop `entitlements` (`EntitlementsPayload`, null when unlimited without billing),
+  `lib/entitlements.ts` (`showLimitReached`, `openIfLimitReached` for fetch() callers), `components/entitlements/`
+  (`UpgradeDialog` in AppLayout, opened by `flash.limit_reached` or the axios 402 interceptor in `bootstrap.ts`;
+  `WorkspaceUsageCard` = settings tab "Plan & usage" in `Pages/Workspaces/Edit.tsx`; `UsageWarningBanner` at 90 %,
+  admins only). Pages `Cloud/…` resolve from `vendor/brainitive/cloud/resources/js/Pages` (`app.tsx`); AdminShell
+  shows a "Customers" tab when `admin.customers.index` exists.
+- **Package (private):** `CloudEntitlements`, `BillingAccount` (Cashier Paddle billable per workspace, `cloud_*`
+  tables), Plan & billing page `/workspaces/{workspace}/plan` (`/billing` is the time-tracking module), webhook
+  `POST /paddle/webhook`, admin `/admin/customers`. Install / deploy: its README (`scripts/composer-cloud.sh`).
+- **Tests:** `tests/Feature/Entitlements/` (foundation, `LimitChecksTest`, `UsageMeterTest`, `VersionPruneTest`),
+  e2e `e2e/tests/plan-limits.spec.ts`, homepage pricing in `homepage.spec.ts`.
+
 ## Frontend layout (`resources/js/`)
 
 | Dir | What |

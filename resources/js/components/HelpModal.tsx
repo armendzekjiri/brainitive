@@ -92,6 +92,18 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.46.0',
+        title: 'Plans for Brainitive Cloud, and a new licence',
+        tag: 'Major Feature',
+        date: '2026-10-30',
+        items: [
+            'Brainitive Cloud has plans now: Free (up to 3 members, 5 projects), Starter (€3 per user / month or €20 per year), Team (€5 or €50, unlimited members and projects) and Business (€15 or €150). Every feature is in every plan — plans differ in members, projects, storage, version history and support.',
+            'Workspace settings → Plan & usage shows your plan and how much of it you use: members, projects, content and file storage.',
+            'At a limit, Brainitive tells you what is full and how to upgrade, instead of failing. After a downgrade nothing is deleted for 90 days; only adding more is paused until you are back under the limit.',
+            'Self-hosted installs have no limits and no billing. Brainitive is now licensed under the Business Source License 1.1: free to self-host for organizations under €2 million annual revenue, and each version becomes AGPL-3.0 after four years.',
+        ]
+    },
+    {
         version: 'v1.45.3',
         title: 'Safari and offline',
         tag: 'Fix',

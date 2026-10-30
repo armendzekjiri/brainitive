@@ -1,7 +1,7 @@
 # Cloud plans: limits foundation (public app) + billing (private) + website (private)
 
 **Branch:** feat/cloud-plans-foundation (release/v1.46.0)
-**Status:** in progress — foundation committed, parallel tickets running
+**Status:** done in the public app (limits off until Paddle live); package: comp plans in progress
 **Started:** 2026-10-30
 **Board card:** [BRAI-160](https://www.brainitive.app/workspaces/ndizeal-everything/projects/brainitive/boards/main-board#item-433)
 **Builds on:** [chore-relicense-bsl.md](./chore-relicense-bsl.md), old pricing in [feat-open-source-cloud.md](./feat-open-source-cloud.md)

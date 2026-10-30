@@ -1042,6 +1042,27 @@ also wait for read / archive actions in flight (a page older than the action is 
 
 ## Architectural decisions
 
+### Cloud plan limits: traps (v1.46.0, BRAI-160)
+- **Package binding wins through `singletonIf`:** package providers register before `bootstrap/providers.php`, so
+  `EntitlementsServiceProvider` must never use `singleton()` for `Entitlements`. With brainitive/cloud installed,
+  `EntitlementsFoundationTest::test_self_hosted_is_unlimited…` fails by design (`CLOUD_ENTITLEMENTS=false` turns
+  the package binding off).
+- **Callers check the member limit, not `Workspace::addUser`:** creating your own workspace (owner = first member)
+  stays exempt. Accepting an invitation checks with `adding = 0` (the open invitation already counts). Sign-up
+  acceptance (`acceptPendingForUser`) skips a full workspace instead of failing registration.
+- **Content size is `pg_column_size` (compressed / TOAST) over a fixed table list** — add a new user-content table
+  to `WorkspaceUsageMeter::CONTENT`. 0 on SQLite. Editor uploads (`uploads/images|documents`) have no size column
+  and don't count as files yet.
+- **Pruning never deletes:** before `enforced()`, during grace, the newest version, the `current_version`, or a
+  `client_deliverables.page_version_id`. A new feature that points at a version must be added to `VersionPruner`.
+  `Page::versions()` / `Plan::versions()` are ordered `version desc` — use `reorder()` in queries.
+- **fetch() doesn't hit the axios 402 interceptor:** call `openIfLimitReached(await res.json())` (editor image
+  upload, icon uploads do). New upload routes outside `workspaces/{workspace}` need the `file.room` middleware.
+- **MCP tools must catch `LimitReached`** and return `Response::error(message)` — an exception there is a 500.
+- **e2e:** limits apply only to slugs starting with `plan-limit-`; never set `ENTITLEMENTS_FREE_WORKSPACES_PER_OWNER`
+  in e2e (the shared owner creates hundreds of workspaces). Several upload endpoints answer 302 even to JSON — assert
+  on the session in PHPUnit.
+
 ### Licence: Business Source License 1.1 instead of AGPL-3.0 (v1.46.0, 2026-10-30)
 - **Why:** the AGPL let anyone resell Brainitive as a hosted service and let big companies self-host for
   free. BSL 1.1 (MariaDB's template, as Outline uses) with our Additional Use Grant: production use is free
