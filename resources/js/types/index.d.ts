@@ -103,7 +103,11 @@ export interface Board {
     position: number;
     project?: Project;
     columns?: BoardColumn[];
-    settings?: { swimlanes?: import('@/lib/swimlanes').SwimlaneConfig } | null;
+    settings?: {
+        swimlanes?: import('@/lib/swimlanes').SwimlaneConfig;
+        /** Days a done card stays on a Kanban board (BRAI-346); 0 / absent = all. See lib/doneRetention.ts. */
+        done_retention_days?: number;
+    } | null;
     created_at: string;
     updated_at: string;
 }

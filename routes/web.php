@@ -459,6 +459,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::delete('boards/{board:slug}', [BoardController::class, 'destroy'])->name('boards.destroy');
             Route::post('boards/{board:slug}/columns', [BoardController::class, 'storeColumn'])->name('boards.columns.store');
             Route::put('boards/{board:slug}/swimlanes', [BoardController::class, 'updateSwimlanes'])->name('boards.swimlanes.update');
+            Route::put('boards/{board:slug}/done-retention', [BoardController::class, 'updateDoneRetention'])->name('boards.done-retention.update'); // BRAI-346
             Route::post('boards/{board:slug}/columns/reorder', [BoardController::class, 'reorderColumns'])->name('boards.columns.reorder');
             Route::post('boards/{board:slug}/items/reorder', [BoardController::class, 'reorderItems'])->name('boards.items.reorder');
             // Bulk edit of the list view (BRAI-108); before items/{item} so "bulk" is never an item id

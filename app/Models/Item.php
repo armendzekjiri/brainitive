@@ -80,6 +80,9 @@ class Item extends Model
             }
         });
 
+        // completed_at follows the column on every write path (BRAI-346: done retention needs it)
+        static::saving(fn (Item $item) => $item->syncCompletedAtWithColumn());
+
         // Auto-watch: add reporter to watchers after creation
         static::created(function (Item $item) {
             if ($item->reporter_id) {
@@ -341,18 +344,46 @@ class Item extends Model
      */
     public function moveToColumn(BoardColumn $column, int $position = 0): void
     {
-        $wasInDoneColumn = $this->column?->is_done_column ?? false;
-        $isNowInDoneColumn = $column->is_done_column;
+        $wasInDoneColumn = (bool) ($this->column?->is_done_column ?? false);
 
         $this->update([
             'column_id' => $column->id,
             'position' => $position,
-            'completed_at' => $isNowInDoneColumn ? now() : null,
+            // done → done (or a reorder inside Done) keeps the date the card was finished
+            'completed_at' => $column->is_done_column
+                ? ($wasInDoneColumn && $this->completed_at ? $this->completed_at : now())
+                : null,
         ]);
+        $this->setRelation('column', $column); // a second move on this instance must see where it is now
+    }
 
-        // If moving out of done column, clear completed_at
-        if ($wasInDoneColumn && ! $isNowInDoneColumn) {
-            $this->update(['completed_at' => null]);
+    /**
+     * Keep `completed_at` in step with the column (BRAI-346), for every Eloquent write:
+     * - entering a done column sets it to now, unless the caller set a date (Jira's resolved date);
+     * - leaving a done column clears it, unless the caller set it;
+     * - done → done keeps the date; a done card without a date gets now.
+     * Creating with a date is trusted as is (imports, restores). Moves between open columns
+     * leave it alone (tests and older flows use it as a plain "done" marker).
+     */
+    private function syncCompletedAtWithColumn(): void
+    {
+        if ($this->exists ? ! $this->isDirty('column_id') : $this->completed_at !== null) {
+            return;
+        }
+        $to = (int) $this->column_id;
+        $from = $this->exists ? (int) $this->getOriginal('column_id') : 0;
+        $ids = array_values(array_filter([$to, $from]));
+        $done = $ids === [] ? collect() : BoardColumn::whereIn('id', $ids)->pluck('is_done_column', 'id');
+        $nowDone = (bool) ($done[$to] ?? false);
+        $wasDone = (bool) ($done[$from] ?? false);
+        $explicit = $this->isDirty('completed_at');
+
+        if ($nowDone) {
+            if ($this->completed_at === null || (! $wasDone && ! $explicit)) {
+                $this->completed_at = now();
+            }
+        } elseif ($wasDone && ! $explicit) {
+            $this->completed_at = null;
         }
     }
 

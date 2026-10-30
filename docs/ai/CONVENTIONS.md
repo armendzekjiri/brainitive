@@ -334,6 +334,10 @@ Pages work like Confluence. Keep these rules when touching pages:
 - Cards: summary first, metadata in the footer (type icon + key left; points, priority,
   assignee right). Keep new card metadata in that footer, not in extra rows.
 - No buttons without handlers — wire them or leave them out.
+- **`items.completed_at` follows the column** (`Item::saving`, BRAI-346): don't compute it in a feature when you
+  change `column_id` through the model. Set it yourself only to carry a known date (an import's resolved date);
+  query-builder column moves must set it and call `BoardLive::itemIds()`. A new board-filter-like rule for the
+  Kanban view goes into the client (boards load every card) and, if AI clients read the board, into `GetBoardTool`.
 - Integration-driven moves (GitHub merge transitions, v1.42.0) live in `boards.settings.github.merge_column_id`
   and save the item model (history marked with `ActivityLog::via()`), never raw column updates.
 

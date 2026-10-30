@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Live\BoardLive;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -38,6 +39,22 @@ class BoardColumn extends Model
             if (empty($column->slug)) {
                 $column->slug = Str::slug($column->name);
             }
+        });
+
+        // Turning the done flag on or off completes / reopens the column's cards (BRAI-346): a card
+        // in a done column always has a completed_at, so done retention can age it out.
+        static::updated(function (BoardColumn $column) {
+            if (! $column->wasChanged('is_done_column')) {
+                return;
+            }
+            $ids = Item::where('column_id', $column->id)
+                ->when($column->is_done_column, fn ($q) => $q->whereNull('completed_at'), fn ($q) => $q->whereNotNull('completed_at'))
+                ->pluck('id')->all();
+            if ($ids === []) {
+                return;
+            }
+            Item::whereIn('id', $ids)->update(['completed_at' => $column->is_done_column ? now() : null]);
+            BoardLive::itemIds($ids, ['completed_at'], (int) $column->board_id);
         });
     }
 

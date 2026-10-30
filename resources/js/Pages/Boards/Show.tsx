@@ -55,6 +55,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { buildLanes, canonicalConfig, Lane, MODE_LABELS, SwimlaneMode } from '@/lib/swimlanes';
+import { doneCutoff, doneRetentionDays, isOlderDone, readShowOlderDone, writeShowOlderDone } from '@/lib/doneRetention';
 import { toast } from 'sonner';
 import {
     Plus,
@@ -764,12 +765,15 @@ function BoardColumnComponent({
     totalItemCount,
     createOpen,
     onCreateOpenChange,
+    olderDone,
 }: {
     column: BoardColumn & { items: Item[] };
     createOpen: boolean;
     onCreateOpenChange: (open: boolean) => void;
-    /** Cards in the column before filters — what the WIP limit counts. */
+    /** Cards in the column before filters (without older done cards that left the board) — what the WIP limit counts. */
     totalItemCount: number;
+    /** Done retention (BRAI-346): older done cards of this column, hidden unless shown. */
+    olderDone?: OlderDoneState;
     workspace: Workspace;
     project: Project;
     board: Board;
@@ -954,6 +958,7 @@ function BoardColumnComponent({
                             onDragEnd={onDragEnd}
                         />
                     ))}
+                    {olderDone && <OlderDoneNote {...olderDone} />}
                 </div>
             </ScrollArea>
 
@@ -974,6 +979,35 @@ function BoardColumnComponent({
     );
 }
 
+interface OlderDoneState {
+    count: number;
+    shown: boolean;
+    days: number;
+    onToggle: () => void;
+}
+
+/** Done retention (BRAI-346): "12 older done cards hidden · Show" under a done column. */
+function OlderDoneNote({ count, shown, days, onToggle, compact = false }: OlderDoneState & { compact?: boolean }) {
+    const cards = count === 1 ? 'card' : 'cards';
+    return (
+        <p
+            className={cn('m-0 text-muted-foreground', compact ? 'mt-1 text-[11px] font-normal normal-case tracking-normal' : 'px-1.5 py-1 text-center text-xs')}
+            title={`Done cards leave the board ${days} days after they were completed. The list view still shows them.`}
+        >
+            {shown ? `Showing ${count} older done ${cards}` : `${count} older done ${cards} hidden`}
+            {' · '}
+            <button
+                type="button"
+                onClick={onToggle}
+                aria-label={shown ? 'Hide older done cards' : 'Show older done cards'}
+                className="font-medium text-primary hover:underline"
+            >
+                {shown ? 'Hide' : 'Show'}
+            </button>
+        </p>
+    );
+}
+
 // Swimlanes: rows across the board; cards placed by laneOf (lib/swimlanes.ts).
 function SwimlaneBoard({
     columns,
@@ -988,8 +1022,11 @@ function SwimlaneBoard({
     onDragStart,
     onDragEnd,
     onDropCell,
+    olderDone,
 }: {
     columns: (BoardColumn & { items: Item[] })[];
+    /** Done retention (BRAI-346), per done column id. */
+    olderDone: Map<number, OlderDoneState>;
     lanes: Lane[];
     laneOf: (item: Item) => string;
     showEmptyLanes: boolean;
@@ -1049,6 +1086,7 @@ function SwimlaneBoard({
                     {columns.map((c) => (
                         <div key={c.id} className={cn(width, 'shrink-0 rounded-md bg-muted/60 dark:bg-secondary/30 px-3 py-2 text-[12px] font-semibold uppercase tracking-[0.03em] text-muted-foreground')}>
                             {c.name} <span className="ml-1">{c.items?.length ?? 0}</span>
+                            {olderDone.get(c.id) && <OlderDoneNote {...olderDone.get(c.id)!} compact />}
                         </div>
                     ))}
                 </div>
@@ -2489,6 +2527,12 @@ export default function BoardsShow({
         });
     const [createInColumnId, setCreateInColumnId] = useState<number | null>(null);
     const currentUserId = auth.user?.id;
+    // Done retention (BRAI-346): "Show" older done cards, per board and browser tab
+    const [showOlderDone, setShowOlderDone] = useState(() => readShowOlderDone(boardProp.id));
+    const toggleOlderDone = () => {
+        writeShowOlderDone(board.id, !showOlderDone);
+        setShowOlderDone(!showOlderDone);
+    };
 
     // List sort + hidden list columns live here (URL-backed) so saved views can capture them
     const [listSort, setListSort] = useState<ListSort | null>(readListSort);
@@ -2693,8 +2737,29 @@ export default function BoardsShow({
             }) || [],
     }));
 
+    // Done retention (BRAI-346, like Jira's "completed issues" filter): Kanban + swimlanes leave done
+    // cards completed more than N days ago out; list, timeline and calendar keep every card. Counts
+    // and WIP limits follow what the board shows; the done column says how many it left out.
+    const retentionCutoff = doneCutoff(board);
+    const isOlder = (column: BoardColumn, item: Item) => column.is_done_column && isOlderDone(item, retentionCutoff);
+    const olderDone = new Map<number, OlderDoneState>();
+    if (retentionCutoff !== null) {
+        for (const column of filteredColumns) {
+            const count = column.is_done_column ? column.items.filter((item) => isOlder(column, item)).length : 0;
+            if (count > 0) olderDone.set(column.id, { count, shown: showOlderDone, days: doneRetentionDays(board), onToggle: toggleOlderDone });
+        }
+    }
+    const kanbanColumns = retentionCutoff === null || showOlderDone
+        ? filteredColumns
+        : filteredColumns.map((column) => (olderDone.has(column.id) ? { ...column, items: column.items.filter((item) => !isOlder(column, item)) } : column));
+    const wipCount = (columnId: number) => {
+        const column = board.columns.find((c) => c.id === columnId);
+        const items = column?.items ?? [];
+        return column && !showOlderDone ? items.filter((item) => !isOlder(column, item)).length : items.length;
+    };
+
     // Lanes for the chosen mode (null = plain columns, e.g. "custom" without lanes set up)
-    const laneModel = buildLanes(laneMode, boardLanes, filteredColumns.flatMap((c) => c.items ?? []), { priorities, itemTypes });
+    const laneModel = buildLanes(laneMode, boardLanes, kanbanColumns.flatMap((c) => c.items ?? []), { priorities, itemTypes });
 
     // Possible parents for a new issue: top-level issues and first-level subtasks (3 levels max),
     // each followed by its children.
@@ -3209,7 +3274,8 @@ export default function BoardsShow({
                 {/* View Content */}
                 {currentView === 'kanban' && laneModel && (
                     <SwimlaneBoard
-                        columns={filteredColumns}
+                        columns={kanbanColumns}
+                        olderDone={olderDone}
                         lanes={laneModel.lanes}
                         laneOf={laneModel.laneOf}
                         showEmptyLanes={laneMode === 'custom'}
@@ -3227,7 +3293,7 @@ export default function BoardsShow({
                 {currentView === 'kanban' && !laneModel && (
                     <div className="flex-1 min-h-0 overflow-hidden bg-background">
                         <div className="flex h-full min-h-0 items-stretch gap-3 overflow-x-auto overflow-y-hidden p-[14px_20px_20px]">
-                            {filteredColumns.map((column) => (
+                            {kanbanColumns.map((column) => (
                                 <BoardColumnComponent
                                     key={column.id}
                                     column={column}
@@ -3243,7 +3309,8 @@ export default function BoardsShow({
                                     onDragOver={handleDragOver}
                                     onDrop={handleDrop}
                                     isDragOver={dragOverColumn === column.id}
-                                    totalItemCount={board.columns.find((c) => c.id === column.id)?.items?.length ?? 0}
+                                    totalItemCount={wipCount(column.id)}
+                                    olderDone={olderDone.get(column.id)}
                                     createOpen={createInColumnId === column.id}
                                     onCreateOpenChange={(open) => setCreateInColumnId(open ? column.id : null)}
                                 />

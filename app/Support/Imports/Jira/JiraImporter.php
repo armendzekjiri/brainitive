@@ -167,6 +167,8 @@ class JiraImporter implements Importer
                 'type' => $sprintNames !== [] ? 'scrum' : 'kanban',
                 'position' => ($project->boards()->max('position') ?? 0) + 1,
                 'created_by' => $user->id,
+                // BRAI-346: an imported board shows its whole history until someone turns done retention on
+                'settings' => ['done_retention_days' => 0],
             ]);
             $board->columns()->delete(); // Board::created adds To Do / In Progress / Done; the mapping decides
 

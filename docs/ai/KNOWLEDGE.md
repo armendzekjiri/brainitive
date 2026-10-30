@@ -413,6 +413,33 @@ id fails `item_ids`, no per-id `exists` rule). Queries grow by a small constant 
   `BoardController::moveItem` (`BulkItemEdit::notifyStatusChange()`).
 - `bulk` routes are registered **before** `items/{item}`; otherwise `bulk` would bind as an item id.
 
+### Done column retention: defaults, completed_at, client-side hiding (BRAI-346, 2026-10-30)
+Jira's "hide completed issues older than…" for Kanban boards: `boards.settings.done_retention_days`.
+- **Defaults are deliberate.** A board without the key reads as **Off** — every board from before the
+  feature, so nobody's Done column empties on deploy. `Board::creating` gives new boards **14** (Jira's
+  2 weeks) unless the caller brings a value: Jira / Trello imports pass 0 (an imported board shows its history),
+  archive restores pass the exported value (old archives → 0), templates pass theirs (absent → 14).
+  Scrum boards ignore it (`doneRetentionDays()` = 0): they show the running sprint.
+- **`completed_at` is the clock, and `Item::saving` keeps it honest.** Entering a done column sets it (a
+  date the caller set is kept, e.g. Jira's resolved date), leaving one clears it, done → done keeps it (a
+  reorder inside Done used to reset it to now). Creating with a date is trusted; moves between open columns
+  leave it alone — many tests (and older flows) use `completed_at` on To Do cards as a plain "done" marker,
+  and Insights / Health count "`completed_at` set **or** in a done column". Flagging a column done stamps its
+  undated cards with now; unflagging clears its cards. The backfill migration dated done cards without one
+  from `updated_at`. Test fixtures that need "done column, no date" must clear it after creating.
+- **Hidden on the client, like every board filter.** The server still sends all cards (list / timeline /
+  calendar views, `#item-N` deep links and the issue dialog need them); Kanban + swimlanes drop done cards
+  older than the cutoff (`lib/doneRetention.ts`; no date = never hidden). Column counts and WIP limits count
+  what the board shows; the footer names the rest. Filters apply first. "Show" is per board and tab
+  (sessionStorage), not a saved-view param. Payload size for huge Done columns is unchanged — server-side
+  trimming would need the list view to load separately.
+- **Live:** no new events. Cards refetched through `boards.cards` carry `completed_at`; a settings save
+  publishes `board.updated` (model event), so open boards pick up the new window.
+- **Jira CSV gotcha found on the way:** an ISO date (`2026-10-20 09:00`) in a Jira CSV fails the whole
+  import — `JiraExport::date()` calls `createFromFormat` per format and the first mismatch throws
+  (`InvalidFormatException`) before `'Y-m-d H:i'` is tried. Jira's own format (`20/Oct/26 9:05 AM`) works.
+  Not fixed here.
+
 ### Explicit route binders run before implicit ones
 In `Route::bind('page' | 'bookmark', …)` the `{workspace}` / `{project}` parameters are still raw
 slugs — an `instanceof Project` check there is always false. `AppServiceProvider::routeProject()` /
