@@ -27,11 +27,15 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
+    // "Cloud/…" pages come from the private brainitive/cloud package (Brainitive Cloud only); the glob is
+    // empty on self-hosted installs.
     resolve: (name) =>
-        resolvePageComponent(
-            `./Pages/${name}.tsx`,
-            import.meta.glob('./Pages/**/*.tsx'),
-        ),
+        name.startsWith('Cloud/')
+            ? resolvePageComponent(
+                  `../../vendor/brainitive/cloud/resources/js/Pages/${name.slice('Cloud/'.length)}.tsx`,
+                  import.meta.glob('../../vendor/brainitive/cloud/resources/js/Pages/**/*.tsx'),
+              )
+            : resolvePageComponent(`./Pages/${name}.tsx`, import.meta.glob('./Pages/**/*.tsx')),
     setup({ el, App, props }) {
         const root = createRoot(el);
 

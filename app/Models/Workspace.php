@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
@@ -185,6 +186,12 @@ class Workspace extends Model
     public function snippetCollections(): HasMany
     {
         return $this->hasMany(SnippetCollection::class)->orderBy('position');
+    }
+
+    /** Nightly measured usage for the Cloud plan limits (usage:measure, v1.46.0). */
+    public function usage(): HasOne
+    {
+        return $this->hasOne(WorkspaceUsage::class);
     }
 
     /**
