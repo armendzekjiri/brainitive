@@ -1,7 +1,8 @@
 #!/bin/sh
 # Install the Brainitive CLI (macOS / Linux):
 #
-#   curl -fsSL https://brainitive.app/install.sh | sh
+#   curl -fsSL https://github.com/armendzekjiri/brainitive/releases/latest/download/install.sh | sh
+#   (short: curl -fsSL https://brainitive.app/install.sh | sh — forwards here)
 #
 # Downloads the latest release binary for this machine from GitHub, checks it against
 # checksums.txt and puts it in /usr/local/bin (or ~/.local/bin when that isn't writable).
@@ -31,7 +32,7 @@ fi
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 case "$os" in
   darwin|linux) ;;
-  *) fail "unsupported OS: $os (Windows: irm https://brainitive.app/install.ps1 | iex)" ;;
+  *) fail "unsupported OS: $os (Windows: irm https://github.com/armendzekjiri/brainitive/releases/latest/download/install.ps1 | iex)" ;;
 esac
 arch=$(uname -m)
 case "$arch" in

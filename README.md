@@ -51,7 +51,7 @@ Cloud or your own server →
 
 **CLI** — capture, issues (with screenshots), tasks, snippets, docs and search from your terminal,
 plus `brainitive mcp` for AI tools on your machine. One command installs it on macOS, Linux or
-Windows: `curl -fsSL https://brainitive.app/install.sh | sh` →
+Windows: `curl -fsSL https://github.com/armendzekjiri/brainitive/releases/latest/download/install.sh | sh` →
 [docs](https://docs.brainitive.app/integrations/cli), source in [`cli/`](cli/).
 
 ![Gantt plans in Brainitive](public/images/screenshots/plans.jpg)

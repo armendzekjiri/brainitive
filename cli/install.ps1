@@ -1,6 +1,6 @@
 # Install the Brainitive CLI on Windows (PowerShell 5.1+):
 #
-#   irm https://brainitive.app/install.ps1 | iex
+#   irm https://github.com/armendzekjiri/brainitive/releases/latest/download/install.ps1 | iex
 #
 # Downloads the latest release for this machine from GitHub, verifies checksums.txt, and
 # installs brainitive.exe into %LOCALAPPDATA%\Brainitive\bin (added to your user PATH).

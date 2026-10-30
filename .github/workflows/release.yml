@@ -81,6 +81,8 @@ jobs:
   # The CLI binaries for macOS, Linux and Windows (both architectures) + checksums.txt on the
   # same release, with stable names: https://github.com/<repo>/releases/latest/download/brainitive_<os>_<arch>.tar.gz
   # is what cli/install.sh, install.ps1 and `brainitive update` fetch. Replaced on every push.
+  # The two installers are uploaded too, so `curl -fsSL …/releases/latest/download/install.sh | sh` works
+  # from GitHub alone (brainitive.app/install.sh forwards there).
   cli:
     needs: version
     runs-on: ubuntu-latest
@@ -112,10 +114,12 @@ jobs:
             rm -f "dist/$out" dist/README.md
           done
           (cd dist && sha256sum brainitive_* > checksums.txt && cat checksums.txt)
+          # the installers ship next to the binaries they fetch (v1.47.1): releases/latest/download/install.sh
+          cp install.sh install.ps1 dist/
       - env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.version.outputs.tag }}
-        run: gh release upload "$TAG" dist/brainitive_* dist/checksums.txt --clobber
+        run: gh release upload "$TAG" dist/brainitive_* dist/checksums.txt dist/install.sh dist/install.ps1 --clobber
 
   docker:
     needs: version
