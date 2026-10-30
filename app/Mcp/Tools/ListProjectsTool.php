@@ -31,7 +31,8 @@ class ListProjectsTool extends Tool
         }
 
         $projects = $workspace->projects()
-            ->get(['id', 'name', 'slug', 'key', 'description'])
+            // workspace_id must come along: hasProjectAccess() reads $project->workspace.
+            ->get(['id', 'workspace_id', 'name', 'slug', 'key', 'description'])
             ->filter(fn ($p) => $user->hasProjectAccess($p))
             ->map(fn ($p) => [
                 'name' => $p->name,

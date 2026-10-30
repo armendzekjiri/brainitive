@@ -49,6 +49,11 @@ Cloud or your own server →
 [Chrome Web Store](https://chromewebstore.google.com/detail/brainitive/mnnkcbjdgphgiiapdfegpgdmjekofmjn)
 (Chrome, Edge, Brave).
 
+**CLI** — capture, issues (with screenshots), tasks, snippets, docs and search from your terminal,
+plus `brainitive mcp` for AI tools on your machine. One command installs it on macOS, Linux or
+Windows: `curl -fsSL https://brainitive.app/install.sh | sh` →
+[docs](https://docs.brainitive.app/integrations/cli), source in [`cli/`](cli/).
+
 ![Gantt plans in Brainitive](public/images/screenshots/plans.jpg)
 
 ## What's inside
@@ -64,8 +69,8 @@ Cloud or your own server →
 - **Lists, My Work, Calendar** — light to-dos, everything assigned to you, Google Calendar &
   Tasks sync.
 - **Helpdesk** — embeddable support widget and ticket portal.
-- **AI** — an MCP server so Claude or ChatGPT can read and update your workspace, plus
-  bring-your-own-key writing helpers.
+- **AI** — an MCP server so Claude or ChatGPT can read and update your workspace — or set up a
+  whole project from a Jira export — plus bring-your-own-key writing helpers.
 - **Snippets & bookmarks**, roles and permissions, notifications and web push.
 
 | Boards | Docs | Whiteboards |

@@ -1655,3 +1655,46 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `unchecked_connection_ids` for a "look for an overlap" hint.
 - Recurring task-list tasks block only their first occurrence (the recurrence projection is private to
   `CalendarController`).
+
+### The CLI is an MCP client; project setup over MCP (v1.47.0)
+- **Why Go, why MCP.** The ask was a binary people install with one `curl | sh` and use without any
+  runtime, on macOS, Linux and Windows. Go gives a cgo-free static binary per target from one
+  `go build` matrix (~8 MB). Instead of growing the old `/api/cli` REST surface (8 endpoints, password
+  login that can't work for Google / GitHub / Microsoft accounts), the CLI calls the MCP tools: the 71
+  tools *are* the API, and `brainitive tool <name>` reaches a new tool the moment it is registered.
+  Trade-off: rich tables need the tool's output shape, so the friendly commands are typed wrappers.
+- **Tool names on the wire are the class names in kebab case** (`create-board-item-tool`), not the
+  `create_board_item` the server instructions use — except `search` and `fetch`, which carry
+  `#[Name]` for the ChatGPT deep-research contract. `mcp.ToolName()` in the CLI normalises both.
+- **Laravel MCP over HTTP needs no session for `tools/call`**: a bare POST with a Bearer token works
+  (that's how the PHPUnit tests post too). `initialize` hands out an `MCP-Session-Id`, which the proxy
+  forwards; responses are JSON unless the server streams, so the client also parses the last SSE
+  `data:` event.
+- **Loopback OAuth is allowed by `GuardOAuthFlows`** (`127.0.0.1` / `localhost` / `::1`), so the CLI
+  registers a client per login with `http://127.0.0.1:<port>/callback` (ports 52817–52819, then any).
+  A Passport refresh token is single use; the CLI saves the rotated pair after every refresh.
+- **`list-projects` 500ed for non-admins**: `->get(['id', 'name', …])` dropped `workspace_id`, so
+  `hasProjectAccess()` got a null workspace. Found by running the binary against a real server; any
+  `get([...columns])` feeding a policy must keep the foreign keys.
+- **Bulk create resolves everything first, writes inside one `IdempotentRequest` transaction.** A bad
+  label / column / option in card 37 fails the whole batch with the valid values and nothing is created;
+  the same `request_id` returns the stored result, so a timeout retry never duplicates. Parents by
+  `parent_external_key` are a second pass after the ids exist (same transaction).
+- **Uniqueness checks must include soft-deleted rows.** `projects`, `boards` and `task_lists` keep
+  their unique name / key / slug after a soft delete; a tool that checks with the default scope
+  passes and then hits the index. Inside `IdempotentRequest` that used to surface as a
+  `ModelNotFoundException` (the wrapper assumed every unique violation was its own retry race); it
+  now rethrows when no `mcp_requests` row exists. Use `withTrashed()` for these checks.
+- **Subtasks follow their parent's sprint** (`ProjectIssues::create` reads `sprint_id` from the
+  parent), as the issue dialog does; `update_board` refuses `kanban` while a sprint is active.
+- **`brainitive logout` revokes on the server** through the old `DELETE /api/cli/logout`, which now
+  revokes the refresh token too. Each `brainitive login` registers a fresh OAuth client (loopback
+  port in the redirect URI), so Connected apps lists one "Brainitive CLI" per login.
+- **"Same name again returns the existing one"** for labels, types, priorities and fields (no
+  `request_id`): an AI rerunning a setup step must not create duplicates, and names are what it has.
+  `Epic` / `Bug` / `Story` / `Task` / `Subtask` already exist instance-wide, so `create_item_type`
+  for those answers `created: false, scope: instance`.
+- **Live check without a browser**: seed a throwaway DB (`php artisan passport:client --personal`,
+  then `createToken('x', ['mcp:use', 'capture'])`), `php artisan serve --port 8099`, and run the binary
+  with `BRAINITIVE_TOKEN` / `BRAINITIVE_SERVER`. `php artisan tinker <file>` drops into the REPL and
+  hangs in a non-interactive shell — use `--execute="include '...';"`.

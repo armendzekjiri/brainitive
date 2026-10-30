@@ -26,6 +26,15 @@ class ToolDiscoveryTest extends TestCase
             'update-sprint-tool' => 'idempotentHint', 'move-items-to-sprint-tool' => 'idempotentHint',
             'start-sprint-tool' => 'idempotentHint', 'complete-sprint-tool' => 'idempotentHint',
             'list-plans-tool' => 'readOnlyHint', 'get-plan-tool' => 'readOnlyHint', 'update-plan-tool' => 'idempotentHint',
+            // v1.47.0: project setup + bulk cards + inbox capture
+            'get-project-config-tool' => 'readOnlyHint', 'create-workspace-tool' => 'idempotentHint', 'create-project-tool' => 'idempotentHint',
+            'update-project-tool' => 'idempotentHint', 'add-project-member-tool' => 'idempotentHint', 'create-board-tool' => 'idempotentHint',
+            'update-board-tool' => 'idempotentHint', 'create-board-column-tool' => 'idempotentHint', 'update-board-column-tool' => 'idempotentHint',
+            'delete-board-column-tool' => 'idempotentHint', 'reorder-board-columns-tool' => 'idempotentHint', 'create-label-tool' => 'idempotentHint',
+            'update-label-tool' => 'idempotentHint', 'delete-label-tool' => 'idempotentHint', 'create-item-type-tool' => 'idempotentHint',
+            'update-item-type-tool' => 'idempotentHint', 'create-priority-tool' => 'idempotentHint', 'update-priority-tool' => 'idempotentHint',
+            'create-item-field-tool' => 'idempotentHint', 'update-item-field-tool' => 'idempotentHint', 'create-task-list-tool' => 'idempotentHint',
+            'create-board-items-tool' => 'idempotentHint', 'capture-to-inbox-tool' => 'idempotentHint',
         ];
 
         foreach ($expected as $name => $hint) {

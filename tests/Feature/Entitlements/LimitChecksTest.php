@@ -3,8 +3,11 @@
 namespace Tests\Feature\Entitlements;
 
 use App\Mcp\Servers\BrainitiveServer;
+use App\Mcp\Tools\CreateBoardItemsTool;
 use App\Mcp\Tools\CreateBoardItemTool;
 use App\Mcp\Tools\CreatePageTool;
+use App\Mcp\Tools\CreateProjectTool;
+use App\Mcp\Tools\CreateWorkspaceTool;
 use App\Models\Helpdesk;
 use App\Models\ImportRun;
 use App\Models\Item;
@@ -279,6 +282,26 @@ class LimitChecksTest extends TestCase
 
         $this->assertSame(0, Page::count());
         $this->assertSame(0, Item::count());
+    }
+
+    public function test_v147_project_setup_tools_respect_the_limits(): void
+    {
+        $this->contentFull();
+        BrainitiveServer::actingAs($this->editor)->tool(CreateBoardItemsTool::class, [
+            'workspace' => $this->workspace->slug, 'project' => $this->project->slug, 'board' => $this->board->slug,
+            'items' => [['title' => 'One'], ['title' => 'Two']], 'request_id' => 'bulk-1',
+        ])->assertHasErrors(['content storage']);
+        $this->assertSame(0, Item::count());
+
+        $this->useLimits(['projects' => 1, 'free_workspaces_per_owner' => 1]);
+        BrainitiveServer::actingAs($this->owner)->tool(CreateProjectTool::class, [
+            'workspace' => $this->workspace->slug, 'name' => 'Second', 'key' => 'SEC', 'request_id' => 'proj-1',
+        ])->assertHasErrors(['projects per workspace']);
+        BrainitiveServer::actingAs($this->owner)->tool(CreateWorkspaceTool::class, [
+            'name' => 'Another one', 'request_id' => 'ws-1',
+        ])->assertHasErrors(['own up to 1 workspaces']);
+        $this->assertSame(1, $this->workspace->projects()->count());
+        $this->assertSame(1, Workspace::where('owner_id', $this->owner->id)->count());
     }
 
     public function test_content_below_the_limit_can_be_created(): void
