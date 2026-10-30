@@ -141,7 +141,7 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
                 {/* Header */}
                 <header className="sticky top-0 z-10 border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
                     <div className="max-w-4xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-                        <Link href="/" className="flex items-center gap-3 shrink-0">
+                        <a href="/" className="flex items-center gap-3 shrink-0">
                             <img
                                 src={app_logo_url}
                                 alt={app_name}
@@ -150,7 +150,7 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
                             <span className="font-semibold text-foreground hidden sm:inline">
                                 {app_name}
                             </span>
-                        </Link>
+                        </a>
                         <Badge variant="secondary" className="gap-1.5 font-medium">
                             <LifeBuoy className="size-3.5" />
                             Support portal
@@ -378,7 +378,7 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
                 <footer className="mt-auto border-t border-[#C0C5C0]/30 bg-white/60 dark:bg-background/80 backdrop-blur-sm">
                     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
                         <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
-                            <Link href="/" className="flex items-center gap-2.5 shrink-0">
+                            <a href="/" className="flex items-center gap-2.5 shrink-0">
                                 <img
                                     src={app_logo_url}
                                     alt=""
@@ -387,7 +387,7 @@ export default function TicketsPublicShow({ ticket, access_token, app_name, app_
                                 <span className="text-sm font-semibold text-[#485E72]">
                                     {app_name}
                                 </span>
-                            </Link>
+                            </a>
                             <OperatorNotice operator={operator} className="max-w-md text-center sm:text-right" />
                         </div>
                         <div className="mt-8 pt-6 border-t border-[#C0C5C0]/20 flex flex-col sm:flex-row items-center justify-between gap-3">
