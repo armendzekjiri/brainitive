@@ -123,8 +123,6 @@ class ContentReferenceController extends Controller
      */
     private function visibleEndpoint(User $user, Project $project, string $type, int $id): ?Model
     {
-        $model = ContentReferences::resolve($project, $type, $id);
-
-        return $model !== null && $user->can('view', $model) ? $model : null;
+        return ContentReferences::visibleEndpoint($user, $project, $type, $id);
     }
 }

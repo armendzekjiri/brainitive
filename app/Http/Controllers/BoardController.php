@@ -24,6 +24,7 @@ use App\Support\Billing\TimeLogActivities;
 use App\Support\Boards\BoardViewConfig;
 use App\Support\Boards\ItemComments;
 use App\Support\Boards\ItemFieldValues;
+use App\Support\Boards\ItemLinks;
 use App\Support\Boards\ItemMentions;
 use App\Support\Boards\Swimlanes;
 use App\Support\Entitlements\LimitGate;
@@ -1013,10 +1014,9 @@ class BoardController extends Controller
 
         $validated = $request->validate([
             'target_item_id' => 'required|exists:items,id',
-            'link_type' => 'required|string|in:blocks,is_blocked_by,duplicates,is_duplicated_by,relates_to,clones,is_cloned_by',
+            'link_type' => ['required', 'string', Rule::in(ItemLinks::types())],
         ]);
 
-        // Prevent self-linking
         // Only issues the user can open — otherwise the link would reveal another
         // workspace's issue key and title.
         $target = Item::with('board.project')->find($validated['target_item_id']);
@@ -1024,31 +1024,16 @@ class BoardController extends Controller
             return back()->withErrors(['target_item_id' => 'That issue was not found.']);
         }
 
-        if ($validated['target_item_id'] == $item->id) {
+        if ($target->id === $item->id) {
             return back()->withErrors(['target_item_id' => 'Cannot link an item to itself.']);
         }
 
-        // Check if link already exists
-        $existingLink = ItemLink::where('source_item_id', $item->id)
-            ->where('target_item_id', $validated['target_item_id'])
-            ->where('link_type', $validated['link_type'])
-            ->exists();
-
-        if ($existingLink) {
+        // The same link, or its inverse added from the other issue (A blocks B = B is blocked by A)
+        if (ItemLinks::find($item, $target, $validated['link_type'])) {
             return back()->withErrors(['target_item_id' => 'This link already exists.']);
         }
 
-        $link = ItemLink::create([
-            'source_item_id' => $item->id,
-            'target_item_id' => $validated['target_item_id'],
-            'link_type' => $validated['link_type'],
-            'created_by' => $request->user()->id,
-        ]);
-
-        ActivityLog::log($item, 'linked', null, [
-            'link_type' => $link->link_type,
-            'item' => $link->targetItem?->key,
-        ]);
+        ItemLinks::add($item, $target, $validated['link_type'], $request->user());
 
         return back()->with('success', 'Item link created successfully.');
     }
@@ -1065,13 +1050,7 @@ class BoardController extends Controller
             abort(404);
         }
 
-        $otherItem = $link->source_item_id === $item->id ? $link->targetItem : $link->sourceItem;
-        ActivityLog::log($item, 'unlinked', null, [
-            'link_type' => $link->source_item_id === $item->id ? $link->link_type : (ItemLink::LINK_TYPES[$link->link_type] ?? $link->link_type),
-            'item' => $otherItem?->key,
-        ]);
-
-        $link->delete();
+        ItemLinks::remove($item, $link);
 
         return back()->with('success', 'Item link removed successfully.');
     }
