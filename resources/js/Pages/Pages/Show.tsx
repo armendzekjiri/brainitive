@@ -86,6 +86,7 @@ import TurndownService from 'turndown';
 import { useState, useEffect, useRef, RefObject, FormEvent, Fragment, useCallback, useMemo, Suspense, lazy } from 'react';
 import { usePagePresence } from '@/hooks/usePagePresence';
 import { useLiveDocument } from '@/components/editor/collab/useLiveDocument';
+import { describeLiveFailure } from '@/components/editor/collab/shared';
 import { PageHistoryDialog } from '@/components/page/PageHistoryDialog';
 import { ExcalidrawViewMode } from '@/components/page/ExcalidrawViewMode';
 import { useLiveWhiteboardView } from '@/hooks/useLiveWhiteboardView';
@@ -95,6 +96,8 @@ import { Textarea } from '@/components/ui/textarea';
 
 // Lazy-load emoji-mart to prevent customElements.define() firing at module load time
 // (breaks Vite HMR with "already defined" error which silently kills onChange).
+/** Live editing is back after editing alone: switch once nobody typed for this long (BRAI-345). */
+const AUTO_SWITCH_IDLE_MS = 5_000;
 const EmojiPickerLazy = lazy(() => import('@emoji-mart/react'));
 const loadEmojiData = () => import('@emoji-mart/data').then((m) => m.default);
 function EmojiMartPicker(props: any) {
@@ -743,6 +746,8 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
     const pendingChangesRef = useRef<DraftChanges>({});
     const savePromiseRef = useRef<Promise<void> | null>(null);
     const conflictRef = useRef(false);
+    /** last single-user change (fallback → live switches only after a pause, BRAI-345) */
+    const lastEditAtRef = useRef(0);
     const isEditingRef = useRef(isEditing);
     isEditingRef.current = isEditing;
     // Latest editor HTML (exports + Update); starts from the saved content
@@ -853,6 +858,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
     }, [routeParams, applyDraftState]);
 
     const queueSave = useCallback((changes: DraftChanges, immediate = false) => {
+        lastEditAtRef.current = Date.now();
         pendingChangesRef.current = { ...pendingChangesRef.current, ...changes };
         if (conflictRef.current) return;
         if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -870,6 +876,31 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
             flushSave();
         }, 1000);
     }, [flushSave]);
+
+    /**
+     * Editing alone → live editing ("Try again" / live editing is back, BRAI-345). The single-user save
+     * must have stored everything first (it starts the new live document from the stored draft): when it
+     * didn't (offline, conflict), stay alone — the save status / conflict dialog says why.
+     */
+    const switchToLive = useCallback(async () => {
+        if (can.update) {
+            await flushSave();
+            if (Object.keys(pendingChangesRef.current).length > 0 || conflictRef.current) return;
+        }
+        liveRef.current.retry();
+    }, [can.update, flushSave]);
+    // live editing is back: switch by itself once nobody typed for a few seconds and all is saved
+    useEffect(() => {
+        if (live.mode !== 'fallback' || !live.recovered) return;
+        const timer = setInterval(() => {
+            const idle = Date.now() - lastEditAtRef.current >= AUTO_SWITCH_IDLE_MS && !saveTimeoutRef.current && !conflictRef.current;
+            if (!can.update || idle) {
+                clearInterval(timer);
+                void switchToLive();
+            }
+        }, 1_000);
+        return () => clearInterval(timer);
+    }, [live.mode, live.recovered, can.update, switchToLive]);
 
     // Who else is here — and did someone else save while we were looking?
     const presentUsers = usePagePresence(route('pages.presence', routeParams), isEditing, (state) => {
@@ -1550,7 +1581,7 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
                         )}>
                             {/* Live co-editing (BRAI-54) */}
                             {live.mode === 'fallback' && (
-                                <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm" role="status">
+                                <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm" role="status" data-testid="live-unavailable">
                                     <Users className="size-4 text-amber-600 dark:text-amber-400 shrink-0" />
                                     {can.update ? (
                                         <span className="flex-1 min-w-[12rem]">
@@ -1561,7 +1592,12 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
                                             <strong>Live updates unavailable</strong> — showing the last saved draft.
                                         </span>
                                     )}
-                                    <Button size="sm" variant="outline" onClick={async () => { if (can.update) await flushSave(); live.retry(); }}>Try again</Button>
+                                    <Button size="sm" variant="outline" onClick={() => void switchToLive()}>{live.recovered ? 'Switch to live editing' : 'Try again'}</Button>
+                                    <span className="basis-full text-xs text-muted-foreground" data-testid="live-unavailable-reason">
+                                        {live.recovered
+                                            ? 'Live editing is available again — switching as soon as you pause.'
+                                            : <>{describeLiveFailure(live.failure)} Retrying automatically…</>}
+                                    </span>
                                 </div>
                             )}
                             {live.notice && (

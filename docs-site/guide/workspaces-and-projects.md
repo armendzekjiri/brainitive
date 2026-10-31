@@ -159,3 +159,7 @@ Workspace admins open **your avatar → Workspace settings**. The tabs on the le
 ## Customize your sidebar
 
 Choose **your avatar → Customize sidebar** to hide entries you don't use, choose which groups each project shows, and pin the boards, lists and docs you open every day. Hidden entries are still reachable with <kbd>⌘K</kbd>.
+
+- **Pinned** items show at the top of the project, above everything else. Pinning doesn't hide the rest; turn on **Show only pinned** if you want just your pins.
+- **Reorder pins** by dragging them in the sidebar's Pinned group, or with **Move up / Move down** in Customize sidebar. The project page uses the same order.
+- **Project tools:** Health, Workload and Releases have their own entries in the project sidebar. Show or hide each one under **Customize sidebar → Project tools**.

@@ -24,6 +24,11 @@ Environment=COLLAB_HOST=127.0.0.1
 Environment=COLLAB_PORT=1234
 # Where the server reaches the app's internal API (bearer-protected; nginx must allow ~25 MB bodies)
 Environment=COLLAB_APP_URL=https://brainitive.app
+# Firewall / no hairpin NAT (the server can't reach its own public IP → every live connection is
+# refused with "app-unreachable" in the log): call nginx on loopback under the public name instead
+# (Host header + TLS SNI = COLLAB_APP_HOST, so the certificate verifies) — BRAI-345:
+#   Environment=COLLAB_APP_URL=https://127.0.0.1
+#   Environment=COLLAB_APP_HOST=brainitive.app
 ExecStart=/usr/bin/node realtime/src/index.js
 Restart=always
 RestartSec=3

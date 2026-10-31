@@ -397,6 +397,7 @@ final class ProjectArchiveWriter
             'description' => $board->description,
             'type' => $board->type,
             'position' => $board->position,
+            'done_retention_days' => $board->doneRetentionSetting(),
             'columns' => $columns,
             'swimlanes' => $this->swimlanes($board->settings['swimlanes'] ?? null),
             'sprints' => $sprints,

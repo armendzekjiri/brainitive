@@ -2,6 +2,7 @@
 
 namespace App\Support\Templates;
 
+use App\Models\Board;
 use App\Models\Item;
 use App\Models\ItemField;
 use App\Models\ItemLink;
@@ -17,7 +18,8 @@ use App\Models\TaskListItem;
  *   item_types:  [{ ref, name, slug, color, icon, description }]           project-owned types
  *   labels:      [{ ref, name, color }]
  *   fields:      [{ ref, name, type, boards: [boardRef]|null, options: [{ ref, label, color }] }]
- *   boards:      [{ ref, name, description, type, columns: [{ ref, name, color, wip_limit, is_done }],
+ *   boards:      [{ ref, name, description, type, done_retention_days (0|7|14|30|60|90, absent = new-board default),
+ *                  columns: [{ ref, name, color, wip_limit, is_done }],
  *                  swimlanes: { mode, rest_name, lanes: [{ name, color, rules: { priorities[slug],
  *                  types[typeRef|"slug:x"], labels[labelRef], unassigned, no_release, overdue } }] } }]
  *   items:       [{ ref, board, column, parent, title, description, type, priority, labels[],
@@ -157,6 +159,8 @@ class TemplateDocument
                 'name' => $name,
                 'description' => self::text($board['description'] ?? null, 5000),
                 'type' => ($board['type'] ?? null) === 'scrum' ? 'scrum' : 'kanban',
+                // BRAI-346; null = not in the template (the board gets the default for new boards)
+                'done_retention_days' => in_array($board['done_retention_days'] ?? null, Board::DONE_RETENTION_OPTIONS, true) ? $board['done_retention_days'] : null,
                 'columns' => $columns,
                 'swimlanes' => self::swimlanes($board['swimlanes'] ?? null, $typeRefs, $labelRefs),
             ];

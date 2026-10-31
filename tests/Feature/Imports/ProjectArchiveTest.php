@@ -3,6 +3,7 @@
 namespace Tests\Feature\Imports;
 
 use App\Models\Attachment;
+use App\Models\Board;
 use App\Models\Comment;
 use App\Models\Helpdesk;
 use App\Models\ImportRun;
@@ -59,6 +60,7 @@ class ProjectArchiveTest extends TestCase
         $large = $field->options()->create(['label' => 'Large', 'position' => 1]);
         $release = Release::create(['project_id' => $this->project->id, 'name' => 'v1', 'status' => 'unreleased', 'public_token' => 'RELEASE-SECRET-456', 'created_by' => $this->owner->id]);
         $sprint = Sprint::factory()->create(['board_id' => $this->board->id, 'name' => 'Sprint 1']);
+        $this->board->update(['settings' => ['done_retention_days' => 30]]); // BRAI-346
 
         Storage::disk('public')->put('uploads/images/aaaa-bbbb.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='));
         $parent = $this->item([
@@ -242,6 +244,7 @@ class ProjectArchiveTest extends TestCase
         $this->assertNotContains($parent->labels->first()->id, $this->project->labels()->pluck('id')->all());
         $this->assertSame('Sprint 1', Sprint::find($parent->sprint_id)->name);
         $this->assertNotSame($this->board->id, $parent->board_id);
+        $this->assertSame(30, Board::findOrFail($parent->board_id)->doneRetentionSetting(), 'done retention (BRAI-346) comes along');
         $this->assertSame('Large', ItemField::where('project_id', $new->id)->sole()->options()->find($parent->fieldValues()->sole()->option_id)->label);
         $this->assertTrue(ItemLink::where('source_item_id', $parent->id)->where('target_item_id', $child->id)->where('link_type', 'blocks')->exists());
         $this->assertStringNotContainsString('data-mention', (string) $parent->description);

@@ -253,6 +253,8 @@ final class ProjectArchiveRestorer
                     'type' => in_array($doc['type'] ?? null, ['kanban', 'scrum'], true) ? $doc['type'] : 'kanban',
                     'position' => self::int($doc['position'] ?? null) ?? $position,
                     'created_by' => $this->user->id,
+                    // BRAI-346: the exported board's done retention; archives from before it = Off, as those boards were
+                    'settings' => ['done_retention_days' => in_array($doc['done_retention_days'] ?? 0, Board::DONE_RETENTION_OPTIONS, true) ? $doc['done_retention_days'] : 0],
                 ]);
                 if ($columns !== []) {
                     $board->columns()->delete(); // Board::created added the defaults; the archive brings its own

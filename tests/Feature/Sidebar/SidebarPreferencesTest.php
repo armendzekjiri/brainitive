@@ -96,11 +96,60 @@ class SidebarPreferencesTest extends TestCase
         $this->assertNull($this->editor->fresh()->sidebar_preferences);
     }
 
+    public function test_health_workload_and_releases_can_be_hidden_one_by_one(): void
+    {
+        $base = "sidebarPreferences.projects.{$this->project->id}.groups";
+
+        $this->save($this->editor, ['project' => ['id' => $this->project->id, 'groups' => ['health' => false, 'releases' => false]]])
+            ->assertOk()
+            ->assertJsonPath("{$base}.health", false)
+            ->assertJsonPath("{$base}.releases", false)
+            ->assertJsonPath("{$base}.workload", true)
+            ->assertJsonPath("{$base}.boards", true);
+
+        $this->save($this->editor, ['project' => ['id' => $this->project->id, 'groups' => ['health' => true]]])
+            ->assertOk()
+            ->assertJsonPath("{$base}.health", true)
+            ->assertJsonPath("{$base}.releases", false);
+
+        $this->actingAs($this->editor)->get(route('projects.show', [$this->workspace, $this->project]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where("{$base}.releases", false)
+                ->where("{$base}.workload", true));
+
+        $this->save($this->editor, ['project' => ['id' => $this->project->id, 'groups' => ['releases' => true]]])->assertOk();
+        $this->assertNull($this->editor->fresh()->sidebar_preferences);
+    }
+
+    public function test_preferences_saved_before_the_project_tools_existed_show_them(): void
+    {
+        // a value stored before BRAI-286 has no health / workload / releases keys
+        $this->editor->forceFill(['sidebar_preferences' => [
+            'hidden_nav' => [],
+            'projects' => [$this->project->id => ['groups' => ['boards' => false, 'lists' => true], 'pins' => [], 'pinned_only' => false]],
+        ]])->save();
+        $base = "sidebarPreferences.projects.{$this->project->id}.groups";
+
+        $this->actingAs($this->editor)->get(route('projects.show', [$this->workspace, $this->project]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where("{$base}.boards", false)
+                ->where("{$base}.health", true)
+                ->where("{$base}.workload", true)
+                ->where("{$base}.releases", true));
+
+        // hiding a tool keeps the old choice
+        $this->save($this->editor, ['project' => ['id' => $this->project->id, 'groups' => ['workload' => false]]])
+            ->assertOk()
+            ->assertJsonPath("{$base}.boards", false)
+            ->assertJsonPath("{$base}.workload", false);
+    }
+
     public function test_project_updates_are_validated(): void
     {
         $id = $this->project->id;
         $this->save($this->editor, ['project' => ['id' => $id, 'groups' => ['calendar' => false]]])->assertJsonValidationErrors('project.groups');
         $this->save($this->editor, ['project' => ['id' => $id, 'groups' => ['lists' => 'maybe']]])->assertJsonValidationErrors('project.groups.lists');
+        $this->save($this->editor, ['project' => ['id' => $id, 'groups' => ['health' => 'maybe']]])->assertJsonValidationErrors('project.groups.health');
         $this->save($this->editor, ['project' => ['id' => $id, 'pins' => [['type' => 'issue', 'id' => 1]]]])->assertJsonValidationErrors('project.pins.0.type');
         $this->save($this->editor, ['project' => ['id' => $id, 'pins' => [['type' => 'board', 'id' => 'x']]]])->assertJsonValidationErrors('project.pins.0.id');
         $this->save($this->editor, ['project' => ['groups' => ['lists' => false]]])->assertJsonValidationErrors('project.id');
@@ -141,6 +190,39 @@ class SidebarPreferencesTest extends TestCase
         // the owner (project admin) may pin the draft
         $this->save($this->owner, ['project' => ['id' => $this->project->id, 'pins' => [['type' => 'page', 'id' => $ownersDraft->id]]]])
             ->assertJsonPath("sidebarPreferences.projects.{$this->project->id}.pins", [['type' => 'page', 'id' => $ownersDraft->id]]);
+    }
+
+    public function test_reordering_pins_stores_the_new_order_and_keeps_the_other_settings(): void
+    {
+        $board = Board::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->owner->id]);
+        $list = TaskList::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->owner->id]);
+        $page = Page::factory()->published()->create(['project_id' => $this->project->id, 'created_by' => $this->owner->id]);
+        $key = "sidebarPreferences.projects.{$this->project->id}";
+
+        $this->save($this->editor, ['project' => ['id' => $this->project->id, 'pinned_only' => true, 'pins' => [
+            ['type' => 'board', 'id' => $board->id],
+            ['type' => 'list', 'id' => $list->id],
+            ['type' => 'page', 'id' => $page->id],
+        ]]])->assertOk();
+
+        // BRAI-284: the same pins in a new order (what drag & drop / Move up / down sends)
+        $reordered = [
+            ['type' => 'page', 'id' => $page->id],
+            ['type' => 'board', 'id' => $board->id],
+            ['type' => 'list', 'id' => $list->id],
+        ];
+        $this->save($this->editor, ['project' => ['id' => $this->project->id, 'pins' => $reordered]])
+            ->assertOk()
+            ->assertJsonPath("{$key}.pins", $reordered)
+            ->assertJsonPath("{$key}.pinned_only", true);
+
+        $this->assertSame($reordered, $this->editor->fresh()->sidebar_preferences['projects'][(string) $this->project->id]['pins']);
+
+        // BRAI-285: turning "pinned only" off keeps the pins in their order
+        $this->save($this->editor, ['project' => ['id' => $this->project->id, 'pinned_only' => false]])
+            ->assertOk()
+            ->assertJsonPath("{$key}.pins", $reordered)
+            ->assertJsonPath("{$key}.pinned_only", false);
     }
 
     public function test_projects_the_user_lost_access_to_are_pruned_on_save(): void

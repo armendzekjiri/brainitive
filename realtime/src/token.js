@@ -30,26 +30,38 @@ export const DOCUMENT_NAME = /^(?:(?:page|whiteboard)\.[0-9a-f]{8}-[0-9a-f]{4}-[
  * @returns {{v: 1, sub: number, name: string, doc: string, edit: boolean, exp: number} | null}
  */
 export function verifyToken(token, key, now = Math.floor(Date.now() / 1000)) {
-    if (typeof token !== 'string' || token.length > 4096) return null;
+    return inspectToken(token, key, now).payload;
+}
+
+/**
+ * Like verifyToken, plus why a token is refused (BRAI-345: the browser and the server log say why):
+ * `invalid-token` (malformed, wrong signature — e.g. COLLAB_SECRET differs between app and server) or
+ * `expired-token` (older than COLLAB_TOKEN_TTL — e.g. clocks differ, or a cached token was reused).
+ * @returns {{payload: object | null, problem: 'invalid-token' | 'expired-token' | null}}
+ */
+export function inspectToken(token, key, now = Math.floor(Date.now() / 1000)) {
+    const invalid = { payload: null, problem: 'invalid-token' };
+    if (typeof token !== 'string' || token.length > 4096) return invalid;
     const parts = token.split('.');
-    if (parts.length !== 2) return null;
+    if (parts.length !== 2) return invalid;
     const [payload, signature] = parts;
 
     const expected = Buffer.from(base64url(createHmac('sha256', key).update(payload).digest()));
     const given = Buffer.from(signature);
-    if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
+    if (expected.length !== given.length || !timingSafeEqual(expected, given)) return invalid;
 
     let data;
     try {
         data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
     } catch {
-        return null;
+        return invalid;
     }
     if (!data || data.v !== 1 || !Number.isInteger(data.sub) || typeof data.doc !== 'string' || typeof data.edit !== 'boolean'
-        || !Number.isInteger(data.exp) || data.exp <= now) {
-        return null;
+        || !Number.isInteger(data.exp)) {
+        return invalid;
     }
-    return data;
+    if (data.exp <= now) return { payload: null, problem: 'expired-token' };
+    return { payload: data, problem: null };
 }
 
 /** Test helper / reference implementation of CollabToken::issue(). */

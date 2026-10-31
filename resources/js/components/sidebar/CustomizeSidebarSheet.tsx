@@ -1,6 +1,6 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from '@inertiajs/react';
-import { Lock, PinOff, RotateCcw } from 'lucide-react';
+import { ChevronDown, ChevronUp, Lock, PinOff, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import {
     CUSTOMIZE_SIDEBAR_EVENT,
     SIDEBAR_GROUPS,
+    movePin,
     projectPreferences,
     resetSidebar,
     setGroupVisible,
@@ -88,6 +89,20 @@ export function CustomizeSidebarSheet({ workspaceSlug, project }: { workspaceSlu
 
     const projectPrefs = project ? projectPreferences(prefs, project.id) : null;
     const pinned = project && projectPrefs && workspaceSlug ? resolvePins(workspaceSlug, project, projectPrefs.pins) : [];
+    const pinnedListRef = useRef<HTMLUListElement>(null);
+
+    /** Move a pin one step and keep focus on its row (the other arrow once it reaches an end). */
+    const move = (index: number, step: -1 | 1) => {
+        if (!project) return;
+        const key = `${pinned[index].pin.type}-${pinned[index].pin.id}`;
+        movePin(project.id, pinned.map((entry) => entry.pin), index, index + step);
+        requestAnimationFrame(() => {
+            const row = pinnedListRef.current?.querySelector(`[data-pin="${key}"]`);
+            const target = row?.querySelector<HTMLButtonElement>(`[data-move="${step}"]:not(:disabled)`)
+                ?? row?.querySelector<HTMLButtonElement>('[data-move]:not(:disabled)');
+            target?.focus();
+        });
+    };
     const isDefault = prefs.hidden_nav.length === 0 && Object.keys(prefs.projects).length === 0;
 
     return (
@@ -135,9 +150,21 @@ export function CustomizeSidebarSheet({ workspaceSlug, project }: { workspaceSlu
                                 />
                             </ul>
 
+                            <p className="mb-1 mt-3 px-2 text-xs font-medium text-muted-foreground">Project tools</p>
+                            <ul className={cn('grid grid-cols-1 gap-0.5 min-[420px]:grid-cols-2', projectPrefs.pinned_only && 'opacity-60')} aria-label="Project tools">
+                                {SIDEBAR_GROUPS.filter((group) => group.section === 'tools').map((group) => (
+                                    <SwitchRow
+                                        key={group.key}
+                                        label={group.label}
+                                        checked={projectPrefs.groups[group.key]}
+                                        onChange={(visible) => setGroupVisible(project.id, group.key, visible)}
+                                    />
+                                ))}
+                            </ul>
+
                             <p className="mb-1 mt-3 px-2 text-xs font-medium text-muted-foreground">Groups</p>
                             <ul className={cn('grid grid-cols-1 gap-0.5 min-[420px]:grid-cols-2', projectPrefs.pinned_only && 'opacity-60')}>
-                                {SIDEBAR_GROUPS.map((group) => (
+                                {SIDEBAR_GROUPS.filter((group) => group.section === 'content').map((group) => (
                                     <SwitchRow
                                         key={group.key}
                                         label={group.label}
@@ -157,11 +184,36 @@ export function CustomizeSidebarSheet({ workspaceSlug, project }: { workspaceSlu
                                     and click the pin.
                                 </p>
                             ) : (
-                                <ul className="space-y-0.5" aria-label="Pinned items">
-                                    {pinned.map((entry) => (
-                                        <li key={`${entry.pin.type}-${entry.pin.id}`} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-muted/50">
+                                <ul ref={pinnedListRef} className="space-y-0.5" aria-label="Pinned items">
+                                    {pinned.map((entry, index) => (
+                                        <li key={`${entry.pin.type}-${entry.pin.id}`} data-pin={`${entry.pin.type}-${entry.pin.id}`} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-muted/50">
                                             <PinIcon entry={entry} className="text-muted-foreground" />
                                             <span className="min-w-0 flex-1 truncate text-sm">{entry.name}</span>
+                                            {/* reorder (BRAI-284): the keyboard alternative to dragging in the sidebar */}
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="size-7 text-muted-foreground"
+                                                aria-label={`Move ${entry.name} up`}
+                                                title="Move up"
+                                                data-move="-1"
+                                                disabled={index === 0}
+                                                onClick={() => move(index, -1)}
+                                            >
+                                                <ChevronUp className="size-3.5" />
+                                            </Button>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="size-7 text-muted-foreground"
+                                                aria-label={`Move ${entry.name} down`}
+                                                title="Move down"
+                                                data-move="1"
+                                                disabled={index === pinned.length - 1}
+                                                onClick={() => move(index, 1)}
+                                            >
+                                                <ChevronDown className="size-3.5" />
+                                            </Button>
                                             <Button
                                                 variant="ghost"
                                                 size="icon"

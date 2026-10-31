@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, FormEvent, DragEvent } from 'react';
 import SwimlaneSettings, { type LaneOptions } from '@/components/board/SwimlaneSettings';
+import DoneRetentionSettings from '@/components/board/DoneRetentionSettings';
 import axios from 'axios';
 
 interface Props extends PageProps {
@@ -589,6 +590,8 @@ export default function BoardsEdit({ workspace, project, board, laneOptions }: P
                             )}
                         </CardContent>
                     </Card>
+
+                    <DoneRetentionSettings workspace={workspace} project={project} board={board} />
 
                     <SwimlaneSettings workspace={workspace} project={project} board={board} options={laneOptions} />
 

@@ -161,6 +161,23 @@ Update** makes it live as before. Readers of a published page keep seeing the pu
 then edited one person at a time, as before. If the service is down while `COLLAB_URL` is set,
 editors see "Live editing unavailable — editing alone" and keep working without it.
 
+**"Live editing unavailable" — why?** The notice names the cause, and the realtime server logs a
+`[realtime] refused …` line for every refused connection (`docker compose logs realtime`, or
+`journalctl -u brainitive-realtime` on a classic server). Brainitive keeps retrying in the background
+and switches back to live editing by itself once it works (documents after a short pause in typing;
+an issue description asks first if text was typed meanwhile — that text is saved before switching).
+
+- *can't be reached* — the service is down, or your proxy doesn't pass `/collab` WebSockets;
+- *refused the connection (sign-in token rejected)* — `COLLAB_SECRET` differs between the app and the
+  realtime server;
+- *can't reach Brainitive* — the realtime server can't call the app's internal API at `COLLAB_APP_URL`
+  (default `APP_URL`). Common on a classic server whose firewall (or missing hairpin NAT) blocks it
+  from reaching its own public address. Call the app on loopback under its public name instead, in
+  the realtime server's environment:
+  `COLLAB_APP_URL=https://127.0.0.1` and `COLLAB_APP_HOST=brainitive.example.com` (sent as Host header
+  and TLS name, so the certificate still verifies; nginx must listen on 127.0.0.1:443, which
+  `listen 443 ssl;` does). Docker needs nothing: compose already uses `http://app:8081`.
+
 ### Live updates (bell, presence, typing)
 
 The same `realtime` service also carries **live channels**: the notification bell rings the moment

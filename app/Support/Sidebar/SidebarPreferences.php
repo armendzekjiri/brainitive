@@ -33,8 +33,11 @@ class SidebarPreferences
     /** Top-level entries a user may hide. Home and Inbox are always shown. */
     public const NAV = ['my_work', 'captures', 'timesheet', 'billing', 'insights', 'calendar', 'booking_pages', 'bookmarks', 'snippets'];
 
-    /** Project groups in the sidebar, in their sidebar order. */
-    public const GROUPS = ['boards', 'lists', 'plans', 'helpdesks', 'lead_forms', 'pages', 'whiteboards', 'folders'];
+    /**
+     * Project groups in the sidebar, in their sidebar order: first the project views Health,
+     * Workload and Releases (one row each, BRAI-286), then the content groups.
+     */
+    public const GROUPS = ['health', 'workload', 'releases', 'boards', 'lists', 'plans', 'helpdesks', 'lead_forms', 'pages', 'whiteboards', 'folders'];
 
     /** What can be pinned. "page" covers pages, whiteboards and folders (one table). */
     public const PIN_TYPES = ['board', 'list', 'plan', 'helpdesk', 'lead_form', 'page'];

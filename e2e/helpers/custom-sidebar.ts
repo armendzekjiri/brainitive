@@ -32,6 +32,14 @@ export async function toggle(page: Page, panel: Locator, name: string, checked: 
     await expect(control).toHaveAttribute('aria-checked', String(checked));
 }
 
+/** Pin an item from its card / row on the open project page and wait until it is saved. */
+export async function pin(page: Page, name: string) {
+    const saved = sidebarSaved(page);
+    await page.getByRole('main').getByRole('button', { name: `Pin ${name}`, exact: true }).click();
+    await saved;
+    await expect(pinnedGroup(page).getByRole('link', { name, exact: true })).toBeVisible();
+}
+
 async function xsrf(page: Page): Promise<Record<string, string>> {
     const cookie = (await page.context().cookies()).find((c) => c.name === 'XSRF-TOKEN');
     if (!cookie) throw new Error('no XSRF-TOKEN cookie: open an app page first');
