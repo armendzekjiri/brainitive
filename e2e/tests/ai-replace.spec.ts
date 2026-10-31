@@ -1,6 +1,6 @@
 import type { Page, Route } from '@playwright/test';
 import { expect, test, uid, urls } from '../fixtures';
-import { card, closeIssue, createCard, openCard, openDeepLink, openIssueId } from '../helpers/boards';
+import { card, closeIssue, createCard, openCard, openDeepLink, openIssueId, saveDescription } from '../helpers/boards';
 
 /**
  * AI in the issue description (BRAI-30): "Generate prompt" may answer with long plain text or
@@ -53,7 +53,7 @@ test.describe('AI replace in the issue description', () => {
         await expect(editor).toContainText(`${marker}: You are a senior Laravel developer.`);
         await expect(editor.getByText('Write a failing test first')).toBeVisible();
 
-        await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+        await saveDescription(page, dialog);
         await expect(dialog.getByText(`${marker}: You are a senior Laravel developer.`)).toBeVisible();
         await closeIssue(page);
         await expect(card(page, title)).toBeVisible();

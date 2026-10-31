@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test, uid, urls } from '../fixtures';
 import { SEED } from '../env';
-import { card, column, createBoard, createCard, closeIssue, openCard, openDeepLink, openIssueId, postJson, sidebarField } from '../helpers/boards';
+import { card, column, createBoard, createCard, closeIssue, openCard, openDeepLink, openIssueId, postJson, saveDescription, sidebarField } from '../helpers/boards';
 
 /**
  * Boards and issues (BRAI-96): cards, the issue dialog, filters, layouts, saved views and board
@@ -94,9 +94,7 @@ test.describe('cards and the issue dialog', () => {
         const editor = dialog.locator('[contenteditable="true"][aria-placeholder="Add a description…"]');
         await editor.click();
         await page.keyboard.type(description);
-        const descriptionSaved = itemWrite(page);
-        await dialog.getByRole('button', { name: 'Save', exact: true }).click();
-        await descriptionSaved;
+        await saveDescription(page, dialog);
         await expect(dialog.getByText(description)).toBeVisible();
 
         await closeIssue(page);

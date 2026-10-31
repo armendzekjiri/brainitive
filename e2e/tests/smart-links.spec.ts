@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test, uid, urls } from '../fixtures';
 import { addProjectContent, docEditor, docReader, draftSaved, publish } from '../helpers/content';
-import { closeIssue, createCard, openCard, openDeepLink, openIssueId } from '../helpers/boards';
+import { closeIssue, createCard, openCard, openDeepLink, openIssueId, saveDescription } from '../helpers/boards';
 import { backlinkList, pageUrl, relatedSection } from '../helpers/backlinks';
 
 /**
@@ -213,9 +213,7 @@ test.describe('smart links', () => {
         await page.keyboard.type('Spec: ');
         await pasteText(description, new URL(pageUrl(secretUuid), page.url()).href);
         await expect(chip(description, `page:${secretUuid}`)).toContainText(secret);
-        const savedDescription = page.waitForResponse((r) => r.request().method() === 'PATCH' && /\/items\/\d+$/.test(new URL(r.url()).pathname));
-        await dialog.getByRole('button', { name: 'Save', exact: true }).click();
-        await savedDescription;
+        await saveDescription(page, dialog);
         await expect(chip(dialog, `page:${secretUuid}`)).toContainText(secret);
         await closeIssue(page);
 
