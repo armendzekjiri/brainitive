@@ -9,6 +9,7 @@ use App\Mcp\Tools\ListPagesTool;
 use App\Mcp\Tools\UpdatePageTool;
 use App\Models\Page;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class PageMcpToolsTest extends TestCase
@@ -97,5 +98,40 @@ class PageMcpToolsTest extends TestCase
         $guide = Page::where('name', 'Team guide')->firstOrFail();
         $this->assertTrue($guide->isPublished());
         $this->assertSame(1, $guide->current_version);
+    }
+
+    public function test_update_moves_a_page_with_parent_uuid(): void
+    {
+        $folder = Page::factory()->folder()->create(['project_id' => $this->project->id, 'created_by' => $this->author->id, 'name' => 'Meetings']);
+        $sub = Page::factory()->folder()->create(['project_id' => $this->project->id, 'created_by' => $this->author->id, 'name' => 'Sub', 'parent_id' => $folder->id]);
+        $page = $this->publishedPage();
+
+        BrainitiveServer::actingAs($this->editor)
+            ->tool(UpdatePageTool::class, $this->scope() + ['page_uuid' => $page->uuid, 'parent_uuid' => $folder->uuid])
+            ->assertOk();
+        $this->assertSame($folder->id, $page->fresh()->parent_id);
+        $this->assertSame(1, $page->fresh()->current_version);
+
+        BrainitiveServer::actingAs($this->editor)
+            ->tool(UpdatePageTool::class, $this->scope() + ['page_uuid' => $page->uuid, 'parent_uuid' => null])
+            ->assertOk();
+        $this->assertNull($page->fresh()->parent_id);
+
+        // no cycles, no foreign parents, no moves for viewers
+        BrainitiveServer::actingAs($this->editor)
+            ->tool(UpdatePageTool::class, $this->scope() + ['page_uuid' => $folder->uuid, 'parent_uuid' => $sub->uuid])
+            ->assertHasErrors(["A folder can't be moved into itself or one of its subfolders."]);
+        BrainitiveServer::actingAs($this->editor)
+            ->tool(UpdatePageTool::class, $this->scope() + ['page_uuid' => $page->uuid, 'parent_uuid' => (string) Str::uuid()])
+            ->assertHasErrors(['The parent_uuid does not match a page or folder in this project.']);
+        BrainitiveServer::actingAs($this->editor)
+            ->tool(UpdatePageTool::class, $this->scope() + ['page_uuid' => $page->uuid, 'parent_uuid' => 'not-a-uuid'])
+            ->assertHasErrors();
+        BrainitiveServer::actingAs($this->viewer)
+            ->tool(UpdatePageTool::class, $this->scope() + ['page_uuid' => $page->uuid, 'parent_uuid' => $folder->uuid])
+            ->assertHasErrors();
+
+        $this->assertNull($folder->fresh()->parent_id);
+        $this->assertNull($page->fresh()->parent_id);
     }
 }

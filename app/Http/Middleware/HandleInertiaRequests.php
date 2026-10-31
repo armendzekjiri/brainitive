@@ -96,6 +96,29 @@ class HandleInertiaRequests extends Middleware
         };
     }
 
+    /**
+     * `can_edit_pages` per sidebar project (BRAI-431): drag handles and "Move…" only for people who
+     * may change pages. Same rule as PagePolicy::create (workspace owner / admin, project admin /
+     * editor), in two queries instead of a policy call per project.
+     */
+    private function markEditablePages(Workspace $workspace, User $user): void
+    {
+        $workspaceAdmin = $workspace->owner_id === $user->id
+            || $user->workspaces()->where('workspace_id', $workspace->id)->wherePivot('role', 'admin')->exists();
+
+        $editable = $workspaceAdmin
+            ? null
+            : $user->projects()
+                ->whereIn('projects.id', $workspace->projects->pluck('id'))
+                ->wherePivotIn('role', ['admin', 'editor'])
+                ->pluck('projects.id')
+                ->all();
+
+        foreach ($workspace->projects as $project) {
+            $project->setAttribute('can_edit_pages', $editable === null || in_array($project->id, $editable, true));
+        }
+    }
+
     private function workspaceSlugFromRoute(Request $request): ?string
     {
         $workspace = $request->route('workspace');
@@ -192,6 +215,7 @@ class HandleInertiaRequests extends Middleware
                 if ($currentWorkspace && $user) {
                     $accessible = $currentWorkspace->projects->filter(fn ($project) => $user->hasProjectAccess($project))->values();
                     $currentWorkspace->setRelation('projects', $accessible);
+                    $this->markEditablePages($currentWorkspace, $user);
 
                     if ($routeWorkspaceSlug) {
                         $request->session()->put(self::LAST_WORKSPACE_SLUG_SESSION_KEY, $currentWorkspace->slug);

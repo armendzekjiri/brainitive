@@ -620,6 +620,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('pages/{page}/duplicate', [PageController::class, 'duplicate'])->name('pages.duplicate');
             Route::get('pages/tree', [PageController::class, 'tree'])->name('pages.tree');
             Route::post('pages/reorder', [PageController::class, 'reorder'])->name('pages.reorder');
+            Route::post('pages/{page}/move', [PageController::class, 'move'])->name('pages.move');
             Route::get('pages/{page}', [PageController::class, 'show'])->name('pages.show');
             Route::get('pages/{page}/excalidraw', [PageController::class, 'excalidrawEditor'])->name('pages.excalidraw');
             Route::post('pages/{page}/excalidraw/save', [PageController::class, 'saveExcalidraw'])->name('pages.excalidraw.save');
