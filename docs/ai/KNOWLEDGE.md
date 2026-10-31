@@ -363,9 +363,26 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
   unique. Every sidebar row now has a `Pin <name>` button, so a non-exact
   `getByRole('button', { name: 'Share' })` also matches "Pin Shared doc…": use `exact: true` for
   generic button names (content.spec's Share button was the one case).
+- **New group keys default to visible (BRAI-286).** `health`, `workload` and `releases` were added
+  to `GROUPS` after people had saved preferences; `normalizeProject` (and `projectPreferences` in
+  the frontend) fill a missing key with `true`, so old values keep working without a migration.
+  Add any future group the same way: append the key, never rename one. In e2e, check the sidebar
+  with the Customize sheet **closed**: the open modal sheet hides the sidebar from the
+  accessibility tree, so `getByRole` there finds nothing and a `toHaveCount(0)` passes vacuously.
 - **Store hydration is silent.** `useSidebarPreferences()` assigns the new server value during render
   (no listener notification) to avoid "update a component while rendering another"; while a write is
   in flight the optimistic state wins over the incoming prop.
+- **Pins never hide groups; only "Show only pinned" does (BRAI-285).** The first version hid every
+  project group as soon as one item was pinned, so switching "Show only pinned" off did nothing until
+  all pins were removed. `ProjectContent`: the Pinned group shows with pins or `pinned_only`; `shows()`
+  checks `pinned_only` + the group switch only.
+- **Pin reorder (BRAI-284) saves the whole `pins` array** (no extra endpoint). `reorderPins` keeps
+  stored pins the user can't see after the visible ones, but the server drops them on any pin save
+  (`visiblePins`). The sidebar drag uses the page tree's native HTML5 pattern (`DraggableItem`, grip
+  enables `draggable` on mousedown; the repo has no dnd library) and saves once on drop. In e2e,
+  Playwright's `dragTo` does not start that drag: use `mouse.down` on the grip, `mouse.move(…, { steps })`,
+  `mouse.up` (passes in Chromium and Firefox). Page rows start with the page's emoji icon, so match
+  their text with a regex (`new RegExp(\`${name}$\`)`), not the exact name.
 
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
@@ -412,6 +429,33 @@ id fails `item_ids`, no per-id `exists` rule). Queries grow by a small constant 
   `ItemStatusChangedNotification` goes to watchers (≠ actor) after the commit, the same rule as
   `BoardController::moveItem` (`BulkItemEdit::notifyStatusChange()`).
 - `bulk` routes are registered **before** `items/{item}`; otherwise `bulk` would bind as an item id.
+
+### Done column retention: defaults, completed_at, client-side hiding (BRAI-346, 2026-10-30)
+Jira's "hide completed issues older than…" for Kanban boards: `boards.settings.done_retention_days`.
+- **Defaults are deliberate.** A board without the key reads as **Off** — every board from before the
+  feature, so nobody's Done column empties on deploy. `Board::creating` gives new boards **14** (Jira's
+  2 weeks) unless the caller brings a value: Jira / Trello imports pass 0 (an imported board shows its history),
+  archive restores pass the exported value (old archives → 0), templates pass theirs (absent → 14).
+  Scrum boards ignore it (`doneRetentionDays()` = 0): they show the running sprint.
+- **`completed_at` is the clock, and `Item::saving` keeps it honest.** Entering a done column sets it (a
+  date the caller set is kept, e.g. Jira's resolved date), leaving one clears it, done → done keeps it (a
+  reorder inside Done used to reset it to now). Creating with a date is trusted; moves between open columns
+  leave it alone — many tests (and older flows) use `completed_at` on To Do cards as a plain "done" marker,
+  and Insights / Health count "`completed_at` set **or** in a done column". Flagging a column done stamps its
+  undated cards with now; unflagging clears its cards. The backfill migration dated done cards without one
+  from `updated_at`. Test fixtures that need "done column, no date" must clear it after creating.
+- **Hidden on the client, like every board filter.** The server still sends all cards (list / timeline /
+  calendar views, `#item-N` deep links and the issue dialog need them); Kanban + swimlanes drop done cards
+  older than the cutoff (`lib/doneRetention.ts`; no date = never hidden). Column counts and WIP limits count
+  what the board shows; the footer names the rest. Filters apply first. "Show" is per board and tab
+  (sessionStorage), not a saved-view param. Payload size for huge Done columns is unchanged — server-side
+  trimming would need the list view to load separately.
+- **Live:** no new events. Cards refetched through `boards.cards` carry `completed_at`; a settings save
+  publishes `board.updated` (model event), so open boards pick up the new window.
+- **Jira CSV gotcha found on the way:** an ISO date (`2026-10-20 09:00`) in a Jira CSV fails the whole
+  import — `JiraExport::date()` calls `createFromFormat` per format and the first mismatch throws
+  (`InvalidFormatException`) before `'Y-m-d H:i'` is tried. Jira's own format (`20/Oct/26 9:05 AM`) works.
+  Not fixed here.
 
 ### Explicit route binders run before implicit ones
 In `Route::bind('page' | 'bookmark', …)` the `{workspace}` / `{project}` parameters are still raw
@@ -956,8 +1000,67 @@ home and project page printed the base64 across the layout (e2e `page-icons.spec
 - **e2e realtime ports** (each spec that stops / restarts its server owns a port; the app learns it per
   request from `X-E2E-Collab-Port`, honoured only with `APP_ENV=e2e`): `COLLAB.port` (E2E_PORT + 100)
   live-docs, `LIVE.port` (E2E_PORT + 101) the global live-channel server (opt in with `X-E2E-Live: 1`),
-  `COLLAB.port + 3` live whiteboards, `COLLAB.port + 4` live issue descriptions. New live specs pick the
-  next free offset.
+  `COLLAB.port + 3` live whiteboards, `COLLAB.port + 4` live issue descriptions, `COLLAB.port + 5`
+  live-recovery (BRAI-345). New live specs pick the next free offset.
+
+### "Live editing unavailable — editing alone" and it didn't recover (v1.48.0, BRAI-345)
+**Root causes found in code (fixed):**
+- The first connect gave up after **2 socket disconnects or 5 s** and then **destroyed the provider** —
+  never retried. A realtime restart (every deploy), a slow access check / document load, a laptop
+  waking up was enough. Now: 10 s / 3 attempts / 2 refusals, then a background probe with backoff
+  (5 → 60 s, at once on `online` / tab visible) and an automatic switch back when safe.
+- Issue descriptions: "Try again" after a failed `items.collab.session` request called `retryProbe`,
+  which reset state but **never re-ran the probe effect** (deps unchanged) → stuck on the read-only
+  "connecting" view. Now a `probeGeneration` dep.
+- "Try again" switched to live even when the single-user save had failed (documents: `flushSave()`
+  never rejects) or without saving at all (descriptions) → text written alone could be lost. Now the
+  switch waits for a successful save.
+- A refused socket reconnected **every second forever** (the provider's backoff restarts once a socket
+  had opened) and fetched a session each time → `throttle:60,1` on `*.collab.session` → 429 → more
+  failures. Now the token function backs off (1 → 8 s; below the server's 10 s auth deadline).
+- Nothing said why: every refusal was a bare 4401 "Unauthorized" with no log line.
+- The page-load token was reused for a later first attempt even when expired.
+
+**Diagnosing now:** the notice names the cause; the browser console has `[live editing] …` lines; the
+realtime log has `[realtime] refused <document> for user <id>: <reason> — <detail>` (reason
+`app-unreachable` / `app-error-<status>` include the internal API URL it called) and `loading … failed`.
+The server's new reasons need the realtime service restarted after the deploy.
+
+**Strong infra suspect: the realtime server can't reach the app.** It calls `COLLAB_APP_URL` (default
+the public `APP_URL`) for every connect (`/api/internal/collab/access`), document load / store and
+live-channel re-check. A firewall or missing hairpin NAT that stops the server from reaching its own
+public IP breaks all of them although the browser's WebSocket upgrade works → every connection is
+refused (`app-unreachable`), banner "The live editing server can't reach Brainitive". Fix without
+touching the firewall: loopback under the public name — in the realtime unit
+`Environment=COLLAB_APP_URL=https://127.0.0.1` + `Environment=COLLAB_APP_HOST=www.brainitive.app`
+(dev: `dev.brainitive.app`), then `systemctl daemon-reload && systemctl restart <unit>`. `COLLAB_APP_HOST`
+becomes the Host header **and the TLS SNI name** (`realtime/src/appFetch.js`, node:https — Node's fetch
+drops a Host header), so nginx picks the right `server {}` and the certificate verifies; needs nginx on
+127.0.0.1:443 (`listen 443 ssl;` = all addresses). Dev also has **basic auth**: `/api/internal/collab/`
+must have `auth_basic off;` (the bearer key is the auth), or every call is a 401 (`app-error-401`).
+
+**Server checks (run on the server; prod port 6201, dev 6202 — never the other apps' ports):**
+```bash
+ss -ltnp | grep -E ':620[12]\b'                                   # node listens on 127.0.0.1:6201 / 6202
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:6201/   # 200 = realtime process up
+systemctl status brainitive-realtime --no-pager                    # dev: systemctl list-units 'brainitive-realtime*'
+systemctl show brainitive-realtime -p Environment                  # COLLAB_PORT, COLLAB_APP_URL, COLLAB_APP_HOST
+journalctl -u brainitive-realtime -n 200 --no-pager | grep -E 'refused|failed|unreachable'
+# WebSocket upgrade through nginx (101 = fine; 502 = process down / wrong port; 200/404 HTML = the
+# /collab location is missing and Laravel answered; 401 on dev = basic auth on /collab)
+curl -sS -o /dev/null -w '%{http_code}\n' --http1.1 --max-time 5 -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+  -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' https://www.brainitive.app/collab
+# Can the server reach the app at the public URL? {"message":"Unauthenticated."} (401 from Laravel) = yes;
+# 000 / timeout = firewall / hairpin → use the loopback setting above; nginx HTML 401 on dev = basic auth
+curl -sS --max-time 10 -w ' %{http_code} %{time_total}s\n' -X POST -H 'Accept: application/json' https://www.brainitive.app/api/internal/collab/access
+# The same over loopback (what COLLAB_APP_URL=https://127.0.0.1 + COLLAB_APP_HOST would do)
+curl -sS --max-time 10 -w ' %{http_code}\n' --resolve www.brainitive.app:443:127.0.0.1 -X POST -H 'Accept: application/json' https://www.brainitive.app/api/internal/collab/access
+# Same secret on both sides (compares hashes, prints no secret)
+sudo sed -n 's/^COLLAB_SECRET=//p' /etc/brainitive/realtime.env | sha256sum; sed -n 's/^COLLAB_SECRET=//p' <app>/.env | sha256sum
+grep -E '^(APP_URL|COLLAB_URL|LIVE_URL|LIVE_PUBLISH_URL)=' <app>/.env   # COLLAB_URL=wss://<this host>/collab; LIVE_PUBLISH_URL=http://127.0.0.1:6201 (dev 6202)
+sudo nginx -T 2>/dev/null | grep -n -A8 'location = /collab'        # proxy_pass 127.0.0.1:6201/6202, Upgrade + Connection headers
+curl -sS -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:6201/internal/live/publish   # 401/403 = reachable (LIVE_PUBLISH_URL)
+```
 
 ### Live whiteboards + live issue descriptions: epochs, saves, side effects (v1.44.0, BRAI-153/151)
 - **Any content write outside a live save starts a new epoch.** Whiteboards: `Page::saved` with `content`

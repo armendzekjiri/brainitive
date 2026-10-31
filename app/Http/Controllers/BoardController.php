@@ -245,6 +245,23 @@ class BoardController extends Controller
     }
 
     /**
+     * How long done cards stay on the Kanban board (BRAI-346): 0 = Off, or 7 / 14 / 30 / 60 / 90 days.
+     * Older ones leave the board's Kanban view only (list view, search and links keep them).
+     */
+    public function updateDoneRetention(Request $request, Workspace $workspace, Project $project, Board $board)
+    {
+        $this->authorize('update', $board);
+
+        $validated = $request->validate([
+            'done_retention_days' => ['required', 'integer', Rule::in(Board::DONE_RETENTION_OPTIONS)],
+        ]);
+        $days = (int) $validated['done_retention_days'];
+        $board->update(['settings' => [...($board->settings ?? []), 'done_retention_days' => $days]]);
+
+        return back()->with('success', $days > 0 ? "Done cards now stay on the board for {$days} days." : 'The board now shows all done cards.');
+    }
+
+    /**
      * Delete a board.
      */
     public function destroy(Workspace $workspace, Project $project, Board $board)

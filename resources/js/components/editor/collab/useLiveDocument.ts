@@ -5,6 +5,9 @@
  *
  * Modes: `off` (not offered) → `connecting` → `live` (also while offline, edits kept on this device)
  * or `fallback` (server unreachable and nothing on this device: single-user editing as before).
+ * In `fallback` (BRAI-345) `failure` says why, a background probe retries with backoff (and at once when
+ * the browser is back online / the tab visible again) and sets `recovered`; the host then switches with
+ * `retry()` once nothing written alone can be lost. `retry()` always starts a fresh connection.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { router } from '@inertiajs/react';
@@ -15,7 +18,12 @@ import { $generateHtmlFromNodes } from '@lexical/html';
 import type { LexicalEditor } from 'lexical';
 import type { PageCollabBootstrap, PageCollabProps, PageCollabSaveResponse, PageCollabSession, PageDraftHashState } from '@/types';
 import { BOOTSTRAP_ORIGIN, buildBootstrapUpdate } from './bootstrap';
-import { collabColor, collabDbName, collabSocketUrl, createLexicalBridge, forgetOlderLocalCopies, type CollabAwarenessData, type LiveEditorBinding } from './shared';
+import {
+    collabColor, collabDbName, collabSocketUrl, createLexicalBridge, describeLiveFailure, forgetOlderLocalCopies, probeLiveConnection,
+    refusalFailure, retryWithBackoff, sessionFailure, type CollabAwarenessData, type LiveEditorBinding, type LiveFailure,
+} from './shared';
+
+export type { LiveFailure } from './shared';
 
 export type LiveMode = 'off' | 'connecting' | 'live' | 'fallback';
 export type LiveConnection = 'online' | 'connecting' | 'offline';
@@ -28,8 +36,20 @@ export interface LivePeer {
     edit: boolean;
 }
 
-/** No first sync within this time and nothing on this device → single-user editing. */
-const CONNECT_TIMEOUT_MS = 5_000;
+/**
+ * First connection: no sync within this time, or this many failed attempts (the provider retries with
+ * backoff in between), or the server refused twice in a row — and nothing on this device → single-user
+ * editing, while a background probe keeps trying (BRAI-345: one blip — a realtime restart on deploy, a
+ * slow access check, a laptop waking up — used to end live editing for the whole session).
+ */
+const CONNECT_TIMEOUT_MS = 10_000;
+const MAX_CONNECT_FAILURES = 3;
+const MAX_REFUSALS = 2;
+/** Back-off before asking for a new token after a refused attempt (1 s, 2 s, 4 s, 8 s …; below the
+ * server's 10 s auth deadline). A refused socket used to come back every second, forever. */
+const REFUSAL_BACKOFF_MAX_MS = 8_000;
+/** A cached token is only used while it has this much life left (else a fresh session is fetched). */
+const TOKEN_MARGIN_S = 15;
 const LOCAL_SAVE_MS = 1_000;
 /** Remote changes are saved by the "leader" only, a bit later (its author usually saved already). */
 const REMOTE_SAVE_MS = 3_000;
@@ -101,6 +121,10 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
     /** the generation the `live` mode belongs to (a reset starts a new one) */
     const [liveGeneration, setLiveGeneration] = useState(-1);
     const [notice, setNotice] = useState<string | null>(null);
+    /** fallback: why live editing is unavailable (BRAI-345) */
+    const [failure, setFailure] = useState<LiveFailure | null>(null);
+    /** fallback: a background probe connected again — the host may switch to live editing (retry()) */
+    const [recovered, setRecovered] = useState(false);
 
     /** IndexedDB key: the page uuid, or the target's key */
     const pageUuid = target?.key ?? routeParams[2];
@@ -289,6 +313,8 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
         setBinding(null);
         setPending(false);
         setSaveFailed(null);
+        setFailure(null);
+        setRecovered(false);
         if (!enabled || !collab) {
             setMode('off');
             return;
@@ -301,6 +327,7 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
         let persistence: IndexeddbPersistence | null = null;
         let provider: HocuspocusProvider | null = null;
         let bridge: ReturnType<typeof createLexicalBridge> | null = null;
+        let stopRecovery: (() => void) | null = null;
         const timers = new Set<ReturnType<typeof setTimeout>>();
         const later = (fn: () => void, ms: number) => {
             const handle = setTimeout(() => { timers.delete(handle); fn(); }, ms);
@@ -342,18 +369,31 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
             const root = doc.get('root', Y.XmlText);
             const hadLocalCopy = root.length > 0;
 
-            let firstToken: string | null = first?.token ?? null;
+            // the session's token, for the first attempt only — and only while it is still valid (a first
+            // attempt that waited, e.g. offline, would otherwise be refused with an expired token)
+            let firstToken: { token: string; expiresAt: number } | null = first ? { token: first.token, expiresAt: first.expires_at } : null;
+            /** refused / failed token attempts in a row (back-off), and why the last token couldn't be fetched */
+            let refusals = 0;
+            let tokenFailure: LiveFailure | null = null;
             provider = new HocuspocusProvider({
                 url: collabSocketUrl(first?.url ?? collab.url),
                 name: documentName,
                 document: doc,
                 token: async () => {
                     if (firstToken) {
-                        const token = firstToken;
+                        const { token, expiresAt } = firstToken;
                         firstToken = null;
-                        return token;
+                        if (expiresAt - Date.now() / 1000 > TOKEN_MARGIN_S) return token;
                     }
-                    const session = await fetchSession();
+                    if (refusals > 0) await sleep(Math.min(REFUSAL_BACKOFF_MAX_MS, 1_000 * 2 ** (refusals - 1)));
+                    let session: PageCollabSession;
+                    try {
+                        session = await fetchSession();
+                        tokenFailure = null;
+                    } catch (error) {
+                        tokenFailure = sessionFailure(error);
+                        throw error;
+                    }
                     if (!alive) return session.token;
                     if (session.document !== documentName) {
                         resetDocument();
@@ -396,7 +436,12 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
             live.on('close', ({ event }: { event?: { code?: number; reason?: string } }) => {
                 if (event?.code === 1000 && DOCUMENT_CLOSED.has(event.reason ?? '')) void recheck();
             });
-            live.on('authenticationFailed', () => void recheck());
+            live.on('authenticationFailed', ({ reason }: { reason?: string }) => {
+                refusals += 1;
+                if (alive) console.warn('[live editing] connection refused:', describeLiveFailure(tokenFailure ?? refusalFailure(reason)), reason ?? '');
+                void recheck();
+            });
+            live.on('authenticated', () => { refusals = 0; });
 
             const awareness = live.awareness;
             const updatePeers = () => {
@@ -435,34 +480,80 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
             doc.on('update', updateReady);
             updateReady();
 
-            const outcome = await new Promise<'synced' | 'failed'>((resolve) => {
+            // null = synced; else why not (each failed attempt is classified, the last cause wins)
+            const outcome = await new Promise<LiveFailure | null>((resolve) => {
                 if (live.isSynced) {
-                    resolve('synced');
+                    resolve(null);
                     return;
                 }
                 let failures = 0;
-                const done = (result: 'synced' | 'failed') => {
+                let refused = 0;
+                let opened = false;
+                let last: LiveFailure | null = null;
+                const done = (result: LiveFailure | null) => {
                     clearTimeout(timer);
                     live.off('synced', onSynced);
+                    live.off('open', onOpen);
                     live.off('disconnect', onDisconnect);
+                    live.off('authenticationFailed', onRefused);
                     resolve(result);
                 };
-                const onSynced = () => done('synced');
-                const onDisconnect = () => { if (++failures >= 2) done('failed'); };
-                const timer = setTimeout(() => done('failed'), CONNECT_TIMEOUT_MS);
+                const onSynced = () => done(null);
+                const onOpen = () => { opened = true; };
+                const onRefused = ({ reason }: { reason?: string }) => {
+                    last = tokenFailure ?? refusalFailure(reason);
+                    if (++refused >= MAX_REFUSALS) done(last);
+                };
+                const onDisconnect = ({ event }: { event?: CloseEvent }) => {
+                    if (event?.reason?.startsWith('Unauthorized: ')) {
+                        last = refusalFailure(event.reason);
+                    } else if (!last || last.reason === 'unreachable') {
+                        last = { reason: 'unreachable', detail: opened ? `connection closed (${event?.code ?? '?'})` : `no connection (${event?.code ?? '?'})` };
+                    }
+                    opened = false;
+                    if (++failures >= MAX_CONNECT_FAILURES) done(last);
+                };
+                const timer = setTimeout(() => done(last ?? (opened
+                    ? { reason: 'timeout', detail: `no answer within ${CONNECT_TIMEOUT_MS / 1000} s` }
+                    : { reason: 'unreachable', detail: 'no connection' })), CONNECT_TIMEOUT_MS);
                 live.on('synced', onSynced);
+                live.on('open', onOpen);
                 live.on('disconnect', onDisconnect);
+                live.on('authenticationFailed', onRefused);
             });
             if (!alive) return;
 
-            if (outcome === 'failed' && !hadLocalCopy) {
-                // stop reconnecting: this editing session is single-user ("Try again" starts over)
+            if (outcome && !hadLocalCopy) {
+                // single-user editing for now; a probe in the background finds out when live editing
+                // works again (the host switches then, or on "Try again" — both start over: retry())
                 live.destroy();
                 provider = null;
                 void persistence?.destroy();
                 persistence = null;
                 providerRef.current = null;
+                console.warn('[live editing] unavailable — editing alone:', describeLiveFailure(outcome), outcome);
+                setFailure(outcome);
                 setMode('fallback');
+                const socketUrl = collabSocketUrl(first?.url ?? collab.url);
+                stopRecovery = retryWithBackoff(async () => {
+                    let session: PageCollabSession;
+                    try {
+                        session = await fetchSession();
+                    } catch (error) {
+                        if (alive) setFailure(sessionFailure(error));
+                        return false;
+                    }
+                    if (!alive) return true;
+                    const result = await probeLiveConnection(collabSocketUrl(session.url ?? socketUrl), session.document, session.token, CONNECT_TIMEOUT_MS);
+                    if (!alive) return true;
+                    if (result) {
+                        setFailure(result);
+                        return false;
+                    }
+                    console.info('[live editing] the live editing server answers again');
+                    setRecovered(true);
+                    return true;
+                });
                 return;
             }
 
@@ -519,6 +610,7 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
         return () => {
             if (!resettingRef.current) saveOnExit(editorRef.current); // closing the editor / leaving the page
             alive = false;
+            stopRecovery?.();
             timers.forEach(clearTimeout);
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current.handle);
             saveTimerRef.current = null;
@@ -592,10 +684,14 @@ export function useLiveDocument({ enabled, collab, routeParams, user, fallback, 
         generation,
         notice,
         dismissNotice: () => setNotice(null),
+        /** fallback: why live editing is unavailable (null otherwise) */
+        failure: effectiveMode === 'fallback' ? failure : null,
+        /** fallback: live editing works again — switch with retry() once nothing written alone is lost */
+        recovered: effectiveMode === 'fallback' && recovered,
         flush,
         setMeta,
         checkEpoch,
         retry,
         hasUnsavedChanges,
-    }), [effectiveMode, connection, pending, saveFailed, ready, canEdit, peers, meta, binding, generation, notice, flush, setMeta, checkEpoch, retry, hasUnsavedChanges]);
+    }), [effectiveMode, connection, pending, saveFailed, ready, canEdit, peers, meta, binding, generation, notice, failure, recovered, flush, setMeta, checkEpoch, retry, hasUnsavedChanges]);
 }

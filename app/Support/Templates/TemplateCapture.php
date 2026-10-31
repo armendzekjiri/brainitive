@@ -185,6 +185,7 @@ class TemplateCapture
             'name' => $board->name,
             'description' => $board->description,
             'type' => $board->type,
+            'done_retention_days' => $board->doneRetentionSetting(),
             'columns' => $board->columns->map(fn ($column) => [
                 'ref' => $this->ref('column', $column->id),
                 'name' => $column->name,

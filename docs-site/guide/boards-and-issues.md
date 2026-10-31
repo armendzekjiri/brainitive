@@ -28,6 +28,8 @@ Columns are the steps of your workflow, for example *To do → In progress → R
 
 In the board settings, edit a column and tick **Mark as "Done" column**. Moving an issue into a done column marks it as completed, so it no longer counts as overdue. Moving it out again reopens it.
 
+**Keep done cards on the board for…** (board settings → **Done column**, Kanban boards only): choose **Off**, 7, 14, 30, 60 or 90 days. Done cards finished longer ago leave the board but stay in the list view, search and links. The done column shows how many are hidden, and **Show** brings them back for the session. New boards start at 14 days; existing and imported boards start at Off. Scrum boards only show the running sprint, so the setting doesn't apply there.
+
 ## Issues
 
 ### Create an issue

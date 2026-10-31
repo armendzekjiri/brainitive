@@ -140,6 +140,8 @@ class TemplateInstantiator
                 'type' => $template['type'],
                 'position' => $position,
                 'created_by' => $this->user->id,
+                // without a value Board::creating gives the default for new boards
+                'settings' => isset($template['done_retention_days']) ? ['done_retention_days' => $template['done_retention_days']] : null,
             ]);
             $this->ids['board'][$template['ref']] = $board->id;
 

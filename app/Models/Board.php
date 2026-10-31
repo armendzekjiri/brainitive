@@ -8,11 +8,21 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 class Board extends Model
 {
     use HasFactory, SoftDeletes;
+
+    /**
+     * Done column retention (BRAI-346, like Jira's "hide completed issues older than…"): how many
+     * days a finished card stays on a Kanban board. 0 = Off (show all).
+     */
+    public const DONE_RETENTION_OPTIONS = [0, 7, 14, 30, 60, 90];
+
+    /** New boards start like Jira (2 weeks); boards without the setting (all existing ones) are Off. */
+    public const DEFAULT_DONE_RETENTION_DAYS = 14;
 
     protected $fillable = [
         'project_id',
@@ -46,6 +56,11 @@ class Board extends Model
             }
             if (empty($board->uuid)) {
                 $board->uuid = (string) Str::uuid();
+            }
+            // A caller that brings the setting (template, archive restore) keeps its value
+            $settings = $board->settings ?? [];
+            if (! array_key_exists('done_retention_days', $settings)) {
+                $board->settings = [...$settings, 'done_retention_days' => self::DEFAULT_DONE_RETENTION_DAYS];
             }
         });
 
@@ -154,5 +169,27 @@ class Board extends Model
     public function isScrum(): bool
     {
         return $this->type === 'scrum';
+    }
+
+    /** The stored done retention (0 = Off); boards from before the setting existed read as Off. */
+    public function doneRetentionSetting(): int
+    {
+        $days = (int) ($this->settings['done_retention_days'] ?? 0);
+
+        return in_array($days, self::DONE_RETENTION_OPTIONS, true) ? $days : 0;
+    }
+
+    /** Days a done card stays on the board, 0 = all of them. Kanban only: Scrum shows the running sprint. */
+    public function doneRetentionDays(): int
+    {
+        return $this->isScrum() ? 0 : $this->doneRetentionSetting();
+    }
+
+    /** Done cards completed before this leave the board (null = none do). */
+    public function doneCutoff(): ?Carbon
+    {
+        $days = $this->doneRetentionDays();
+
+        return $days > 0 ? now()->subDays($days) : null;
     }
 }

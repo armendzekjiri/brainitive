@@ -18,16 +18,23 @@ import type {
  * provider: pages that render AppLayout themselves (Projects/Show) read and write the same store.
  */
 
-/** Project groups in sidebar order, with the labels the sidebar shows. */
-export const SIDEBAR_GROUPS: { key: SidebarGroupKey; label: string }[] = [
-    { key: 'boards', label: 'Boards' },
-    { key: 'lists', label: 'Lists' },
-    { key: 'plans', label: 'Plans' },
-    { key: 'helpdesks', label: 'Helpdesk' },
-    { key: 'lead_forms', label: 'Lead forms' },
-    { key: 'pages', label: 'Pages' },
-    { key: 'whiteboards', label: 'Whiteboards' },
-    { key: 'folders', label: 'Folders' },
+/**
+ * Project groups in sidebar order, with the labels the sidebar shows. "tools" are the project
+ * views Health / Workload / Releases, one top-level row each (BRAI-286); "content" groups list
+ * the project's boards, lists, pages, ….
+ */
+export const SIDEBAR_GROUPS: { key: SidebarGroupKey; label: string; section: 'tools' | 'content' }[] = [
+    { key: 'health', label: 'Health', section: 'tools' },
+    { key: 'workload', label: 'Workload', section: 'tools' },
+    { key: 'releases', label: 'Releases', section: 'tools' },
+    { key: 'boards', label: 'Boards', section: 'content' },
+    { key: 'lists', label: 'Lists', section: 'content' },
+    { key: 'plans', label: 'Plans', section: 'content' },
+    { key: 'helpdesks', label: 'Helpdesk', section: 'content' },
+    { key: 'lead_forms', label: 'Lead forms', section: 'content' },
+    { key: 'pages', label: 'Pages', section: 'content' },
+    { key: 'whiteboards', label: 'Whiteboards', section: 'content' },
+    { key: 'folders', label: 'Folders', section: 'content' },
 ];
 
 const DEFAULT_GROUPS = Object.fromEntries(SIDEBAR_GROUPS.map((g) => [g.key, true])) as Record<SidebarGroupKey, boolean>;
@@ -135,6 +142,36 @@ export function togglePin(projectId: number, pin: SidebarPin) {
         ? current.filter((p) => !(p.type === pin.type && p.id === pin.id))
         : [...current, pin];
     save({ project: { id: projectId, pins } }, withProject(projectId, (p) => ({ ...p, pins })));
+}
+
+const pinKey = (pin: SidebarPin) => `${pin.type}:${pin.id}`;
+
+/**
+ * Save a new order of the project's pins (BRAI-284). `ordered` is the order the user sees; stored
+ * pins it leaves out (deleted, or no longer visible to the user) keep their place after it.
+ */
+export function reorderPins(projectId: number, ordered: SidebarPin[]) {
+    const current = projectPreferences(state, projectId).pins;
+    const stored = new Set(current.map(pinKey));
+    const seen = new Set<string>();
+    const front = ordered.filter((pin) => {
+        const key = pinKey(pin);
+        if (!stored.has(key) || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+    const pins = [...front, ...current.filter((pin) => !seen.has(pinKey(pin)))];
+    if (pins.every((pin, index) => pinKey(pin) === pinKey(current[index]))) return;
+    save({ project: { id: projectId, pins } }, withProject(projectId, (p) => ({ ...p, pins })));
+}
+
+/** Move the pin at `from` to `to` within `ordered` (the visible pins) and save the new order. */
+export function movePin(projectId: number, ordered: SidebarPin[], from: number, to: number) {
+    if (from === to || from < 0 || to < 0 || from >= ordered.length || to >= ordered.length) return;
+    const next = [...ordered];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    reorderPins(projectId, next);
 }
 
 export function resetSidebar() {

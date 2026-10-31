@@ -39,6 +39,7 @@ import { useLiveChannel } from '@/lib/live';
 import { TypingIndicator, useTyping } from '@/components/live/useTyping';
 import { LiveAvatarStack } from '@/components/live/LiveAvatars';
 import { useLiveItemDescription } from '@/components/item/useLiveItemDescription';
+import { describeLiveFailure } from '@/components/editor/collab/shared';
 import type { PageProps } from '@/types';
 
 // ── Minimal item shape used by the "Link issue" picker ───────────────────────
@@ -335,13 +336,13 @@ export function useItemDetail(args: UseItemDetailArgs) {
 
     /** When this tab last wrote (field save, comment): older detail answers don't undo it (BRAI-151). */
     const lastLocalWriteRef = useRef(0);
-    const saveProp = useCallback((fields: Record<string, any>) => {
+    const saveProp = useCallback((fields: Record<string, any>, options: { onSuccess?: () => void } = {}) => {
         if (!item) return;
         lastLocalWriteRef.current = Date.now();
         router.patch(
             route('boards.items.update', [workspace.slug, project.slug, board.slug, item.id]),
             fields,
-            { preserveScroll: true },
+            { preserveScroll: true, onSuccess: options.onSuccess },
         );
     }, [workspace.slug, project.slug, board.slug, item?.id]);
 
@@ -584,6 +585,26 @@ export function useItemDetail(args: UseItemDetailArgs) {
         // the server's version, including changes that arrived while the last save was on its way
         refreshDetails(true);
     };
+    /**
+     * Editing alone → live editing ("Try again" / live editing is back, BRAI-345): text written alone
+     * is stored first (a single-user save starts a new live document from it), so nothing is lost.
+     */
+    const switchDescriptionToLive = () => {
+        const reconnect = liveDescription.reconnect;
+        if (editorContent === savedDescription) {
+            reconnect();
+            return;
+        }
+        const text = editorContent;
+        saveProp({ description: text }, { onSuccess: () => { setSavedDescription(text); reconnect(); } });
+    };
+    // live editing is back and nothing was written alone: switch by itself
+    const descriptionUnchanged = editorContent === savedDescription;
+    const autoSwitchDescription = isEditingDescription && liveDescription.recovered && descriptionUnchanged;
+    const reconnectDescription = liveDescription.reconnect;
+    useEffect(() => {
+        if (autoSwitchDescription) reconnectDescription();
+    }, [autoSwitchDescription, reconnectDescription]);
     const cancelDescription = () => {
         setEditorContent(savedDescription);
         setEditorKey(k => k + 1);
@@ -752,7 +773,7 @@ export function useItemDetail(args: UseItemDetailArgs) {
         // description
         editorContent, savedDescription, editorKey, isEditingDescription,
         handleEditorChange, startEditDescription, saveDescription, cancelDescription, handleCheckboxToggle,
-        liveDescription, finishLiveDescription, finishingDescription,
+        liveDescription, finishLiveDescription, finishingDescription, switchDescriptionToLive,
         // live (BRAI-151): who's typing a comment
         liveChannel, typing,
         // properties
@@ -1006,7 +1027,7 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
         comment, setComment, commentEditorKey, setCommentEditorKey, commentActive, setCommentActive,
         localComments, replyingTo, replyText, setReplyText, replyEditorKey,
         handlePostComment, handleReply, cancelReply, history, detailsLoading,
-        liveDescription, finishLiveDescription, finishingDescription, typing,
+        liveDescription, finishLiveDescription, finishingDescription, switchDescriptionToLive, typing,
     } = d;
     const hasText = (html: string) => html.replace(/<[^>]*>/g, '').trim() !== '';
     // replies count as typing a comment too (never any content in the signal)
@@ -1178,9 +1199,16 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                 ) : isEditingDescription ? (
                     <div>
                         {(liveDescription.mode === 'fallback' || liveDescription.unreachable) && (
-                            <p className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200" role="status">
-                                <span>Live editing unavailable — editing alone.</span>
-                                <button type="button" className="underline" onClick={liveDescription.unreachable ? liveDescription.retryProbe : liveDescription.retry}>Try again</button>
+                            <p className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200" role="status" data-testid="live-unavailable">
+                                <span className="flex-1 min-w-[12rem]">
+                                    <span className="font-medium">Live editing unavailable — editing alone.</span>{' '}
+                                    {liveDescription.recovered
+                                        ? 'Live editing is available again — your text is saved first when you switch.'
+                                        : <>{describeLiveFailure(liveDescription.failure)} Retrying automatically…</>}
+                                </span>
+                                <button type="button" className="underline" onClick={switchDescriptionToLive}>
+                                    {liveDescription.recovered ? 'Switch to live editing' : 'Try again'}
+                                </button>
                             </p>
                         )}
                         <RichLexicalEditor

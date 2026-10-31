@@ -28,6 +28,7 @@ export function isLiveRequest(request) {
 export function attachLive(server, {
     secret,
     appUrl,
+    appHost = '',
     fetchImpl,
     accessIntervalMs = 60_000,
     publishFrom = 'loopback',
@@ -38,7 +39,7 @@ export function attachLive(server, {
     if (!appUrl) throw new Error('COLLAB_APP_URL (or APP_URL) is required');
 
     const keys = deriveLiveKeys(secret);
-    const access = createAccessClient({ appUrl, internalKey: deriveKeys(secret).internal, fetchImpl });
+    const access = createAccessClient({ appUrl, appHost, internalKey: deriveKeys(secret).internal, fetchImpl });
     const hub = createLiveHub({ tokenKey: keys.token, access, logger, limits });
     const handlePublish = createPublishHandler({ key: keys.publish, hub, allowFrom: publishFrom, logger });
     const sockets = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 });
