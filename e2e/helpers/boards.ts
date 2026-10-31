@@ -3,6 +3,26 @@ import { SEED } from '../env';
 
 /** Helpers for the board / issue journeys (tests/boards.spec.ts). */
 
+/**
+ * Save the issue description that is open for editing. Locally and in CI journeys edit alone:
+ * Save → PATCH /items/{id}. On dev.brainitive.app a realtime server runs, so the description is
+ * edited live (BRAI-345): changes are stored while typing and Done closes once the last one is.
+ */
+export async function saveDescription(page: Page, dialog: Locator): Promise<void> {
+    const live = dialog.getByTestId('live-description');
+    const save = dialog.getByRole('button', { name: 'Save', exact: true });
+    await expect(live.or(save)).toBeVisible();
+    if (await live.isVisible()) {
+        await live.getByRole('button', { name: 'Done', exact: true }).click();
+        await expect(live).toBeHidden();
+        return;
+    }
+    // an Inertia write answers 303, so no r.ok() here
+    const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && /\/items\/\d+$/.test(new URL(r.url()).pathname));
+    await save.click();
+    await saved;
+}
+
 /** A kanban column (the <section> whose heading is the column name). */
 export const column = (page: Page, name: string): Locator =>
     page.locator('section').filter({ has: page.getByRole('heading', { level: 3, name, exact: true }) });
