@@ -101,6 +101,21 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.47.3',
+        title: 'Sidebar pins, project tools, live editing and done columns',
+        tag: 'Fix',
+        date: '2026-10-30',
+        items: [
+            'Pinning something no longer hides the rest of the project sidebar. Only "Show only pinned" does that, and turning it off brings every group back with your pins on top.',
+            'Reorder your pins: drag them in the sidebar, or use Move up / Move down in Customize sidebar. The project page uses the same order.',
+            'Health, Workload and Releases have their own place in the project sidebar instead of hiding under Boards, and each can be shown or hidden under Customize sidebar → Project tools.',
+            '"Live editing unavailable" now says why, keeps retrying in the background and switches back to live editing by itself. Anything you wrote alone in the meantime is saved first.',
+            'Done columns no longer grow forever: choose in the board settings how long finished cards stay on a Kanban board (7–90 days, new boards 14). Older cards stay in the list view and search, and "Show" brings them back.',
+            'Issues keep their completion date when you reorder them or move them between done columns.',
+            'Self-hosting: the new COLLAB_APP_HOST setting lets the realtime server reach the app over loopback, for servers whose firewall blocks their own public address.',
+        ]
+    },
+    {
         version: 'v1.47.2',
         title: 'CLI Cloud sign-in and shorter command',
         tag: 'Fix',
