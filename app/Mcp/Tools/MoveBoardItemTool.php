@@ -4,6 +4,7 @@ namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\InteractsWithBrainitive;
 use App\Support\Mcp\ResourceLocator;
+use App\Support\Work\WorkCompletion;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -12,7 +13,7 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('Move a board item to a different column (e.g. to mark it In Progress or Done). Provide the item id and the target column_id (both from get_board). Moving into a "done" column marks it complete.')]
+#[Description('Move a board item to a different column (e.g. to mark it In Progress or Done). Provide the item id and the target column_id (both from get_board). Moving into a "done" column marks it complete (with_subtasks: its open subtasks too); watchers are notified of the new status, as on the board.')]
 class MoveBoardItemTool extends Tool
 {
     use InteractsWithBrainitive;
@@ -26,6 +27,7 @@ class MoveBoardItemTool extends Tool
             'item_id' => 'required|integer',
             'column_id' => 'required|integer',
             'position' => 'nullable|integer|min:0',
+            'with_subtasks' => 'nullable|boolean',
         ]);
 
         $user = $request->user();
@@ -57,7 +59,8 @@ class MoveBoardItemTool extends Tool
             return Response::error($e->getMessage());
         }
 
-        $item->moveToColumn($column, $validated['position'] ?? 0);
+        // the board's drag & drop: move (+ the open subtasks into a done column) and notify the watchers
+        WorkCompletion::moveIssue($item, $column, (int) ($validated['position'] ?? 0), $user, (bool) ($validated['with_subtasks'] ?? false));
 
         return Response::structured([
             'moved' => true,
@@ -92,6 +95,7 @@ class MoveBoardItemTool extends Tool
             'item_id' => $schema->integer()->description('The item id to move (from get_board).')->required(),
             'column_id' => $schema->integer()->description('The destination column id (from get_board).')->required(),
             'position' => $schema->integer()->description('Optional 0-based position within the column. Defaults to the top.')->default(0),
+            'with_subtasks' => $schema->boolean()->description('Moving into a done column: complete the open subtasks (all levels) too, like the board\'s "complete subtasks" choice. Default false.')->default(false),
         ];
     }
 }
