@@ -68,6 +68,34 @@ final class SmartLinks
     }
 
     /**
+     * The ref behind a link to this instance's issue, doc / whiteboard, ticket or plan page (what a smart
+     * link's href is, and what a Markdown copy of it keeps), or null for any other URL. App API (BRAI-413).
+     */
+    public static function refFromUrl(string $url): ?string
+    {
+        $parts = parse_url(trim($url));
+        if ($parts === false || ! isset($parts['path'])) {
+            return null;
+        }
+        $host = $parts['host'] ?? null;
+        if ($host !== null && strcasecmp($host, (string) parse_url((string) config('app.url'), PHP_URL_HOST)) !== 0) {
+            return null;
+        }
+        $path = rtrim($parts['path'], '/');
+        $base = '#^/workspaces/[^/]+/projects/([a-z0-9][a-z0-9-]{0,99})';
+        $fragment = $parts['fragment'] ?? '';
+
+        return match (true) {
+            (bool) preg_match($base.'/boards/[^/]+/items/([1-9]\d{0,17})$#', $path, $m) => 'item:'.$m[2],
+            (bool) preg_match($base.'/boards/[^/]+$#', $path) && (bool) preg_match('/^item-([1-9]\d{0,17})$/', $fragment, $f) => 'item:'.$f[1],
+            (bool) preg_match($base.'/pages/('.self::UUID.')$#i', $path, $m) => 'page:'.strtolower($m[2]),
+            (bool) preg_match($base.'/helpdesks/[^/]+/tickets/([1-9]\d{0,17})$#', $path, $m) => 'ticket:'.$m[2],
+            (bool) preg_match($base.'/plans/([a-z0-9][a-z0-9-]{0,199})$#', $path, $m) => 'plan:'.$m[1].'/'.$m[2],
+            default => null,
+        };
+    }
+
+    /**
      * The smart link refs in saved HTML (valid ones, once each, in order).
      *
      * @return list<string>

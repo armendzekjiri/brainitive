@@ -8949,6 +8949,621 @@
                 }
             }
         },
+        "/pages/{uuid}/versions": {
+            "get": {
+                "operationId": "app.v1.pages.versions.index",
+                "description": "Every publish (and every 30-minute checkpoint of a whiteboard) is a version. Restoring one: web only.",
+                "summary": "A page's published versions, newest first",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `PageVersionResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageVersionCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/pages/{uuid}/versions/{version}": {
+            "get": {
+                "operationId": "app.v1.pages.versions.show",
+                "summary": "One version with its text (docs: Markdown + sanitized HTML)",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "version",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`PageVersionDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageVersionDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/pages/{uuid}/reviews": {
+            "get": {
+                "operationId": "app.v1.pages.reviews.index",
+                "description": "People who can edit the doc see all of them; a reviewer the ones they were asked for (even on a draft they\ncan't open otherwise). Nobody else \u2192 404.",
+                "summary": "The reviews of a doc the user may see, newest first (not paginated)",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `PageReviewResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/PageReviewResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/pages/{uuid}/reviews/{review}": {
+            "get": {
+                "operationId": "app.v1.pages.reviews.show",
+                "summary": "One review: the reviewed snapshot (Markdown + sanitized HTML), the reviewers' decisions, the threads and\nwhat the user may do",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "review",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`PageReviewDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageReviewDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/pages/{uuid}/reviews/{review}/decision": {
+            "post": {
+                "operationId": "app.v1.pages.reviews.decide",
+                "description": "An active reviewer of an open review (403 otherwise). An approval of the current draft lets a\n\"review required\" doc publish; the author is notified.",
+                "summary": "Approve or request changes",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "review",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReviewDecisionRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`PageReviewDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageReviewDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/pages/{uuid}/reviews/{review}/comments": {
+            "post": {
+                "operationId": "app.v1.pages.reviews.comments.store",
+                "description": "New threads need an open review the user may see (403 otherwise); replies any review they may see. A quote\nthat isn't in the snapshot \u2192 422 `quote`. Answers 201 with the thread. With `request_id` a retry answers 200.",
+                "summary": "Comment on a review: a new thread (optionally on a passage: `quote` + `prefix` / `suffix` of the snapshot's\ntext), or a reply (`parent_uuid`)",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "review",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreReviewCommentRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`PageThreadResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageThreadResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`PageThreadResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageThreadResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/pages/{uuid}/review-threads/{thread}": {
+            "patch": {
+                "operationId": "app.v1.pages.reviews.threads.update",
+                "description": "Anyone who may see the thread's review, as on the web.",
+                "summary": "Resolve or reopen a thread",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "thread",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ResolveThreadRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`PageThreadResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageThreadResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/pages/{uuid}/links": {
+            "get": {
+                "operationId": "app.v1.pages.links",
+                "description": "Backlinks are other content of the project that links here: docs' smart links (published text), issues,\nplan rows, whiteboard cards, and links people added. Only content the user can open is listed. Adding /\nremoving links: web (or the MCP) for now.",
+                "summary": "A page's links: what it links to (`related`) and its backlinks (`referenced_by`)",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`PageLinksResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageLinksResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/links/resolve": {
+            "get": {
+                "operationId": "app.v1.links.resolve",
+                "description": "One entry per requested ref / URL, in the order asked: `ok` (live data), `restricted` (it exists but the\nuser can't open it \u2014 no title) or `not_found` (also any URL that isn't an issue, doc, whiteboard, ticket or\nplan page of this instance, and content of other workspaces). At most 100 refs + 100 URLs per call.",
+                "summary": "Resolve smart links: refs from the HTML (`data-smart-link`) and / or links to this Brainitive from Markdown",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "query",
+                        "required": true,
+                        "description": "the workspace (slug) of the doc / issue the links are in",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 255
+                        }
+                    },
+                    {
+                        "name": "refs[]",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "maxLength": 300
+                            }
+                        }
+                    },
+                    {
+                        "name": "urls[]",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "maxLength": 2000
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `SmartLinkResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SmartLinkResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
         "/pages/{uuid}/collab-token": {
             "post": {
                 "operationId": "app.v1.pages.collab.token",
@@ -11143,6 +11758,81 @@
                     "expires_at"
                 ],
                 "title": "ConnectedAppResource"
+            },
+            "ContentLinkResource": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "item",
+                            "page",
+                            "ticket",
+                            "plan"
+                        ]
+                    },
+                    "kind": {
+                        "type": "string",
+                        "description": "Issue, Doc, Whiteboard, Ticket, Plan"
+                    },
+                    "id": {
+                        "type": "integer"
+                    },
+                    "key": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "issue / ticket key"
+                    },
+                    "uuid": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "docs and whiteboards"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "draft / archived for pages"
+                    },
+                    "origin": {
+                        "type": "string",
+                        "enum": [
+                            "manual",
+                            "derived",
+                            "manual+derived"
+                        ]
+                    },
+                    "derived_from": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "type",
+                    "kind",
+                    "id",
+                    "key",
+                    "uuid",
+                    "title",
+                    "url",
+                    "status",
+                    "origin",
+                    "derived_from"
+                ],
+                "title": "ContentLinkResource"
             },
             "ConvertCaptureRequest": {
                 "type": "object",
@@ -13693,6 +14383,28 @@
                 ],
                 "title": "PageDetailResource"
             },
+            "PageLinksResource": {
+                "type": "object",
+                "properties": {
+                    "related": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ContentLinkResource"
+                        }
+                    },
+                    "referenced_by": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ContentLinkResource"
+                        }
+                    }
+                },
+                "required": [
+                    "related",
+                    "referenced_by"
+                ],
+                "title": "PageLinksResource"
+            },
             "PageResource": {
                 "type": "object",
                 "properties": {
@@ -13781,6 +14493,534 @@
                     "updated_at"
                 ],
                 "title": "PageResource"
+            },
+            "PageReviewDetailResource": {
+                "type": "object",
+                "properties": {
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "number": {
+                        "type": "integer",
+                        "description": "#1, #2 \u2026 of this page"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "pending",
+                            "approved",
+                            "changes_requested",
+                            "published",
+                            "cancelled"
+                        ]
+                    },
+                    "stale": {
+                        "type": "boolean"
+                    },
+                    "snapshot_name": {
+                        "type": "string",
+                        "description": "the title of the reviewed snapshot"
+                    },
+                    "message": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "requested_by": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "closed_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "reviewers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PageReviewerResource"
+                        }
+                    },
+                    "snapshot_markdown": {
+                        "type": "string"
+                    },
+                    "snapshot_html": {
+                        "type": "string"
+                    },
+                    "my_decision": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "decision": {
+                                "type": "string",
+                                "enum": [
+                                    "pending",
+                                    "approved",
+                                    "changes_requested"
+                                ]
+                            },
+                            "comment": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "decision",
+                            "comment"
+                        ]
+                    },
+                    "threads": {
+                        "type": "array",
+                        "description": "the threads of every review of the page the user may see, oldest first",
+                        "items": {
+                            "$ref": "#/components/schemas/PageThreadResource"
+                        }
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "decide": {
+                                "type": "boolean"
+                            },
+                            "comment": {
+                                "type": "boolean",
+                                "description": "start a thread (replies: anyone who sees the review)"
+                            },
+                            "open_page": {
+                                "type": "boolean",
+                                "description": "the live doc (an unpublished draft is not shown to reviewers)"
+                            }
+                        },
+                        "required": [
+                            "decide",
+                            "comment",
+                            "open_page"
+                        ]
+                    }
+                },
+                "required": [
+                    "uuid",
+                    "number",
+                    "status",
+                    "stale",
+                    "snapshot_name",
+                    "message",
+                    "requested_by",
+                    "created_at",
+                    "closed_at",
+                    "url",
+                    "reviewers",
+                    "snapshot_markdown",
+                    "snapshot_html",
+                    "my_decision",
+                    "threads",
+                    "can"
+                ],
+                "title": "PageReviewDetailResource"
+            },
+            "PageReviewResource": {
+                "type": "object",
+                "properties": {
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "number": {
+                        "type": "integer",
+                        "description": "#1, #2 \u2026 of this page"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "pending",
+                            "approved",
+                            "changes_requested",
+                            "published",
+                            "cancelled"
+                        ]
+                    },
+                    "stale": {
+                        "type": "boolean"
+                    },
+                    "snapshot_name": {
+                        "type": "string",
+                        "description": "the title of the reviewed snapshot"
+                    },
+                    "message": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "requested_by": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "closed_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "reviewers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PageReviewerResource"
+                        }
+                    }
+                },
+                "required": [
+                    "uuid",
+                    "number",
+                    "status",
+                    "stale",
+                    "snapshot_name",
+                    "message",
+                    "requested_by",
+                    "created_at",
+                    "closed_at",
+                    "url",
+                    "reviewers"
+                ],
+                "title": "PageReviewResource"
+            },
+            "PageReviewerResource": {
+                "type": "object",
+                "properties": {
+                    "user_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "null when the account was deleted"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "decision": {
+                        "type": "string",
+                        "enum": [
+                            "pending",
+                            "approved",
+                            "changes_requested"
+                        ]
+                    },
+                    "comment": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "decided_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "active": {
+                        "type": "boolean",
+                        "description": "false: can't open the project any more (or deleted) \u2014 not counted"
+                    }
+                },
+                "required": [
+                    "user_id",
+                    "name",
+                    "decision",
+                    "comment",
+                    "decided_at",
+                    "active"
+                ],
+                "title": "PageReviewerResource"
+            },
+            "PageThreadCommentResource": {
+                "type": "object",
+                "properties": {
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "author": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name"
+                        ]
+                    },
+                    "body": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "uuid",
+                    "author",
+                    "body",
+                    "created_at"
+                ],
+                "title": "PageThreadCommentResource"
+            },
+            "PageThreadResource": {
+                "type": "object",
+                "properties": {
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "review_uuid": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "review_number": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "quote": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "prefix": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "suffix": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "outdated": {
+                        "type": "boolean"
+                    },
+                    "resolved": {
+                        "type": "boolean"
+                    },
+                    "resolved_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "resolved_by_name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "comments": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PageThreadCommentResource"
+                        }
+                    }
+                },
+                "required": [
+                    "uuid",
+                    "review_uuid",
+                    "review_number",
+                    "quote",
+                    "prefix",
+                    "suffix",
+                    "outdated",
+                    "resolved",
+                    "resolved_at",
+                    "resolved_by_name",
+                    "comments"
+                ],
+                "title": "PageThreadResource"
+            },
+            "PageVersionCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/PageVersionResource"
+                },
+                "title": "PageVersionCollection"
+            },
+            "PageVersionDetailResource": {
+                "type": "object",
+                "properties": {
+                    "version": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the emoji; null for an uploaded image icon"
+                    },
+                    "message": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the note given when it was published"
+                    },
+                    "author": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/PersonResource"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "markdown": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "html": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "version",
+                    "name",
+                    "icon",
+                    "message",
+                    "author",
+                    "created_at",
+                    "markdown",
+                    "html"
+                ],
+                "title": "PageVersionDetailResource"
+            },
+            "PageVersionResource": {
+                "type": "object",
+                "properties": {
+                    "version": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the emoji; null for an uploaded image icon"
+                    },
+                    "message": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the note given when it was published"
+                    },
+                    "author": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/PersonResource"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "version",
+                    "name",
+                    "icon",
+                    "message",
+                    "author",
+                    "created_at"
+                ],
+                "title": "PageVersionResource"
             },
             "PersonResource": {
                 "type": "object",
@@ -14590,6 +15830,44 @@
                 ],
                 "title": "ReorderTasksRequest"
             },
+            "ResolveThreadRequest": {
+                "type": "object",
+                "description": "`PATCH /pages/{uuid}/review-threads/{thread}`: resolve / reopen a thread (anyone who may see its review, as on the web).",
+                "properties": {
+                    "resolved": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "resolved"
+                ],
+                "title": "ResolveThreadRequest"
+            },
+            "ReviewDecisionRequest": {
+                "type": "object",
+                "description": "`POST /pages/{uuid}/reviews/{review}/decision`: an active reviewer of an open review decides (403 otherwise).",
+                "properties": {
+                    "decision": {
+                        "type": "string",
+                        "enum": [
+                            "approved",
+                            "changes_requested"
+                        ]
+                    },
+                    "comment": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "a note for the author (plain text)",
+                        "maxLength": 5000
+                    }
+                },
+                "required": [
+                    "decision"
+                ],
+                "title": "ReviewDecisionRequest"
+            },
             "SearchPlaceResource": {
                 "type": "object",
                 "properties": {
@@ -14754,6 +16032,163 @@
                     "updated_at"
                 ],
                 "title": "SearchResultResource"
+            },
+            "SmartLinkResource": {
+                "type": "object",
+                "properties": {
+                    "requested": {
+                        "type": "string"
+                    },
+                    "state": {
+                        "type": "string",
+                        "enum": [
+                            "ok",
+                            "restricted",
+                            "not_found"
+                        ]
+                    },
+                    "ref": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the canonical ref (`plan:<id>` for a plan asked by slug); null unless ok"
+                    },
+                    "type": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "item",
+                            "page",
+                            "ticket",
+                            "plan",
+                            null
+                        ]
+                    },
+                    "label": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "key": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "title": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "status": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "category": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "category"
+                        ]
+                    },
+                    "due_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "person": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "role": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "role",
+                            "name"
+                        ]
+                    },
+                    "priority": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "color": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "color"
+                        ]
+                    },
+                    "project": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "slug": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "slug"
+                        ]
+                    }
+                },
+                "required": [
+                    "requested",
+                    "state",
+                    "ref",
+                    "type",
+                    "label",
+                    "key",
+                    "title",
+                    "url",
+                    "status",
+                    "due_date",
+                    "person",
+                    "priority",
+                    "project"
+                ],
+                "title": "SmartLinkResource"
             },
             "SnippetCollectionCollection": {
                 "type": "array",
@@ -15838,6 +17273,58 @@
                     "key"
                 ],
                 "title": "StoreProjectRequest"
+            },
+            "StoreReviewCommentRequest": {
+                "type": "object",
+                "description": "`POST /pages/{uuid}/reviews/{review}/comments`: a new thread on an open review (PageReviewPolicy::comment), or a\nreply to a thread of a review the user may see (`parent_uuid`).",
+                "properties": {
+                    "body": {
+                        "type": "string",
+                        "description": "plain text",
+                        "maxLength": 5000
+                    },
+                    "parent_uuid": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "reply to this thread (its root comment's uuid)"
+                    },
+                    "quote": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "a new thread on a passage of the snapshot: the selected text and a few characters around it",
+                        "maxLength": 1000
+                    },
+                    "prefix": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 64
+                    },
+                    "suffix": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 64
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "body"
+                ],
+                "title": "StoreReviewCommentRequest"
             },
             "StoreSnippetCollectionRequest": {
                 "type": "object",
