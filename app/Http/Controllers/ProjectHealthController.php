@@ -10,12 +10,12 @@ use App\Support\ProjectHealth\HealthAiException;
 use App\Support\ProjectHealth\HealthMetrics;
 use App\Support\ProjectHealth\HealthNarrator;
 use App\Support\ProjectHealth\HealthSnapshot;
+use App\Support\ProjectHealth\HealthWindow;
 use App\Support\ProjectHealth\ReportSources;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -185,32 +185,6 @@ class ProjectHealthController extends Controller
      */
     private function window(Request $request, User $user, bool $strict = true): array
     {
-        $rules = [
-            'tz' => 'nullable|string|timezone:all_with_bc',
-            'from' => 'nullable|date_format:Y-m-d|after_or_equal:2000-01-01',
-            'to' => 'nullable|date_format:Y-m-d|before_or_equal:2100-12-31',
-        ];
-        $input = $request->only(['tz', 'from', 'to']);
-        $validator = Validator::make($input, $rules);
-        if ($validator->fails()) {
-            if ($strict) {
-                throw new ValidationException($validator);
-            }
-            $input = array_diff_key($input, $validator->errors()->messages());
-        }
-
-        $timezone = $input['tz'] ?? $user->localTimezone();
-        $today = CarbonImmutable::now($timezone)->toDateString();
-        $to = $input['to'] ?? $today;
-        $from = $input['from'] ?? CarbonImmutable::parse($to)->subDays(self::DEFAULT_PERIOD_DAYS - 1)->toDateString();
-
-        if ($from > $to || CarbonImmutable::parse($from)->diffInDays(CarbonImmutable::parse($to)) >= self::MAX_PERIOD_DAYS) {
-            if ($strict) {
-                throw ValidationException::withMessages(['from' => 'Pick a period of up to a year that starts before it ends.']);
-            }
-            $from = CarbonImmutable::parse($to)->subDays(self::DEFAULT_PERIOD_DAYS - 1)->toDateString();
-        }
-
-        return [$timezone, $from, $to];
+        return HealthWindow::resolve($request->only(['tz', 'from', 'to']), $user, $strict);
     }
 }

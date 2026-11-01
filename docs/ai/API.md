@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270, Bookings 280, Helpdesk 290, Leads 300, Portals 310. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270, Bookings 280, Helpdesk 290, Leads 300, Portals 310, Insights 320. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -874,6 +874,23 @@ utm: {utm_source, …}|null, referrer, consent_at, consent_text, assignee: {id, 
 - Web only: portal settings and on / off, merging ideas, creating / linking cards, the audit log, inviting / revoking clients,
   publishing / withdrawing deliverables, answering clients, share links.
 
+### Insights
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/workspaces/{slug}/insights/{tab}?period=this_month\|last_month\|last_30\|last_90\|custom&from=&to=&project=` | app + verified | One Insights tab (`overview`, `team`, `projects`, `helpdesk`, `usage`) → `{data: {tab, filters: {period, from, to, project, timezone}, projects: [{id, name}], insights: {…the web tab's numbers}}}`. Workspace admins only (403 members, 404 others); unknown tab → 404 | Read-only | BRAI-248, BRAI-243 | ready (v1.49.0, BRAI-423) |
+| `GET /api/v1/projects/{id}/health?from=&to=&tz=` | app + verified | Live metrics of the period (default the last 14 days, ≤ a year; bad range → 422) + the last 30 status updates → `{data: {from, to, timezone, metrics: {as_of, timezone, today, period, values, unknown, lists}, reports: [{id, status, summary, author, as_of, created_at, ai_assisted}], can_create, url}}`. Every project member | Read-only | BRAI-247 | ready (v1.49.0, BRAI-423) |
+| `GET /api/v1/projects/{id}/workload?from=&weeks=4\|6\|8\|12` | app + verified | The workload grid → `{data: {from (Monday), weeks_count, timezone, current_week, weeks, members: [{id, name, avatar_display, capacity_minutes, work, cells: [{week, capacity_minutes, allocated_minutes, free_minutes, over_minutes, load_percent, state: ok\|over\|unset\|unavailable, allocations}]}], team, review, can_plan, url}}`. Every project member | Read-only | BRAI-246 | ready (v1.49.0, BRAI-423) |
+
+- The web pages' own Support classes and role checks: Insights = `App\Support\Insights\*Insights::compute` + `InsightsFilters`
+  (`InsightsController::compute`; workspace admins: `WorkspacePolicy::update`), health = `HealthMetrics` + `HealthWindow`
+  (extracted from `ProjectHealthController`; `ProjectHealthReportPolicy::viewAny`), workload = `WorkloadGrid::build`
+  (`WorkloadPolicy::viewAny`; override notes only for planners, as on the web). Their nested shapes are passed as the web page gets
+  them (aggregates, member names / avatars, no addresses), so the OpenAPI schema types the top level only: read the web page's
+  props (`resources/js/Pages/Insights/*`, `Projects/Health`, `Workload/Index`) for the inner fields.
+- **Team time** = the Insights `team` tab (hours, completed / open / overdue per member). The billing time overview (amounts,
+  clients, rates) and every CSV / Excel export stay on the web (money never goes to the apps, BRAI-242 / 244 / 245).
+- Web only: writing status updates (and the AI draft), planning workload (capacity, overrides, allocations), exports.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -1424,4 +1441,40 @@ Built in: BRAI-422 (desktop) · Mobile scope: Read-only (inviting clients, publi
 Share links, embeds and the public pages (feedback portal, client portal, booking pages, lead forms, support page, public plans and release notes) are public web pages: the apps open them in the browser.
 The App API returns their addresses (public_url / url fields) for sharing; deep links into the app use the web URLs of issues, docs and boards.
 Registry: docs/ai/API.md#portals · Decided in: BRAI-422
+```
+
+**BRAI-248** (workspace admin insights dashboards)
+```
+## API (ready) — read only
+- GET /api/v1/workspaces/{slug}/insights/{overview|team|projects|helpdesk|usage}?period=&from=&to=&project= — the web's Insights numbers: throughput, cycle time, team, support, leads, usage (workspace admins; 403 for members)
+Scope: app · OpenAPI: docs/api/openapi.json#/Insights · Registry: docs/ai/API.md#insights
+Built in: BRAI-423 (desktop) · Mobile scope: Read-only summaries (CSV exports: web only)
+```
+
+**BRAI-243** (team time overview, reports and Excel exports)
+```
+## API (ready) — read only, time without money
+- GET /api/v1/workspaces/{slug}/insights/team?period=&project= — hours, completed / open / overdue issues per member (workspace admins)
+- Own time: GET /api/v1/me/timesheet, GET /api/v1/work-logs (Time tracking)
+- The billing time overview (clients, activities, rates, amounts) and the Excel export: web only
+Scope: app · OpenAPI: docs/api/openapi.json#/Insights · Registry: docs/ai/API.md#insights
+Built in: BRAI-423 (desktop) · Mobile scope: Read-only summaries (money and exports: web only)
+```
+
+**BRAI-246** (workload planning, team capacity and allocations)
+```
+## API (ready) — read only
+- GET /api/v1/projects/{id}/workload?from=&weeks=4|6|8|12 — capacity vs planned hours per member and week, overload, review hints (missing estimates, stale plans)
+- Planning (capacity, leave overrides, allocations): web only (can_plan + url)
+Scope: app · OpenAPI: docs/api/openapi.json#/Insights · Registry: docs/ai/API.md#insights
+Built in: BRAI-423 (desktop) · Mobile scope: Read-only
+```
+
+**BRAI-247** (project health reports and status updates)
+```
+## API (ready) — read only
+- GET /api/v1/projects/{id}/health?from=&to= — due / overdue / blocked / unassigned / milestones / late plan rows with the issues behind them, plus the saved status updates (on track / at risk / off track)
+- Writing a status update and the AI draft: web only (can_create + url)
+Scope: app · OpenAPI: docs/api/openapi.json#/Insights · Registry: docs/ai/API.md#insights
+Built in: BRAI-423 (desktop) · Mobile scope: Read-only
 ```
