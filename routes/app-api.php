@@ -4,6 +4,8 @@ use App\Http\Controllers\AppApi\AuthController;
 use App\Http\Controllers\AppApi\BoardController;
 use App\Http\Controllers\AppApi\BookmarkController;
 use App\Http\Controllers\AppApi\CalendarController;
+use App\Http\Controllers\AppApi\CalendarEventController;
+use App\Http\Controllers\AppApi\CalendarFeedController;
 use App\Http\Controllers\AppApi\CaptureController;
 use App\Http\Controllers\AppApi\ConnectedAppController;
 use App\Http\Controllers\AppApi\DeviceAuthController;
@@ -17,6 +19,7 @@ use App\Http\Controllers\AppApi\IssueLinkController;
 use App\Http\Controllers\AppApi\LinkController;
 use App\Http\Controllers\AppApi\MeAvatarController;
 use App\Http\Controllers\AppApi\MeController;
+use App\Http\Controllers\AppApi\MeetingController;
 use App\Http\Controllers\AppApi\MemberController;
 use App\Http\Controllers\AppApi\MyWorkController;
 use App\Http\Controllers\AppApi\NavigationController;
@@ -140,9 +143,25 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         // the TV wallboard: work due today / overdue + My Day + today's events in one call (ETag → 304)
         Route::get('me/today', TodayController::class)->name('today');
 
-        // ── Calendar, read part (CalendarEvents: the web calendar's sources) ─────────────────────
+        // ── Calendar (CalendarEvents: the web calendar's sources), meetings, the ICS feed link ─────
         Route::get('calendar/events', [CalendarController::class, 'events'])->name('calendar.events');
         Route::get('calendar/connections', [CalendarController::class, 'connections'])->name('calendar.connections');
+        // writes on the user's own writable calendars (CalendarProviders::writable); {event} = event:<connection>:<id>
+        Route::post('calendar/events', [CalendarEventController::class, 'store'])->middleware('throttle:30,1,app.calendar.events.store')->name('calendar.events.store');
+        Route::get('calendar/events/{event}', [CalendarEventController::class, 'show'])->name('calendar.events.show');
+        Route::patch('calendar/events/{event}', [CalendarEventController::class, 'update'])->name('calendar.events.update');
+        Route::delete('calendar/events/{event}', [CalendarEventController::class, 'destroy'])->name('calendar.events.destroy');
+        Route::get('calendar/meeting-calendars', [CalendarEventController::class, 'meetingCalendars'])->name('calendar.meeting-calendars');
+        // online meetings of issues / docs (MeetingScheduler, MeetingPolicy)
+        Route::get('meetings', [MeetingController::class, 'index'])->name('meetings.index');
+        Route::post('meetings', [MeetingController::class, 'store'])->middleware('throttle:20,1,app.meetings.store')->name('meetings.store');
+        Route::delete('meetings/{meeting}', [MeetingController::class, 'destroy'])->middleware('throttle:30,1,app.meetings.destroy')->name('meetings.destroy');
+        Route::post('meetings/{meeting}/notes', [MeetingController::class, 'notes'])->middleware('throttle:20,1,app.meetings.notes')->name('meetings.notes');
+        // the private ICS feed link (CalendarFeeds)
+        Route::get('me/calendar-feed', [CalendarFeedController::class, 'show'])->name('calendar-feed.show');
+        Route::put('me/calendar-feed', [CalendarFeedController::class, 'update'])->middleware('throttle:20,1,app.calendar-feed.update')->name('calendar-feed.update');
+        Route::post('me/calendar-feed/reset', [CalendarFeedController::class, 'reset'])->middleware('throttle:10,1,app.calendar-feed.reset')->name('calendar-feed.reset');
+        Route::delete('me/calendar-feed', [CalendarFeedController::class, 'destroy'])->name('calendar-feed.destroy');
 
         // ── Task lists + to-dos (TaskLists, WorkCompletion: shared with the web, CLI and MCP) ──────
         // lists and tasks by id; ids on writes are checked in the controller (no route constraint)

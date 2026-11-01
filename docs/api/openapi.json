@@ -3025,6 +3025,98 @@
                         "$ref": "#/components/responses/RateLimited"
                     }
                 }
+            },
+            "post": {
+                "operationId": "app.v1.calendar.events.store",
+                "description": "Without `time` it's an all-day event (`end_date` inclusive); a timed one without `end_time` lasts 30\nminutes. `conference` adds a Google Meet / Teams call when the calendar offers it (422 `calendar`\notherwise); `attendees` are invited by the provider. Answers 201 with the event as the provider saved\nit, or 200 with the same event on a replayed `request_id`. A calendar that isn't the user's \u2192 422\n`connection_id`; a read-only one (ICS link) \u2192 422 `calendar`.",
+                "summary": "Create an event in one of the user's writable calendars",
+                "tags": [
+                    "Calendar"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreCalendarEventRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`CalendarEventDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CalendarEventDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`CalendarEventDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CalendarEventDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "An error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Human-readable, safe to show."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "description": "Machine-readable: switch on this, not on the message.",
+                                            "enum": [
+                                                "conflict"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
             }
         },
         "/calendar/connections": {
@@ -3055,6 +3147,596 @@
                                 }
                             }
                         }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/calendar/events/{event}": {
+            "get": {
+                "operationId": "app.v1.calendar.events.show",
+                "description": "`id` is the event's `id` from `GET /calendar/events` (`event:<connection>:<event id>`, URL-encoded).",
+                "summary": "One event of a connected calendar, with its description",
+                "tags": [
+                    "Calendar"
+                ],
+                "parameters": [
+                    {
+                        "name": "event",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CalendarEventDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CalendarEventDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "app.v1.calendar.events.update",
+                "description": "Only the sent fields change. Moving it: send `date` (+ `time`, `end_date`, `end_time`); without `time`\nit becomes all-day. A read-only calendar \u2192 422 `calendar`.",
+                "summary": "Change an event of one of the user's writable calendars",
+                "tags": [
+                    "Calendar"
+                ],
+                "parameters": [
+                    {
+                        "name": "event",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateCalendarEventRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`CalendarEventDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CalendarEventDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "app.v1.calendar.events.destroy",
+                "description": "The provider tells its attendees. A read-only calendar \u2192 422 `calendar`.",
+                "summary": "Delete an event of one of the user's writable calendars",
+                "tags": [
+                    "Calendar"
+                ],
+                "parameters": [
+                    {
+                        "name": "event",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/calendar/meeting-calendars": {
+            "get": {
+                "operationId": "app.v1.calendar.meeting-calendars",
+                "description": "For `conference` of `POST /calendar/events` and `POST /meetings`. Not paginated.",
+                "summary": "The calendars the user can add a video call to (Google Meet / Teams), with the kinds each allows",
+                "tags": [
+                    "Calendar"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `MeetingCalendarResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/MeetingCalendarResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/meetings": {
+            "get": {
+                "operationId": "app.v1.meetings.index",
+                "description": "Not paginated (at most 200, as the web). Attendee addresses only for the organiser.",
+                "summary": "The meetings of an issue or doc, oldest first",
+                "tags": [
+                    "Calendar"
+                ],
+                "parameters": [
+                    {
+                        "name": "subject_type",
+                        "in": "query",
+                        "required": true,
+                        "description": "item (an issue) | page (a doc)",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "item",
+                                "page"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "subject_id",
+                        "in": "query",
+                        "required": true,
+                        "description": "the issue's id, or the doc's uuid",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 64
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `MeetingResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/MeetingResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.meetings.store",
+                "description": "Creates the event (with a Google Meet / Teams call, or `conference: none`) in one of the user's own\ncalendars and links it to the issue / doc. `member_ids` = project members (by id, the server knows their\naddresses), `emails` = other guests. Needs edit rights on the issue / doc (403); a calendar that isn't\nthe user's \u2192 422 `connection_id`; a call the calendar can't add \u2192 422 `conference`; a read-only calendar\n\u2192 422 `calendar`. 201, or 200 on a replayed `request_id`. `conference_provider` set while `join_url` is\nnull = the calendar hasn't returned the link yet (open `event_url`).",
+                "summary": "Schedule an online meeting for an issue or doc",
+                "tags": [
+                    "Calendar"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreMeetingRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`MeetingResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MeetingResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`MeetingResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MeetingResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/meetings/{meeting}": {
+            "delete": {
+                "operationId": "app.v1.meetings.destroy",
+                "description": "The calendar event stays; `cancel_event=1` also deletes it (the provider tells the attendees) \u2014 only the\norganiser, on their own active calendar (`can.cancel`, else 403). Unlinking needs `can.remove` (the\norganiser or someone who can edit the issue / doc).",
+                "summary": "Remove a meeting from its issue / doc",
+                "tags": [
+                    "Calendar"
+                ],
+                "parameters": [
+                    {
+                        "name": "meeting",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cancel_event",
+                        "in": "query",
+                        "schema": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/meetings/{meeting}/notes": {
+            "post": {
+                "operationId": "app.v1.meetings.notes",
+                "description": "\"Notes \u2014 <title> <date>\" in the issue's / doc's project (under the doc for a doc's meeting), published,\nwith the meeting's details and Agenda / Notes / Action items headings. 201 when this call created it, 200\nwhen it existed. Creating needs the right to create docs in the project (403); an existing notes doc that\nis still its author's draft \u2192 403.",
+                "summary": "Open the meeting's notes doc, creating it the first time",
+                "tags": [
+                    "Calendar"
+                ],
+                "parameters": [
+                    {
+                        "name": "meeting",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "`MeetingNotesResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MeetingNotesResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`MeetingNotesResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MeetingNotesResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/calendar-feed": {
+            "get": {
+                "operationId": "app.v1.calendar-feed.show",
+                "summary": "The user's private feed: the secret link, subscribe links and options (`enabled: false` when off)",
+                "tags": [
+                    "Calendar"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CalendarFeedResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CalendarFeedResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "app.v1.calendar-feed.update",
+                "description": "201 when it was off (a new secret link), 200 when it only changed the options. A missing option takes its\ndefault; `project_ids` keeps only projects the user can open.",
+                "summary": "Turn the feed on, or replace its options",
+                "tags": [
+                    "Calendar"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateCalendarFeedRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`CalendarFeedResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CalendarFeedResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`CalendarFeedResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CalendarFeedResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "app.v1.calendar-feed.destroy",
+                "summary": "Turn the feed off: the link stops working (204; off already = 204 too)",
+                "tags": [
+                    "Calendar"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/calendar-feed/reset": {
+            "post": {
+                "operationId": "app.v1.calendar-feed.reset",
+                "summary": "A new secret link; the old one stops working at once. Keeps the options",
+                "tags": [
+                    "Calendar"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CalendarFeedResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CalendarFeedResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
@@ -11292,6 +11974,172 @@
                 ],
                 "title": "CalendarErrorResource"
             },
+            "CalendarEventDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "unique per occurrence: issue:<id>, task:<id>[:<date>], event:<connection>:<id>, google_task:<connection>:<id>, booking:<uuid>"
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "issue | task | event | google_task | booking"
+                    },
+                    "work_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "issues / tasks: the id for PATCH /me/work/{id}; null otherwise"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "all_day": {
+                        "type": "boolean"
+                    },
+                    "start": {
+                        "type": "string",
+                        "description": "timed: ISO-8601 UTC; all-day: Y-m-d"
+                    },
+                    "end": {
+                        "type": "string",
+                        "description": "timed: ISO-8601 UTC; all-day: Y-m-d, inclusive (the last day)"
+                    },
+                    "location": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "conference_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "https join link of the event's video call (Google Meet, Teams \u2026)"
+                    },
+                    "conference_provider": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "google_meet | teams | other"
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the calendar's colour (events), the project's colour (issues / tasks)"
+                    },
+                    "calendar": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "connected calendars / Google Tasks only",
+                        "properties": {
+                            "connection_id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "provider": {
+                                "type": "string"
+                            },
+                            "provider_label": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "connection_id",
+                            "name",
+                            "provider",
+                            "provider_label"
+                        ]
+                    },
+                    "project": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "issues / tasks only",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "key": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "key"
+                        ]
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the web page (issues, tasks, bookings)"
+                    },
+                    "external_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the event in its own calendar app, when the provider gives one"
+                    },
+                    "done": {
+                        "type": "boolean"
+                    },
+                    "read_only": {
+                        "type": "boolean",
+                        "description": "a read-only calendar (an ICS subscription) or a booking"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "plain text (or the provider's HTML for some Outlook events), null when none"
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "work_id",
+                    "title",
+                    "all_day",
+                    "start",
+                    "end",
+                    "location",
+                    "conference_url",
+                    "conference_provider",
+                    "color",
+                    "calendar",
+                    "project",
+                    "url",
+                    "external_url",
+                    "done",
+                    "read_only",
+                    "description"
+                ],
+                "title": "CalendarEventDetailResource"
+            },
             "CalendarEventResource": {
                 "type": "object",
                 "properties": {
@@ -11449,6 +12297,119 @@
                     "read_only"
                 ],
                 "title": "CalendarEventResource"
+            },
+            "CalendarFeedResource": {
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the secret https link (anyone with it can read the feed: PUT \u2026 then POST /me/calendar-feed/reset if it leaked)"
+                    },
+                    "webcal_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the same as webcal: (opens the OS calendar app)"
+                    },
+                    "links": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "\"subscribe\" links of each calendar app",
+                        "properties": {
+                            "apple": {
+                                "type": "string"
+                            },
+                            "google": {
+                                "type": "string"
+                            },
+                            "outlook": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "apple",
+                            "google",
+                            "outlook"
+                        ]
+                    },
+                    "options": {
+                        "type": "object",
+                        "description": "what the feed contains: assigned, created, tasks, my_day, focus, completed, descriptions (bool), project_ids (empty = all)",
+                        "properties": {
+                            "assigned": {
+                                "type": "boolean"
+                            },
+                            "created": {
+                                "type": "boolean"
+                            },
+                            "tasks": {
+                                "type": "boolean"
+                            },
+                            "my_day": {
+                                "type": "boolean"
+                            },
+                            "focus": {
+                                "type": "boolean"
+                            },
+                            "completed": {
+                                "type": "boolean"
+                            },
+                            "descriptions": {
+                                "type": "boolean"
+                            },
+                            "project_ids": {
+                                "type": "array",
+                                "items": {}
+                            }
+                        },
+                        "required": [
+                            "assigned",
+                            "created",
+                            "tasks",
+                            "my_day",
+                            "focus",
+                            "completed",
+                            "descriptions",
+                            "project_ids"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "last_fetched_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "when a calendar app last fetched it"
+                    },
+                    "fetch_count": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "enabled",
+                    "url",
+                    "webcal_url",
+                    "links",
+                    "options",
+                    "created_at",
+                    "last_fetched_at",
+                    "fetch_count"
+                ],
+                "title": "CalendarFeedResource"
             },
             "CaptureCollection": {
                 "type": "array",
@@ -13988,6 +14949,210 @@
                     "device"
                 ],
                 "title": "MeResource"
+            },
+            "MeetingCalendarResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "the connection id (connection_id of POST /calendar/events and POST /meetings)"
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "provider_label": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "account_email": {
+                        "type": "string"
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "conference_providers": {
+                        "type": "array",
+                        "description": "google_meet and / or teams; empty = the calendar can't add a call right now (events without one still work)",
+                        "items": {}
+                    }
+                },
+                "required": [
+                    "id",
+                    "provider",
+                    "provider_label",
+                    "name",
+                    "account_email",
+                    "color",
+                    "conference_providers"
+                ],
+                "title": "MeetingCalendarResource"
+            },
+            "MeetingNotesResource": {
+                "type": "object",
+                "properties": {
+                    "uuid": {
+                        "type": "string",
+                        "description": "GET /api/v1/pages/{uuid}"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "the web page"
+                    }
+                },
+                "required": [
+                    "uuid",
+                    "name",
+                    "url"
+                ],
+                "title": "MeetingNotesResource"
+            },
+            "MeetingResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "subject": {
+                        "type": "object",
+                        "description": "the issue / doc: {type: item|page, id: issue id | doc uuid}",
+                        "properties": {
+                            "type": {
+                                "type": "string"
+                            },
+                            "id": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "id"
+                        ]
+                    },
+                    "starts_at": {
+                        "type": "string"
+                    },
+                    "ends_at": {
+                        "type": "string"
+                    },
+                    "timezone": {
+                        "type": "string",
+                        "description": "the zone it was scheduled in (for showing the organiser's wall clock)"
+                    },
+                    "conference_provider": {
+                        "type": "string",
+                        "description": "google_meet | teams | other | null (no video call). Set while join_url is null = the calendar hasn't returned the link yet: open event_url"
+                    },
+                    "conference_label": {
+                        "type": "string"
+                    },
+                    "join_url": {
+                        "type": "string",
+                        "description": "https join link of the call"
+                    },
+                    "event_url": {
+                        "type": "string",
+                        "description": "the event in the organiser's calendar app"
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "provider_label": {
+                        "type": "string"
+                    },
+                    "attendees": {
+                        "type": "array",
+                        "description": "[{name, email}]: email only for the organiser",
+                        "items": {}
+                    },
+                    "organizer": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name"
+                        ]
+                    },
+                    "notes_page": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "the notes doc (created on the web), only when the user may open it",
+                        "properties": {
+                            "uuid": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "url": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "uuid",
+                            "name",
+                            "url"
+                        ]
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "remove": {
+                                "type": "boolean",
+                                "description": "DELETE /meetings/{id}: unlink from the issue / doc (the event stays)"
+                            },
+                            "cancel": {
+                                "type": "boolean",
+                                "description": "DELETE /meetings/{id}?cancel_event=1: also cancel the calendar event (the organiser, on their active calendar)"
+                            }
+                        },
+                        "required": [
+                            "remove",
+                            "cancel"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "title",
+                    "subject",
+                    "starts_at",
+                    "ends_at",
+                    "timezone",
+                    "conference_provider",
+                    "conference_label",
+                    "join_url",
+                    "event_url",
+                    "provider",
+                    "provider_label",
+                    "attendees",
+                    "organizer",
+                    "notes_page",
+                    "can"
+                ],
+                "title": "MeetingResource"
             },
             "MemberCollection": {
                 "type": "array",
@@ -17944,6 +19109,107 @@
                 ],
                 "title": "StoreBookmarkItemRequest"
             },
+            "StoreCalendarEventRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/calendar/events`: a new event on one of the user's own writable connected calendars (the\nweb calendar's quick create). Dates and times are wall clock in `timezone` (default: the user's).",
+                "properties": {
+                    "connection_id": {
+                        "type": "integer",
+                        "description": "a calendar of GET /calendar/connections (kind calendar, read_only false)"
+                    },
+                    "title": {
+                        "type": "string",
+                        "maxLength": 500
+                    },
+                    "date": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "first day, Y-m-d"
+                    },
+                    "time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "start time H:i (24 h); none = an all-day event"
+                    },
+                    "end_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date",
+                        "description": "last day (inclusive), default `date`"
+                    },
+                    "end_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "end time H:i, default 30 minutes after the start"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 5000
+                    },
+                    "location": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 500
+                    },
+                    "timezone": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "IANA zone of date / time, default the user's (effective_timezone of GET /me)"
+                    },
+                    "conference": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "a video call: one of the calendar's conference_providers (GET /calendar/meeting-calendars)",
+                        "enum": [
+                            "google_meet",
+                            "teams",
+                            null
+                        ]
+                    },
+                    "attendees": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "description": "guests by address; the calendar provider sends the invitations",
+                        "items": {
+                            "type": "string",
+                            "format": "email",
+                            "maxLength": 254
+                        },
+                        "maxItems": 50
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "retry key: the same id + input answers 200 with the event the first call created"
+                    }
+                },
+                "required": [
+                    "connection_id",
+                    "title",
+                    "date"
+                ],
+                "title": "StoreCalendarEventRequest"
+            },
             "StoreCaptureRequest": {
                 "type": "object",
                 "description": "`POST /api/v1/captures`: what a person types into a capture (Capture::rules(), as the web and the extension).",
@@ -18201,6 +19467,101 @@
                     "title"
                 ],
                 "title": "StoreIssueRequest"
+            },
+            "StoreMeetingRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/meetings`: schedule an online meeting for an issue / doc (the web's \"Schedule meeting\"\ndialog, MeetingScheduler). Needs edit rights on the issue / doc (403) and one of the user's own calendars.",
+                "properties": {
+                    "subject_type": {
+                        "type": "string",
+                        "enum": [
+                            "item",
+                            "page"
+                        ]
+                    },
+                    "subject_id": {
+                        "type": "string",
+                        "maxLength": 64
+                    },
+                    "connection_id": {
+                        "type": "integer"
+                    },
+                    "title": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 5000
+                    },
+                    "date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "start_time": {
+                        "type": "string"
+                    },
+                    "duration": {
+                        "type": "integer",
+                        "minimum": 5,
+                        "maximum": 720
+                    },
+                    "timezone": {
+                        "type": "string"
+                    },
+                    "conference": {
+                        "type": "string",
+                        "enum": [
+                            "google_meet",
+                            "teams",
+                            "none"
+                        ]
+                    },
+                    "member_ids": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": "integer"
+                        },
+                        "maxItems": 50,
+                        "uniqueItems": true
+                    },
+                    "emails": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": "string",
+                            "format": "email",
+                            "maxLength": 254
+                        },
+                        "maxItems": 50
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "subject_type",
+                    "subject_id",
+                    "connection_id",
+                    "title",
+                    "date",
+                    "start_time",
+                    "duration",
+                    "conference"
+                ],
+                "title": "StoreMeetingRequest"
             },
             "StorePageRequest": {
                 "type": "object",
@@ -19589,6 +20950,105 @@
                     }
                 },
                 "title": "UpdateBookmarkItemRequest"
+            },
+            "UpdateCalendarEventRequest": {
+                "type": "object",
+                "description": "`PATCH /api/v1/calendar/events/{id}`: change the sent fields of an event in one of the user's own writable\ncalendars (the web calendar's event dialog). Moving it: send `date` (+ `time`, `end_date`, `end_time`) \u2014\nwithout `time` it becomes an all-day event.",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 500
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 10000
+                    },
+                    "location": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 500
+                    },
+                    "date": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "new first day, Y-m-d: replaces all of the event's dates and times"
+                    },
+                    "time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "end_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date"
+                    },
+                    "end_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "timezone": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "IANA zone of date / time, default the user's"
+                    }
+                },
+                "title": "UpdateCalendarEventRequest"
+            },
+            "UpdateCalendarFeedRequest": {
+                "type": "object",
+                "description": "`PUT /api/v1/me/calendar-feed`: turn the private feed on, or replace its options (a missing option takes\nits default, as on the web). `options.project_ids` = only these projects (empty = all the user can open).",
+                "properties": {
+                    "options": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "assigned": {
+                                "type": "boolean"
+                            },
+                            "created": {
+                                "type": "boolean"
+                            },
+                            "tasks": {
+                                "type": "boolean"
+                            },
+                            "my_day": {
+                                "type": "boolean"
+                            },
+                            "focus": {
+                                "type": "boolean"
+                            },
+                            "completed": {
+                                "type": "boolean"
+                            },
+                            "descriptions": {
+                                "type": "boolean"
+                            },
+                            "project_ids": {
+                                "type": "array",
+                                "items": {
+                                    "type": "integer"
+                                },
+                                "maxItems": 500
+                            }
+                        }
+                    }
+                },
+                "title": "UpdateCalendarFeedRequest"
             },
             "UpdateCaptureRequest": {
                 "type": "object",

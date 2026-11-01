@@ -360,8 +360,21 @@ updated_at}`.
 ### Calendar
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
-| `GET /api/v1/calendar/events?from=&to=&sources[]=&me_only=&show_completed=` | app + verified | Tray "next meeting", TV wallboard "next meeting in 12 min", mobile agenda: everything the web calendar shows for the user's local days `from`…`to` (Y-m-d, inclusive, ≤ 62 days; default today + 7), sorted, not paginated → `{data: [event], from, to, timezone, errors: [{connection_id, message}]}` | Full (read) | BRAI-222 | ready (v1.49.0, BRAI-418 read part) |
+| `GET /api/v1/calendar/events?from=&to=&sources[]=&me_only=&show_completed=` | app + verified | Tray "next meeting", TV wallboard "next meeting in 12 min", mobile agenda: everything the web calendar shows for the user's local days `from`…`to` (Y-m-d, inclusive, ≤ 62 days; default today + 7), sorted, not paginated → `{data: [event], from, to, timezone, errors: [{connection_id, message}]}` | Full | BRAI-222 | ready (v1.49.0, BRAI-418 read part) |
 | `GET /api/v1/calendar/connections` | app + verified | Settings → calendars: the user's connected calendars / Google Tasks lists with status → `{data: [{id, provider, provider_label, kind, account_email, account_name, name, color, is_active, read_only, sync_error, sync_error_at}]}`, not paginated. Connecting / removing: web only | Status only | BRAI-229 | ready (v1.49.0, BRAI-418 read part) |
+| `POST /api/v1/calendar/events` | app + verified, 30/min | Quick create / time block: `{connection_id, title, date, time?, end_date?, end_time?, description?, location?, timezone?, conference?: google_meet\|teams, attendees?: [email], request_id?}` on one of the user's own writable calendars → 201 `{data: event + description}` (200 on a replayed `request_id`). Not the user's calendar → 422 `connection_id`; read-only (ICS) / provider refused → 422 `calendar`; a call the calendar can't add → 422 `calendar` | Full | BRAI-222, BRAI-220, BRAI-225 | ready (v1.49.0, BRAI-418) |
+| `GET /api/v1/calendar/events/{id}` | app + verified | One event of a connected calendar with its `description`; `{id}` = the list's `event:<connection>:<event id>` (URL-encoded). Another user's calendar / unknown event / other id kinds → 404 | Full | BRAI-222 | ready (v1.49.0, BRAI-418) |
+| `PATCH /api/v1/calendar/events/{id}` | app + verified | Change the sent fields `{title, description, location, date, time, end_date, end_time, timezone?}`; moving = send `date` (+ times; no `time` → all-day) → `{data: event}`. Read-only → 422 `calendar` | Full | BRAI-222 | ready (v1.49.0, BRAI-418) |
+| `DELETE /api/v1/calendar/events/{id}` | app + verified | Delete it (the provider tells attendees) → 204. Read-only → 422 `calendar` | Full | BRAI-222 | ready (v1.49.0, BRAI-418) |
+| `GET /api/v1/calendar/meeting-calendars` | app + verified | The user's calendars that can add a video call → `{data: [{id, provider, provider_label, name, account_email, color, conference_providers: [google_meet\|teams]}]}`, not paginated | Full | BRAI-225 | ready (v1.49.0, BRAI-418) |
+| `GET /api/v1/meetings?subject_type=item\|page&subject_id=` | app + verified | The meetings of an issue (id) / doc (uuid), oldest first (≤ 200, not paginated) → `{data: [meeting]}`. Can't open the issue / doc → 404 | Full | BRAI-225 | ready (v1.49.0, BRAI-418) |
+| `POST /api/v1/meetings` | app + verified, 20/min | Schedule a Meet / Teams call on an issue / doc: `{subject_type, subject_id, connection_id, title, description?, date, start_time, duration (5–720 min), timezone?, conference: google_meet\|teams\|none, member_ids?, emails?, request_id?}` → 201 `{data: meeting}`. Can't edit the issue / doc → 403; outsiders → 404; not a project member in `member_ids` → 422 | Full | BRAI-225 | ready (v1.49.0, BRAI-418) |
+| `DELETE /api/v1/meetings/{id}?cancel_event=0\|1` | app + verified | Unlink from the issue / doc (`can.remove`), or also cancel the calendar event (`can.cancel`: the organiser) → 204; else 403 | Full | BRAI-225 | ready (v1.49.0, BRAI-418) |
+| `POST /api/v1/meetings/{id}/notes` | app + verified | The meeting's notes doc, created the first time (published, linked to the issue / doc) → 201 / 200 `{data: {uuid, name, url}}`; read it with `GET /pages/{uuid}`. No right to create docs → 403 | Full | BRAI-225 | ready (v1.49.0, BRAI-418) |
+| `GET /api/v1/me/calendar-feed` | app + verified | The private ICS link → `{data: {enabled, url, webcal_url, links: {apple, google, outlook}, options: {assigned, created, tasks, my_day, focus, completed, descriptions, project_ids}, created_at, last_fetched_at, fetch_count}}` (`enabled: false` → links null, default options) | Full | BRAI-229 | ready (v1.49.0, BRAI-418) |
+| `PUT /api/v1/me/calendar-feed` | app + verified | Turn on / replace the options `{options?: {…}}` (a missing option = its default; `project_ids` only projects the user can open) → 201 when it was off, else 200 | Full | BRAI-229 | ready (v1.49.0, BRAI-418) |
+| `POST /api/v1/me/calendar-feed/reset` | app + verified | New secret link, the old one dies → `{data: feed}`; off → 404 | Full | BRAI-229 | ready (v1.49.0, BRAI-418) |
+| `DELETE /api/v1/me/calendar-feed` | app + verified | Turn it off (the link dies) → 204 | Full | BRAI-229 | ready (v1.49.0, BRAI-418) |
 
 Event: `{id, type: issue|task|event|google_task|booking, work_id, title, all_day, start, end, location,
 conference_url, conference_provider, color, calendar: {connection_id, name, provider, provider_label}|null,
@@ -381,8 +394,23 @@ project: {id, name, key}|null, url, external_url, done, read_only}`.
 - A calendar that fails to load is left out, listed in `errors`, and its `sync_error` shows in
   `/calendar/connections` (as the web's "Reconnect …" warning). Calls go to the providers live: refresh
   every few minutes, not every few seconds.
-- **Later (phase 08):** creating / moving / deleting events on writable calendars, meetings
-  (Meet / Teams links), the private ICS feed link (`GET /me/calendar-feed`). Connecting providers: web only.
+- **Writes (BRAI-418)** go through the web's provider layer (`CalendarProviders::writable`, as
+  `CalendarConnectionController` and the MCP's calendar tools): only the user's own connections, any provider that writes
+  (Google, Outlook, CalDAV); ICS links are read-only. Dates / times are wall clock in `timezone` (default the user's
+  `effective_timezone`, not the server's). Provider errors are 422 `{code: validation_failed, errors: {calendar: [..]}}`
+  (`CalendarProviderException::render`), with the provider's short message. The API never calls a provider's OAuth:
+  **connecting, reconnecting and removing calendars stay on the web** (`sync_error` → "Reconnect on the web").
+- Event ids of providers can hold `=`, `~`, `_`, `-` (never `/`): URL-encode the whole `event:<connection>:<id>`.
+- **Meetings** (`Support\Meetings\MeetingScheduler`, shared with the web's `MeetingController`; `MeetingPolicy`): the event
+  with its call goes into the organiser's own calendar, the provider invites attendees (Brainitive sends nothing). Meeting:
+  `{id, title, subject: {type: item|page, id}, starts_at, ends_at, timezone, conference_provider, conference_label, join_url,
+  event_url, provider, provider_label, attendees: [{name, email}], organizer: {id, name}, notes_page: {uuid, name, url}|null,
+  can: {remove, cancel}}`. Attendee `email` only for the organiser (others see names, "Guest" for typed addresses), as on
+  the web. `conference_provider` set while `join_url` is null = the provider hasn't returned the link yet (open `event_url`).
+  Attendee picker: `GET /projects/{id}/members` (ids → `member_ids`; the server knows the addresses).
+- **ICS feed** (`Support\CalendarFeed\CalendarFeeds`, shared with the web's "Subscribe in other apps"): the `url` is a
+  secret (anyone with it reads the feed); calendar apps fetch it without a token. Share sheet / "Add to calendar" use
+  `webcal_url` or `links.*`.
 
 ### Task lists
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
@@ -842,20 +870,55 @@ Scope: app · OpenAPI: docs/api/openapi.json#/My Work · Registry: docs/ai/API.m
 Built in: BRAI-396 (desktop) · Mobile scope: Full (reordering My Day: web only for now)
 ```
 
-**BRAI-222** (unified calendar, read part)
+**BRAI-222** (unified calendar)
 ```
-## API (ready) — read part
+## API (ready)
 - GET /api/v1/calendar/events?from=&to=&sources[]=&me_only= — connected calendars, Google Tasks, bookings and dated issues / tasks for the user's local days (≤ 62), sorted; timed = UTC instants, all-day = dates (end inclusive)
+- POST /api/v1/calendar/events {connection_id, title, date, time?, end_date?, end_time?, location?, description?, conference?, attendees?, request_id?} — new event on one of the user's writable calendars
+- GET|PATCH|DELETE /api/v1/calendar/events/{id} — one event (+ description) · move / edit the sent fields · delete (id = event:<connection>:<event id>, URL-encoded)
+- Issues / tasks in the calendar: PATCH /api/v1/items/{id} (reschedule), PATCH /api/v1/me/work/{id} (done)
 Scope: app · OpenAPI: docs/api/openapi.json#/Calendar · Registry: docs/ai/API.md#calendar
-Built in: BRAI-418 read part (desktop) · Mobile scope: Read now; creating / moving events: API in phase 08
+Built in: BRAI-418 (desktop) · Mobile scope: Full (read-only calendars → 422 calendar; connecting providers: web only)
 ```
 
-**BRAI-229** (calendar feed + provider status, status part)
+**BRAI-220** (personal calendar / time blocks and task reminders)
 ```
-## API (ready) — provider status
-- GET /api/v1/calendar/connections — connected calendars and Google Tasks lists: name, colour, provider, read-only, sync_error ("Reconnect …")
+## API (ready)
+- POST /api/v1/calendar/events — block time in a connected calendar (a timed event; default zone = the user's)
+- GET /api/v1/calendar/events?sources[]=board&sources[]=list&me_only=1 · GET /api/v1/me/work?due=today,upcoming — upcoming assignments
+- POST /api/v1/me/timer/start · /stop — focus sessions (Time tracking) · task reminders: reminder_minutes on PATCH /api/v1/task-lists/{id}/items/{task}
+Scope: app · OpenAPI: docs/api/openapi.json#/Calendar, #/My Work · Registry: docs/ai/API.md#calendar
+Built in: BRAI-418 (desktop) · Mobile scope: Full (push delivery of reminders: later)
+```
+
+**BRAI-225** (Google Meet and Microsoft Teams meetings)
+```
+## API (ready)
+- GET /api/v1/calendar/meeting-calendars — the user's calendars that can add a call, with conference_providers (google_meet / teams)
+- GET /api/v1/meetings?subject_type=item|page&subject_id= — the meetings of an issue / doc (join_url, attendees, organizer, notes doc, can {remove, cancel})
+- POST /api/v1/meetings {subject_type, subject_id, connection_id, title, date, start_time, duration, conference, member_ids?, emails?, request_id?} — schedule; the provider invites
+- DELETE /api/v1/meetings/{id}?cancel_event=1 — unlink, or also cancel the event (organiser) · POST /api/v1/meetings/{id}/notes — open / create the notes doc
+- POST /api/v1/calendar/events {conference: google_meet|teams} — a meeting from the calendar (no issue); events carry conference_url to join
 Scope: app · OpenAPI: docs/api/openapi.json#/Calendar · Registry: docs/ai/API.md#calendar
-Built in: BRAI-418 read part (desktop) · Mobile scope: Status only (connecting providers: web only; the private feed link: API in phase 08)
+Built in: BRAI-418 (desktop) · Mobile scope: Full (connecting Google / Microsoft: web only)
+```
+
+**BRAI-229** (calendar feed + provider status)
+```
+## API (ready)
+- GET /api/v1/calendar/connections — connected calendars and Google Tasks lists: name, colour, provider, read-only, sync_error ("Reconnect …")
+- GET /api/v1/me/calendar-feed — the private ICS link (url, webcal_url, subscribe links for Apple / Google / Outlook) and its options
+- PUT /api/v1/me/calendar-feed {options?} — turn on / change what it contains · POST /api/v1/me/calendar-feed/reset — new link · DELETE — off
+Scope: app · OpenAPI: docs/api/openapi.json#/Calendar · Registry: docs/ai/API.md#calendar
+Built in: BRAI-418 (desktop) · Mobile scope: Status + feed link (connecting / reconnecting providers: web only)
+```
+
+**BRAI-223** (connect Google Calendar, Google Tasks, Outlook 365) · **BRAI-224** (connect iCloud / CalDAV, ICS subscriptions)
+```
+## API: web only — open in browser
+Connecting, reconnecting and removing calendar accounts (OAuth, app passwords, ICS links) happens on the web (Calendar → Add calendar).
+The apps show the connections and their status (GET /api/v1/calendar/connections: read_only, sync_error) and use them (GET|POST|PATCH|DELETE /api/v1/calendar/events).
+Registry: docs/ai/API.md#calendar · Decided in: BRAI-418
 ```
 
 **BRAI-262** (data export)

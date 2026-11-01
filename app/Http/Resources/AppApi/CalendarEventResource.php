@@ -61,7 +61,7 @@ class CalendarEventResource extends JsonResource
         ];
     }
 
-    private function text(mixed $value): ?string
+    protected function text(mixed $value): ?string
     {
         return is_string($value) ? $value : null;
     }

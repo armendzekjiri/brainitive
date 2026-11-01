@@ -496,3 +496,55 @@ Deviations from the plan / cards:
 - `## API (ready)` texts for BRAI-198, 199, 200, 201, 202, 203, 206, 209, 212, 213, 214, 267 and the web-only text for BRAI-207, 208,
   210 are in `docs/ai/API.md` → "Mobile card texts".
 
+
+## Phase 08 — calendar writes, booking, helpdesk, leads, portals, insights
+
+Desktop-app board cards 698–704 (epic BRAI-417, card 697): BRAI-418 (rest) … BRAI-423 are "API ·" cards, built in card
+order, same flow and definition of done as phases 06 / 07 (`feat/app-api-<name>` from `release/v1.49.0`, merged back
+`--no-ff`; PHPUnit incl. Passport → 401, other users / workspaces → 404, role rules, 422, pagination, 402 where the web
+has a limit; e2e spec; `API.md` rows + mobile card texts; OpenAPI via `TEST_DB_SUFFIX=p08 composer openapi`). BRAI-424
+is not an API card: only its `API.md` part (the "web only — open in browser" texts). New spec tags from 280 on.
+
+**Public-facing modules** (helpdesk customers, lead forms, client portals, feedback portals, booking pages) have public
+routes and guest users. The App API is for signed-in workspace members only: it exposes the member / agent side, never
+the public or guest side, and never more customer data than the web's agent / member view shows. Builders and
+settings (booking page builder, SLA rules, lead form builder, portal settings, share links): web only.
+External providers: the API never connects them (OAuth stays web only); writes go through the same provider services
+as the web (`CalendarProviders`), faked in tests.
+
+### BRAI-418 calendar writes, meetings, ICS feed link (`feat/app-api-calendar-writes`)
+- `POST /calendar/events` `{connection_id, title, date, time?, end_date?, end_time?, description?, location?, timezone?,
+  conference?, attendees?, request_id?}` on the user's own writable calendar (the web's quick create +
+  `CalendarProviders::writable`), `GET|PATCH|DELETE /calendar/events/{id}` with the list's `event:<connection>:<event>` id.
+  Provider errors keep the web's 422 `errors.calendar`, in the API error shape.
+- Meetings (Meet / Teams on an issue or doc): `GET /calendar/meeting-calendars`, `GET /meetings?subject_type=&subject_id=`,
+  `POST /meetings`, `DELETE /meetings/{id}?cancel_event=` — extract `MeetingController`'s scheduling / removal / row into
+  `Support\Meetings\MeetingScheduler` (+ presenter) and make the web use it.
+- `GET|PUT|DELETE /me/calendar-feed` + `POST /me/calendar-feed/reset`: the private ICS link (the web's "Subscribe in other
+  apps"); extract the options / payload of `CalendarFeedController` into `Support\CalendarFeed\CalendarFeeds`.
+
+### BRAI-419 bookings (`feat/app-api-bookings`)
+- `GET /bookings?status=upcoming|past|cancelled` (the host's own bookings, as the booking page's "Bookings" tab),
+  `GET /bookings/{uuid}`, `POST /bookings/{uuid}/cancel` (host cancel, `BookingService::cancel`), `GET /booking-pages` (read).
+  Reschedule is the guest's (public manage link) on the web: not offered to hosts unless the web has it.
+
+### BRAI-420 helpdesk agent side (`feat/app-api-helpdesk`)
+- `GET /projects/{id}/helpdesks`, `GET /helpdesks/{id}/tickets?status=&assignee=&sla=`, `GET /tickets/{id}` (thread, the
+  contact as the agent view shows it, SLA state), `POST /tickets/{id}/replies` (reply / internal note), `PATCH /tickets/{id}`
+  (status, assignee, priority) — the web's agent services, shared code extracted where the web holds it inline.
+
+### BRAI-421 leads (`feat/app-api-leads`)
+- `GET /projects/{id}/lead-forms`, `GET /lead-forms/{id}/leads` (pipeline stages + cards, answers, UTM as the web's lead view),
+  `PATCH /leads/{id}` (stage, assignee), `POST /leads/{id}/notes` (if the web has notes).
+
+### BRAI-422 feedback + client portals (`feat/app-api-portals`)
+- `GET /feedback-portals/{id}/posts`, `PATCH /feedback-posts/{id}` (status), `GET /client-portals/{id}/deliverables` (read,
+  approval state). Merging, settings, share links: web only.
+
+### BRAI-423 insights, workload, project health, team time (`feat/app-api-insights`)
+- Read-only summaries, role-checked like the web: `GET /workspaces/{slug}/insights?range=`, `GET /projects/{id}/health`,
+  `GET /workspaces/{slug}/workload?week=`, `GET /workspaces/{slug}/time-report?…`. Exports: web only.
+
+### BRAI-424 web-only mobile cards (docs only)
+- `API.md` → "Mobile card texts": `## API: web only — open in browser` for BRAI-195, 207, 208, 210, 223, 224, 227, 234, 235,
+  239, 242, 244, 245, 250, 251, 253, 254, 255, 257, 260, 261, and the matching rows. The board is not touched.
