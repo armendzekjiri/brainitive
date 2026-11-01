@@ -159,7 +159,8 @@ class PageContentConverter
     private static function inline(string $text): string
     {
         // Tokenise so we can escape literal text but keep generated tags.
-        $pattern = '/(\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|_(.+?)_|`(.+?)`|\[(.+?)\]\((\S+?)\))/';
+        // images first: `![alt](src)` would otherwise read as "!" + a link
+        $pattern = '/(!\[([^\]]*)\]\((\S+?)\)|\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|_(.+?)_|`(.+?)`|\[(.+?)\]\((\S+?)\))/';
         $out = '';
         $offset = 0;
 
@@ -170,16 +171,22 @@ class PageContentConverter
             }
 
             $token = $m[0][0];
-            if (Str::startsWith($token, '**') || Str::startsWith($token, '__')) {
-                $out .= '<strong>'.self::esc($m[2][0] !== '' ? $m[2][0] : $m[3][0]).'</strong>';
+            if (Str::startsWith($token, '![')) {
+                // http(s) or a path on this site only (no data: / javascript:)
+                $src = self::safeHref($m[3][0]);
+                $out .= $src !== null && ! str_starts_with(strtolower($src), 'mailto:')
+                    ? '<img src="'.self::esc($src).'" alt="'.self::esc($m[2][0]).'">'
+                    : self::esc($m[2][0]);
+            } elseif (Str::startsWith($token, '**') || Str::startsWith($token, '__')) {
+                $out .= '<strong>'.self::esc($m[4][0] !== '' ? $m[4][0] : $m[5][0]).'</strong>';
             } elseif (Str::startsWith($token, '`')) {
-                $out .= '<code>'.self::esc($m[6][0]).'</code>';
+                $out .= '<code>'.self::esc($m[8][0]).'</code>';
             } elseif (Str::startsWith($token, '[')) {
-                $out .= self::safeHref($m[8][0]) !== null
-                    ? '<a href="'.self::esc(self::safeHref($m[8][0])).'">'.self::esc($m[7][0]).'</a>'
-                    : self::esc($m[7][0]);
+                $out .= self::safeHref($m[10][0]) !== null
+                    ? '<a href="'.self::esc(self::safeHref($m[10][0])).'">'.self::esc($m[9][0]).'</a>'
+                    : self::esc($m[9][0]);
             } else {
-                $out .= '<em>'.self::esc($m[4][0] !== '' ? $m[4][0] : $m[5][0]).'</em>';
+                $out .= '<em>'.self::esc($m[6][0] !== '' ? $m[6][0] : $m[7][0]).'</em>';
             }
 
             $offset = $start + strlen($token);
@@ -280,6 +287,7 @@ class PageContentConverter
                 'em', 'i' => "*{$inner}*",
                 'code' => "`{$inner}`",
                 'a' => '['.$inner.']('.($child->attributes?->getNamedItem('href')?->nodeValue ?? '').')',
+                'img' => '!['.str_replace([']', "\n"], ['', ' '], (string) ($child->attributes?->getNamedItem('alt')?->nodeValue ?? '')).']('.($child->attributes?->getNamedItem('src')?->nodeValue ?? '').')',
                 'br' => "\n",
                 default => $inner,
             };

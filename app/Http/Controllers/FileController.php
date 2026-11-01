@@ -2,9 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Support\Uploads;
+use App\Support\Files\EditorUploads;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class FileController extends Controller
 {
@@ -14,21 +13,18 @@ class FileController extends Controller
      */
     public function uploadImage(Request $request)
     {
-        $request->validate([
-            'image' => 'required|image|mimes:jpeg,png,gif,webp|max:10240', // 10MB max; no SVG (scripts on our origin)
-        ]);
+        $request->validate(['image' => EditorUploads::IMAGE_RULES]); // 10MB max; no SVG (scripts on our origin)
 
-        $file = $request->file('image');
-        $filename = Uploads::imageName($file);
-        $path = $file->storeAs('uploads/images', $filename, 'public');
+        // shared with the App API's POST /uploads
+        $stored = EditorUploads::storeImage($request->file('image'));
 
         // Editor.js format response
         return response()->json([
             'success' => 1,
             'file' => [
-                'url' => Storage::url($path),
-                'name' => $file->getClientOriginalName(),
-                'size' => $file->getSize(),
+                'url' => $stored['url'],
+                'name' => $stored['name'],
+                'size' => $stored['size'],
             ],
         ]);
     }
@@ -39,23 +35,19 @@ class FileController extends Controller
      */
     public function uploadDocument(Request $request)
     {
-        $request->validate([
-            'document' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,zip,rar|max:20480', // 20MB max
-        ]);
+        $request->validate(['document' => EditorUploads::DOCUMENT_RULES]); // 20MB max
 
-        $file = $request->file('document');
-        $filename = Uploads::name($file);
-        $path = $file->storeAs('uploads/documents', $filename, 'public');
+        $stored = EditorUploads::storeDocument($request->file('document'));
 
         // Editor.js Attaches format response
         return response()->json([
             'success' => 1,
             'file' => [
-                'url' => Storage::url($path),
-                'name' => $file->getClientOriginalName(),
-                'size' => $file->getSize(),
-                'title' => $file->getClientOriginalName(),
-                'extension' => Uploads::extension($file),
+                'url' => $stored['url'],
+                'name' => $stored['name'],
+                'size' => $stored['size'],
+                'title' => $stored['name'],
+                'extension' => $stored['extension'],
             ],
         ]);
     }
