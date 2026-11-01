@@ -410,3 +410,21 @@ descriptions are Markdown in / out (stored as the editor's HTML), like task note
 ### BRAI-409 timeline and calendar issue views (`feat/app-api-dated-items`)
 - `GET /projects/{id}/items?from=&to=` (issues whose start…due touches the range), reschedule through
   `PATCH /items/{id}`. Recurring issues and templates: web only.
+
+### Phase 06 — result
+Merged into `release/v1.49.0`: `feat/app-api-boards` (BRAI-403), `feat/app-api-issues` (BRAI-404), `feat/app-api-issue-activity`
+(BRAI-405), `feat/app-api-issue-links` (BRAI-406), `feat/app-api-board-views` (BRAI-407), `feat/app-api-sprints` (BRAI-408),
+`feat/app-api-dated-items` (BRAI-409). No migrations. New spec tags: Boards 200, Issues 210, Sprints 220. e2e: `app-api-boards`,
+`-issues`, `-issue-activity`, `-issue-links`, `-board-views`, `-sprints`, `-dated-items`.
+Deviations from the plan / cards:
+- Move cards (`POST /items/{id}/move`) is in BRAI-403 (the card's "read, move cards"), not 404.
+- Comments: no `PATCH|DELETE` (the web has no comment edit / delete). Watching is the user's own (`POST|DELETE /items/{id}/watch`
+  + `GET …/watchers`); managing other watchers: web only. Attachments upload straight to the issue (no shared uploads API yet).
+- Filters use the board URL / saved-view params (`assignee=me|unassigned|user-<id>`, `labels=1,2`, `f<id>=…`) instead of the
+  card's `label` / `field[x]`, so views work as they are.
+- Scrum: the backlog is `GET /boards/{id}/backlog` + `POST /boards/{id}/backlog/items`, not sprint id `0`; sprint issues are
+  `GET /sprints/{id}/items`.
+- Dated issues: `GET /projects/{id}/items?from=&to=` (start … due touching the range), not `due_from` / `due_to`.
+- `## API (ready)` texts for BRAI-187, 188, 189, 190, 191, 192, 193, 194, 252 and the web-only text for BRAI-195 are in
+  `docs/ai/API.md` → "Mobile card texts".
+

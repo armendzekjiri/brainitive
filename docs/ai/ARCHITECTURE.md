@@ -450,7 +450,8 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   `config/scramble.php` (documents only `api/v1`; API version `1.0.0`).
 - **Endpoints:** `app/Http/Controllers/AppApi/*` (Instance, Auth, Me + MeAvatar, Device, Invitation,
   Workspace, Project, Member, Navigation, Search, Notification, ConnectedApp, DeviceAuth, MyWork, Today,
-  Calendar, TaskList, Capture, Snippet, Bookmark, Timer + WorkLog — one `#[Group]` tag per
+  Calendar, TaskList, Capture, Snippet, Bookmark, Timer + WorkLog, Board, Issue + IssueActivity + IssueLink, Sprint —
+  one `#[Group]` tag per
   `API.md` module), Form Requests in `app/Http/Requests/AppApi/`, Resources in
   `app/Http/Resources/AppApi/`. The tables in `API.md` are the list.
 - **Lists + visibility (phase 03):** `Requests\AppApi\ListRequest` (`cursor` / `limit` /
@@ -476,6 +477,14 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   web `SnippetController` / `BookmarkController`), `Support\Billing\WorkTimers` (web `WorkTimerController`) and
   `Support\Billing\TimeEntries` (week, rules, create / update / delete, guard; web `TimesheetController`).
   `Controllers\AppApi\Concerns\CreatesOnce`: `request_id` retries of creates (`IdempotentRequest`, `mcp_requests`).
+- **Shared with the web (phase 06, boards / issues / scrum):** `Support\Boards\Issues` (the issue dialog's rules, create,
+  update, labels, delete; web `BoardController@storeItem|updateItem|updateItemLabels|destroyItem`), `Support\Boards\ItemAttachments`
+  (web `storeAttachment|destroyAttachment`), `WorkCompletion::moveIssue(..., $withSubtasks)` (web `moveItem`),
+  `SprintLifecycle::moveIssues` (MCP `move_items_to_sprint`), plus the API's own `Support\Boards\BoardCards` (the cards a board page
+  shows: Scrum = running sprint, Kanban = done retention), `BoardFilters` (the board URL / saved-view filter params in SQL, as
+  `Pages/Boards/Show.tsx` + `lib/customFields.ts` apply them) and `IssueMarkdown` (descriptions / comments as Markdown with
+  `@[Name](user:<id>)` mentions). Reused as they were: `ItemComments`, `ItemLinks` + `ContentLinkFormatter::issueLinks`,
+  `ItemFieldValues`, `BoardViewConfig::sanitize`, `SprintReport`, `ItemDevelopment`.
 - **TV device-code sign-in (BRAI-438):** `Support\AppApi\AppDeviceCodes` (RFC 8628 codes in the cache),
   `AppDeviceSignIn` (device row + `max_devices` + first pair; also used by `/auth/exchange`), `AppClients`
   (`config/app-api.php` → `clients.*.grant` / `platforms`); `Controllers\AppApi\DeviceAuthController`;

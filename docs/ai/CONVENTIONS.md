@@ -185,6 +185,13 @@ Full conventions and the endpoint registry: [`API.md`](./API.md); recipe:
 - Content is addressed by id (`/task-lists/{id}`, `/snippet-collections/{id}`, `/bookmarks/{id}`), captures by uuid;
   resolve it through `ResolvesVisible` (`visibleTaskList`, `visibleSnippetCollection`, `visibleSnippet`,
   `visibleBookmarkGroup`) or, in a Form Request, in `authorize()` so 404 comes before 422.
+- Rich text the web stores as editor HTML (issue descriptions, comments, task notes) is **Markdown** in the App API; a mention
+  is `@[Name](user:<id>)` (`IssueMarkdown`), resolved only for people who can open the project. Issues / boards / sprints are
+  addressed by id (`/items/{id}`, `/boards/{id}`, `/sprints/{id}`); `GET /items/by-key/{KEY}` for keys.
+- An update that can collide with someone else's takes the `updated_at` the client last read and answers 409 when the row
+  changed since (`PATCH /items/{id}`).
+- Filters mirror the web's own URL params instead of a second filter language: `GET /boards/{id}/items` takes the board URL /
+  saved-view params (`BoardFilters`), so a saved view's `params` work as they are.
 - The spec's `info.version` is the API version (`1.0.0`), not the app release; breaking changes → `/api/v2`.
 - Web ↔ desktop: call native features only through `resources/js/lib/desktop.ts` (feature-detected,
   no-op in a browser); never import `@tauri-apps/api` into the web app.

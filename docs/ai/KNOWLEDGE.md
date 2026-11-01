@@ -2023,3 +2023,24 @@ Never migrate devdb just to export the spec.
   overview); billed entries answer 422 `entry` (the web's message). Tests that travel past 15 minutes need a fresh
   app access token (access tokens live 15 minutes).
 
+### App API phase 06: boards, issues, comments, scrum, views (v1.49.0, BRAI-403 … BRAI-409)
+- **The issue dialog's code is shared now.** `BoardController@storeItem|updateItem|updateItemLabels|destroyItem` call
+  `Support\Boards\Issues`; attachments `ItemAttachments`. The rules got two small fixes on the way: `priority_id` must be a
+  priority of the project (`ItemPriority::forProject`, it used to accept any row of `item_priorities`), and `story_points`,
+  `original_estimate`, `release_id` are accepted on create too (the web form doesn't send them yet). Custom field errors come back
+  as `values.<id>` from `ItemFieldValues::apply`: the API renames them to `fields.<id>`.
+- **`JsonResource::with()` is an instance method** (extra top-level data): a static `with()` on a resource is a fatal error —
+  `IssueResource::eagerLoad()`.
+- **`withCount()` on a `fromSub()` query fails** ("Expression could not be converted to string"). Put the counts on the inner
+  query and only `with()` on the outer one (`IssueController@dated`, which cursor-paginates over `COALESCE(start_date, due_date)`
+  as a sub-select column — same trick as `AssignedWork`).
+- **Board cards ≠ all issues.** The board page shows a Scrum board's running sprint only and hides old done cards on Kanban
+  (client side, `lib/doneRetention.ts`); `BoardCards::query` reproduces both in SQL, and the board filters (`BoardFilters`) mirror
+  `Show.tsx` / `lib/customFields.ts` — change them together.
+- **Comment rights follow the web, not `ItemPolicy::comment`.** The web's `storeComment` authorizes `update`, so project viewers
+  can't comment; the API does the same (`can.comment` = `can.update`). There is no comment edit / delete on the web, so none in
+  the API (the card asked for "own comments").
+- **Sprint moves validate inside the idempotent write.** `SprintLifecycle::moveIssues` throws `DomainException` for a completed
+  sprint or ids that aren't top-level issues of the board; inside `IdempotentRequest::run` the transaction rolls back and no
+  request row is stored, so a corrected retry with the same `request_id` still runs.
+
