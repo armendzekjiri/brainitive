@@ -361,3 +361,52 @@ Deviations from the plan / cards:
 - `## API (ready)` texts for BRAI-216, 217, 218, 241, 258 and the web-only text for BRAI-242 / 244 / 245 are in
   `docs/ai/API.md` → "Mobile card texts".
 
+
+## Phase 06 — boards, issues, comments, scrum, views
+
+Desktop-app board cards 683–689 (epic BRAI-402, card 682): BRAI-403 … BRAI-409, all "API ·" cards, built in card
+order. Same flow and definition of done as phase 04b (`feat/app-api-<name>` from `release/v1.49.0`, merged back
+`--no-ff`; tests incl. Passport → 401, other workspaces / projects → 404, viewer vs editor vs admin, 422,
+pagination, 402 where the web has it; e2e spec; `API.md` rows + mobile card texts; OpenAPI via
+`TEST_DB_SUFFIX=p06 composer openapi`). New spec tags from 200 on (Boards 200, Issues 210, …).
+Everything goes through the web's code, so live boards (`BoardLive`, model events) and watcher notifications
+fire for app writes too. Issues are addressed by id (`/items/{id}`), boards by id (`/boards/{id}`); issue
+descriptions are Markdown in / out (stored as the editor's HTML), like task notes.
+
+### BRAI-403 boards and columns, read + move cards (`feat/app-api-boards`)
+- `GET /projects/{id}/boards` (cursor, `updated_since`), `GET /boards/{id}` (columns with WIP limit, done flag and
+  card counts, swimlane setup, done retention, running sprint, `can`), `GET /boards/{id}/items?column=&include_old_done=`
+  (the board's cards: Scrum = the running sprint, Kanban = done retention applied, as the board page).
+- `POST /items/{id}/move {column_id, position?, with_subtasks?}` → the card. Extract the web's `moveItem` (incl.
+  "complete the open subtasks") into `WorkCompletion::moveIssue(..., $withSubtasks)`; web uses it.
+- Column create / edit / reorder: web only (BoardPolicy::update holders see `can.update`).
+
+### BRAI-404 issues: create, view, edit, move, assign (`feat/app-api-issues`)
+- `POST /boards/{id}/items` (402 at the storage limit, `request_id`), `GET|PATCH|DELETE /items/{id}`,
+  `GET /items/by-key/{KEY}`. PATCH takes the sent fields (title, description Markdown, type, priority, assignee, dates,
+  labels, story points, estimate, fix version, parent, custom field values) + optional `updated_at` → 409 when the
+  issue changed since. GitHub development (PRs / branches / commits) read-only on the detail.
+- Extract the inline rules / create / update of `BoardController@storeItem|updateItem|updateItemLabels` into
+  `App\Support\Boards\Issues`; web uses it.
+
+### BRAI-405 comments, mentions, watchers, attachments, history (`feat/app-api-issue-activity`)
+- `GET|POST /items/{id}/comments` (Markdown, replies), `PATCH|DELETE /items/{id}/comments/{comment}` (own, as the
+  web), `POST|DELETE /items/{id}/watch`, `GET|POST /items/{id}/attachments`, `DELETE …/{attachment}`,
+  `GET /items/{id}/activity` (cursor). Shared: `ItemComments`, attachment create / delete extracted from the web.
+
+### BRAI-406 subtasks and issue links (`feat/app-api-issue-links`)
+- `GET /items/{id}/children` (+ create with `parent_id` on `POST /boards/{id}/items`), `GET|POST|DELETE
+  /items/{id}/links` (`ItemLinks`, Restricted for issues the user can't open).
+
+### BRAI-407 custom fields, filters, saved views (`feat/app-api-board-views`)
+- `GET /projects/{id}/config` (types, priorities, labels, fields + options, members, releases), `GET /boards/{id}/views`
+  (`BoardViewConfig`), filters on `GET /boards/{id}/items` (`assignee`, `label[]`, `type[]`, `priority[]`, `q`, `field[id]`).
+
+### BRAI-408 scrum (`feat/app-api-sprints`)
+- `GET /boards/{id}/sprints`, `GET /sprints/{id}` (`0` = backlog with `?board=`), `POST /sprints/{id}/items` (move
+  issues, `SprintLifecycle` / `InteractsWithSprints` rules), `GET /sprints/{id}/burndown`, `GET /boards/{id}/velocity`
+  (`SprintReport`). Create / start / complete: web only.
+
+### BRAI-409 timeline and calendar issue views (`feat/app-api-dated-items`)
+- `GET /projects/{id}/items?from=&to=` (issues whose start…due touches the range), reschedule through
+  `PATCH /items/{id}`. Recurring issues and templates: web only.

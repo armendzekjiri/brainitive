@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers\AppApi\Concerns;
 
+use App\Models\Board;
 use App\Models\Bookmark;
+use App\Models\Item;
 use App\Models\Project;
 use App\Models\Snippet;
 use App\Models\SnippetCollection;
@@ -75,6 +77,26 @@ trait ResolvesVisible
         abort_unless($group instanceof Bookmark && $group->workspace !== null && $user->hasWorkspaceAccess($group->workspace) && $user->can('view', $group), 404);
 
         return $group;
+    }
+
+    /** A board of a project the user can open (BoardPolicy::view). */
+    protected function visibleBoard(Request $request, int|string $id): Board
+    {
+        abort_unless(self::isId($id), 404);
+        $board = Board::with('project.workspace')->find((int) $id);
+        abort_unless($board instanceof Board && $board->project?->workspace !== null && $request->user()->can('view', $board), 404);
+
+        return $board;
+    }
+
+    /** An issue on a board of a project the user can open (ItemPolicy::view). */
+    protected function visibleItem(Request $request, int|string $id): Item
+    {
+        abort_unless(self::isId($id), 404);
+        $item = Item::with('board.project.workspace')->find((int) $id);
+        abort_unless($item instanceof Item && $item->board?->project?->workspace !== null && $request->user()->can('view', $item), 404);
+
+        return $item;
     }
 
     private static function isId(int|string $id): bool

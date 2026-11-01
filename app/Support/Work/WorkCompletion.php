@@ -47,12 +47,23 @@ final class WorkCompletion
         self::moveIssue($work, $column, 0, $actor);
     }
 
-    /** Move an issue to a column of its board; watchers (except the actor) hear about a new status. */
-    public static function moveIssue(Item $item, BoardColumn $column, int $position, User $actor): void
+    /**
+     * Move an issue to a column of its board; watchers (except the actor) hear about a new status.
+     * `$withSubtasks`: moving into a done column completes the open subtasks (all levels) too, as the
+     * board's "Also complete the subtasks?" (web drag & drop, App API).
+     */
+    public static function moveIssue(Item $item, BoardColumn $column, int $position, User $actor, bool $withSubtasks = false): void
     {
         $oldColumn = $item->column;
 
         $item->moveToColumn($column, $position);
+
+        if ($withSubtasks && $column->is_done_column) {
+            Item::whereIn('id', $item->descendantIds())
+                ->whereHas('column', fn ($q) => $q->where('is_done_column', false))
+                ->get()
+                ->each(fn (Item $child) => $child->moveToColumn($column, 0));
+        }
 
         if (! $oldColumn || $oldColumn->id === $column->id) {
             return;
