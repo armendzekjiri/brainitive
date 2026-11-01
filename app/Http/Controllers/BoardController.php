@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ActivityLog;
 use App\Models\Attachment;
 use App\Models\Board;
 use App\Models\BoardColumn;
@@ -22,6 +21,7 @@ use App\Support\Billing\TimeLog;
 use App\Support\Billing\TimeLogActivities;
 use App\Support\Boards\BoardViewConfig;
 use App\Support\Boards\Issues;
+use App\Support\Boards\ItemAttachments;
 use App\Support\Boards\ItemComments;
 use App\Support\Boards\ItemFieldValues;
 use App\Support\Boards\ItemLinks;
@@ -31,7 +31,6 @@ use App\Support\Entitlements\LimitGate;
 use App\Support\Github\ItemDevelopment;
 use App\Support\Live\BoardLive;
 use App\Support\References\ContentReferences;
-use App\Support\Uploads;
 use App\Support\Work\WorkCompletion;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -910,33 +909,14 @@ class BoardController extends Controller
     }
 
     /**
-     * Store a new attachment for an item.
+     * Store a new attachment for an item (shared with the App API: Support\Boards\ItemAttachments).
      */
     public function storeAttachment(Request $request, Workspace $workspace, Project $project, Board $board, Item $item)
     {
         $this->authorize('update', $item);
 
-        $validated = $request->validate([
-            'file' => 'required|file|max:10240', // 10MB max
-        ]);
-
-        $file = $request->file('file');
-        $filename = Uploads::name($file);
-        $path = $file->storeAs('attachments/'.$item->id, $filename, 'public');
-
-        $attachment = $item->attachments()->create([
-            'user_id' => $request->user()->id,
-            'filename' => $filename,
-            'original_filename' => Uploads::displayName($file),
-            'path' => $path,
-            'mime_type' => $file->getMimeType(),
-            'size' => $file->getSize(),
-        ]);
-
-        // Add URL for response
-        $attachment->url = asset('storage/'.$path);
-
-        ActivityLog::log($item, 'attachment_added', null, ['name' => $attachment->original_filename]);
+        $request->validate(['file' => ItemAttachments::RULES]);
+        ItemAttachments::add($item, $request->user(), $request->file('file'));
 
         return back()->with('success', 'Attachment uploaded successfully.');
     }
@@ -953,12 +933,7 @@ class BoardController extends Controller
             abort(404);
         }
 
-        // Delete file from storage
-        \Storage::disk('public')->delete($attachment->path);
-
-        ActivityLog::log($item, 'attachment_removed', null, ['name' => $attachment->original_filename]);
-
-        $attachment->delete();
+        ItemAttachments::remove($item, $attachment);
 
         return back()->with('success', 'Attachment deleted successfully.');
     }
