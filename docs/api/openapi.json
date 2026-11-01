@@ -80,6 +80,9 @@
         },
         {
             "name": "Issues"
+        },
+        {
+            "name": "Sprints"
         }
     ],
     "security": [
@@ -7795,6 +7798,555 @@
                     }
                 }
             }
+        },
+        "/boards/{board}/sprints": {
+            "get": {
+                "operationId": "app.v1.sprints.index",
+                "description": "`status` = comma-separated `active`, `planned`, `completed` (default `active,planned`: what the backlog page\nshows). A Kanban board has none.",
+                "summary": "The sprints of a board, in planning order",
+                "tags": [
+                    "Sprints"
+                ],
+                "parameters": [
+                    {
+                        "name": "board",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "comma-separated: active, planned, completed (default active,planned)",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^(active|planned|completed)(,(active|planned|completed))*$"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `SprintResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SprintCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/boards/{board}/backlog": {
+            "get": {
+                "operationId": "app.v1.sprints.backlog",
+                "summary": "The backlog of a Scrum board: top-level issues in no sprint, in backlog order",
+                "tags": [
+                    "Sprints"
+                ],
+                "parameters": [
+                    {
+                        "name": "board",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `IssueResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/IssueCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/boards/{board}/backlog/items": {
+            "post": {
+                "operationId": "app.v1.sprints.backlog.move",
+                "description": "Same rules as moving into a sprint.",
+                "summary": "Move issues to the backlog (out of their sprint); subtasks follow their parent",
+                "tags": [
+                    "Sprints"
+                ],
+                "parameters": [
+                    {
+                        "name": "board",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MoveToSprintRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`SprintMoveResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SprintMoveResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/boards/{board}/velocity": {
+            "get": {
+                "operationId": "app.v1.sprints.velocity",
+                "summary": "Velocity: committed vs. completed of the board's last completed sprints, oldest first (not paginated)",
+                "tags": [
+                    "Sprints"
+                ],
+                "parameters": [
+                    {
+                        "name": "board",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `VelocityResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/VelocityResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/sprints/{sprint}": {
+            "get": {
+                "operationId": "app.v1.sprints.show",
+                "summary": "One sprint with its issue counts and story points",
+                "tags": [
+                    "Sprints"
+                ],
+                "parameters": [
+                    {
+                        "name": "sprint",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`SprintResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SprintResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/sprints/{sprint}/items": {
+            "get": {
+                "operationId": "app.v1.sprints.items",
+                "summary": "The issues of a sprint, in backlog order (top-level issues; their subtasks are in the sprint too)",
+                "tags": [
+                    "Sprints"
+                ],
+                "parameters": [
+                    {
+                        "name": "sprint",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `IssueResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/IssueCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.sprints.move",
+                "description": "Needs the right to plan the board (`can.manage_sprints`, 403). Ids that aren't top-level issues of the\nboard or a completed sprint \u2192 422 and nothing moves. `request_id` makes a retry answer the first result.",
+                "summary": "Move issues into a planned or the active sprint (at the end); subtasks follow their parent",
+                "tags": [
+                    "Sprints"
+                ],
+                "parameters": [
+                    {
+                        "name": "sprint",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MoveToSprintRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`SprintMoveResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SprintMoveResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/sprints/{sprint}/burndown": {
+            "get": {
+                "operationId": "app.v1.sprints.burndown",
+                "summary": "A sprint's burndown: remaining story points (or issues) per day and the ideal line",
+                "tags": [
+                    "Sprints"
+                ],
+                "parameters": [
+                    {
+                        "name": "sprint",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`BurndownResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BurndownResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -8745,6 +9297,53 @@
                     "updated_at"
                 ],
                 "title": "BookmarkItemResource"
+            },
+            "BurndownResource": {
+                "type": "object",
+                "properties": {
+                    "sprint_id": {
+                        "type": "integer"
+                    },
+                    "unit": {
+                        "type": "string",
+                        "description": "points | issues"
+                    },
+                    "total": {
+                        "type": "integer"
+                    },
+                    "days": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "date": {
+                                    "type": "string"
+                                },
+                                "ideal": {
+                                    "type": "number"
+                                },
+                                "remaining": {
+                                    "type": [
+                                        "integer",
+                                        "null"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "date",
+                                "ideal",
+                                "remaining"
+                            ]
+                        }
+                    }
+                },
+                "required": [
+                    "sprint_id",
+                    "unit",
+                    "total",
+                    "days"
+                ],
+                "title": "BurndownResource"
             },
             "CalendarConnectionResource": {
                 "type": "object",
@@ -11336,6 +11935,33 @@
                 ],
                 "title": "MoveIssueRequest"
             },
+            "MoveToSprintRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/sprints/{id}/items` \u00b7 `POST /api/v1/boards/{id}/backlog/items`: issues to move. Authorized\nbefore validation: a board / sprint the user can't open is a 404, planning needs BoardPolicy::update (403),\nas the backlog page.",
+                "properties": {
+                    "item_ids": {
+                        "type": "array",
+                        "description": "top-level issues of the board (subtasks follow their parent)",
+                        "items": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "minItems": 1,
+                        "maxItems": 200
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "item_ids"
+                ],
+                "title": "MoveToSprintRequest"
+            },
             "MyDayResource": {
                 "type": "object",
                 "properties": {
@@ -12990,6 +13616,164 @@
                     "$ref": "#/components/schemas/SnippetResource"
                 },
                 "title": "SnippetsCollection"
+            },
+            "SprintCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/SprintResource"
+                },
+                "title": "SprintCollection"
+            },
+            "SprintMoveResource": {
+                "type": "object",
+                "properties": {
+                    "moved": {
+                        "type": "integer",
+                        "description": "issues that changed their sprint (the ones already there don't count)"
+                    },
+                    "sprint_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "the target sprint; null = the backlog"
+                    }
+                },
+                "required": [
+                    "moved",
+                    "sprint_id"
+                ],
+                "title": "SprintMoveResource"
+            },
+            "SprintResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "board_id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "goal": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "planned | active | completed"
+                    },
+                    "position": {
+                        "type": "integer",
+                        "description": "planning order"
+                    },
+                    "start_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "end_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "started_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "completed_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "counts": {
+                        "type": "object",
+                        "properties": {
+                            "issues": {
+                                "type": "integer"
+                            },
+                            "done": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "issues",
+                            "done"
+                        ]
+                    },
+                    "points": {
+                        "type": "object",
+                        "properties": {
+                            "total": {
+                                "type": "integer"
+                            },
+                            "done": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "total",
+                            "done"
+                        ]
+                    },
+                    "committed_points": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "completed sprints: what was committed at the start and completed at the end"
+                    },
+                    "completed_points": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "committed_issues": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "completed_issues": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "board_id",
+                    "name",
+                    "goal",
+                    "status",
+                    "position",
+                    "start_date",
+                    "end_date",
+                    "started_at",
+                    "completed_at",
+                    "counts",
+                    "points",
+                    "committed_points",
+                    "completed_points",
+                    "committed_issues",
+                    "completed_issues",
+                    "url"
+                ],
+                "title": "SprintResource"
             },
             "StartDeviceAuthRequest": {
                 "type": "object",
@@ -15238,6 +16022,38 @@
                     }
                 },
                 "title": "UpdateWorkLogRequest"
+            },
+            "VelocityResource": {
+                "type": "object",
+                "properties": {
+                    "sprint_id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "committed_points": {
+                        "type": "integer"
+                    },
+                    "completed_points": {
+                        "type": "integer"
+                    },
+                    "committed_issues": {
+                        "type": "integer"
+                    },
+                    "completed_issues": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "sprint_id",
+                    "name",
+                    "committed_points",
+                    "completed_points",
+                    "committed_issues",
+                    "completed_issues"
+                ],
+                "title": "VelocityResource"
             },
             "WatchersResource": {
                 "type": "object",
