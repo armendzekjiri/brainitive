@@ -18,6 +18,7 @@ use App\Http\Controllers\AppApi\InvitationController;
 use App\Http\Controllers\AppApi\IssueActivityController;
 use App\Http\Controllers\AppApi\IssueController;
 use App\Http\Controllers\AppApi\IssueLinkController;
+use App\Http\Controllers\AppApi\LeadController;
 use App\Http\Controllers\AppApi\LinkController;
 use App\Http\Controllers\AppApi\MeAvatarController;
 use App\Http\Controllers\AppApi\MeController;
@@ -178,6 +179,13 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::get('tickets/{ticket}', [HelpdeskController::class, 'ticket'])->name('tickets.show');
         Route::patch('tickets/{ticket}', [HelpdeskController::class, 'update'])->name('tickets.update');
         Route::post('tickets/{ticket}/replies', [HelpdeskController::class, 'reply'])->middleware('throttle:60,1,app.tickets.replies')->name('tickets.replies.store');
+
+        // ── Leads, member side (LeadActions, LeadFormPolicy); the public form and the builder: web only ──
+        Route::get('projects/{project}/lead-forms', [LeadController::class, 'forms'])->name('lead-forms.index');
+        Route::get('lead-forms/{form}/leads', [LeadController::class, 'leads'])->name('lead-forms.leads');
+        Route::get('lead-forms/{form}/analytics', [LeadController::class, 'analytics'])->name('lead-forms.analytics');
+        Route::get('leads/{lead}', [LeadController::class, 'show'])->name('leads.show');
+        Route::patch('leads/{lead}', [LeadController::class, 'update'])->name('leads.update');
 
         // ── Task lists + to-dos (TaskLists, WorkCompletion: shared with the web, CLI and MCP) ──────
         // lists and tasks by id; ids on writes are checked in the controller (no route constraint)
