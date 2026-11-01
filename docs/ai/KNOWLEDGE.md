@@ -2044,3 +2044,31 @@ Never migrate devdb just to export the spec.
   sprint or ids that aren't top-level issues of the board; inside `IdempotentRequest::run` the transaction rolls back and no
   request row is stored, so a corrected retry with the same `request_id` still runs.
 
+### App API phase 07: docs, whiteboards, plans, releases, files (v1.49.0, BRAI-411 … BRAI-416)
+- **App doc edits follow the web editor, not the MCP.** MCP `update-page` writes `content` of a published page directly (discarding
+  its draft, no revision check); the App API saves into the draft (`PageWrites::saveDraft`, published only by `POST …/publish`) and
+  needs `revision` with `markdown`. Live editors bump `edit_revision` with every save, so an app holding an old revision gets 409 —
+  intended: the app never overwrites live typing. The write resets the live epoch (`Page::saved` → `PageCollab::reset`): open browsers
+  reload on the app's text, as after the web's single-user save. The web's autosave revision check now runs on the locked row too.
+- **`{page}` is an explicitly bound route parameter** (slug / uuid lookup in `AppServiceProvider`): App API routes use `{uuid}` for
+  pages, like `{group}` for bookmark groups.
+- **Native live editing needs the save, not just the token.** A client that joins the Yjs document and edits must also send the
+  live draft (`PUT /pages/{uuid}/collab/draft`, as the leading browser does) — otherwise its edits live only in the server's Y state
+  and are lost at the next epoch reset. Hence BRAI-412 exposes bootstrap + save, not only the token.
+- **Reviewers can't open the draft they review.** `PageReviewPolicy::view` = page editors or active reviewers; the API finds reviews
+  through a page of a project the user can open, then that policy (`ResolvesPageReviews`). An approved review stays `approved` and
+  open (`can.decide` still true) until publish or a draft change (`stale`).
+- **Markdown keeps only the link of a smart link** (`data-smart-link` is dropped), so `GET /links/resolve` also takes Brainitive URLs
+  (`SmartLinks::refFromUrl`: this host or relative paths only; `boards/<b>/items/<id>`, `boards/<b>#item-<id>`, `pages/<uuid>`,
+  `helpdesks/<h>/tickets/<id>`, `plans/<slug>` → `plan:<project>/<slug>`).
+- **The Markdown converter now keeps images** (`![alt](src)` ⇄ `<img>`; http(s) / site paths only, `data:` / `javascript:` dropped).
+  Before, a doc's or issue's images vanished on any Markdown write (MCP included).
+- **Tree without content:** `GET /projects/{id}/pages` never loads `pages.content` (whiteboard scenes are large): `kind` comes from
+  SQL (`content::jsonb ->> 'type'`, `jsonb_exists(…, 'elements')`), the icon as `substr(icon, 1, 64)` (image icons are long `data:`
+  URLs; the list only says `has_image_icon`).
+- **No whiteboard image export on the server** (nothing renders Excalidraw server-side): `preview_image_url` is the last "Save & exit"
+  PNG and can be older than the scene. **No file registry:** uploads return their public URL (as attachments do); no signed URLs or
+  thumbnails.
+- **App API uploads skipped the storage limit** before phase 07 (issue attachments, bookmark files: `file.room` is web middleware). Now
+  `FileRoom::ensure` inside the idempotent write, so a replayed `request_id` is never refused.
+

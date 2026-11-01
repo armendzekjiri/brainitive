@@ -476,3 +476,23 @@ writes `content`); the API follows the web editor instead.
 ### BRAI-416 files (`feat/app-api-files`)
 - `POST /uploads` (multipart, the web's upload checks: allowlisted extensions, size, storage → 402) and how the apps
   fetch files; a shared uploads service if issue attachments can use it cheaply.
+
+### Phase 07 — result
+Merged into `release/v1.49.0`: `fix/mcp-move-notifies-watchers`, `feat/app-api-pages` (BRAI-411), `feat/app-api-collab-token`
+(BRAI-412), `feat/app-api-doc-reviews` (BRAI-413), `feat/app-api-whiteboards` (BRAI-414), `feat/app-api-plans-releases` (BRAI-415),
+`feat/app-api-files` (BRAI-416). No migrations. New spec tags: Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270. e2e:
+`app-api-pages`, `-collab-token`, `-doc-reviews`, `-whiteboards`, `-plans-releases`, `-uploads`.
+Deviations from the plan / cards:
+- Docs: `PATCH /pages/{uuid}` saves into the draft (the web editor's path) with `revision` required for `markdown`; publishing is its
+  own call. Delete / duplicate / unpublish / archive / image icons: web only.
+- Collab: besides the token, the API has the browser's bootstrap + live draft save (a native editor must save). Docs only.
+- Reviews: one `POST …/reviews/{review}/decision {decision}` (the web's endpoint) instead of `approve` / `request-changes`; threads are
+  the review's inline comments. Backlinks are `GET /pages/{uuid}/links` (`related` + `referenced_by`). Smart links:
+  `GET /links/resolve?workspace=&refs[]=&urls[]=` (batch).
+- Whiteboards: `GET /whiteboards/{uuid}` (+ ETag); no `export.png` — the last saved preview (`preview_image_url`).
+- Releases are not paginated (the web's order, ≤ a project's releases); plans are.
+- Files: `POST /uploads` returns the public URL + a Markdown snippet (the web editor's model), no upload id / `GET /files/{id}` /
+  signed URLs / thumbnails. Attachments and bookmark files now check the storage limit (402).
+- `## API (ready)` texts for BRAI-198, 199, 200, 201, 202, 203, 206, 209, 212, 213, 214, 267 and the web-only text for BRAI-207, 208,
+  210 are in `docs/ai/API.md` → "Mobile card texts".
+

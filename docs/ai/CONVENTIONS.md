@@ -190,6 +190,11 @@ Full conventions and the endpoint registry: [`API.md`](./API.md); recipe:
   addressed by id (`/items/{id}`, `/boards/{id}`, `/sprints/{id}`); `GET /items/by-key/{KEY}` for keys.
 - An update that can collide with someone else's takes the `updated_at` the client last read and answers 409 when the row
   changed since (`PATCH /items/{id}`).
+- Live documents (docs, Yjs): an App API text change is a save from outside the live document — it goes through the editor's draft
+  path (`PageWrites::saveDraft`), needs the `revision` (`edit_revision`) the client read (required with `markdown`, 409 otherwise) and
+  resets the live epoch like the web's single-user save. Never write a doc's `content` directly from a new API path.
+- App API uploads always check the plan's file storage (`FileRoom::ensure`, inside the idempotent write) — the web's `file.room`
+  middleware doesn't run on `/api/v1`.
 - Filters mirror the web's own URL params instead of a second filter language: `GET /boards/{id}/items` takes the board URL /
   saved-view params (`BoardFilters`), so a saved view's `params` work as they are.
 - The spec's `info.version` is the API version (`1.0.0`), not the app release; breaking changes → `/api/v2`.
