@@ -19,16 +19,19 @@ The desktop app is in development. The server side ships with Brainitive v1.49.0
 | `/api/v1/*` | The **App API**: a JSON API only for the first-party desktop and mobile apps. It has its own tokens and rate limits and is separate from the API that AI apps, the CLI and the browser extension use (`/mcp`, `/api/cli`, `/api/ext`) |
 | `/app/authorize` | Sign-in page the app opens in the system browser. People sign in the way they always do (password, Google, Microsoft or GitHub) and confirm "Sign in to Brainitive Desktop" |
 | `/app/session/*` | One-time link that signs the app's window into the web app after the native sign-in |
+| `/app/device` | Where people confirm the code a **TV** shows (device-code sign-in). They open it on a phone or computer where they are signed in, or scan the TV's QR code, and click **Approve** |
 | `/collab` | Live updates, as for the browser (see [Realtime server](./realtime)) |
 
 Sign-in hands the app a one-time code through the `brainitive://` link. No OAuth app, client secret or redirect URL has to be set up on your server for this.
+
+The **TV app** has no usable browser, so it signs in with a code instead (OAuth device authorization, RFC 8628): the TV shows a code like `BCDF-GHJK` and a QR code, the person confirms it at `https://<your server>/app/device`, and the TV is signed in. The code works once, for 10 minutes. Nothing to set up for this either: `/app/device` uses the address in `APP_URL`, so make sure it is the public address people reach your server at.
 
 ## Reverse proxy
 
 Nothing extra is needed when your proxy forwards everything to Brainitive (the nginx examples in [Docker](./docker) and [Manual install](./manual-install) do). If you only forward selected paths, also forward:
 
 - `/api/v1/` with the `Authorization` header unchanged, and
-- `/app/` (sign-in and the one-time session links).
+- `/app/` (sign-in, the one-time session links and the TV code page `/app/device`).
 
 The App API sends no CORS headers on purpose: only the native apps call it, never a website.
 
@@ -43,7 +46,7 @@ Raise them only when an upgrade note asks you to. All variables: [Configuration]
 
 ## Signed-in devices
 
-Every app sign-in is a device. People see theirs under **Profile → Notifications → Desktop & mobile apps** and can sign one out there. Suspending a user or changing their password signs out all their apps.
+Every app sign-in is a device (desktop, mobile or TV). People see theirs under **Profile → Notifications → Desktop & mobile apps** and can sign one out there. Suspending a user or changing their password signs out all their apps.
 
 ## API reference
 

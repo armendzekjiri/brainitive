@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AppApi\AuthController;
 use App\Http\Controllers\AppApi\ConnectedAppController;
+use App\Http\Controllers\AppApi\DeviceAuthController;
 use App\Http\Controllers\AppApi\DeviceController;
 use App\Http\Controllers\AppApi\InstanceController;
 use App\Http\Controllers\AppApi\InvitationController;
@@ -38,6 +39,10 @@ Route::middleware('throttle:app-auth')->group(function () {
     Route::post('auth/exchange', [AuthController::class, 'exchange'])->name('auth.exchange');
     Route::post('auth/refresh', [AuthController::class, 'refresh'])->name('auth.refresh');
 });
+
+// ── Auth (public): device-code sign-in for the TV app (RFC 8628); confirmed at /app/device ──────
+Route::post('auth/device', [DeviceAuthController::class, 'start'])->middleware('throttle:app-device-start')->name('auth.device');
+Route::post('auth/device/token', [DeviceAuthController::class, 'token'])->middleware('throttle:app-device-poll')->name('auth.device.token');
 
 Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function () {
 

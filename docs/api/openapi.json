@@ -227,6 +227,199 @@
                 "security": []
             }
         },
+        "/auth/device": {
+            "post": {
+                "operationId": "app.v1.auth.device",
+                "description": "Answers (unwrapped, RFC 8628 \u00a73.2) the `device_code` to poll with, the `user_code` to show\n(XXXX-XXXX), the page to type it on (`verification_uri`), that page with the code filled in for\na QR (`verification_uri_complete`), `expires_in` (seconds, 600) and the polling `interval`\n(seconds, 5). Only clients that sign in with a device code (`tv`); the platform must be the\nclient's (`android_tv`), else 422.",
+                "summary": "Start a device-code sign-in",
+                "tags": [
+                    "Auth"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StartDeviceAuthRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`DeviceAuthorizationResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DeviceAuthorizationResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": []
+            }
+        },
+        "/auth/device/token": {
+            "post": {
+                "operationId": "app.v1.auth.device.token",
+                "description": "Once the user approved: the same token response as `/auth/exchange` (unwrapped, with `device`),\nonce. Until then a 400 with an RFC 8628 `code`: `authorization_pending` (ask again after\n`interval`), `slow_down` (asked too soon: wait 5 s longer from now on), `access_denied` (the user\nsaid no: stop), `expired_token` (start again), `invalid_grant` (unknown or already used code).",
+                "summary": "Poll for the tokens of a device-code sign-in",
+                "tags": [
+                    "Auth"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DeviceTokenRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "400": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string",
+                                                    "const": "Waiting for the code to be confirmed on another device."
+                                                },
+                                                "code": {
+                                                    "type": "string",
+                                                    "const": "authorization_pending"
+                                                },
+                                                "errors": {
+                                                    "type": "null"
+                                                }
+                                            },
+                                            "required": [
+                                                "message",
+                                                "code",
+                                                "errors"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string"
+                                                },
+                                                "code": {
+                                                    "type": "string",
+                                                    "const": "slow_down"
+                                                },
+                                                "interval": {
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "required": [
+                                                "message",
+                                                "code",
+                                                "interval"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string",
+                                                    "const": "The sign-in was denied."
+                                                },
+                                                "code": {
+                                                    "type": "string",
+                                                    "const": "access_denied"
+                                                },
+                                                "errors": {
+                                                    "type": "null"
+                                                }
+                                            },
+                                            "required": [
+                                                "message",
+                                                "code",
+                                                "errors"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string",
+                                                    "const": "The code has expired. Start signing in again."
+                                                },
+                                                "code": {
+                                                    "type": "string",
+                                                    "const": "expired_token"
+                                                },
+                                                "errors": {
+                                                    "type": "null"
+                                                }
+                                            },
+                                            "required": [
+                                                "message",
+                                                "code",
+                                                "errors"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "message": {
+                                                    "type": "string",
+                                                    "const": "The device code is invalid or was already used. Start signing in again."
+                                                },
+                                                "code": {
+                                                    "type": "string",
+                                                    "const": "invalid_grant"
+                                                },
+                                                "errors": {
+                                                    "type": "null"
+                                                }
+                                            },
+                                            "required": [
+                                                "message",
+                                                "code",
+                                                "errors"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`TokenResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TokenResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": []
+            }
+        },
         "/auth/logout": {
             "post": {
                 "operationId": "app.v1.auth.logout",
@@ -2420,6 +2613,44 @@
                 ],
                 "title": "DataExportStateResource"
             },
+            "DeviceAuthorizationResource": {
+                "type": "object",
+                "properties": {
+                    "device_code": {
+                        "type": "string",
+                        "description": "secret of the device: send it back to /auth/device/token, never show it"
+                    },
+                    "user_code": {
+                        "type": "string",
+                        "description": "what the screen shows, XXXX-XXXX"
+                    },
+                    "verification_uri": {
+                        "type": "string",
+                        "description": "where to type it: {instance}/app/device"
+                    },
+                    "verification_uri_complete": {
+                        "type": "string",
+                        "description": "the same page with the code filled in (the QR); still needs the user's click"
+                    },
+                    "expires_in": {
+                        "type": "integer",
+                        "description": "seconds until the code stops working"
+                    },
+                    "interval": {
+                        "type": "integer",
+                        "description": "seconds to wait between two polls"
+                    }
+                },
+                "required": [
+                    "device_code",
+                    "user_code",
+                    "verification_uri",
+                    "verification_uri_complete",
+                    "expires_in",
+                    "interval"
+                ],
+                "title": "DeviceAuthorizationResource"
+            },
             "DeviceResource": {
                 "type": "object",
                 "properties": {
@@ -2481,6 +2712,21 @@
                 ],
                 "title": "DeviceResource"
             },
+            "DeviceTokenRequest": {
+                "type": "object",
+                "description": "POST /api/v1/auth/device/token: the `device_code` of POST /auth/device.",
+                "properties": {
+                    "device_code": {
+                        "type": "string",
+                        "description": "a wrong one is answered as `invalid_grant`, not a validation error",
+                        "maxLength": 256
+                    }
+                },
+                "required": [
+                    "device_code"
+                ],
+                "title": "DeviceTokenRequest"
+            },
             "ExchangeCodeRequest": {
                 "type": "object",
                 "description": "POST /api/v1/auth/exchange: the one-time code from brainitive://auth/callback, the PKCE\nverifier and the device that signs in. Whether the platform fits the client is checked after\nthe code is known (AuthController::exchange).",
@@ -2510,7 +2756,8 @@
                                     "windows",
                                     "linux",
                                     "ios",
-                                    "android"
+                                    "android",
+                                    "android_tv"
                                 ]
                             },
                             "app_version": {
@@ -4182,6 +4429,60 @@
                     "updated_at"
                 ],
                 "title": "SearchResultResource"
+            },
+            "StartDeviceAuthRequest": {
+                "type": "object",
+                "description": "POST /api/v1/auth/device: a device without a usable browser (the TV app) starts a device-code\nsign-in (RFC 8628). Same `device` object as /auth/exchange; the platform must be one of the client's.",
+                "properties": {
+                    "client": {
+                        "type": "string",
+                        "description": "clients that sign in with a device code (today: `tv`)",
+                        "enum": [
+                            "tv"
+                        ]
+                    },
+                    "device": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "maxLength": 120
+                            },
+                            "platform": {
+                                "type": "string",
+                                "enum": [
+                                    "macos",
+                                    "windows",
+                                    "linux",
+                                    "ios",
+                                    "android",
+                                    "android_tv"
+                                ]
+                            },
+                            "app_version": {
+                                "type": "string",
+                                "maxLength": 32
+                            },
+                            "os_version": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "maxLength": 64
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "platform",
+                            "app_version"
+                        ]
+                    }
+                },
+                "required": [
+                    "client",
+                    "device"
+                ],
+                "title": "StartDeviceAuthRequest"
             },
             "StoreInvitationRequest": {
                 "type": "object",

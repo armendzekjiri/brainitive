@@ -1,7 +1,7 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Laptop, LogOut, Monitor, Smartphone } from 'lucide-react';
+import { Laptop, LogOut, Monitor, Smartphone, Tv } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { AppDevice } from '@/types';
 
@@ -11,6 +11,13 @@ const PLATFORM_LABELS: Record<AppDevice['platform'], string> = {
     linux: 'Linux',
     ios: 'iOS',
     android: 'Android',
+    android_tv: 'Android TV',
+};
+
+const CLIENT_NAMES: Record<AppDevice['client'], string> = {
+    desktop: 'Brainitive Desktop',
+    mobile: 'Brainitive Mobile',
+    tv: 'Brainitive TV',
 };
 
 /**
@@ -39,7 +46,7 @@ export default function AppDevices({ devices, className = '' }: { devices: AppDe
             ) : (
                 <ul className="divide-y rounded-lg border" aria-label="Signed-in apps">
                     {devices.map((device) => {
-                        const Icon = device.client === 'mobile' ? Smartphone : device.platform === 'macos' ? Laptop : Monitor;
+                        const Icon = device.client === 'tv' ? Tv : device.client === 'mobile' ? Smartphone : device.platform === 'macos' ? Laptop : Monitor;
                         return (
                             <li key={device.id} className="flex items-center gap-3 px-4 py-3" data-testid="app-device">
                                 <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -49,7 +56,7 @@ export default function AppDevices({ devices, className = '' }: { devices: AppDe
                                     <p className="truncate text-sm font-medium">{device.name}</p>
                                     <p className="truncate text-xs text-muted-foreground">
                                         {[
-                                            `${device.client === 'mobile' ? 'Brainitive Mobile' : 'Brainitive Desktop'}${device.app_version ? ` ${device.app_version}` : ''}`,
+                                            `${CLIENT_NAMES[device.client] ?? 'Brainitive app'}${device.app_version ? ` ${device.app_version}` : ''}`,
                                             PLATFORM_LABELS[device.platform] ?? device.platform,
                                         ].join(' · ')}
                                     </p>

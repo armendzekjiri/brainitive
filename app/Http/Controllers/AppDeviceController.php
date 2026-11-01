@@ -40,7 +40,11 @@ class AppDeviceController extends Controller
 
         $device = AppDevice::create([
             'user_id' => $request->user()->id,
-            'client' => in_array($validated['platform'] ?? 'macos', ['ios', 'android'], true) ? 'mobile' : 'desktop',
+            'client' => match ($validated['platform'] ?? 'macos') {
+                'ios', 'android' => 'mobile',
+                'android_tv' => 'tv',
+                default => 'desktop',
+            },
             'platform' => $validated['platform'] ?? 'macos',
             'name' => $validated['name'],
             'app_version' => '0.1.0',

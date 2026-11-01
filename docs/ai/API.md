@@ -58,6 +58,50 @@ Token response (exchange + refresh):
 
 Cancel on the consent page → `brainitive://auth/callback?error=access_denied&state=…`.
 
+### TV: device-code sign-in (RFC 8628, BRAI-438)
+
+**The TV app uses the device code; desktop and mobile keep PKCE** (`/app/authorize` + `/auth/exchange`).
+Clients and their grant + platforms: `config/app-api.php` → `clients` (`tv`: grant `device_code`,
+platform `android_tv`, no redirect — `/app/authorize` refuses it; PKCE clients can't start a device code).
+
+```
+TV                                        Phone / computer (signed in)              Server
+ │── POST /api/v1/auth/device {client: "tv", device: {name, platform: "android_tv", app_version, os_version?}} ──▶│
+ │◀── {device_code, user_code: "BCDF-GHJK", verification_uri, verification_uri_complete, expires_in: 600, interval: 5}
+ │ shows user_code + a QR of verification_uri_complete
+ │                                          │ opens /app/device (types the code) or the QR (code filled in)
+ │                                          │ sees code, device name, client, platform → Approve / Deny (POST)
+ │── POST /api/v1/auth/device/token {device_code} every `interval` s ────────────────────────────────▶│
+ │◀── 400 {code: authorization_pending} … then 200 token response (as /auth/exchange, unwrapped, + device)
+```
+
+`POST /auth/device` → (unwrapped)
+```json
+{ "device_code": "k3…64 chars", "user_code": "BCDF-GHJK",
+  "verification_uri": "https://brainitive.example.com/app/device",
+  "verification_uri_complete": "https://brainitive.example.com/app/device?code=BCDF-GHJK",
+  "expires_in": 600, "interval": 5 }
+```
+`POST /auth/device/token {device_code}` → 200 the token response above (`device.platform: "android_tv"`),
+or 400 `{message, code}` with `code`:
+
+| code | meaning | the TV does |
+|---|---|---|
+| `authorization_pending` | not decided yet | poll again after `interval` |
+| `slow_down` | polled sooner than `interval` (+ `interval`: the new wait, +5 s each time) | wait the new `interval` from now on |
+| `access_denied` | the user clicked Deny (or was suspended) | stop, show "denied" |
+| `expired_token` | 10 minutes passed | start again |
+| `invalid_grant` | unknown or already used `device_code` | start again |
+
+- The user code: 8 letters of `BCDFGHJKLMNPQRSTVWXZ` (no vowels, no look-alikes), shown `XXXX-XXXX`; typing
+  ignores case, spaces and dashes. Single use: once approved or denied it no longer opens, for anyone.
+- `/app/device` needs a signed-in, verified web session (guests sign in first and come back). Opening
+  the QR never approves: only the Approve click (POST + CSRF) does.
+- Limits: `POST /auth/device` 10/min per IP; polling 120/min per IP (the per-code `interval` is the real
+  limit); `/app/device` 15/min per user + 40/min per IP, and 10 wrong codes per user lock it for 15 min (429).
+- The token is issued once (the next poll → `invalid_grant`); `max_devices`, refresh rotation + reuse
+  detection, logout and revocation work as for desktop / mobile. TV tokens get 401 on `/mcp`, `/api/cli`, `/api/ext`.
+
 ## The `## API (ready)` section on a mobile card
 
 Each endpoint's card on the **Mobile app** board (`mobile-app`, project `brainitive`, workspace
@@ -99,6 +143,10 @@ the server can't read its changelog (a stripped package).
 | `POST /api/v1/auth/refresh` | public, `throttle:app-auth` | `{refresh_token}` → new pair (unwrapped); the old pair is dead. Invalid / expired → 401 `invalid_grant`. A refresh token used **again** → device revoked (`refresh_reuse`) + email → 401 `invalid_grant`. **Send one refresh at a time** | Full | BRAI-172 | ready |
 | `POST /api/v1/auth/logout` | `auth:app` | Sign this device out → 204 | Full | BRAI-174 | ready |
 | `POST /api/v1/auth/web-session` | `auth:app` | → `{data: {url}}`: one-time (60 s) `/app/session/{code}` for the webview; append `?to=/path` (relative) to land elsewhere | Web only (desktop webview) | BRAI-177 | ready |
+| `POST /api/v1/auth/device` | public, 10/min per IP | TV: start a device-code sign-in `{client: "tv", device: {name, platform: "android_tv", app_version, os_version?}}` → `{device_code, user_code, verification_uri, verification_uri_complete, expires_in, interval}` (unwrapped). Not a device-code client / platform not the client's → 422 | none (TV only) | BRAI-438 | ready (v1.49.0) |
+| `POST /api/v1/auth/device/token` | public, 120/min per IP | TV: poll `{device_code}` → token response (unwrapped) once approved; else 400 `authorization_pending` / `slow_down` (+`interval`) / `access_denied` / `expired_token` / `invalid_grant` | none (TV only) | BRAI-438 | ready (v1.49.0) |
+| `GET /app/device` (browser) | web session (`auth` + `verified`) | Confirm page: enter the TV's code, or `?code=` from the QR → code, device name, client, platform + Approve / Deny. Never approves by itself | the page is used from phones | BRAI-438 | ready (v1.49.0) |
+| `POST /app/device` (browser) | web session + CSRF | `{user_code, decision: approve\|deny}` → done / denied page; a decided, expired or unknown code → 422 page; 10 wrong codes / 15 min → 429 | — | BRAI-438 | ready (v1.49.0) |
 | `GET /app/session/{code}` (browser) | the code | Webview: signs that user into the web guard with remember-me (cookies survive restarts), signs out another signed-in user first, → `?to=` or `/dashboard`. Used / expired code, revoked device or suspended user → login page | Web only | BRAI-177 | ready |
 
 ### Account
@@ -128,7 +176,7 @@ calls answer with the same object.
 ### Devices
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
-| `GET /api/v1/devices` | app | Settings → signed-in devices: the user's active installs, most recently used first → `{data: [{id, client, platform, name, app_version, os_version, has_push_token, current, last_used_at, created_at}]}` (≤ `max_devices`, not paginated). Never token hashes, IP or the push token. | Full | BRAI-173, BRAI-266 | ready |
+| `GET /api/v1/devices` | app | Settings → signed-in devices: the user's active installs (`client` desktop / mobile / tv; `platform` macos / windows / linux / ios / android / android_tv), most recently used first → `{data: [{id, client, platform, name, app_version, os_version, has_push_token, current, last_used_at, created_at}]}` (≤ `max_devices`, not paginated). Never token hashes, IP or the push token. | Full | BRAI-173, BRAI-266 | ready |
 | `PATCH /api/v1/devices/current` | app | After start / update / rename: `{name?, app_version?, os_version?, push_token?}` (only sent fields change; `push_token: null` removes it; stored encrypted, APNs / FCM delivery later) → `{data: device}`. The card said `POST /devices`: the row already exists after `/auth/exchange`, so it's an update of the calling device. | Full | BRAI-177, BRAI-266 | ready |
 | `DELETE /api/v1/devices/{id}` | app | Remote sign-out of one of the user's own active devices → 204 (its tokens die at once; the calling device = sign out). Another user's / revoked / unknown id → 404. | Full | BRAI-173, BRAI-266 | ready |
 
@@ -267,7 +315,7 @@ apps' push once it ships (APNs / FCM via the device's `push_token`).
 | `GET /api/v1/me/data-export` | app + verified | "Download my data": `{data: {latest, exports: [≤ 5], available_in}}` (seconds until a new request is allowed) | Request export | BRAI-262 | ready (v1.49.0, BRAI-394) |
 | `POST /api/v1/me/data-export` | app + verified, `throttle:5,1` | Request the ZIP (prepared in the background; notification + email when ready) → 202 with the same shape. Already being prepared / within the hour → 422 `export` | Request export | BRAI-262 | ready (v1.49.0, BRAI-394) |
 
-Connected app: `{id, kind: desktop|mobile|mcp|cli|extension|oauth, name, platform, app_version,
+Connected app: `{id, kind: desktop|mobile|tv|mcp|cli|extension|oauth, name, platform, app_version,
 scopes, current, connected_at, last_used_at, expires_at}` — never a token, hash, IP or push token.
 Passport tokens are grouped per client (one row each, as on the web): the CLI and tokens from
 `php artisan mcp:get-token` share the personal access client and show as `cli`.

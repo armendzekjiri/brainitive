@@ -7,15 +7,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * One signed-in desktop / mobile app install (App API v1, BRAI-385 / BRAI-428) and its current
+ * One signed-in desktop / mobile / TV app install (App API v1, BRAI-385 / BRAI-428) and its current
  * token pair. Revoking the device clears the pair, so its tokens stop working at once.
  * Tokens are issued and checked by App\Support\AppApi\AppTokens only.
  */
 class AppDevice extends Model
 {
-    public const CLIENTS = ['desktop', 'mobile'];
+    public const CLIENTS = ['desktop', 'mobile', 'tv'];
 
-    public const PLATFORMS = ['macos', 'windows', 'linux', 'ios', 'android'];
+    public const PLATFORMS = ['macos', 'windows', 'linux', 'ios', 'android', 'android_tv'];
 
     protected $fillable = [
         'user_id', 'client', 'platform', 'name', 'app_version', 'os_version', 'push_token',

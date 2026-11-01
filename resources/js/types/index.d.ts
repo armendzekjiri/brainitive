@@ -2984,8 +2984,8 @@ export interface PushDevice {
  */
 export interface AppDevice {
     id: number;
-    client: 'desktop' | 'mobile';
-    platform: 'macos' | 'windows' | 'linux' | 'ios' | 'android';
+    client: 'desktop' | 'mobile' | 'tv';
+    platform: 'macos' | 'windows' | 'linux' | 'ios' | 'android' | 'android_tv';
     name: string;
     app_version: string | null;
     os_version: string | null;
