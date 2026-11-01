@@ -6,11 +6,14 @@ use App\Models\Item;
 use App\Models\User;
 use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
+use App\Notifications\Contracts\DigestibleMail;
+use App\Support\Notifications\DigestEntry;
+use App\Support\Notifications\MailDigest;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class ItemAssignedNotification extends Notification
+class ItemAssignedNotification extends Notification implements DigestibleMail
 {
     use Queueable, RespectsPreferences, SendsWebPush;
 
@@ -90,5 +93,29 @@ class ItemAssignedNotification extends Notification
             ->headline("{$this->by()} assigned you to {$this->item->key}")
             ->line($title)
             ->action('Open issue', $this->toDatabase($notifiable)['item_url']);
+    }
+
+    /** The line in the notification email digest (BRAI-429). */
+    public function digestEntry(object $notifiable): ?DigestEntry
+    {
+        $workspace = MailDigest::workspaceOf($this->item);
+        if (! $workspace) {
+            return null;
+        }
+        $title = NewLeadNotification::plain((string) $this->item->title);
+        $board = $this->item->board;
+
+        return new DigestEntry(
+            type: 'item_assigned',
+            workspace: $workspace,
+            subject: $this->item,
+            title: "{$this->by()} assigned you to {$this->item->key}",
+            url: $this->toDatabase($notifiable)['item_url'],
+            mailSubject: "{$this->by()} assigned you to {$this->item->key}: {$title}",
+            subjectKey: $this->item->key,
+            subjectTitle: $title,
+            context: $board ? trim(($board->project?->name ? $board->project->name.' · ' : '').$board->name) : null,
+            action: 'Open issue',
+        );
     }
 }

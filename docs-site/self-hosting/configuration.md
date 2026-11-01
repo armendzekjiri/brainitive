@@ -115,6 +115,7 @@ See [Email](./email) for setup and testing.
 | `MAIL_EHLO_DOMAIN` | host of `APP_URL` | Name the server uses to greet the SMTP server |
 | `MAIL_URL` | – | Alternative: the whole SMTP connection as one URL |
 | `MAIL_SENDMAIL_PATH` | `/usr/sbin/sendmail -bs -i` | Used with `MAIL_MAILER=sendmail` |
+| `NOTIFICATION_EMAIL_DIGEST_SECONDS` | `60` | Activity emails (assignments, mentions, comments, status changes, page updates, sprints) wait this many seconds from the first one and go out as one email per person and workspace. `0` sends every email on its own, at once. The bell and push are never delayed. Needs the queue worker; with `QUEUE_CONNECTION=sync` emails are always sent at once |
 
 ### Email to helpdesk
 
@@ -207,6 +208,12 @@ Normally created in **Instance admin → GitHub App**. These variables override 
 |---|---|---|
 | `GITHUB_STARS` | `true` | Show the star count on "Star on GitHub" buttons. The scheduler fetches it hourly from GitHub's API. `false` turns that off |
 | `GITHUB_REPOSITORY` | `armendzekjiri/brainitive` | Repository the buttons link to |
+
+### Update check
+
+| Variable | Default | What it does |
+|---|---|---|
+| `BRAINITIVE_UPDATE_CHECK` | on (self-hosted) | Once a day the scheduler asks GitHub's public API for the latest Brainitive release (anonymous, nothing about your instance is sent). Instance admins then see a newer version in **Instance admin → Overview** and in a small dismissible strip. Nothing is installed: see [Upgrading](./upgrading). `false` turns it off. Empty means on, except on Brainitive Cloud. Check now with `php artisan brainitive:check-update` |
 
 ## AI, MCP and outgoing requests
 

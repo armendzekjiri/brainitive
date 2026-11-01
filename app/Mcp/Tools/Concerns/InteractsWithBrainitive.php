@@ -213,19 +213,24 @@ trait InteractsWithBrainitive
     }
 
     /**
-     * An item type available to the project by slug or name, or null when none given.
+     * An item type enabled for the project by slug or name, or null when none given. `$keep` (an
+     * issue's current type) is accepted even when the project switched it off.
      *
      * @throws ToolError
      */
-    protected function itemTypeIdFor(Project $project, ?string $type): ?int
+    protected function itemTypeIdFor(Project $project, ?string $type, ?ItemType $keep = null): ?int
     {
         if ($type === null || trim($type) === '') {
             return null;
         }
+        $matches = fn (ItemType $t) => $this->sameName($t->name, $type) || $t->slug === mb_strtolower(trim($type));
+        if ($keep && $matches($keep)) {
+            return $keep->id;
+        }
         $all = ItemType::forProject($project)->get();
-        $found = $all->first(fn (ItemType $t) => $this->sameName($t->name, $type) || $t->slug === mb_strtolower(trim($type)));
+        $found = $all->first($matches);
         if (! $found) {
-            throw new ToolError("No item type \"{$type}\" in this project. Types: ".$all->pluck('name')->join(', ').'. Add one with create_item_type.');
+            throw new ToolError("No item type \"{$type}\" in this project. Types: ".$all->pluck('name')->join(', ').'. Add one (or switch a switched-off one back on) with create_item_type.');
         }
 
         return $found->id;

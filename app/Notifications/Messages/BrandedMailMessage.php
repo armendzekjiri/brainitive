@@ -45,6 +45,13 @@ class BrandedMailMessage extends MailMessage
     /** @var list<array{label: string, url: string}> */
     public array $footerLinks = [];
 
+    /**
+     * Linked list lines (notification email digest, BRAI-429), rendered by `mail::entries`.
+     *
+     * @var list<array{label: string, time: ?string, link: string, title: string, context: ?string, body: ?string, url: string}>
+     */
+    public array $entries = [];
+
     /** A member's notification (one of their channels on Profile → Notifications). */
     public static function member(object $notifiable, ?string $type = null): static
     {
@@ -143,6 +150,28 @@ class BrandedMailMessage extends MailMessage
         return $this;
     }
 
+    /**
+     * A list of linked lines (the notification email digest): each one a small label + time, the linked
+     * subject ("WEB-42 · Fix the login redirect"), what happened, its context and a short preview. Plain
+     * text only — the `mail::entries` component escapes it; links must be app URLs.
+     *
+     * @param  list<array{label: string, time?: ?string, link: string, title: string, context?: ?string, body?: ?string, url: string}>  $entries
+     */
+    public function entries(array $entries): static
+    {
+        $this->entries = array_map(fn (array $e) => [
+            'label' => BrandedMail::line((string) $e['label'], 40),
+            'time' => isset($e['time']) ? BrandedMail::line((string) $e['time'], 20) : null,
+            'link' => BrandedMail::line((string) $e['link'], 160),
+            'title' => BrandedMail::line((string) $e['title'], 200),
+            'context' => blank($e['context'] ?? null) ? null : BrandedMail::line((string) $e['context'], 120),
+            'body' => blank($e['body'] ?? null) ? null : BrandedMail::line(strip_tags((string) $e['body']), 140),
+            'url' => (string) $e['url'],
+        ], array_values($entries));
+
+        return $this;
+    }
+
     /** "— Acme Support" instead of "— Brainitive". */
     public function signOff(string $name): static
     {
@@ -160,6 +189,7 @@ class BrandedMailMessage extends MailMessage
             'context' => $this->context,
             'reason' => $this->reason,
             'footerLinks' => $this->footerLinks,
+            'entries' => $this->entries,
         ]);
     }
 }

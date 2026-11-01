@@ -36,12 +36,11 @@ class CreateItemTypeTool extends Tool
             $this->authorizeFor($user, 'update', $project);
 
             $name = trim($v['name']);
-            // Including instance types switched off for this project: switch them back on instead of
-            // creating a second "Bug".
+            // Including types switched off for this project (instance-wide or its own): switch them
+            // back on instead of creating a second "Bug".
             $existing = ItemType::forProjectSettings($project)->get()->first(fn ($t) => $this->sameName($t->name, $name));
-            if ($existing && $existing->project_id === null && in_array($existing->id, $project->disabledItemTypeIds(), true)) {
-                $disabled = collect($project->disabledItemTypeIds())->reject(fn (int $id) => $id === $existing->id)->values()->all();
-                $project->update(['settings' => array_merge($project->settings ?? [], ['disabled_item_types' => $disabled])]);
+            if ($existing && ! $existing->isEnabledFor($project)) {
+                $existing->setEnabledFor($project, true);
             }
             $type = $existing ?? $project->itemTypes()->create([
                 'name' => $name,

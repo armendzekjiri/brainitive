@@ -102,6 +102,17 @@ jobs:
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
+            # realtime server (live editing, BRAI-434): only where its systemd unit is installed;
+            # a failed restart warns instead of failing the deploy (editors fall back to editing alone)
+            if systemctl cat brainitive-realtime-dev >/dev/null 2>&1; then
+              echo ">>> Realtime server: installing dependencies and restarting..."
+              npm --prefix realtime ci --omit=dev --silent
+              if sudo -n systemctl restart brainitive-realtime-dev && sleep 2 && systemctl is-active --quiet brainitive-realtime-dev; then
+                echo ">>> brainitive-realtime-dev restarted"
+              else
+                echo "::warning::brainitive-realtime-dev did not restart. Run: sudo systemctl restart brainitive-realtime-dev"
+              fi
+            fi
             echo ">>> dev.brainitive.app is on ${{ github.sha }}"
 
   e2e-dev:

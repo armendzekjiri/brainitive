@@ -7,11 +7,14 @@ use App\Models\Item;
 use App\Models\User;
 use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
+use App\Notifications\Contracts\DigestibleMail;
+use App\Support\Notifications\DigestEntry;
+use App\Support\Notifications\MailDigest;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class ItemStatusChangedNotification extends Notification
+class ItemStatusChangedNotification extends Notification implements DigestibleMail
 {
     use Queueable, RespectsPreferences, SendsWebPush;
 
@@ -87,5 +90,28 @@ class ItemStatusChangedNotification extends Notification
             ->line("{$this->actor->name} moved {$this->item->key} from {$this->oldColumn->name} to {$this->newColumn->name}.")
             ->line(NewLeadNotification::plain((string) $this->item->title))
             ->action('Open issue', $this->toDatabase($notifiable)['item_url']);
+    }
+
+    /** The line in the notification email digest (BRAI-429). */
+    public function digestEntry(object $notifiable): ?DigestEntry
+    {
+        $workspace = MailDigest::workspaceOf($this->item);
+        if (! $workspace) {
+            return null;
+        }
+        $board = $this->item->board;
+
+        return new DigestEntry(
+            type: 'item_status_changed',
+            workspace: $workspace,
+            subject: $this->item,
+            title: "{$this->actor->name} moved {$this->item->key} from {$this->oldColumn->name} to {$this->newColumn->name}",
+            url: $this->toDatabase($notifiable)['item_url'],
+            mailSubject: "{$this->item->key} moved to {$this->newColumn->name}",
+            subjectKey: $this->item->key,
+            subjectTitle: NewLeadNotification::plain((string) $this->item->title),
+            context: $board ? trim(($board->project?->name ? $board->project->name.' · ' : '').$board->name) : null,
+            action: 'Open issue',
+        );
     }
 }

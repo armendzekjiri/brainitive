@@ -111,7 +111,8 @@ class BoardViewConfig
             'status' => $board->columns()->pluck('id')->all(),
             'labels' => $project->labels()->pluck('id')->all(),
             'priority' => ItemPriority::forProject($project)->pluck('id')->all(),
-            'type' => ItemType::forProject($project)->pluck('id')->all() ?: ItemType::pluck('id')->all(),
+            // switched-off types too: a saved view keeps its filter while a type is off for a while
+            'type' => ItemType::forProjectSettings($project)->pluck('id')->all(),
         ];
         $names = ['status' => 'columns', 'labels' => 'labels', 'priority' => 'priorities', 'type' => 'issue types'];
         foreach (self::ID_LISTS as $key) {

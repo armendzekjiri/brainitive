@@ -388,6 +388,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('labels/{label}', [ProjectController::class, 'updateLabel'])->name('projects.labels.update');
             Route::delete('labels/{label}', [ProjectController::class, 'destroyLabel'])->name('projects.labels.destroy');
             // Item types (project-level configuration)
+            Route::get('item-types', [ProjectController::class, 'itemTypesJson'])->name('projects.item-types.index');
             Route::post('item-types', [ProjectController::class, 'storeItemType'])->name('projects.item-types.store');
             Route::post('item-types/upload-icon', [ProjectController::class, 'uploadItemTypeIcon'])->name('projects.item-types.upload-icon');
             Route::put('item-types/{itemType}', [ProjectController::class, 'updateItemType'])->name('projects.item-types.update');
@@ -620,6 +621,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::post('pages/{page}/duplicate', [PageController::class, 'duplicate'])->name('pages.duplicate');
             Route::get('pages/tree', [PageController::class, 'tree'])->name('pages.tree');
             Route::post('pages/reorder', [PageController::class, 'reorder'])->name('pages.reorder');
+            Route::post('pages/{page}/move', [PageController::class, 'move'])->name('pages.move');
             Route::get('pages/{page}', [PageController::class, 'show'])->name('pages.show');
             Route::get('pages/{page}/excalidraw', [PageController::class, 'excalidrawEditor'])->name('pages.excalidraw');
             Route::post('pages/{page}/excalidraw/save', [PageController::class, 'saveExcalidraw'])->name('pages.excalidraw.save');
@@ -747,6 +749,10 @@ Route::middleware(['auth', 'verified', 'instance.admin'])->prefix('admin')->name
     Route::delete('github-app', [Admin\GithubAppController::class, 'destroy'])->name('github-app.destroy');
 
     Route::get('audit-log', Admin\AuditLogController::class)->name('audit-log');
+
+    // "New version available" strip (BRAI-433): hidden per admin until a newer release comes out
+    Route::post('update-notice/dismiss', [Admin\UpdateNoticeController::class, 'dismiss'])
+        ->middleware('throttle:30,1,admin.update-notice.dismiss')->name('update-notice.dismiss');
 
     // Email previews (BRAI-155): every email with sample data + a test send to the admin's own address
     Route::get('emails', [Admin\EmailPreviewController::class, 'index'])->name('emails.index');

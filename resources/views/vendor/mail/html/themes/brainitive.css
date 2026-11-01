@@ -380,6 +380,53 @@ img {
     padding-bottom: 0;
 }
 
+/* Linked list lines (notification email digest, BRAI-429) */
+
+.entries {
+    margin: 4px 0 24px;
+}
+
+.entry {
+    border-bottom: 1px solid #E3E7EB;
+    padding: 12px 0;
+}
+
+.entry-meta {
+    color: #5F6E7C;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+    margin: 0 0 2px;
+    text-transform: uppercase;
+}
+
+.entry-link {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.4;
+    margin: 0 0 2px;
+}
+
+.entry-text {
+    color: #485E72;
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.entry-context {
+    color: #5F6E7C;
+}
+
+.entry-body {
+    color: #5F6E7C;
+    font-size: 14px;
+    font-style: italic;
+    line-height: 1.5;
+    margin: 4px 0 0;
+}
+
 /* Utilities */
 
 .preheader {

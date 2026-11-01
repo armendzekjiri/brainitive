@@ -61,6 +61,11 @@ The base class gives you, for free:
   goes through `plain()`) on the branded layout (`BrandedMailMessage` via
   `RespectsPreferences::brandedMail($notifiable, TYPE)`: "Manage notifications" for members, a
   guest footer for everyone else). A custom `toMail()` starts from `$this->brandedMail(...)` too.
+- **Email digest (BRAI-429):** `CatalogNotification` implements `DigestibleMail`. If the type is normal
+  activity (assignments, comments, mentions …), add it to `MailDigest::TYPES` (label + noun) and override
+  `digestSubject()` (the issue / page / task list / board whose `view` policy guards it); its email then
+  waits up to 60 s and joins the person's digest for that workspace. Account, guest and time-critical
+  types stay out of `TYPES` and are mailed at once.
 - **Add every new email to `App\Support\Mail\EmailPreviews::entries()`** (v1.44.0) —
   `EmailTemplatesTest` renders each entry and Admin → Emails previews it.
 

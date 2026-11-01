@@ -41,6 +41,8 @@ p, li, ul, ol, .message-body, .panel-content, .panel-content p, .table td { colo
 .table th, .table td { border-bottom-color: #263442 !important; }
 a { color: #5AB0F0 !important; }
 .panel { background-color: #1E2A36 !important; }
+.entry { border-bottom-color: #263442 !important; }
+.entry-meta, .entry-context, .entry-body { color: #9AA9B6 !important; }
 a.button { color: #FFFFFF !important; }
 }
 

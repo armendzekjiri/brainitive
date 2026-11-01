@@ -68,7 +68,7 @@ class UpdateBoardItemTool extends Tool
                 $changes['assigned_to'] = $this->resolveAssigneeId($user, $project, $validated['assignee']);
             }
             if (array_key_exists('type', $validated)) {
-                $changes['item_type_id'] = $this->itemTypeIdFor($project, $validated['type']) ?? $item->item_type_id;
+                $changes['item_type_id'] = $this->itemTypeIdFor($project, $validated['type'], $item->itemType) ?? $item->item_type_id;
             }
             if (array_key_exists('priority', $validated)) {
                 $changes['priority_id'] = $this->priorityIdFor($project, $validated['priority']) ?? $item->priority_id;

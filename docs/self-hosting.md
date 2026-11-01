@@ -93,6 +93,22 @@ Building from source instead: `git pull && docker compose up -d --build`.
 Migrations run automatically when the `app` container starts. Check **Help → Changelog**
 for what changed.
 
+### Knowing when there is a new version
+
+Once a day the scheduler asks GitHub's public API for the latest Brainitive release — an anonymous
+request, nothing about your instance is sent — and instance admins see it: **Instance admin →
+Overview** shows the running version, the latest release, its date and links to the release notes and
+the [upgrade guide](https://docs.brainitive.app/self-hosting/upgrading), and a small strip at the top
+of the app says "Brainitive vX available" (dismissed per version; a newer release shows it again).
+Regular users never see it, and nothing is downloaded or installed — upgrading stays the commands
+above.
+
+- Check now: `docker compose exec app php artisan brainitive:check-update` (prints the result).
+- Turn it off: `BRAINITIVE_UPDATE_CHECK=false` in `.env`. Empty (the default) means on for self-hosted
+  installs and off on Brainitive Cloud.
+- Offline or rate-limited servers just keep the last result; the check never slows down a page.
+- The running version is the newest entry of the in-app changelog (**Help → Changelog**).
+
 ## Search
 
 Search ("Find anything": the search page, ⌘K and the MCP `search` tool) is built in: it runs on
@@ -269,6 +285,26 @@ replies back by email in the same thread. Nothing to set up on the server beside
 - **Loops:** auto-replies, bounces, mailing lists and Brainitive's own mail are ignored, and one
   sender can open at most 10 tickets per hour and helpdesk. *Recently received* in the settings
   shows what came in and why something was ignored or rejected.
+
+## Notification emails (digest)
+
+When several things happen for one person in quick succession (five issues assigned in a row, a
+burst of comments), Brainitive sends **one** email instead of five. Activity emails — assignments,
+mentions, comments, status changes, page updates and sprints — wait
+`NOTIFICATION_EMAIL_DIGEST_SECONDS` (default `60`) from the first one and then go out together, one
+email per person and workspace. A single event arrives as a normal email after that time. The bell,
+browser push and live updates are never delayed, and each person's email settings (Profile →
+Notifications) and access are checked again when the digest is sent.
+
+Account and security mail (verification, password reset, invitations), mail to customers and
+guests (helpdesk replies, portals, bookings, lead confirmations, invoices) and time-critical
+notifications (helpdesk, SLA, leads, bookings, reviews, reminders) are always sent at once.
+
+- **Needs the queue worker** (the `queue` container): the digest is a delayed queue job. With
+  `QUEUE_CONNECTION=sync` there is nothing to wait with, so every email is sent at once as before.
+- **Turn it off** with `NOTIFICATION_EMAIL_DIGEST_SECONDS=0` (one email per notification, at once).
+- Failures are logged and retried 3 times; emails that still couldn't be sent go out with that
+  person's next digest. Waiting emails live in the `pending_notification_emails` table.
 
 ## Legal pages (imprint, privacy, terms)
 

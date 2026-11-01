@@ -20,6 +20,11 @@
 
 @endforeach
 
+{{-- Linked list lines (notification email digest, BRAI-429) --}}
+@if (! empty($entries))
+<x-mail::entries :entries="$entries" />
+
+@endif
 {{-- Quoted user text (comment, reply, note) --}}
 @if (! empty($quote))
 <x-mail::quote :text="$quote" />

@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\TaskListItem;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 
 /** A task-list task was assigned to you by someone else (category: assignments). */
 class TaskAssignedNotification extends CatalogNotification
@@ -16,6 +17,11 @@ class TaskAssignedNotification extends CatalogNotification
     public function catalogType(): string
     {
         return 'task_assigned';
+    }
+
+    protected function digestSubject(): ?Model
+    {
+        return $this->task->taskList;
     }
 
     protected function message(object $notifiable): array

@@ -5,7 +5,6 @@ namespace App\Http\Middleware;
 use App\Models\Board;
 use App\Models\Capture;
 use App\Models\ItemPriority;
-use App\Models\ItemType;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
@@ -17,6 +16,7 @@ use App\Support\Legal\LegalInfo;
 use App\Support\Live\LiveConfig;
 use App\Support\Plans\PlanTemplates;
 use App\Support\Sidebar\SidebarPreferences;
+use App\Support\Updates\UpdateCheck;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -89,11 +89,34 @@ class HandleInertiaRequests extends Middleware
     private static function pageTreeRecursive(User $user, int $depth = 7): \Closure
     {
         return function ($query) use ($user, $depth) {
-            $query->visibleTo($user)->orderBy('type', 'desc')->orderBy('position');
+            $query->visibleTo($user)->orderBy('type', 'desc')->orderBy('position')->orderBy('id');
             if ($depth > 0) {
                 $query->with(['children' => self::pageTreeRecursive($user, $depth - 1)]);
             }
         };
+    }
+
+    /**
+     * `can_edit_pages` per sidebar project (BRAI-431): drag handles and "Move…" only for people who
+     * may change pages. Same rule as PagePolicy::create (workspace owner / admin, project admin /
+     * editor), in two queries instead of a policy call per project.
+     */
+    private function markEditablePages(Workspace $workspace, User $user): void
+    {
+        $workspaceAdmin = $workspace->owner_id === $user->id
+            || $user->workspaces()->where('workspace_id', $workspace->id)->wherePivot('role', 'admin')->exists();
+
+        $editable = $workspaceAdmin
+            ? null
+            : $user->projects()
+                ->whereIn('projects.id', $workspace->projects->pluck('id'))
+                ->wherePivotIn('role', ['admin', 'editor'])
+                ->pluck('projects.id')
+                ->all();
+
+        foreach ($workspace->projects as $project) {
+            $project->setAttribute('can_edit_pages', $editable === null || in_array($project->id, $editable, true));
+        }
     }
 
     private function workspaceSlugFromRoute(Request $request): ?string
@@ -149,7 +172,8 @@ class HandleInertiaRequests extends Middleware
                         $q->visibleTo($user)
                             ->with(['children' => self::pageTreeRecursive($user, 7)])
                             ->orderBy('type', 'desc')
-                            ->orderBy('position');
+                            ->orderBy('position')
+                            ->orderBy('id');
                     },
                 ]);
             }])
@@ -192,6 +216,7 @@ class HandleInertiaRequests extends Middleware
                 if ($currentWorkspace && $user) {
                     $accessible = $currentWorkspace->projects->filter(fn ($project) => $user->hasProjectAccess($project))->values();
                     $currentWorkspace->setRelation('projects', $accessible);
+                    $this->markEditablePages($currentWorkspace, $user);
 
                     if ($routeWorkspaceSlug) {
                         $request->session()->put(self::LAST_WORKSPACE_SLUG_SESSION_KEY, $currentWorkspace->slug);
@@ -237,16 +262,24 @@ class HandleInertiaRequests extends Middleware
             }
         }
 
+        // asked by two lazy props (auth.isInstanceAdmin, updateNotice): one query per request
+        $isInstanceAdmin = null;
+        $instanceAdmin = function () use (&$isInstanceAdmin, $user): bool {
+            return $isInstanceAdmin ??= (bool) $user?->isInstanceAdmin();
+        };
+
         return [
             ...parent::share($request),
             'auth' => [
                 'user' => $user,
-                'isInstanceAdmin' => fn () => (bool) $user?->isInstanceAdmin(),
+                'isInstanceAdmin' => $instanceAdmin,
             ],
             // The running focus timer (BRAI-74), shown as a pill in the top bar on every page.
             'activeTimer' => fn () => $user ? WorkTimer::where('user_id', $user->id)->first()?->payload($user) : null,
             // "Star on GitHub" buttons (homepage + account menu): repository link and cached star count
             'githubRepo' => fn () => GithubStars::shared(),
+            // "New version available" strip (BRAI-433): instance admins of self-hosted installs only, null for everyone else
+            'updateNotice' => fn () => UpdateCheck::enabled() && $instanceAdmin() ? UpdateCheck::noticeFor($user, true) : null,
             // Footer links to the legal pages (BRAI-156): imprint / DPA / sub-processors may be null (self-hosted)
             'legalLinks' => fn () => LegalInfo::links(),
             'workspaces' => $workspaces,
@@ -257,7 +290,6 @@ class HandleInertiaRequests extends Middleware
             'entitlements' => fn () => EntitlementsPayload::for($currentWorkspace),
             'currentProjectId' => $currentProjectId,
             'currentBoardId' => $currentBoardId,
-            'itemTypes' => fn () => $user ? ItemType::orderBy('id')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
             'priorities' => fn () => $user ? ItemPriority::orderBy('order')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
             'planTemplates' => fn () => $user ? PlanTemplates::all() : [],
             'currentPageUuid' => $request->routeIs('pages.show') && $request->route('page')

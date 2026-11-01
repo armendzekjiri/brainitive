@@ -24,7 +24,9 @@ use App\Support\Billing\TimeLogActivities;
 use App\Support\Boards\BoardViewConfig;
 use App\Support\Boards\ItemComments;
 use App\Support\Boards\ItemFieldValues;
+use App\Support\Boards\ItemLinks;
 use App\Support\Boards\ItemMentions;
+use App\Support\Boards\LinkedIssueVisibility;
 use App\Support\Boards\Swimlanes;
 use App\Support\Entitlements\LimitGate;
 use App\Support\Github\ItemDevelopment;
@@ -122,11 +124,11 @@ class BoardController extends Controller
                 ]);
             },
         ]);
+        LinkedIssueVisibility::mask($board->columns->flatMap->items, $request->user());
 
+        // Only the types enabled for the project: cards with a switched-off type still show it
+        // (item_type is loaded with each card).
         $itemTypes = ItemType::forProject($project)->orderBy('id')->get();
-        if ($itemTypes->isEmpty()) {
-            $itemTypes = ItemType::orderBy('id')->get();
-        }
         $priorities = ItemPriority::forProject($project)->orderBy('order')->get();
         $projectUsers = $project->workspace->users()->get(['users.id', 'name', 'email', 'avatar']);
         $projectLabels = $project->labels()->orderBy('name')->get();
@@ -402,7 +404,7 @@ class BoardController extends Controller
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'column_id' => ['required', Rule::exists('board_columns', 'id')->where('board_id', $board->id)],
-            'item_type_id' => 'nullable|exists:item_types,id',
+            'item_type_id' => ['nullable', 'integer', Rule::in(ItemType::selectableIdsFor($project))],
             'priority_id' => 'nullable|exists:item_priorities,id',
             'assigned_to' => ['nullable', 'integer', new ProjectMember($project)],
             'due_date' => 'nullable|date',
@@ -434,7 +436,7 @@ class BoardController extends Controller
             ],
         ]);
 
-        $itemTypeId = $validated['item_type_id'] ?? ItemType::where('is_default', true)->first()?->id;
+        $itemTypeId = $validated['item_type_id'] ?? ItemType::defaultIdFor($project);
         if ($subtaskTypeId && (int) $itemTypeId === (int) $subtaskTypeId && empty($validated['parent_id'])) {
             return back()->withErrors(['parent_id' => 'Subtasks must have a parent task.']);
         }
@@ -529,6 +531,7 @@ class BoardController extends Controller
             ->whereIn('column_id', $board->columns()->select('id'))
             ->when($board->isScrum(), fn ($query) => $query->where('sprint_id', $activeSprintId))
             ->get();
+        LinkedIssueVisibility::mask($items, $request->user());
 
         return response()->json(['items' => $items]);
     }
@@ -618,9 +621,9 @@ class BoardController extends Controller
             'creator:id,name,email',
             'watchers:id,name,email,avatar',
             'outgoingLinks.targetItem:id,key,title,board_id',
-            'outgoingLinks.targetItem.board:id,name,slug',
+            'outgoingLinks.targetItem.board:id,name,slug,project_id',
             'incomingLinks.sourceItem:id,key,title,board_id',
-            'incomingLinks.sourceItem.board:id,name,slug',
+            'incomingLinks.sourceItem.board:id,name,slug,project_id',
             'fieldValues' => fn ($q) => $q->select(self::FIELD_VALUE_COLUMNS),
             'attachments' => function ($q) {
                 $q->with('user:id,name,email')->orderBy('created_at', 'desc');
@@ -636,6 +639,7 @@ class BoardController extends Controller
         foreach ($item->attachments as $attachment) {
             $attachment->url = asset('storage/'.$attachment->path);
         }
+        LinkedIssueVisibility::mask([$item], $request->user());
 
         $itemTypes = ItemType::forProject($project)->get();
         $priorities = ItemPriority::forProject($project)->orderBy('order')->get();
@@ -647,6 +651,7 @@ class BoardController extends Controller
         $columns = $board->columns()->orderBy('position')->with([
             'items' => fn ($q) => $this->withCardData($q),
         ])->get();
+        LinkedIssueVisibility::mask($columns->flatMap->items, $request->user());
 
         // Get all items in the project for linking (excluding current item)
         $projectItems = Item::whereHas('board', function ($q) use ($project) {
@@ -773,7 +778,8 @@ class BoardController extends Controller
         $validated = $request->validate([
             'title' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
-            'item_type_id' => 'nullable|exists:item_types,id',
+            // enabled types; a card may keep the switched-off type it already has
+            'item_type_id' => ['nullable', 'integer', Rule::in(ItemType::selectableIdsFor($project, $item->item_type_id))],
             'priority_id' => 'nullable|exists:item_priorities,id',
             'assigned_to' => ['nullable', 'integer', new ProjectMember($project)],
             'start_date' => 'nullable|date',
@@ -1013,10 +1019,9 @@ class BoardController extends Controller
 
         $validated = $request->validate([
             'target_item_id' => 'required|exists:items,id',
-            'link_type' => 'required|string|in:blocks,is_blocked_by,duplicates,is_duplicated_by,relates_to,clones,is_cloned_by',
+            'link_type' => ['required', 'string', Rule::in(ItemLinks::types())],
         ]);
 
-        // Prevent self-linking
         // Only issues the user can open — otherwise the link would reveal another
         // workspace's issue key and title.
         $target = Item::with('board.project')->find($validated['target_item_id']);
@@ -1024,31 +1029,16 @@ class BoardController extends Controller
             return back()->withErrors(['target_item_id' => 'That issue was not found.']);
         }
 
-        if ($validated['target_item_id'] == $item->id) {
+        if ($target->id === $item->id) {
             return back()->withErrors(['target_item_id' => 'Cannot link an item to itself.']);
         }
 
-        // Check if link already exists
-        $existingLink = ItemLink::where('source_item_id', $item->id)
-            ->where('target_item_id', $validated['target_item_id'])
-            ->where('link_type', $validated['link_type'])
-            ->exists();
-
-        if ($existingLink) {
+        // The same link, or its inverse added from the other issue (A blocks B = B is blocked by A)
+        if (ItemLinks::find($item, $target, $validated['link_type'])) {
             return back()->withErrors(['target_item_id' => 'This link already exists.']);
         }
 
-        $link = ItemLink::create([
-            'source_item_id' => $item->id,
-            'target_item_id' => $validated['target_item_id'],
-            'link_type' => $validated['link_type'],
-            'created_by' => $request->user()->id,
-        ]);
-
-        ActivityLog::log($item, 'linked', null, [
-            'link_type' => $link->link_type,
-            'item' => $link->targetItem?->key,
-        ]);
+        ItemLinks::add($item, $target, $validated['link_type'], $request->user());
 
         return back()->with('success', 'Item link created successfully.');
     }
@@ -1065,13 +1055,7 @@ class BoardController extends Controller
             abort(404);
         }
 
-        $otherItem = $link->source_item_id === $item->id ? $link->targetItem : $link->sourceItem;
-        ActivityLog::log($item, 'unlinked', null, [
-            'link_type' => $link->source_item_id === $item->id ? $link->link_type : (ItemLink::LINK_TYPES[$link->link_type] ?? $link->link_type),
-            'item' => $otherItem?->key,
-        ]);
-
-        $link->delete();
+        ItemLinks::remove($item, $link);
 
         return back()->with('success', 'Item link removed successfully.');
     }
@@ -1220,9 +1204,9 @@ class BoardController extends Controller
                 'parent:id,key,title,board_id',
                 'watchers:id,name,email,avatar',
                 'outgoingLinks.targetItem:id,key,title,board_id',
-                'outgoingLinks.targetItem.board:id,name,slug',
+                'outgoingLinks.targetItem.board:id,name,slug,project_id',
                 'incomingLinks.sourceItem:id,key,title,board_id',
-                'incomingLinks.sourceItem.board:id,name,slug',
+                'incomingLinks.sourceItem.board:id,name,slug,project_id',
                 'fieldValues' => fn ($q) => $q->select(self::FIELD_VALUE_COLUMNS),
                 // "Repeats weekly" badge of issues created by a recurring template (BRAI-123)
                 'recurringOccurrence:id,item_id,recurring_issue_id',

@@ -14,6 +14,7 @@ import { GlobalStickyNotes } from '@/components/GlobalStickyNotes';
 import { PushPrompt } from '@/components/PushPrompt';
 import { UpgradeDialog } from '@/components/entitlements/UpgradeDialog';
 import { UsageWarningBanner } from '@/components/entitlements/UsageWarningBanner';
+import { UpdateNoticeBanner } from '@/components/admin/UpdateNoticeBanner';
 import { SidebarResizer, getInitialSidebarWidth } from '@/components/SidebarResizer';
 import { HelpModal } from '@/components/HelpModal';
 import { NotificationsDropdown } from '@/components/NotificationsDropdown';
@@ -98,6 +99,8 @@ import {
     PackageOpen,
     ArrowRight,
     BookOpen,
+    MoreHorizontal,
+    FolderInput,
 } from 'lucide-react';
 import { DOCS_URL } from '@/lib/docs';
 import { useTheme } from '@/hooks/useTheme';
@@ -122,6 +125,7 @@ import { useSidebarNavItems } from '@/components/sidebar/navItems';
 import { PinIcon, resolvePins, type ResolvedPin, type SidebarProject } from '@/components/sidebar/pins';
 import { reorderPins } from '@/lib/sidebarPreferences';
 import { SIDEBAR_GROUPS, openCustomizeSidebar, projectPreferences, useSidebarPreferences } from '@/lib/sidebarPreferences';
+import { PageTreeRow, RootDropZone, usePageTreeDnd, usePageTreeDndState } from '@/components/sidebar/PageTreeDnd';
 import GitHubStarButton from '@/components/GitHubStarButton';
 import { LegalFooterLinks } from '@/components/legal/LegalFooterLinks';
 
@@ -397,8 +401,8 @@ function DraggableItem({
     );
 }
 
-// Draggable group of sidebar items with DB-persisted reorder
-function DraggableSidebarGroup({
+// One level of the sidebar page tree. Drag & drop and "Move…" live in PageTreeRow (BRAI-431).
+function PageTreeList({
     items,
     workspace,
     project,
@@ -413,58 +417,18 @@ function DraggableSidebarGroup({
     onAddItem: (parentId: number) => void;
     currentPageUuid?: string | null;
 }) {
-    const [orderedItems, setOrderedItems] = useState<PageType[]>(items);
-    const dragIndexRef = useRef<number | null>(null);
-
-    // Sync when Inertia provides updated items after navigation/mutations
-    const itemKey = items.map((i) => i.id).join(',');
-    useEffect(() => {
-        setOrderedItems(items);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [itemKey]);
-
-    const handleDragStart = (index: number) => {
-        dragIndexRef.current = index;
-    };
-
-    const handleDragEnter = (index: number) => {
-        if (dragIndexRef.current === null || dragIndexRef.current === index) return;
-        const newItems = [...orderedItems];
-        const [dragged] = newItems.splice(dragIndexRef.current, 1);
-        newItems.splice(index, 0, dragged);
-        dragIndexRef.current = index;
-        setOrderedItems(newItems);
-    };
-
-    const handleDragEnd = () => {
-        if (dragIndexRef.current === null) return;
-        dragIndexRef.current = null;
-        const pagesData = orderedItems.map((page, idx) => ({
-            id: page.id,
-            position: idx,
-            parent_id: page.parent_id ?? null,
-        }));
-        axios.post(route('pages.reorder', [workspace.slug, project.slug]), { pages: pagesData });
-    };
-
     return (
         <>
-            {orderedItems.map((page, index) => (
-                <DraggableItem
+            {items.map((page) => (
+                <PageTreeItem
                     key={page.id}
-                    onDragStart={() => handleDragStart(index)}
-                    onDragEnter={() => handleDragEnter(index)}
-                    onDragEnd={handleDragEnd}
-                >
-                    <PageTreeItem
-                        page={page}
-                        workspace={workspace}
-                        project={project}
-                        level={level}
-                        onAddItem={onAddItem}
-                        currentPageUuid={currentPageUuid}
-                    />
-                </DraggableItem>
+                    page={page}
+                    workspace={workspace}
+                    project={project}
+                    level={level}
+                    onAddItem={onAddItem}
+                    currentPageUuid={currentPageUuid}
+                />
             ))}
         </>
     );
@@ -571,7 +535,10 @@ function ProjectContent({
     onAddItem: (projectId: number, parentId?: number) => void;
     currentPageUuid?: string | null;
 }) {
-    const hasContent = (project.boards && project.boards.length > 0) || (project.task_lists && project.task_lists.length > 0) || (project.plans && project.plans.length > 0) || (project.pages && project.pages.length > 0) || (project.helpdesks && project.helpdesks.length > 0) || (project.lead_forms?.length ?? 0) > 0;
+    // Page tree drag & drop + "Move…" (BRAI-431): the tree is optimistic while a move saves
+    const pageDnd = usePageTreeDndState(workspace, project);
+    const pageTree = pageDnd.tree;
+    const hasContent = (project.boards && project.boards.length > 0) || (project.task_lists && project.task_lists.length > 0) || (project.plans && project.plans.length > 0) || pageTree.length > 0 || (project.helpdesks && project.helpdesks.length > 0) || (project.lead_forms?.length ?? 0) > 0;
     const [pinnedOpen, setPinnedOpen] = useExpandedState(`project-${project.id}-pinned`, true);
     const [boardsOpen, setBoardsOpen] = useExpandedState(`project-${project.id}-boards`, true);
     const [listsOpen, setListsOpen] = useExpandedState(`project-${project.id}-lists`, true);
@@ -607,9 +574,9 @@ function ProjectContent({
         );
     }
 
-    const rootDocs = project.pages?.filter((p) => p.type === 'page' && !p.is_whiteboard) || [];
-    const rootWhiteboards = project.pages?.filter((p) => p.type === 'page' && p.is_whiteboard) || [];
-    const rootFolders = project.pages?.filter((p) => p.type === 'folder') || [];
+    const rootDocs = pageTree.filter((p) => p.type === 'page' && !p.is_whiteboard);
+    const rootWhiteboards = pageTree.filter((p) => p.type === 'page' && p.is_whiteboard);
+    const rootFolders = pageTree.filter((p) => p.type === 'folder');
     const params = [workspace.slug, project.slug];
 
     const groups: { key: string; node: React.ReactNode }[] = [];
@@ -727,9 +694,11 @@ function ProjectContent({
             key,
             node: (
                 <>
-                    <SidebarGroupToggle label={label} open={open} onToggle={setOpen} />
+                    <RootDropZone>
+                        <SidebarGroupToggle label={label} open={open} onToggle={setOpen} />
+                    </RootDropZone>
                     {open && (
-                        <DraggableSidebarGroup
+                        <PageTreeList
                             items={items}
                             workspace={workspace}
                             project={project}
@@ -743,6 +712,7 @@ function ProjectContent({
     }
 
     return (
+        <pageDnd.Provider value={pageDnd.value}>
         <SidebarMenu className="space-y-0.5">
             {/* Pinned (BRAI-106) */}
             {showPinned && (
@@ -786,6 +756,8 @@ function ProjectContent({
                 </button>
             </SidebarMenuItem>
         </SidebarMenu>
+        {pageDnd.dialogs}
+        </pageDnd.Provider>
     );
 }
 
@@ -1248,6 +1220,33 @@ function CreateItemModal({ open, onClose, workspace, project, parentId, parentTy
 }
 
 // Page/Folder Tree Item
+// "⋯" on a sidebar page / whiteboard / folder row (BRAI-431): Move… for people who may edit pages.
+function PageRowMenu({ page }: { page: PageType }) {
+    const dnd = usePageTreeDnd();
+    if (!dnd?.enabled) return null;
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-60"
+                    aria-label={`More actions for ${page.name}`}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <MoreHorizontal className="size-3.5" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-44">
+                <DropdownMenuItem onSelect={() => dnd.openMove(page)}>
+                    <FolderInput className="size-4 mr-2" />
+                    Move…
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+}
+
 function PageTreeItem({
     page,
     workspace,
@@ -1266,191 +1265,134 @@ function PageTreeItem({
     const hasChildren = page.children && page.children.length > 0;
     const defaultOpen = !!currentPageUuid && hasChildren && (page.uuid === currentPageUuid || pageContainsUuid(page, currentPageUuid));
     const [isOpen, setIsOpen] = useExpandedState(`page-${page.id}`, defaultOpen);
+    const dnd = usePageTreeDnd();
+    const hovered = !!dnd?.dragging && dnd.hoverId === page.id;
 
     // Auto-expand when we navigate to this page or a descendant (e.g. open sidebar to current location)
     useEffect(() => {
         if (defaultOpen) setIsOpen(true);
     }, [defaultOpen]);
 
+    // BRAI-431: hovering a collapsed row for 600 ms while dragging opens it
+    useEffect(() => {
+        if (!hovered || isOpen || !hasChildren) return;
+        const timer = window.setTimeout(() => setIsOpen(true), 600);
+        return () => window.clearTimeout(timer);
+    }, [hovered, isOpen, hasChildren]);
+
+    const icon = page.is_whiteboard ? (
+        <PencilRuler className="size-4 shrink-0 text-brand-slate" />
+    ) : (page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
+        ? <img src={page.icon} className="size-4 rounded object-cover shrink-0" alt="" />
+        : <span className="shrink-0 text-base">{page.icon || (page.type === 'folder' ? '📁' : '📄')}</span>;
+
+    const addButton = (
+        <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 shrink-0 opacity-0 group-hover:opacity-100 mr-1"
+            aria-label={`Add to ${page.name}`}
+            onClick={(e) => {
+                e.stopPropagation();
+                onAddItem(page.id);
+            }}
+        >
+            <Plus className="size-3.5" />
+        </Button>
+    );
+
+    const childLists = () => {
+        const children = page.children ?? [];
+        const groups = [
+            children.filter((p) => p.type === 'page' && !p.is_whiteboard),
+            children.filter((p) => p.type === 'page' && p.is_whiteboard),
+            children.filter((p) => p.type === 'folder'),
+        ];
+        return groups.map((items, index) => items.length > 0 && (
+            <PageTreeList
+                key={index}
+                items={items}
+                workspace={workspace}
+                project={project}
+                level={level + 1}
+                onAddItem={onAddItem}
+                currentPageUuid={currentPageUuid}
+            />
+        ));
+    };
+
     if (page.type === 'folder') {
         return (
             <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="group/pin flex min-w-0 items-center group">
-                    <CollapsibleTrigger asChild>
-                        <button
-                            className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-left text-sm"
-                            style={{ paddingLeft: `${level * 12 + 8}px` }}
-                        >
-                            <ChevronRight className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-                            {(page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
-                                ? <img src={page.icon} className="size-4 rounded object-cover shrink-0" alt="" />
-                                : <span className="shrink-0 text-base">{page.icon || '📁'}</span>
-                            }
-                            <span className="min-w-0 truncate text-muted-foreground group-hover:text-foreground">{page.name}</span>
-                        </button>
-                    </CollapsibleTrigger>
-                    <PinButton projectId={project.id} type="page" id={page.id} name={page.name} />
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-6 shrink-0 opacity-0 group-hover:opacity-100 mr-1"
-                        aria-label={`Add to ${page.name}`}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onAddItem(page.id);
-                        }}
-                    >
-                        <Plus className="size-3.5" />
-                    </Button>
-                </div>
-                {hasChildren && (
-                    <CollapsibleContent>
-                        {(() => {
-                            const children = page.children!;
-                            const childDocs = children.filter((p) => p.type === 'page' && !p.is_whiteboard);
-                            const childWhiteboards = children.filter((p) => p.type === 'page' && p.is_whiteboard);
-                            const childFolders = children.filter((p) => p.type === 'folder');
-                            return (
-                                <>
-                                    {childDocs.length > 0 && (
-                                        <DraggableSidebarGroup
-                                            items={childDocs}
-                                            workspace={workspace}
-                                            project={project}
-                                            level={level + 1}
-                                            onAddItem={onAddItem}
-                                            currentPageUuid={currentPageUuid}
-                                        />
-                                    )}
-                                    {childWhiteboards.length > 0 && (
-                                        <DraggableSidebarGroup
-                                            items={childWhiteboards}
-                                            workspace={workspace}
-                                            project={project}
-                                            level={level + 1}
-                                            onAddItem={onAddItem}
-                                            currentPageUuid={currentPageUuid}
-                                        />
-                                    )}
-                                    {childFolders.length > 0 && (
-                                        <DraggableSidebarGroup
-                                            items={childFolders}
-                                            workspace={workspace}
-                                            project={project}
-                                            level={level + 1}
-                                            onAddItem={onAddItem}
-                                            currentPageUuid={currentPageUuid}
-                                        />
-                                    )}
-                                </>
-                            );
-                        })()}
-                    </CollapsibleContent>
-                )}
+                <PageTreeRow page={page} level={level}>
+                    <div className="group/pin flex min-w-0 items-center group">
+                        <CollapsibleTrigger asChild>
+                            <button
+                                className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-left text-sm"
+                                style={{ paddingLeft: `${level * 12 + 8}px` }}
+                            >
+                                <ChevronRight className={`size-3.5 shrink-0 text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                                {icon}
+                                <span className="min-w-0 truncate text-muted-foreground group-hover:text-foreground">{page.name}</span>
+                            </button>
+                        </CollapsibleTrigger>
+                        <PinButton projectId={project.id} type="page" id={page.id} name={page.name} />
+                        <PageRowMenu page={page} />
+                        {addButton}
+                    </div>
+                </PageTreeRow>
+                {hasChildren && <CollapsibleContent>{childLists()}</CollapsibleContent>}
             </Collapsible>
         );
     }
 
     // Page with children: collapsible with link to page
     if (page.type === 'page' && hasChildren) {
-        const children = page.children!;
-        const childDocs = children.filter((p) => p.type === 'page' && !p.is_whiteboard);
-        const childWhiteboards = children.filter((p) => p.type === 'page' && p.is_whiteboard);
-        const childFolders = children.filter((p) => p.type === 'folder');
         return (
             <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="group/pin flex min-w-0 items-center group">
-                    <CollapsibleTrigger asChild>
-                        <button
-                            className="shrink-0 p-1 hover:bg-accent rounded transition-colors text-muted-foreground"
-                            style={{ marginLeft: `${level * 12 + 4}px` }}
+                <PageTreeRow page={page} level={level}>
+                    <div className="group/pin flex min-w-0 items-center group">
+                        <CollapsibleTrigger asChild>
+                            <button
+                                className="shrink-0 p-1 hover:bg-accent rounded transition-colors text-muted-foreground"
+                                style={{ marginLeft: `${level * 12 + 4}px` }}
+                            >
+                                <ChevronRight className={`size-3.5 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
+                            </button>
+                        </CollapsibleTrigger>
+                        <Link
+                            href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
+                            className="flex min-w-0 flex-1 items-center gap-2 px-1 py-1.5 hover:bg-accent rounded-md transition-colors text-left text-sm text-muted-foreground hover:text-foreground"
                         >
-                            <ChevronRight className={`size-3.5 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
-                        </button>
-                    </CollapsibleTrigger>
-                    <Link
-                        href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
-                        className="flex min-w-0 flex-1 items-center gap-2 px-1 py-1.5 hover:bg-accent rounded-md transition-colors text-left text-sm text-muted-foreground hover:text-foreground"
-                    >
-                        {page.is_whiteboard ? (
-                            <PencilRuler className="size-4 shrink-0 text-brand-slate" />
-                        ) : (page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
-                            ? <img src={page.icon} className="size-4 rounded object-cover shrink-0" alt="" />
-                            : (
-                                <span className="shrink-0 text-base">{page.icon || '📄'}</span>
-                            )}
-                        <span className="min-w-0 truncate">{page.name}</span>
-                    </Link>
-                    <PinButton projectId={project.id} type="page" id={page.id} name={page.name} />
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-6 shrink-0 opacity-0 group-hover:opacity-100 mr-1"
-                        aria-label={`Add to ${page.name}`}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onAddItem(page.id);
-                        }}
-                    >
-                        <Plus className="size-3.5" />
-                    </Button>
-                </div>
-                <CollapsibleContent>
-                    <>
-                        {childDocs.length > 0 && (
-                            <DraggableSidebarGroup
-                                items={childDocs}
-                                workspace={workspace}
-                                project={project}
-                                level={level + 1}
-                                onAddItem={onAddItem}
-                                currentPageUuid={currentPageUuid}
-                            />
-                        )}
-                        {childWhiteboards.length > 0 && (
-                            <DraggableSidebarGroup
-                                items={childWhiteboards}
-                                workspace={workspace}
-                                project={project}
-                                level={level + 1}
-                                onAddItem={onAddItem}
-                                currentPageUuid={currentPageUuid}
-                            />
-                        )}
-                        {childFolders.length > 0 && (
-                            <DraggableSidebarGroup
-                                items={childFolders}
-                                workspace={workspace}
-                                project={project}
-                                level={level + 1}
-                                onAddItem={onAddItem}
-                                currentPageUuid={currentPageUuid}
-                            />
-                        )}
-                    </>
-                </CollapsibleContent>
+                            {icon}
+                            <span className="min-w-0 truncate">{page.name}</span>
+                        </Link>
+                        <PinButton projectId={project.id} type="page" id={page.id} name={page.name} />
+                        <PageRowMenu page={page} />
+                        {addButton}
+                    </div>
+                </PageTreeRow>
+                <CollapsibleContent>{childLists()}</CollapsibleContent>
             </Collapsible>
         );
     }
 
     return (
-        <div className="group/pin flex min-w-0 items-center">
-            <Link
-                href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
-                className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
-                style={{ paddingLeft: `${level * 12 + 24}px` }}
-            >
-                {page.is_whiteboard ? (
-                    <PencilRuler className="size-4 shrink-0 text-brand-slate" />
-                ) : (page.icon?.startsWith('data:') || page.icon?.startsWith('http') || page.icon?.startsWith('/'))
-                    ? <img src={page.icon} className="size-4 rounded object-cover shrink-0" alt="" />
-                    : (
-                        <span className="shrink-0 text-base">{page.icon || '📄'}</span>
-                    )}
-                <span className="min-w-0 truncate">{page.name}</span>
-            </Link>
-            <PinButton projectId={project.id} type="page" id={page.id} name={page.name} className="mr-1" />
-        </div>
+        <PageTreeRow page={page} level={level}>
+            <div className="group/pin flex min-w-0 items-center group">
+                <Link
+                    href={route('pages.show', [workspace.slug, project.slug, page.uuid])}
+                    className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 hover:bg-accent rounded-md transition-colors text-sm text-muted-foreground hover:text-foreground"
+                    style={{ paddingLeft: `${level * 12 + 24}px` }}
+                >
+                    {icon}
+                    <span className="min-w-0 truncate">{page.name}</span>
+                </Link>
+                <PinButton projectId={project.id} type="page" id={page.id} name={page.name} />
+                <PageRowMenu page={page} />
+                <span className="w-1 shrink-0" />
+            </div>
+        </PageTreeRow>
     );
 }
 
@@ -2137,6 +2079,7 @@ export default function AppLayout({ children, title }: Props) {
                 <SidebarInset className="flex h-dvh flex-col overflow-hidden">
                     <TopBar onCreateClick={() => openCreateTaskModal()} onSearchClick={onOpenSearch} onOpenHelp={() => setHelpModalOpen(true)} />
                     <UsageWarningBanner />
+                    <UpdateNoticeBanner />
                     <main className="flex-1 overflow-auto bg-muted/30">
                         {children}
                     </main>
