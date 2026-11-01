@@ -6,7 +6,6 @@ use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
-use App\Notifications\PageUpdatedNotification;
 use App\Support\Collab\CollabConfig;
 use App\Support\Collab\PageCollab;
 use App\Support\Collab\WhiteboardCollab;
@@ -14,6 +13,7 @@ use App\Support\Entitlements\LimitGate;
 use App\Support\PageReviews\ReviewGate;
 use App\Support\PageReviews\ReviewPresenter;
 use App\Support\Pages\PageMover;
+use App\Support\Pages\PageWrites;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -44,28 +44,7 @@ class PageController extends Controller
             'content_type' => 'nullable|string|in:doc,excalidraw',
         ]);
 
-        $content = null;
-        if ($validated['type'] === 'page') {
-            $contentType = $validated['content_type'] ?? 'doc';
-            $content = $contentType === 'excalidraw'
-                ? ['type' => 'excalidraw', 'elements' => [], 'appState' => []]
-                : ['type' => 'doc', 'content' => []];
-        }
-
-        $defaultIcon = match (true) {
-            $validated['type'] === 'folder' => '📁',
-            ($validated['content_type'] ?? '') === 'excalidraw' => '✏️',
-            default => '📄',
-        };
-
-        $page = $project->allPages()->create([
-            'name' => $validated['name'],
-            'type' => $validated['type'],
-            'parent_id' => $validated['parent_id'] ?? null,
-            'icon' => $validated['icon'] ?? $defaultIcon,
-            'created_by' => Auth::id(),
-            'content' => $content,
-        ]);
+        $page = PageWrites::create($project, $request->user(), $validated);
 
         if ($request->wantsJson()) {
             return response()->json($page->load('children'));
@@ -407,11 +386,10 @@ class PageController extends Controller
             'force' => 'boolean',
         ]);
 
-        if ($conflict = $this->draftConflict($page, $validated)) {
-            return $conflict;
+        // the revision check and the save run on the locked row (shared with the App API)
+        if (! PageWrites::saveDraft($page, $request->user(), $this->draftChanges($validated), $this->baseRevision($validated))) {
+            return $this->draftConflict($page->fresh(), $validated) ?? response()->json(['message' => 'This page was changed by someone else while you were editing.'], 409);
         }
-
-        $page->saveDraft($request->user(), $this->draftChanges($validated));
 
         return response()->json($this->draftState($page->fresh()));
     }
@@ -480,11 +458,7 @@ class PageController extends Controller
         }
 
         // BRAI-80: "review required" pages publish only an approved draft (checked on the locked row)
-        $result = ReviewGate::publishing(
-            $page,
-            fn (Page $locked) => $locked->isPublished() ? 'published' : null,
-            fn (Page $locked) => $locked->publish($request->user(), $validated['message'] ?? null),
-        );
+        $result = PageWrites::publish($page, $request->user(), $validated['message'] ?? null);
         if ($result === ReviewGate::REFUSAL) {
             return $this->reviewRefusal($request);
         }
@@ -514,46 +488,21 @@ class PageController extends Controller
             return back()->withErrors(['page' => 'Only published pages can be updated. Publish the page first.']);
         }
 
-        $user = $request->user();
-        $changes = $this->draftChanges($validated);
-
         // One transaction on the locked page row: the editor's last changes, the review check
-        // (BRAI-80) and the publish all see the same draft.
-        $result = ReviewGate::publishing(
-            $page,
-            function (Page $locked) use ($validated, $changes, $user) {
-                if ($this->draftConflict($locked, $validated)) {
-                    return 'conflict';
-                }
-                if ($changes !== []) {
-                    $locked->saveDraft($user, $changes);
-                }
+        // (BRAI-80) and the publish all see the same draft; then the watchers hear (shared with the App API)
+        $result = PageWrites::publishChanges($page, $request->user(), $this->draftChanges($validated), $this->baseRevision($validated),
+            $validated['message'] ?? null, (bool) ($validated['notify'] ?? true));
 
-                return $locked->hasUnpublishedChanges() ? null : 'unchanged';
-            },
-            fn (Page $locked) => [$locked, $locked->publishChanges($user, $validated['message'] ?? null)],
-        );
-
-        if ($result === 'conflict') {
+        if ($result === PageWrites::STALE) {
             return back()->withErrors(['page' => 'Someone else changed this page while you were editing. Reload to see their changes.']);
         }
-        if ($result === 'unchanged') {
+        if ($result === PageWrites::UNCHANGED) {
             return back()->with('success', 'No changes to publish.');
         }
         if ($result === ReviewGate::REFUSAL) {
             return $this->reviewRefusal($request);
         }
-        [$page, $version] = $result;
-
-        if ($validated['notify'] ?? true) {
-            $page->load('watchers');
-            foreach ($page->watchers as $watcher) {
-                if ($watcher->id === $user->id) {
-                    continue;
-                }
-                $watcher->notify(new PageUpdatedNotification($page, $user));
-            }
-        }
+        $version = $result;
 
         return back()->with('success', "Page updated to version {$version->version}.");
     }
@@ -842,8 +791,7 @@ class PageController extends Controller
      */
     private function draftConflict(Page $page, array $validated): ?JsonResponse
     {
-        $baseRevision = $validated['base_revision'] ?? null;
-        if ($baseRevision === null || ($validated['force'] ?? false) || (int) $baseRevision === $page->edit_revision) {
+        if (! PageWrites::isStale($page, $this->baseRevision($validated))) {
             return null;
         }
 
@@ -857,6 +805,16 @@ class PageController extends Controller
                 'updated_at' => ($page->draft_updated_at ?? $page->updated_at)?->toIso8601String(),
             ],
         ], 409);
+    }
+
+    /**
+     * The revision the editor started from; null (no check) without one or when the user chose to overwrite.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function baseRevision(array $validated): ?int
+    {
+        return isset($validated['base_revision']) && ! ($validated['force'] ?? false) ? (int) $validated['base_revision'] : null;
     }
 
     /**

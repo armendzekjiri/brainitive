@@ -5,6 +5,7 @@ namespace App\Http\Controllers\AppApi\Concerns;
 use App\Models\Board;
 use App\Models\Bookmark;
 use App\Models\Item;
+use App\Models\Page;
 use App\Models\Project;
 use App\Models\Snippet;
 use App\Models\SnippetCollection;
@@ -12,6 +13,7 @@ use App\Models\Sprint;
 use App\Models\TaskList;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 /**
  * App API v1: a workspace or project the user can't open is a 404, never a 403, so nobody learns
@@ -108,6 +110,19 @@ trait ResolvesVisible
         abort_unless($sprint instanceof Sprint && $sprint->board?->project?->workspace !== null && $request->user()->can('view', $sprint->board), 404);
 
         return $sprint;
+    }
+
+    /**
+     * A doc, whiteboard or folder the user may see (PagePolicy::view): a project they can open, and an
+     * unpublished page only when it's theirs or they are an admin. Pages are addressed by uuid.
+     */
+    protected function visiblePage(Request $request, string $uuid): Page
+    {
+        abort_unless(Str::isUuid($uuid), 404);
+        $page = Page::with('project.workspace')->where('uuid', $uuid)->first();
+        abort_unless($page instanceof Page && $page->project?->workspace !== null && $request->user()->can('view', $page), 404);
+
+        return $page;
     }
 
     private static function isId(int|string $id): bool

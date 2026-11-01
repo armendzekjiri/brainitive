@@ -8,6 +8,7 @@ use App\Support\Entitlements\LimitGate;
 use App\Support\Entitlements\LimitReached;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\Mcp\ResourceLocator;
+use App\Support\Pages\PageWrites;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -51,17 +52,12 @@ class CreatePageTool extends Tool
             $parentId = $parent->id;
         }
 
-        $content = ! empty($validated['markdown'])
-            ? PageContentConverter::htmlToPageContent(PageContentConverter::markdownToHtml($validated['markdown']))
-            : ['type' => 'lexical', 'html' => ''];
-
-        $page = $project->allPages()->create([
+        // an empty Markdown body is an empty editor document (the web's create starts the legacy empty shape)
+        $page = PageWrites::create($project, $user, [
             'name' => $validated['title'],
             'type' => 'page',
             'parent_id' => $parentId,
-            'icon' => '📄',
-            'created_by' => $user->id,
-            'content' => $content,
+            'html' => ! empty($validated['markdown']) ? PageContentConverter::markdownToHtml($validated['markdown']) : '',
         ]);
 
         if ($validated['publish'] ?? false) {

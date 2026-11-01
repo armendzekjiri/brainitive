@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -640,6 +640,35 @@ set when a sprint starts / completes.
 - The running sprint's cards by column are `GET /boards/{id}/items` (a Scrum board shows only the running sprint).
 - Creating, editing, starting, completing sprints and ranking inside the backlog: web only (`can.manage_sprints` → "Open in browser").
 
+### Docs
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/projects/{id}/pages?parent=root\|<uuid>` | app + verified | The page tree (docs, whiteboards, folders), flat with `parent_id` / `parent_uuid`, in the web's order (docs + whiteboards before folders, then `position`), cursor-paginated, `updated_since`; `parent` = one level. Unpublished pages only for their author and admins | Read + light edit | BRAI-198 | ready (v1.49.0, BRAI-411) |
+| `GET /api/v1/pages/{uuid}` | app + verified | One page: `markdown` + sanitized `html` (docs), `revision`, `version`, breadcrumbs, `can`. Someone else's unpublished draft → 404 | Read + light edit | BRAI-198, BRAI-199 | ready (v1.49.0, BRAI-411) |
+| `POST /api/v1/projects/{id}/pages` | app + verified, 60/min | `{name, kind?: doc\|whiteboard\|folder, parent_uuid?, icon? (emoji), markdown? (docs), publish?, request_id?}` → 201 `{data: page}`. 403 without `can.create`, 422 a parent the user can't see, 402 `limit_reached` (storage) | Read + light edit | BRAI-198 | ready (v1.49.0, BRAI-411) |
+| `PATCH /api/v1/pages/{uuid}` | app + verified, 120/min | `{name?, icon?, markdown?, revision}` → `{data: page}`; `revision` is required with `markdown` and → 409 `conflict` when the page was saved since. A published doc's changes become unpublished changes. Whiteboards / folders: `name`, `icon`. 403 without `can.update` | Read + light edit | BRAI-199 | ready (v1.49.0, BRAI-411) |
+| `POST /api/v1/pages/{uuid}/publish` | app + verified | `{message?, notify? (default true), revision?}` → `{data: page}`: publish a draft, or make a published doc's changes live as a new version (watchers notified). Nothing to publish → 200 unchanged; "review required" without an approved review → 422 `review`; folders → 422 | Read + light edit | BRAI-198 | ready (v1.49.0, BRAI-411) |
+| `POST /api/v1/pages/{uuid}/move` | app + verified | `{parent_uuid (null = top level), before_uuid?, after_uuid?}` → `{data: page}`; into itself / its subpages → 422 `parent_uuid` | Read + light edit | BRAI-198 | ready (v1.49.0, BRAI-411) |
+
+Page (tree): `{id, uuid, project_id, parent_id, parent_uuid, kind: doc|whiteboard|folder, name, icon (emoji|null), has_image_icon,
+status: draft|published|archived, position, url, created_at, updated_at}`. `GET /pages/{uuid}` adds `{icon_image (data: URL or
+URL)|null, markdown|null, html|null, revision, version, published_at, has_unpublished_changes, review_required, breadcrumbs: [{uuid,
+name, type}], creator, last_edited_by, watching, can: {update, delete, publish, create}}`.
+- Same code and rules as the web: `PagePolicy` (unpublished pages are their author's and the project / workspace admins'),
+  `Support\Pages\PageWrites` (create, the editor's draft save with the revision check on the locked row, publish through
+  `ReviewGate` + watcher notifications; shared with `PageController` and the MCP's `create_page`) and `PageMover`.
+- **What a user reads = their web view:** editors get the working copy (`name`, text: a published doc's unpublished changes
+  included, `has_unpublished_changes`), readers the published version. The tree's `name` is always the published one.
+- **Text is Markdown** with mentions `@[Name](user:<id>)` (`IssueMarkdown`; a mention notifies the person once, when they can open
+  the project). `html` is the stored editor HTML through `SafeHtml` — for rendering, never for sending back. Editor formatting
+  Markdown lacks (colours, embeds, smart-link cards) is lost when the app sends `markdown`: send it only when the user changed it.
+- **Live editing (Yjs):** a text change from the app is a save from outside the live document, like the web's single-user
+  editor: it needs the `revision` the app read (live editors save every few seconds, so a stale one → 409; load and retry) and
+  starts a new live document (`PageCollab::reset`), so open browsers reload on the app's text. On a published doc it only reaches
+  the draft; readers see it after publish.
+- Icons from the app are emoji (`data:` / `http` / `/…` → 422); uploading image icons, duplicating, unpublishing, archiving,
+  deleting, version restore, review requests: web only for now. Whiteboard scenes: Whiteboards.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -916,4 +945,25 @@ Built in: BRAI-409 (desktop) · Mobile scope: Read + reschedule
 ## API: web only — open in browser
 Recurring issue rules and issue templates are set up on the web (project settings / board). Issues they create are ordinary issues in the API (GET /api/v1/items/{id}, the board's items).
 Registry: docs/ai/API.md#issues · Decided in: BRAI-409
+```
+
+**BRAI-198** (wiki page tree, folders, drafts and publishing)
+```
+## API (ready)
+- GET /api/v1/projects/{id}/pages?parent=root|<uuid> — the page tree (docs, whiteboards, folders) with parent_uuid, in the web's order; drafts only the author's / admins'
+- GET /api/v1/pages/{uuid} — one page: Markdown, revision, breadcrumbs, can {update, delete, publish, create}
+- POST /api/v1/projects/{id}/pages {name, kind, parent_uuid?, markdown?, publish?, request_id?} — new doc / whiteboard / folder (402 at the storage limit)
+- POST /api/v1/pages/{uuid}/publish — publish a draft or a doc's changes (watchers notified; review-required docs need an approved review → 422)
+- POST /api/v1/pages/{uuid}/move {parent_uuid, before_uuid?, after_uuid?}
+Scope: app · OpenAPI: docs/api/openapi.json#/Docs · Registry: docs/ai/API.md#docs
+Built in: BRAI-411 (desktop) · Mobile scope: Read + light edit (delete, duplicate, archive, image icons: web only)
+```
+
+**BRAI-199** (rich document editor)
+```
+## API (ready) — Markdown editing
+- GET /api/v1/pages/{uuid} — markdown (mentions @[Name](user:<id>)) for editing, sanitized html for rendering, revision
+- PATCH /api/v1/pages/{uuid} {markdown, revision, name?, icon?} — replace the text; a stale revision → 409 (someone or a live editor saved since: reload)
+Scope: app · OpenAPI: docs/api/openapi.json#/Docs · Registry: docs/ai/API.md#docs
+Built in: BRAI-411 (desktop) · Mobile scope: Light edit in Markdown (the full block editor, tables, embeds: web / desktop webview; live co-editing: BRAI-200)
 ```

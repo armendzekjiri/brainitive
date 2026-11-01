@@ -83,6 +83,9 @@
         },
         {
             "name": "Sprints"
+        },
+        {
+            "name": "Docs"
         }
     ],
     "security": [
@@ -8476,6 +8479,475 @@
                     }
                 }
             }
+        },
+        "/projects/{project}/pages": {
+            "get": {
+                "operationId": "app.v1.pages.index",
+                "description": "Build the tree with `parent_id` / `parent_uuid`; inside a parent the web's order is docs and whiteboards\nbefore folders, then `position` (this list's order). `?parent=root` or `?parent=<uuid>` loads one level.\nUnpublished pages are listed only for their author and the project / workspace admins, as on the web.",
+                "summary": "A project's page tree: docs, whiteboards and folders, flat",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "parent",
+                        "in": "query",
+                        "description": "`root` = the top level, a page / folder uuid = its children; leave out for every level",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^(root|[0-9a-fA-F-]{36})$"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`PageCollection`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageCollection"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.pages.store",
+                "description": "`markdown` is the doc's text (mentions `@[Name](user:<id>)` notify project members). New docs and\nwhiteboards are drafts only their author (and admins) see, until published (`publish: true` or\n`POST /pages/{uuid}/publish`). Needs `can.create` of the project (403). With `request_id` a retry answers\n200 with the page the first call created.",
+                "summary": "Create a doc, whiteboard or folder",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StorePageRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`PageDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`PageDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "402": {
+                        "$ref": "#/components/responses/LimitReached"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/pages/{uuid}": {
+            "get": {
+                "operationId": "app.v1.pages.show",
+                "description": "Editors read the working copy (a published doc's unpublished changes included), readers the published\nversion. A whiteboard's scene: `GET /whiteboards/{uuid}`.",
+                "summary": "One doc, whiteboard or folder: the text as Markdown (and sanitized HTML), `revision`, its place in the tree\nand what the user may do",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`PageDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "app.v1.pages.update",
+                "description": "A doc's `name`, `icon` and `markdown` are saved as the editor saves them: on a published doc they become\nunpublished changes (readers see them after `POST /pages/{uuid}/publish`), a draft changes directly.\n`markdown` replaces the whole text and needs the `revision` you last read: 409 `conflict` when someone\n(or a live editor) saved since \u2014 load the page again. Editor formatting Markdown lacks is lost: send the\ntext only when the user changed it. Whiteboards and folders: `name` and `icon`. Needs `can.update` (403).",
+                "summary": "Change a page; only the sent fields change",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdatePageRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`PageDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "An error\n\nConflict",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Human-readable, safe to show."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "description": "Machine-readable: switch on this, not on the message.",
+                                            "enum": [
+                                                "conflict"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/pages/{uuid}/publish": {
+            "post": {
+                "operationId": "app.v1.pages.publish",
+                "description": "A draft becomes visible to the project (version 1); on a published doc the changes become a new version and\nits watchers are notified (`notify: false` to skip). Nothing to publish \u2192 200 with the page as it is. A\n\"review required\" doc publishes only an approved review of the current draft (422 `review`). Send\n`revision` to get 409 instead of publishing changes you haven't seen. Needs `can.publish` (403).",
+                "summary": "Publish a doc or whiteboard, or make a published doc's unpublished changes live",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PublishPageRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`PageDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "An error\n\nConflict",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Human-readable, safe to show."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "description": "Machine-readable: switch on this, not on the message.",
+                                            "enum": [
+                                                "conflict"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/pages/{uuid}/move": {
+            "post": {
+                "operationId": "app.v1.pages.move",
+                "description": "`parent_uuid: null` = the top level. `before_uuid` / `after_uuid` (one at most) place it next to a sibling\nin the new parent; without them it goes to the end. Into itself or its own subpages \u2192 422. Its subpages\nmove with it. Needs `can.update` (403).",
+                "summary": "Move a page, whiteboard or folder: into a folder or page, to the top level, or next to a sibling",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MovePageRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`PageDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PageDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -12064,6 +12536,39 @@
                 ],
                 "title": "MoveIssueRequest"
             },
+            "MovePageRequest": {
+                "type": "object",
+                "description": "`POST /pages/{uuid}/move`: into a folder / page, to the top level, or before / after a sibling (the\nsidebar's drag & drop and \"Move\u2026\" dialog, PageMover).",
+                "properties": {
+                    "parent_uuid": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "the new parent (a folder or page of the same project), null = the top level"
+                    },
+                    "before_uuid": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "put it right before / after this sibling (one of them at most); else at the end"
+                    },
+                    "after_uuid": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "parent_uuid"
+                ],
+                "title": "MovePageRequest"
+            },
             "MoveToSprintRequest": {
                 "type": "object",
                 "description": "`POST /api/v1/sprints/{id}/items` \u00b7 `POST /api/v1/boards/{id}/backlog/items`: issues to move. Authorized\nbefore validation: a board / sprint the user can't open is a 404, planning needs BoardPolicy::update (403),\nas the backlog page.",
@@ -12491,6 +12996,322 @@
                     "created_at"
                 ],
                 "title": "NotificationResource"
+            },
+            "PageCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/PageResource"
+                },
+                "title": "PageCollection"
+            },
+            "PageCrumbResource": {
+                "type": "object",
+                "properties": {
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "folder",
+                            "page"
+                        ]
+                    }
+                },
+                "required": [
+                    "uuid",
+                    "name",
+                    "type"
+                ],
+                "title": "PageCrumbResource"
+            },
+            "PageDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "project_id": {
+                        "type": "integer"
+                    },
+                    "parent_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "parent_uuid": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "doc",
+                            "whiteboard",
+                            "folder"
+                        ]
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "has_image_icon": {
+                        "type": "boolean"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "draft",
+                            "published",
+                            "archived"
+                        ]
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "icon_image": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "an uploaded icon: a data: URL or the image's address"
+                    },
+                    "markdown": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "docs only (null for whiteboards and folders)"
+                    },
+                    "html": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "revision": {
+                        "type": "integer"
+                    },
+                    "version": {
+                        "type": "integer",
+                        "description": "the number of the latest published version (0 = never published)"
+                    },
+                    "published_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "has_unpublished_changes": {
+                        "type": "boolean"
+                    },
+                    "review_required": {
+                        "type": "boolean"
+                    },
+                    "breadcrumbs": {
+                        "type": "array",
+                        "description": "the ancestors, top first (the web's breadcrumbs)",
+                        "items": {
+                            "$ref": "#/components/schemas/PageCrumbResource"
+                        }
+                    },
+                    "creator": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/PersonResource"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "last_edited_by": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/PersonResource"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "watching": {
+                        "type": "boolean"
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "update": {
+                                "type": "boolean",
+                                "description": "rename, change the text (docs), move"
+                            },
+                            "delete": {
+                                "type": "boolean"
+                            },
+                            "publish": {
+                                "type": "boolean"
+                            },
+                            "create": {
+                                "type": "boolean",
+                                "description": "new pages in this project"
+                            }
+                        },
+                        "required": [
+                            "update",
+                            "delete",
+                            "publish",
+                            "create"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "project_id",
+                    "parent_id",
+                    "parent_uuid",
+                    "kind",
+                    "name",
+                    "icon",
+                    "has_image_icon",
+                    "status",
+                    "position",
+                    "url",
+                    "created_at",
+                    "updated_at",
+                    "icon_image",
+                    "markdown",
+                    "html",
+                    "revision",
+                    "version",
+                    "published_at",
+                    "has_unpublished_changes",
+                    "review_required",
+                    "breadcrumbs",
+                    "creator",
+                    "last_edited_by",
+                    "watching",
+                    "can"
+                ],
+                "title": "PageDetailResource"
+            },
+            "PageResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "project_id": {
+                        "type": "integer"
+                    },
+                    "parent_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "parent_uuid": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "doc",
+                            "whiteboard",
+                            "folder"
+                        ]
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "has_image_icon": {
+                        "type": "boolean"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "draft",
+                            "published",
+                            "archived"
+                        ]
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "project_id",
+                    "parent_id",
+                    "parent_uuid",
+                    "kind",
+                    "name",
+                    "icon",
+                    "has_image_icon",
+                    "status",
+                    "position",
+                    "url",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "PageResource"
             },
             "PersonResource": {
                 "type": "object",
@@ -13179,6 +14000,33 @@
                     "version"
                 ],
                 "title": "ProjectTemplateResource"
+            },
+            "PublishPageRequest": {
+                "type": "object",
+                "description": "`POST /pages/{uuid}/publish`: publish a draft, or make a published doc's unpublished changes live.",
+                "properties": {
+                    "message": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the version's note in the history",
+                        "maxLength": 255
+                    },
+                    "notify": {
+                        "type": "boolean",
+                        "description": "a published doc's update: tell its watchers (default true)"
+                    },
+                    "revision": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "the `revision` as last read: 409 when the page changed since",
+                        "minimum": 0
+                    }
+                },
+                "title": "PublishPageRequest"
             },
             "RecentDestinationResource": {
                 "type": "object",
@@ -14399,6 +15247,63 @@
                     "title"
                 ],
                 "title": "StoreIssueRequest"
+            },
+            "StorePageRequest": {
+                "type": "object",
+                "description": "`POST /projects/{id}/pages`: a new doc, whiteboard or folder. Authorized before validation: a project the\nuser can't open is a 404, one where they may only read a 403 (PagePolicy::create).",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "kind": {
+                        "type": "string",
+                        "description": "default doc",
+                        "enum": [
+                            "doc",
+                            "whiteboard",
+                            "folder"
+                        ]
+                    },
+                    "parent_uuid": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "a folder or page of this project the user can see; leave out for the top level"
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 32
+                    },
+                    "markdown": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "docs only",
+                        "maxLength": 1000000
+                    },
+                    "publish": {
+                        "type": "boolean",
+                        "description": "make it visible to the project right away (docs and whiteboards; default: an author-only draft)"
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "name"
+                ],
+                "title": "StorePageRequest"
             },
             "StoreProjectRequest": {
                 "type": "object",
@@ -15890,6 +16795,40 @@
                     "preferences"
                 ],
                 "title": "UpdateNotificationPreferencesRequest"
+            },
+            "UpdatePageRequest": {
+                "type": "object",
+                "description": "`PATCH /pages/{uuid}`: only the sent fields change. A doc's text is replaced as a whole, so `markdown` needs\nthe `revision` the app last read (409 when the page changed since \u2014 live editors save every few seconds).",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 32
+                    },
+                    "markdown": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "docs only; replaces the whole text",
+                        "maxLength": 1000000
+                    },
+                    "revision": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "the page's `revision` as last read: 409 conflict when it changed since (required with `markdown`)",
+                        "minimum": 0
+                    }
+                },
+                "title": "UpdatePageRequest"
             },
             "UpdatePinsRequest": {
                 "type": "object",
