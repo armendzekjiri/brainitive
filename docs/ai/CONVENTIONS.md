@@ -179,6 +179,12 @@ Full conventions and the endpoint registry: [`API.md`](./API.md); recipe:
 - Work (issues + list tasks) is addressed as `issue:<id>` / `task:<id>` (`WorkRef`) everywhere in the
   App API, and listed with one resource (`WorkItemResource`). An endpoint a wallboard polls answers an
   `ETag` and 304 on `If-None-Match` (`TodayController`), and runs a fixed number of queries (test it).
+- Creates take an optional `request_id` (uuid) through `Concerns\CreatesOnce`: the first call answers 201, a
+  retry with the same id and input 200 with the same record, the same id with other input 409. Write the two
+  answers as two `return (new XResource(...))->response()` statements (201 + 200) so the spec shows both.
+- Content is addressed by id (`/task-lists/{id}`, `/snippet-collections/{id}`, `/bookmarks/{id}`), captures by uuid;
+  resolve it through `ResolvesVisible` (`visibleTaskList`, `visibleSnippetCollection`, `visibleSnippet`,
+  `visibleBookmarkGroup`) or, in a Form Request, in `authorize()` so 404 comes before 422.
 - The spec's `info.version` is the API version (`1.0.0`), not the app release; breaking changes → `/api/v2`.
 - Web ↔ desktop: call native features only through `resources/js/lib/desktop.ts` (feature-detected,
   no-op in a browser); never import `@tauri-apps/api` into the web app.

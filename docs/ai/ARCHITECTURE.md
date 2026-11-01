@@ -450,7 +450,7 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   `config/scramble.php` (documents only `api/v1`; API version `1.0.0`).
 - **Endpoints:** `app/Http/Controllers/AppApi/*` (Instance, Auth, Me + MeAvatar, Device, Invitation,
   Workspace, Project, Member, Navigation, Search, Notification, ConnectedApp, DeviceAuth, MyWork, Today,
-  Calendar — one `#[Group]` tag per
+  Calendar, TaskList, Capture, Snippet, Bookmark, Timer + WorkLog — one `#[Group]` tag per
   `API.md` module), Form Requests in `app/Http/Requests/AppApi/`, Resources in
   `app/Http/Resources/AppApi/`. The tables in `API.md` are the list.
 - **Lists + visibility (phase 03):** `Requests\AppApi\ListRequest` (`cursor` / `limit` /
@@ -469,6 +469,13 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   `BoardController@moveItem`, `TaskListController@updateItem`, offline list tasks),
   `Support\Calendar\CalendarEvents` (the web calendar's events, from `CalendarController@index`) +
   `AgendaEvent` (the API's event shape, cut to the user's local days).
+- **Shared with the web (phase 04b):** `Support\TaskLists\TaskLists` (visible lists, list / task create, task
+  rules, reorder; web `TaskListController`, the CLI `/api/cli/lists*`, MCP `create_task_list`, `ContentCapture`),
+  `Support\Captures\CaptureInbox` (inbox query, counts, create, archive / restore; web inbox, extension + MCP
+  "save to inbox"), `Support\Snippets\Snippets`, `Support\Bookmarks\Bookmarks` (rules, create, files, deletes;
+  web `SnippetController` / `BookmarkController`), `Support\Billing\WorkTimers` (web `WorkTimerController`) and
+  `Support\Billing\TimeEntries` (week, rules, create / update / delete, guard; web `TimesheetController`).
+  `Controllers\AppApi\Concerns\CreatesOnce`: `request_id` retries of creates (`IdempotentRequest`, `mcp_requests`).
 - **TV device-code sign-in (BRAI-438):** `Support\AppApi\AppDeviceCodes` (RFC 8628 codes in the cache),
   `AppDeviceSignIn` (device row + `max_devices` + first pair; also used by `/auth/exchange`), `AppClients`
   (`config/app-api.php` → `clients.*.grant` / `platforms`); `Controllers\AppApi\DeviceAuthController`;

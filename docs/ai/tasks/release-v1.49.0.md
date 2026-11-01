@@ -342,3 +342,22 @@ Creates take an optional `request_id` (uuid): a retry answers 200 with what the 
   /me/timesheet?workspace=&week=` (+ activities, loggable projects). Rates, clients, VAT, invoices: web only.
 - Extract `WorkTimerController` start / stop / discard → `App\Support\Billing\WorkTimers` and
   `TimesheetController` store / update / destroy → `App\Support\Billing\TimeEntries` (web + API).
+
+### Phase 04b — result
+Merged into `release/v1.49.0`: `feat/app-api-task-lists` (BRAI-397), `feat/app-api-captures` (BRAI-398),
+`feat/app-api-snippets-bookmarks` (BRAI-399), `feat/app-api-time-tracking` (BRAI-400). No migrations (request_id
+retries reuse `mcp_requests`). New spec tags: Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time
+tracking 190. e2e: `app-api-task-lists`, `-captures`, `-snippets-bookmarks`, `-time-tracking` (+ `helpers/app-api.ts`).
+Deviations from the plan / cards:
+- Task lists: tasks are their own cursor list (`GET /task-lists/{id}/items`), not inside `GET /task-lists/{id}`;
+  notes are Markdown; reorder takes `{ids}` in order. Renaming / deleting lists: web only for now.
+- Captures: also `GET /captures/counts`, `GET /captures/{id}`, `PATCH`, archive / restore and `preview`; files on a
+  capture are deferred (the web's captures have none).
+- Snippets / bookmarks: collections and groups by id, plus `PATCH|DELETE` of collections / groups and cursor item
+  lists; bookmark icons are emoji only (uploads web only), collaborators web only.
+- Time: the timer start takes `{id: "issue:<id>"}` and no activity — the activity is chosen when stopping, as on the
+  web (`GET /me/timer` carries the options); stop needs the `timer_id`; `GET /me/timesheet` needs `workspace`.
+  Work logs are own entries only; billed → 422 `entry`. Rates, clients, VAT, invoices: web only (BRAI-242/244/245).
+- `## API (ready)` texts for BRAI-216, 217, 218, 241, 258 and the web-only text for BRAI-242 / 244 / 245 are in
+  `docs/ai/API.md` → "Mobile card texts".
+
