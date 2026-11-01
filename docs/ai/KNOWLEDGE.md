@@ -1842,8 +1842,10 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `ContentReferences::forEndpoint` does for the UI — a private draft never shows, not even as a count).
   A linked issue the user can't open (an old cross-project link; the picker only offers the project's
   issues, MCP only links inside the project) is listed as `restricted: true`, `id: 0`, no key / title /
-  url. The issue view itself still renders such links with their title (`showItem` / `itemDetails` load
-  `incomingLinks.sourceItem` unchecked) — a separate fix if wanted.
+  url. The web views do the same since BRAI-435: `LinkedIssueVisibility::mask()` runs on every
+  place BoardController loads `outgoingLinks.targetItem` / `incomingLinks.sourceItem` (board, live
+  card refetch, issue page). It needs the other issue's `board:…,project_id` loaded; a new place that
+  loads links must call it too, or titles from other projects leak again.
 - **"A blocks B" = "B is_blocked_by A".** `ItemLinks::find` matches the inverse row from the other issue,
   so `link_issues` is a no-op for it and the issue view now refuses it as "This link already exists."
   (before, both rows could be added). `unlink_issues` with a type removes either representation.

@@ -464,6 +464,8 @@ export interface ItemLink {
     source_item_id: number;
     target_item_id: number;
     link_type: 'blocks' | 'is_blocked_by' | 'duplicates' | 'is_duplicated_by' | 'relates_to' | 'clones' | 'is_cloned_by';
+    /** The other issue is in a project the viewer can't open: no id, key, title or board (BRAI-435) */
+    restricted?: boolean;
     source_item?: {
         id: number;
         key: string;

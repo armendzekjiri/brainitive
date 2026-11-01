@@ -1373,9 +1373,13 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                             <div key={`out-${link.id}`} className="flex items-center justify-between py-1.5 px-2 rounded-md -mx-2 group hover:bg-muted/40 transition-colors">
                                 <div className="flex items-center gap-2 min-w-0">
                                     <span className="text-sm text-muted-foreground shrink-0">{linkTypeOptions.find(o => o.value === link.link_type)?.label || link.link_type}</span>
-                                    <Link href={route('boards.items.show', [workspace.slug, project.slug, link.target_item?.board?.slug, link.target_item_id])} className="text-sm text-primary hover:underline truncate">
-                                        <span className="font-mono text-sm mr-1">{link.target_item?.key}</span>{link.target_item?.title}
-                                    </Link>
+                                    {link.restricted ? (
+                                        <span className="text-sm text-muted-foreground italic">Restricted</span>
+                                    ) : (
+                                        <Link href={route('boards.items.show', [workspace.slug, project.slug, link.target_item?.board?.slug, link.target_item_id])} className="text-sm text-primary hover:underline truncate">
+                                            <span className="font-mono text-sm mr-1">{link.target_item?.key}</span>{link.target_item?.title}
+                                        </Link>
+                                    )}
                                 </div>
                                 <Button variant="ghost" size="icon" className="size-6 opacity-0 group-hover:opacity-100 shrink-0" onClick={() => handleDeleteLink(link.id)}>
                                     <X className="size-3" />
@@ -1386,9 +1390,13 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                             <div key={`in-${link.id}`} className="flex items-center justify-between py-1.5 px-2 rounded-md -mx-2 group hover:bg-muted/40 transition-colors">
                                 <div className="flex items-center gap-2 min-w-0">
                                     <span className="text-sm text-muted-foreground shrink-0">{linkTypeOptions.find(o => o.value === inverseLinkType(link.link_type))?.label || link.link_type}</span>
-                                    <Link href={route('boards.items.show', [workspace.slug, project.slug, link.source_item?.board?.slug, link.source_item_id])} className="text-sm text-primary hover:underline truncate">
-                                        <span className="font-mono text-sm mr-1">{link.source_item?.key}</span>{link.source_item?.title}
-                                    </Link>
+                                    {link.restricted ? (
+                                        <span className="text-sm text-muted-foreground italic">Restricted</span>
+                                    ) : (
+                                        <Link href={route('boards.items.show', [workspace.slug, project.slug, link.source_item?.board?.slug, link.source_item_id])} className="text-sm text-primary hover:underline truncate">
+                                            <span className="font-mono text-sm mr-1">{link.source_item?.key}</span>{link.source_item?.title}
+                                        </Link>
+                                    )}
                                 </div>
                                 <Button variant="ghost" size="icon" className="size-6 opacity-0 group-hover:opacity-100 shrink-0" onClick={() => handleDeleteLink(link.id)}>
                                     <X className="size-3" />
