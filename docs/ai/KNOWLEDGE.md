@@ -1936,3 +1936,37 @@ different `docs/api/openapi.json` than CI does. Regenerate it with `composer ope
 (`OPENAPI_WRITE=1 php artisan test --filter=OpenApiSpecTest`, `TEST_DB_SUFFIX=<name>` in a worktree):
 the export then runs on the migrated test database, the same one the drift test checks against.
 Never migrate devdb just to export the spec.
+- **Scramble keeps inference state in statics** (the extension broker of the first app, reflection
+  caches). A test that rendered the docs before (`ApiDocsAccessTest`) changed what a later export in the
+  same PHPUnit process inferred (a cursor list's response description), so the drift check depended on
+  test order. `OpenApiSpecTest::setUp()` resets `Context` and the reflector / resource caches; keep that
+  when upgrading Scramble (phase 03, v1.49.0).
+- **Getting real types into the spec:** Scramble types a field from inference, not from `@var`. A
+  value that comes out as `string` / `{}` (a `(object)` cast, `array_map`, an interface call, a pivot
+  attribute) gets its type from a small private method with a declared return type (`?string`,
+  `object`) or from `collect(...)->map(...)->all()`; a list of arrays becomes typed by wrapping the rows
+  in a Resource (`PinResource::collection(...)`). Keep `->resolve()` out of `response()->json([...])` —
+  pass the collection itself, or its items are `{}`.
+
+### App API phase 03: what the apps can see (v1.49.0, BRAI-388 … BRAI-394)
+- **Verified address for all workspace content.** The whole web app sits behind `verified`, so the App
+  API's workspace / project / members / navigation / search / notifications / connected-apps routes
+  are in a `verified` group (403). `/me`, devices and sign-in stay open so an unverified user can be
+  shown "verify your email".
+- **404 before validation.** A write whose Form Request would answer 422 ("name already taken",
+  "already a member") checks visibility in `authorize()` first (`abort_unless(can('view'), 404)`, then
+  the policy → 403), so outsiders can't probe the workspace (`StoreProjectRequest`,
+  `StoreInvitationRequest`). Reads use `AppApi\Concerns\ResolvesVisible`.
+- **No route `where()` on non-GET App API routes.** web.php ends in a GET `{fallbackPlaceholder}`
+  route, so a POST / PUT / DELETE whose URI fails a route constraint answers **405**, not 404. Check
+  malformed ids in the controller instead (`notifications/{id}` → `Str::isUuid`, `connected-apps/{id}`).
+  Also guard uuid columns: Postgres refuses to compare a non-uuid (500) — `ConnectedApps::disconnect`.
+- **Projects by id** (`/projects/{id}`): slugs are unique only per workspace and change on rename.
+- **Recent destinations live on the client** (browser local storage on the web, the device in the
+  apps); `RecentDestinations::resolve()` only turns `{type, id}` into titles / links the user may open.
+- **Search by workspace:** `search_entries.workspace_id` is not rewritten when a project moves, so the
+  workspace filter matches project content through `projects.workspace_id` and only snippets /
+  bookmarks by their own `workspace_id` (`TableSearchEngine::visibleEntries`).
+- **Known web gap (not fixed here):** `GET /workspaces/{slug}/projects` (web) renders
+  `Projects/Index`, which doesn't exist in `resources/js/Pages` — the page errors; the workspace home
+  lists projects instead.

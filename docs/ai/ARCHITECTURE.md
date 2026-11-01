@@ -448,8 +448,18 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   `APP_API_MIN_DESKTOP_VERSION` / `APP_API_MIN_MOBILE_VERSION`), `config/auth.php` guard `app`,
   `config/scramble.php` (documents only `api/v1`; API version `1.0.0`).
 - **Endpoints:** `app/Http/Controllers/AppApi/*` (Instance, Auth, Me + MeAvatar, Device, Invitation,
-  Workspace — one `#[Group]` tag per `API.md` module), Form Requests in `app/Http/Requests/AppApi/`,
-  Resources in `app/Http/Resources/AppApi/`. The tables in `API.md` are the list.
+  Workspace, Project, Member, Navigation, Search, Notification, ConnectedApp — one `#[Group]` tag per
+  `API.md` module), Form Requests in `app/Http/Requests/AppApi/`, Resources in
+  `app/Http/Resources/AppApi/`. The tables in `API.md` are the list.
+- **Lists + visibility (phase 03):** `Requests\AppApi\ListRequest` (`cursor` / `limit` /
+  `updated_since`) + a `Resources\AppApi\CursorCollection` subclass per list (`{data, next_cursor}`);
+  `Controllers\AppApi\Concerns\ResolvesVisible` (workspace by slug / project by id → 404 when the
+  user can't open it). Workspace content routes are in a `verified` group.
+- **Shared with the web (phase 03):** `Support\Projects\ProjectCreator` (new project: rules, limits,
+  template), `Support\Workspaces\WorkspaceInvites`, `Support\Navigation\RecentDestinations` (command
+  palette recents) + `PinnedContent`, `SidebarPreferences`, `SearchService` (`SearchQuery::$workspaceIds`),
+  `Support\Notifications\NotificationInbox` + `NotificationCatalog::preferenceRules/updatePreferences`,
+  `Support\Profile\ConnectedApps` + `DataExports`, `AppTokens::signOutDevice()`.
 - **Spec:** `docs/api/openapi.json` (committed; `composer openapi` regenerates it through
   `tests/Feature/AppApi/OpenApiSpecTest.php`, which is also the CI drift check). UI `/docs/api` +
   `/docs/api.json`: local env or instance admins.
