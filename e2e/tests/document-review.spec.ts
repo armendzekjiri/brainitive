@@ -39,13 +39,13 @@ async function typeDraft(page: Page, text: string, replace = false) {
 }
 
 async function moreActions(page: Page, item: string) {
-    await page.getByRole('button', { name: 'More actions' }).click();
+    await page.getByRole('button', { name: 'More actions', exact: true }).click();
     await page.getByRole('menuitem', { name: item }).click();
 }
 
 /** The admin's "Review required before publish" switch (a checkbox item in the page menu). */
 async function requireReview(page: Page) {
-    await page.getByRole('button', { name: 'More actions' }).click();
+    await page.getByRole('button', { name: 'More actions', exact: true }).click();
     const item = page.getByRole('menuitemcheckbox', { name: 'Review required before publish' });
     await expect(item).toHaveAttribute('aria-checked', 'false');
     await item.click();

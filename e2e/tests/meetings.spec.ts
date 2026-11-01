@@ -126,7 +126,7 @@ test.describe('online meetings', () => {
             await addProjectContent(page, 'Page', doc);
             await expect(page).toHaveURL(/\/pages\//);
 
-            await page.getByRole('button', { name: 'More actions' }).click();
+            await page.getByRole('button', { name: 'More actions', exact: true }).click();
             await page.getByRole('menuitem', { name: 'Schedule meeting' }).click();
             await expect(page.getByRole('dialog', { name: 'Schedule meeting' }).getByLabel('Title')).toHaveValue(doc);
             await schedule(page, host, 'Microsoft Teams', 'guest@partner.example.test');

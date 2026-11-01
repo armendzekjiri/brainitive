@@ -186,7 +186,7 @@ test.describe('meeting notes to issues', () => {
         await page.keyboard.type('Max sends the release notes.');
         await saved;
 
-        await page.getByRole('button', { name: 'More actions' }).click();
+        await page.getByRole('button', { name: 'More actions', exact: true }).click();
         await page.getByRole('menuitem', { name: 'Extract action items' }).click();
         await expect(dialog(page).getByText(docName)).toBeVisible();
         await expect(dialog(page).getByLabel('Meeting notes')).toHaveCount(0);
