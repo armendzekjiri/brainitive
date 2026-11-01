@@ -105,7 +105,7 @@ class OpenApiSpecTest extends TestCase
     public function test_every_operation_is_tagged_with_its_registry_module(): void
     {
         // the modules of docs/ai/API.md, in order: #[Group('<Module>', weight: n)] on each AppApi controller
-        $modules = ['Instance', 'Auth', 'Account', 'Devices', 'Invitations', 'Workspaces', 'Projects', 'Members', 'Navigation', 'Search', 'Notifications', 'Connected apps', 'My Work'];
+        $modules = ['Instance', 'Auth', 'Account', 'Devices', 'Invitations', 'Workspaces', 'Projects', 'Members', 'Navigation', 'Search', 'Notifications', 'Connected apps', 'My Work', 'Calendar'];
 
         foreach ($this->generate()['paths'] ?? [] as $path => $operations) {
             foreach ($operations as $method => $operation) {

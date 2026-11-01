@@ -56,6 +56,9 @@
         },
         {
             "name": "My Work"
+        },
+        {
+            "name": "Calendar"
         }
     ],
     "security": [
@@ -2824,6 +2827,163 @@
                     }
                 }
             }
+        },
+        "/calendar/events": {
+            "get": {
+                "operationId": "app.v1.calendar.events",
+                "description": "The events of their connected calendars (any provider) and Google Tasks, their bookings and the\ndated issues / list tasks of the projects they can open \u2014 the web calendar's sources \u2014 for the\nuser's local days `from` \u2026 `to` (inclusive, Y-m-d, at most 62 days; default today + 7), sorted by\nstart. Not paginated. A calendar that can't be loaded is left out and listed in `errors` (its\n`sync_error` also shows in `GET /calendar/connections`).",
+                "summary": "The user's calendar for a range of days",
+                "tags": [
+                    "Calendar"
+                ],
+                "parameters": [
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "description": "first day, Y-m-d in the user's time zone (default: today)",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "description": "last day, inclusive (default: from + 7 days); at most 62 days after from",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "sources[]",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "enum": [
+                                "board",
+                                "list",
+                                "external",
+                                "booking"
+                            ],
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "board",
+                                    "list",
+                                    "external",
+                                    "booking"
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "name": "me_only",
+                        "in": "query",
+                        "description": "only issues / tasks assigned to the user (connected calendars are the user's own anyway)",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "show_completed",
+                        "in": "query",
+                        "description": "false: leave out completed issues / tasks (default true, as the web)",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/CalendarEventResource"
+                                            }
+                                        },
+                                        "from": {
+                                            "type": "string"
+                                        },
+                                        "to": {
+                                            "type": "string"
+                                        },
+                                        "timezone": {
+                                            "type": "string",
+                                            "description": "the zone of `from` / `to` (the user's effective time zone)"
+                                        },
+                                        "errors": {
+                                            "type": "array",
+                                            "description": "calendars that failed this time: [{connection_id, message}]",
+                                            "items": {}
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "from",
+                                        "to",
+                                        "timezone",
+                                        "errors"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/calendar/connections": {
+            "get": {
+                "operationId": "app.v1.calendar.connections",
+                "summary": "The user's connected calendars and Google Tasks lists: name, colour, provider, status",
+                "tags": [
+                    "Calendar"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `CalendarConnectionResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/CalendarConnectionResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -2850,6 +3010,243 @@
                     "id"
                 ],
                 "title": "AddMyDayItemRequest"
+            },
+            "CalendarConnectionResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "provider": {
+                        "type": "string",
+                        "description": "google | outlook | caldav | ics \u2026"
+                    },
+                    "provider_label": {
+                        "type": "string"
+                    },
+                    "kind": {
+                        "type": "string",
+                        "description": "calendar | tasks (Google Tasks)"
+                    },
+                    "account_email": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "account_name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "description": "false: switched off because access failed (see sync_error): reconnect on the web"
+                    },
+                    "read_only": {
+                        "type": "boolean",
+                        "description": "true: events can't be created / changed in it (ICS subscriptions)"
+                    },
+                    "sync_error": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "why the last load failed (\"Reconnect \u2026\"), null when fine"
+                    },
+                    "sync_error_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "provider",
+                    "provider_label",
+                    "kind",
+                    "account_email",
+                    "account_name",
+                    "name",
+                    "color",
+                    "is_active",
+                    "read_only",
+                    "sync_error",
+                    "sync_error_at"
+                ],
+                "title": "CalendarConnectionResource"
+            },
+            "CalendarEventResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "unique per occurrence: issue:<id>, task:<id>[:<date>], event:<connection>:<id>, google_task:<connection>:<id>, booking:<uuid>"
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "issue | task | event | google_task | booking"
+                    },
+                    "work_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "issues / tasks: the id for PATCH /me/work/{id}; null otherwise"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "all_day": {
+                        "type": "boolean"
+                    },
+                    "start": {
+                        "type": "string",
+                        "description": "timed: ISO-8601 UTC; all-day: Y-m-d"
+                    },
+                    "end": {
+                        "type": "string",
+                        "description": "timed: ISO-8601 UTC; all-day: Y-m-d, inclusive (the last day)"
+                    },
+                    "location": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "conference_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "https join link of the event's video call (Google Meet, Teams \u2026)"
+                    },
+                    "conference_provider": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "google_meet | teams | other"
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the calendar's colour (events), the project's colour (issues / tasks)"
+                    },
+                    "calendar": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "connected calendars / Google Tasks only",
+                        "properties": {
+                            "connection_id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "provider": {
+                                "type": "string"
+                            },
+                            "provider_label": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "connection_id",
+                            "name",
+                            "provider",
+                            "provider_label"
+                        ]
+                    },
+                    "project": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "issues / tasks only",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "key": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "key"
+                        ]
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the web page (issues, tasks, bookings)"
+                    },
+                    "external_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the event in its own calendar app, when the provider gives one"
+                    },
+                    "done": {
+                        "type": "boolean"
+                    },
+                    "read_only": {
+                        "type": "boolean",
+                        "description": "a read-only calendar (an ICS subscription) or a booking"
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "work_id",
+                    "title",
+                    "all_day",
+                    "start",
+                    "end",
+                    "location",
+                    "conference_url",
+                    "conference_provider",
+                    "color",
+                    "calendar",
+                    "project",
+                    "url",
+                    "external_url",
+                    "done",
+                    "read_only"
+                ],
+                "title": "CalendarEventResource"
             },
             "ConnectedAppResource": {
                 "type": "object",
