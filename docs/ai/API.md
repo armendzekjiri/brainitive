@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -200,6 +200,25 @@ lists (joining doesn't change the member's record): reload them when opening a p
 "send an invitation?" before mailing an unknown address; the apps ask in their own UI and then POST.
 Role changes, removals, cancelling invitations, project membership: web only.
 
+### Navigation
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/me/navigation?workspace={slug}&recent[]={type}:{id}` | app + verified | Dock / taskbar jump list, "Recent" menu, app menus: the web sidebar of one workspace + the app's recent destinations resolved (≤ 12, most recent first; types `project`, `board`, `page`, `item`, `plan`). Not a member / unknown → 404, no `workspace` → 422 | Full | BRAI-182 | ready (v1.49.0, BRAI-391) |
+| `PUT /api/v1/me/pins` | app + verified | Pin / unpin / reorder in one project: `{project_id, pins: [{type, id}] (≤ 50, the whole list in order; [] = none), pinned_only?}` → `{data: {project_id, pinned_only, pins}}`. Pins the user can't open or not in the project are dropped. Can't open the project → 404 | Full | BRAI-182 | ready (v1.49.0, BRAI-391) |
+
+`GET /me/navigation` → `{data: {workspace, nav: [keys], hidden_nav: [keys], projects: [{id, slug, key,
+name, icon, color, url, groups: {health, workload, releases, boards, lists, plans, helpdesks,
+lead_forms, pages, whiteboards, folders: bool}, pinned_only, pins: [{type, id, name, url,
+is_whiteboard}], boards: [{id, name, type, url}], task_lists, plans, helpdesks, lead_forms: [{id,
+name, url}]}], recent: [{type, id, title, subtitle, url}]}}`.
+- Same data as the web sidebar (`users.sidebar_preferences`, BRAI-106): a pin or hidden group set in
+  the app shows on the web and back. Pin types: `board`, `list`, `plan`, `helpdesk`, `lead_form`, `page`
+  (docs, whiteboards, folders). `nav` = `home`, `inbox` + the entries the user didn't hide.
+- **Recent is kept on the device**, as the web keeps it in the browser (command palette); the server
+  only resolves the entries and drops what the user can no longer open (`RecentDestinations`).
+- Docs are not in the navigation (they can be many): a project's folder tree is `GET /projects/{id}`.
+  Hiding top-level entries / groups: web only for now.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -233,4 +252,13 @@ Built in: BRAI-389 (desktop) · Mobile scope: Read + create
 - POST /api/v1/workspaces/{slug}/invitations — invite by email (admins; 402 at the member limit)
 Scope: app · OpenAPI: docs/api/openapi.json#/Members · Registry: docs/ai/API.md#members
 Built in: BRAI-390 (desktop) · Mobile scope: Read + invite (roles and removals web only)
+```
+
+**BRAI-182** (navigation)
+```
+## API (ready)
+- GET /api/v1/me/navigation?workspace={slug}&recent[]=board:12 — sidebar of a workspace (entries, projects, groups, pins) + the app's recent destinations resolved
+- PUT /api/v1/me/pins — replace one project's pins (and "pinned only"); synced with the web sidebar
+Scope: app · OpenAPI: docs/api/openapi.json#/Navigation · Registry: docs/ai/API.md#navigation
+Built in: BRAI-391 (desktop) · Mobile scope: Full (recent list kept on the device)
 ```

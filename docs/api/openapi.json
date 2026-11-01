@@ -41,6 +41,9 @@
         },
         {
             "name": "Members"
+        },
+        {
+            "name": "Navigation"
         }
     ],
     "security": [
@@ -1425,6 +1428,123 @@
                     }
                 }
             }
+        },
+        "/me/navigation": {
+            "get": {
+                "operationId": "app.v1.navigation.show",
+                "summary": "The sidebar of one workspace: visible entries, projects with their content groups and pins,\nand the app's recent destinations (`recent[]=board:12`) resolved",
+                "tags": [
+                    "Navigation"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "query",
+                        "required": true,
+                        "description": "the workspace's slug",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 255
+                        }
+                    },
+                    {
+                        "name": "recent[]",
+                        "in": "query",
+                        "description": "\"<type>:<id>\", type one of project, board, page, item, plan",
+                        "schema": {
+                            "type": "array",
+                            "pattern": "^(project|board|page|item|plan):[1-9][0-9]{0,18}$",
+                            "items": {
+                                "type": "string",
+                                "pattern": "^(project|board|page|item|plan):[1-9][0-9]{0,18}$"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`NavigationResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/NavigationResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/pins": {
+            "put": {
+                "operationId": "app.v1.navigation.pins",
+                "summary": "Replace one project's sidebar pins (and optionally \"pinned only\"). Pins the user can't open or\nthat aren't in the project are dropped",
+                "tags": [
+                    "Navigation"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdatePinsRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`PinsResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PinsResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -2047,6 +2167,321 @@
                 ],
                 "title": "MemberResource"
             },
+            "NavigationProjectResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "key": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "groups": {
+                        "type": "object",
+                        "description": "false = the user hid this group of the project in the sidebar (SidebarPreferences::GROUPS)",
+                        "properties": {
+                            "health": {
+                                "type": "boolean"
+                            },
+                            "workload": {
+                                "type": "boolean"
+                            },
+                            "releases": {
+                                "type": "boolean"
+                            },
+                            "boards": {
+                                "type": "boolean"
+                            },
+                            "lists": {
+                                "type": "boolean"
+                            },
+                            "plans": {
+                                "type": "boolean"
+                            },
+                            "helpdesks": {
+                                "type": "boolean"
+                            },
+                            "lead_forms": {
+                                "type": "boolean"
+                            },
+                            "pages": {
+                                "type": "boolean"
+                            },
+                            "whiteboards": {
+                                "type": "boolean"
+                            },
+                            "folders": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "health",
+                            "workload",
+                            "releases",
+                            "boards",
+                            "lists",
+                            "plans",
+                            "helpdesks",
+                            "lead_forms",
+                            "pages",
+                            "whiteboards",
+                            "folders"
+                        ]
+                    },
+                    "pinned_only": {
+                        "type": "boolean"
+                    },
+                    "pins": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PinResource"
+                        }
+                    },
+                    "boards": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "type": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "type",
+                                "url"
+                            ]
+                        }
+                    },
+                    "task_lists": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "url"
+                            ]
+                        }
+                    },
+                    "plans": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "url"
+                            ]
+                        }
+                    },
+                    "helpdesks": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "url"
+                            ]
+                        }
+                    },
+                    "lead_forms": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "url"
+                            ]
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "slug",
+                    "key",
+                    "name",
+                    "icon",
+                    "color",
+                    "url",
+                    "groups",
+                    "pinned_only",
+                    "pins",
+                    "boards",
+                    "task_lists",
+                    "plans",
+                    "helpdesks",
+                    "lead_forms"
+                ],
+                "title": "NavigationProjectResource"
+            },
+            "NavigationResource": {
+                "type": "object",
+                "properties": {
+                    "workspace": {
+                        "$ref": "#/components/schemas/WorkspaceResource"
+                    },
+                    "nav": {
+                        "type": "array",
+                        "description": "top-level entries in sidebar order (home, inbox, my_work, captures, timesheet, billing,\ninsights, calendar, booking_pages, bookmarks, snippets); home and inbox are always there",
+                        "items": {}
+                    },
+                    "hidden_nav": {
+                        "type": "array",
+                        "items": {}
+                    },
+                    "projects": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/NavigationProjectResource"
+                        }
+                    },
+                    "recent": {
+                        "type": "array",
+                        "description": "the app's recent[] entries the user can still open, in the app's order",
+                        "items": {
+                            "$ref": "#/components/schemas/RecentDestinationResource"
+                        }
+                    }
+                },
+                "required": [
+                    "workspace",
+                    "nav",
+                    "hidden_nav",
+                    "projects",
+                    "recent"
+                ],
+                "title": "NavigationResource"
+            },
+            "PinResource": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "description": "board | list | plan | helpdesk | lead_form | page (docs, whiteboards and folders)"
+                    },
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "is_whiteboard": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "type",
+                    "id",
+                    "name",
+                    "url",
+                    "is_whiteboard"
+                ],
+                "title": "PinResource"
+            },
+            "PinsResource": {
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "integer"
+                    },
+                    "pinned_only": {
+                        "type": "boolean"
+                    },
+                    "pins": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PinResource"
+                        }
+                    }
+                },
+                "required": [
+                    "project_id",
+                    "pinned_only",
+                    "pins"
+                ],
+                "title": "PinsResource"
+            },
             "ProjectCollection": {
                 "type": "array",
                 "items": {
@@ -2561,6 +2996,36 @@
                 ],
                 "title": "ProjectTemplateResource"
             },
+            "RecentDestinationResource": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "description": "project | board | page | item | plan"
+                    },
+                    "id": {
+                        "type": "integer"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "subtitle": {
+                        "type": "string",
+                        "description": "where it lives, e.g. \"Website \u00b7 Board\""
+                    },
+                    "url": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "type",
+                    "id",
+                    "title",
+                    "subtitle",
+                    "url"
+                ],
+                "title": "RecentDestinationResource"
+            },
             "RefreshTokenRequest": {
                 "type": "object",
                 "description": "POST /api/v1/auth/refresh: the current refresh token (`brr_\u2026`, single use).",
@@ -2818,6 +3283,54 @@
                     }
                 },
                 "title": "UpdateMeRequest"
+            },
+            "UpdatePinsRequest": {
+                "type": "object",
+                "description": "`PUT /api/v1/me/pins` (BRAI-391): replace one project's sidebar pins (the web's sidebar rules,\nSidebarPreferencesController). Pins the user can't open are dropped, not an error.",
+                "properties": {
+                    "project_id": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "pins": {
+                        "type": "array",
+                        "description": "the whole list, in sidebar order; [] unpins everything",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": [
+                                        "board",
+                                        "list",
+                                        "plan",
+                                        "helpdesk",
+                                        "lead_form",
+                                        "page"
+                                    ]
+                                },
+                                "id": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                }
+                            },
+                            "required": [
+                                "type",
+                                "id"
+                            ]
+                        },
+                        "maxItems": 50
+                    },
+                    "pinned_only": {
+                        "type": "boolean",
+                        "description": "show only the Pinned group of this project"
+                    }
+                },
+                "required": [
+                    "project_id",
+                    "pins"
+                ],
+                "title": "UpdatePinsRequest"
             },
             "WebSessionResource": {
                 "type": "object",
