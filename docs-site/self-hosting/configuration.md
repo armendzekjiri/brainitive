@@ -208,6 +208,12 @@ Normally created in **Instance admin → GitHub App**. These variables override 
 | `GITHUB_STARS` | `true` | Show the star count on "Star on GitHub" buttons. The scheduler fetches it hourly from GitHub's API. `false` turns that off |
 | `GITHUB_REPOSITORY` | `armendzekjiri/brainitive` | Repository the buttons link to |
 
+### Update check
+
+| Variable | Default | What it does |
+|---|---|---|
+| `BRAINITIVE_UPDATE_CHECK` | on (self-hosted) | Once a day the scheduler asks GitHub's public API for the latest Brainitive release (anonymous, nothing about your instance is sent). Instance admins then see a newer version in **Instance admin → Overview** and in a small dismissible strip. Nothing is installed: see [Upgrading](./upgrading). `false` turns it off. Empty means on, except on Brainitive Cloud. Check now with `php artisan brainitive:check-update` |
+
 ## AI, MCP and outgoing requests
 
 | Variable | Default | What it does |

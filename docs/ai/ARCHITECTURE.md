@@ -319,6 +319,18 @@ Plan [`tasks/feat-legal-compliance.md`](./tasks/feat-legal-compliance.md); human
 - **Pages:** `Pages/Admin/{Overview,Users,Workspaces,Settings,AuditLog,GithubApp,Emails}.tsx` (GitHub App setup, v1.42.0 — see the GitHub App module; Emails = previews of every email, v1.44.0), shell `components/admin/AdminShell.tsx`; entry in the `AppLayout` user menu when `auth.isInstanceAdmin`
 - **Metadata only:** names, emails, counts, dates. Never page / board / item content.
 - **Promote via CLI:** `php artisan make:instance-admin <email>` (also verifies the email)
+- **Update check (BRAI-433, self-hosted):** `App\Support\Updates\UpdateCheck` — `run()` (one anonymous GET of
+  `api.github.com/repos/armendzekjiri/brainitive/releases/latest`, plain `Http` like `GithubStars`; drafts,
+  pre-releases and non-`vX.Y.Z` tags ignored; failures `Log::info` + keep the last result), stored in
+  `instance_settings.settings.update_check` (`latest_version`, `release_url`, `published_at`, `checked_at`,
+  `failed_at`); `status()` → Overview prop `updates` ("Updates" card + "Brainitive vX available" alert);
+  `noticeFor($user)` → shared prop `updateNotice` (instance admins only) → `components/admin/UpdateNoticeBanner.tsx`
+  under the top bar in `AppLayout`, dismissed per version (`users.onboarding_state.update_notice_dismissed`,
+  `admin.update-notice.dismiss`, JSON). Command `brainitive:check-update` (daily 05:05 in `routes/console.php`;
+  `--clear`; `--fake-latest=` e2e only). `enabled()` = `BRAINITIVE_UPDATE_CHECK` (`config('app.update_check')`), else
+  `! LegalInfo::isCloud()`. Running version: `App\Support\AppVersion::current()` = newest `CHANGELOG` entry of
+  `HelpModal.tsx` (see Self-hosting → Releases). Test `tests/Feature/Admin/UpdateCheckTest.php`, e2e
+  `e2e/tests/update-check.spec.ts`.
 
 ### MyWork, Search, Notifications, Files
 - **MyWork:** `MyWorkController` → `Pages/MyWork/` — cross-workspace "assigned to me" dashboard
@@ -717,7 +729,10 @@ Code name "entitlements", never "plan" (`App\Models\Plan` is the Gantt plan).
   `CHANGELOG` version in `HelpModal.tsx` (`.github/scripts/changelog-release.mjs`), creates
   tag + GitHub Release if that version is new, then calls `docker-publish.yml` → image
   `ghcr.io/<owner>/brainitive` (`:edge` + `:sha-…` always; `:X.Y.Z`, `:X.Y`, `:latest` on a
-  new version; a hand-pushed `v*` tag builds too).
+  new version; a hand-pushed `v*` tag builds too). The backend reads the same entry at runtime
+  (`App\Support\AppVersion`, BRAI-433: first 64 KB of `HelpModal.tsx`, which ships in the image and in every
+  checkout) — bumping the changelog is the only version bump; there is no `VERSION` file or `APP_VERSION`.
+  `ProjectArchive::appVersion()` and the update check use it.
 - **Live + legal (v1.44.0):** compose sets `LIVE_PUBLISH_URL=http://realtime:1234` for app /
   queue / scheduler and `LIVE_PUBLISH_FROM=private` on `realtime` (live channels share the
   `realtime` service and Caddy's `/collab*` route — nothing new to run). Self-hosted installs show

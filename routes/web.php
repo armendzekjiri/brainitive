@@ -748,6 +748,10 @@ Route::middleware(['auth', 'verified', 'instance.admin'])->prefix('admin')->name
 
     Route::get('audit-log', Admin\AuditLogController::class)->name('audit-log');
 
+    // "New version available" strip (BRAI-433): hidden per admin until a newer release comes out
+    Route::post('update-notice/dismiss', [Admin\UpdateNoticeController::class, 'dismiss'])
+        ->middleware('throttle:30,1,admin.update-notice.dismiss')->name('update-notice.dismiss');
+
     // Email previews (BRAI-155): every email with sample data + a test send to the admin's own address
     Route::get('emails', [Admin\EmailPreviewController::class, 'index'])->name('emails.index');
     Route::get('emails/{email}', [Admin\EmailPreviewController::class, 'show'])->where('email', '[a-z0-9-]{1,64}')
