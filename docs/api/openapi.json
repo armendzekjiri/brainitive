@@ -65,6 +65,12 @@
         },
         {
             "name": "Captures"
+        },
+        {
+            "name": "Snippets"
+        },
+        {
+            "name": "Bookmarks"
         }
     ],
     "security": [
@@ -4238,6 +4244,1250 @@
                     }
                 }
             }
+        },
+        "/workspaces/{workspace}/snippet-collections": {
+            "get": {
+                "operationId": "app.v1.snippet-collections.index",
+                "summary": "The snippet collections of a workspace, in the web's order",
+                "tags": [
+                    "Snippets"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "path",
+                        "required": true,
+                        "description": "The workspace slug",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `SnippetCollectionResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SnippetCollectionCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.snippet-collections.store",
+                "description": "Workspace editors / admins (403 otherwise). With `request_id` a retry answers 200 with the\ncollection the first call created.",
+                "summary": "Create a snippet collection at the end of the workspace",
+                "tags": [
+                    "Snippets"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "path",
+                        "required": true,
+                        "description": "The workspace slug",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreSnippetCollectionRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`SnippetCollectionDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SnippetCollectionDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`SnippetCollectionDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SnippetCollectionDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/snippet-collections/{collection}": {
+            "get": {
+                "operationId": "app.v1.snippet-collections.show",
+                "summary": "One snippet collection with what the user may do",
+                "tags": [
+                    "Snippets"
+                ],
+                "parameters": [
+                    {
+                        "name": "collection",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`SnippetCollectionDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SnippetCollectionDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "app.v1.snippet-collections.update",
+                "description": "Its creator or a workspace admin (403 otherwise).",
+                "summary": "Change a collection (only the sent fields)",
+                "tags": [
+                    "Snippets"
+                ],
+                "parameters": [
+                    {
+                        "name": "collection",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateSnippetCollectionRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`SnippetCollectionDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SnippetCollectionDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "app.v1.snippet-collections.destroy",
+                "description": "Its creator or a workspace admin (403 otherwise).",
+                "summary": "Delete a collection with its snippets",
+                "tags": [
+                    "Snippets"
+                ],
+                "parameters": [
+                    {
+                        "name": "collection",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/snippet-collections/{collection}/snippets": {
+            "get": {
+                "operationId": "app.v1.snippets.index",
+                "summary": "The snippets of a collection, in the web's order, with their content",
+                "tags": [
+                    "Snippets"
+                ],
+                "parameters": [
+                    {
+                        "name": "collection",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `SnippetResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SnippetsCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.snippets.store",
+                "description": "Workspace editors / admins (403 otherwise). With `request_id` a retry answers 200 with the snippet\nthe first call created.",
+                "summary": "Add a snippet at the end of a collection",
+                "tags": [
+                    "Snippets"
+                ],
+                "parameters": [
+                    {
+                        "name": "collection",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreSnippetRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`SnippetResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SnippetResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`SnippetResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SnippetResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/snippets/{snippet}": {
+            "get": {
+                "operationId": "app.v1.snippets.show",
+                "summary": "One snippet",
+                "tags": [
+                    "Snippets"
+                ],
+                "parameters": [
+                    {
+                        "name": "snippet",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`SnippetResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SnippetResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "app.v1.snippets.update",
+                "description": "Workspace editors / admins (403 otherwise).",
+                "summary": "Change a snippet (only the sent fields)",
+                "tags": [
+                    "Snippets"
+                ],
+                "parameters": [
+                    {
+                        "name": "snippet",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateSnippetRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`SnippetResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/SnippetResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "app.v1.snippets.destroy",
+                "description": "Workspace editors / admins (403 otherwise).",
+                "summary": "Delete a snippet",
+                "tags": [
+                    "Snippets"
+                ],
+                "parameters": [
+                    {
+                        "name": "snippet",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspace}/bookmarks": {
+            "get": {
+                "operationId": "app.v1.bookmarks.index",
+                "summary": "The bookmark groups of a workspace the user can see, in the web's order, with item counts",
+                "tags": [
+                    "Bookmarks"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "path",
+                        "required": true,
+                        "description": "The workspace slug",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `BookmarkGroupResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BookmarkGroupCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.bookmarks.store",
+                "description": "Workspace editors / admins (403 otherwise); `visibility` private (default) or public. With\n`request_id` a retry answers 200 with the group the first call created.",
+                "summary": "Create a bookmark group at the end of the workspace",
+                "tags": [
+                    "Bookmarks"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "path",
+                        "required": true,
+                        "description": "The workspace slug",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreBookmarkGroupRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`BookmarkGroupDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BookmarkGroupDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`BookmarkGroupDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BookmarkGroupDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/bookmarks/{group}": {
+            "get": {
+                "operationId": "app.v1.bookmarks.show",
+                "summary": "One bookmark group with what the user may do",
+                "tags": [
+                    "Bookmarks"
+                ],
+                "parameters": [
+                    {
+                        "name": "group",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`BookmarkGroupDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BookmarkGroupDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "app.v1.bookmarks.update",
+                "description": "Its creator, editor collaborators and workspace admins (403 otherwise).",
+                "summary": "Change a group's name, description, emoji icon or visibility (only the sent fields)",
+                "tags": [
+                    "Bookmarks"
+                ],
+                "parameters": [
+                    {
+                        "name": "group",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateBookmarkGroupRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`BookmarkGroupDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BookmarkGroupDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "app.v1.bookmarks.destroy",
+                "description": "Its creator or a workspace admin (403 otherwise).",
+                "summary": "Delete a group with its items and files",
+                "tags": [
+                    "Bookmarks"
+                ],
+                "parameters": [
+                    {
+                        "name": "group",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/bookmarks/{group}/items": {
+            "get": {
+                "operationId": "app.v1.bookmarks.items.index",
+                "summary": "The items of a group, in the web's order. `type` = link | todo | note | file",
+                "tags": [
+                    "Bookmarks"
+                ],
+                "parameters": [
+                    {
+                        "name": "group",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "link | todo | note | file (default: all)",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "link",
+                                "todo",
+                                "note",
+                                "file"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `BookmarkItemResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BookmarkItemCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.bookmarks.items.store",
+                "description": "A file is sent as multipart/form-data (`file`, \u2264 200 MB). A link's title, favicon and description\nare fetched in the background. Needs the right to change the group (403). With `request_id` a retry\nanswers 200 with the item the first call created.",
+                "summary": "Add a link, to-do, note or file at the end of a group",
+                "tags": [
+                    "Bookmarks"
+                ],
+                "parameters": [
+                    {
+                        "name": "group",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreBookmarkItemRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`BookmarkItemResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BookmarkItemResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`BookmarkItemResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BookmarkItemResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/bookmarks/{group}/items/{item}": {
+            "patch": {
+                "operationId": "app.v1.bookmarks.items.update",
+                "description": "Needs the right to change the group (403).",
+                "summary": "Change an item: title, URL, content, `is_completed` (to-dos)",
+                "tags": [
+                    "Bookmarks"
+                ],
+                "parameters": [
+                    {
+                        "name": "group",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateBookmarkItemRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`BookmarkItemResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BookmarkItemResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "app.v1.bookmarks.items.destroy",
+                "description": "Needs the right to change the group (403).",
+                "summary": "Delete an item (and its file)",
+                "tags": [
+                    "Bookmarks"
+                ],
+                "parameters": [
+                    {
+                        "name": "group",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -4264,6 +5514,362 @@
                     "id"
                 ],
                 "title": "AddMyDayItemRequest"
+            },
+            "BookmarkGroupCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/BookmarkGroupResource"
+                },
+                "title": "BookmarkGroupCollection"
+            },
+            "BookmarkGroupDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "icon": {
+                        "type": "string",
+                        "description": "an emoji or an image URL ('' when none)"
+                    },
+                    "visibility": {
+                        "type": "string",
+                        "description": "private (its creator, collaborators, workspace admins) | public (every member + share_url)"
+                    },
+                    "counts": {
+                        "type": "object",
+                        "properties": {
+                            "links": {
+                                "type": "integer"
+                            },
+                            "todos": {
+                                "type": "integer"
+                            },
+                            "todos_completed": {
+                                "type": "integer"
+                            },
+                            "notes": {
+                                "type": "integer"
+                            },
+                            "files": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "links",
+                            "todos",
+                            "todos_completed",
+                            "notes",
+                            "files"
+                        ]
+                    },
+                    "is_owner": {
+                        "type": "boolean"
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "share_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "update": {
+                                "type": "boolean",
+                                "description": "rename, icon, visibility, and add / change / delete items"
+                            },
+                            "delete": {
+                                "type": "boolean",
+                                "description": "its creator or a workspace admin"
+                            }
+                        },
+                        "required": [
+                            "update",
+                            "delete"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "slug",
+                    "name",
+                    "description",
+                    "icon",
+                    "visibility",
+                    "counts",
+                    "is_owner",
+                    "position",
+                    "share_url",
+                    "workspace",
+                    "url",
+                    "created_at",
+                    "updated_at",
+                    "can"
+                ],
+                "title": "BookmarkGroupDetailResource"
+            },
+            "BookmarkGroupResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "icon": {
+                        "type": "string",
+                        "description": "an emoji or an image URL ('' when none)"
+                    },
+                    "visibility": {
+                        "type": "string",
+                        "description": "private (its creator, collaborators, workspace admins) | public (every member + share_url)"
+                    },
+                    "counts": {
+                        "type": "object",
+                        "properties": {
+                            "links": {
+                                "type": "integer"
+                            },
+                            "todos": {
+                                "type": "integer"
+                            },
+                            "todos_completed": {
+                                "type": "integer"
+                            },
+                            "notes": {
+                                "type": "integer"
+                            },
+                            "files": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "links",
+                            "todos",
+                            "todos_completed",
+                            "notes",
+                            "files"
+                        ]
+                    },
+                    "is_owner": {
+                        "type": "boolean"
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "share_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "slug",
+                    "name",
+                    "description",
+                    "icon",
+                    "visibility",
+                    "counts",
+                    "is_owner",
+                    "position",
+                    "share_url",
+                    "workspace",
+                    "url",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "BookmarkGroupResource"
+            },
+            "BookmarkItemCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/BookmarkItemResource"
+                },
+                "title": "BookmarkItemCollection"
+            },
+            "BookmarkItemResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "group_id": {
+                        "type": "integer"
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "link | todo | note | file"
+                    },
+                    "title": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "content": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "file_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "file items: where to download it"
+                    },
+                    "is_completed": {
+                        "type": "boolean",
+                        "description": "to-dos"
+                    },
+                    "favicon_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "links: fetched from the page after saving"
+                    },
+                    "page_description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "group_id",
+                    "type",
+                    "title",
+                    "url",
+                    "content",
+                    "file_url",
+                    "is_completed",
+                    "favicon_url",
+                    "page_description",
+                    "position",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "BookmarkItemResource"
             },
             "CalendarConnectionResource": {
                 "type": "object",
@@ -6946,6 +8552,314 @@
                 ],
                 "title": "SearchResultResource"
             },
+            "SnippetCollectionCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/SnippetCollectionResource"
+                },
+                "title": "SnippetCollectionCollection"
+            },
+            "SnippetCollectionDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "an emoji or an image URL"
+                    },
+                    "visibility": {
+                        "type": "string",
+                        "description": "private (members) | public (also anyone with share_url)"
+                    },
+                    "snippets_count": {
+                        "type": "integer"
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "share_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "update": {
+                                "type": "boolean",
+                                "description": "rename, describe, visibility (its creator or a workspace admin)"
+                            },
+                            "delete": {
+                                "type": "boolean"
+                            },
+                            "manage_snippets": {
+                                "type": "boolean",
+                                "description": "add, edit and delete snippets (workspace editors / admins)"
+                            }
+                        },
+                        "required": [
+                            "update",
+                            "delete",
+                            "manage_snippets"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "slug",
+                    "name",
+                    "description",
+                    "icon",
+                    "visibility",
+                    "snippets_count",
+                    "position",
+                    "share_url",
+                    "workspace",
+                    "url",
+                    "created_at",
+                    "updated_at",
+                    "can"
+                ],
+                "title": "SnippetCollectionDetailResource"
+            },
+            "SnippetCollectionResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "an emoji or an image URL"
+                    },
+                    "visibility": {
+                        "type": "string",
+                        "description": "private (members) | public (also anyone with share_url)"
+                    },
+                    "snippets_count": {
+                        "type": "integer"
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "share_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "slug",
+                    "name",
+                    "description",
+                    "icon",
+                    "visibility",
+                    "snippets_count",
+                    "position",
+                    "share_url",
+                    "workspace",
+                    "url",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "SnippetCollectionResource"
+            },
+            "SnippetResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "collection_id": {
+                        "type": "integer"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "language": {
+                        "type": "string",
+                        "description": "highlight.js name: plaintext, php, typescript, bash \u2026"
+                    },
+                    "content": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "visibility": {
+                        "type": "string",
+                        "description": "inherit | private | public"
+                    },
+                    "effective_visibility": {
+                        "type": "string",
+                        "description": "what inherit resolves to: private | public"
+                    },
+                    "share_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "slug",
+                    "collection_id",
+                    "title",
+                    "description",
+                    "language",
+                    "content",
+                    "visibility",
+                    "effective_visibility",
+                    "share_url",
+                    "position",
+                    "url",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "SnippetResource"
+            },
+            "SnippetsCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/SnippetResource"
+                },
+                "title": "SnippetsCollection"
+            },
             "StartDeviceAuthRequest": {
                 "type": "object",
                 "description": "POST /api/v1/auth/device: a device without a usable browser (the TV app) starts a device-code\nsign-in (RFC 8628). Same `device` object as /auth/exchange; the platform must be one of the client's.",
@@ -6999,6 +8913,110 @@
                     "device"
                 ],
                 "title": "StartDeviceAuthRequest"
+            },
+            "StoreBookmarkGroupRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/workspaces/{slug}/bookmarks` (BRAI-399): the web's fields, the icon as an emoji. Outside\nthe workspace \u2192 404 before validation; members who aren't editors / admins \u2192 403 (BookmarkPolicy::create).",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 2000
+                    },
+                    "visibility": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "private (its creator, collaborators and workspace admins) | public (every member + the share link)",
+                        "enum": [
+                            "private",
+                            "public",
+                            null
+                        ]
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "an emoji (image icons: web only)",
+                        "maxLength": 10
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "a uuid: a retry with the same one answers 200 with the group the first call created"
+                    }
+                },
+                "required": [
+                    "name"
+                ],
+                "title": "StoreBookmarkGroupRequest"
+            },
+            "StoreBookmarkItemRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/bookmarks/{id}/items`: a link, to-do, note or file (multipart `file`, \u2264 200 MB, the web's\nallowed types; scripts and executables are refused).",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "link",
+                            "todo",
+                            "note",
+                            "file"
+                        ]
+                    },
+                    "title": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 500
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "pattern": "#^https?://[^\\s\\x00-\\x1f]+$#i",
+                        "maxLength": 2048
+                    },
+                    "content": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 10000
+                    },
+                    "file": {
+                        "type": "string",
+                        "format": "binary",
+                        "contentMediaType": "application/octet-stream",
+                        "description": "type file: the upload (multipart/form-data)"
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "a uuid: a retry with the same one answers 200 with the item the first call created"
+                    }
+                },
+                "required": [
+                    "type"
+                ],
+                "title": "StoreBookmarkItemRequest"
             },
             "StoreCaptureRequest": {
                 "type": "object",
@@ -7140,6 +9158,110 @@
                     "key"
                 ],
                 "title": "StoreProjectRequest"
+            },
+            "StoreSnippetCollectionRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/workspaces/{slug}/snippet-collections` (BRAI-399): the web's fields. Outside the\nworkspace \u2192 404 before validation; members who aren't editors / admins \u2192 403 (SnippetPolicy::create).",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 2000
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "an emoji (the web also takes an uploaded image's URL)",
+                        "maxLength": 2048
+                    },
+                    "visibility": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "private (members only) | public (anyone with the share link)",
+                        "enum": [
+                            "private",
+                            "public",
+                            null
+                        ]
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "a uuid: a retry with the same one answers 200 with the collection the first call created"
+                    }
+                },
+                "required": [
+                    "name"
+                ],
+                "title": "StoreSnippetCollectionRequest"
+            },
+            "StoreSnippetRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/snippet-collections/{id}/snippets`: the web's fields. Not a member \u2192 404; not a\nworkspace editor / admin \u2192 403 (SnippetPolicy::create, as the web).",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 2000
+                    },
+                    "language": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 50
+                    },
+                    "content": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "visibility": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "inherit (the collection's) | private | public",
+                        "enum": [
+                            "inherit",
+                            "private",
+                            "public",
+                            null
+                        ]
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "a uuid: a retry with the same one answers 200 with the snippet the first call created"
+                    }
+                },
+                "required": [
+                    "title"
+                ],
+                "title": "StoreSnippetRequest"
             },
             "StoreTaskListRequest": {
                 "type": "object",
@@ -7798,6 +9920,72 @@
                 ],
                 "title": "UpdateAvatarRequest"
             },
+            "UpdateBookmarkGroupRequest": {
+                "type": "object",
+                "description": "`PATCH /api/v1/bookmarks/{id}`: only the sent fields change; the icon as an emoji.",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 2000
+                    },
+                    "visibility": {
+                        "type": "string",
+                        "description": "private (its creator, collaborators and workspace admins) | public (every member + the share link)",
+                        "enum": [
+                            "private",
+                            "public"
+                        ]
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "an emoji (image icons: web only); null removes it",
+                        "maxLength": 10
+                    }
+                },
+                "title": "UpdateBookmarkGroupRequest"
+            },
+            "UpdateBookmarkItemRequest": {
+                "type": "object",
+                "description": "`PATCH /api/v1/bookmarks/{id}/items/{item}`: title, URL, content, done (to-dos).",
+                "properties": {
+                    "title": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 500
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "pattern": "#^https?://[^\\s\\x00-\\x1f]+$#i",
+                        "maxLength": 2048
+                    },
+                    "content": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 10000
+                    },
+                    "is_completed": {
+                        "type": "boolean"
+                    }
+                },
+                "title": "UpdateBookmarkItemRequest"
+            },
             "UpdateCaptureRequest": {
                 "type": "object",
                 "description": "`PATCH /api/v1/captures/{id}`: Capture::rules(), but only the sent fields change.",
@@ -7972,6 +10160,88 @@
                     "pins"
                 ],
                 "title": "UpdatePinsRequest"
+            },
+            "UpdateSnippetCollectionRequest": {
+                "type": "object",
+                "description": "`PATCH /api/v1/snippet-collections/{id}`: only the sent fields change. Not a member \u2192 404; not its\ncreator or a workspace admin \u2192 403 (SnippetPolicy::update).",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 2000
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "an emoji (the web also takes an uploaded image's URL)",
+                        "maxLength": 2048
+                    },
+                    "visibility": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "private (members only) | public (anyone with the share link)",
+                        "enum": [
+                            "private",
+                            "public",
+                            null
+                        ]
+                    }
+                },
+                "title": "UpdateSnippetCollectionRequest"
+            },
+            "UpdateSnippetRequest": {
+                "type": "object",
+                "description": "`PATCH /api/v1/snippets/{id}`: only the sent fields change. Not a member \u2192 404; not a workspace\neditor / admin \u2192 403 (SnippetPolicy::create, as the web).",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 2000
+                    },
+                    "language": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 50
+                    },
+                    "content": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "visibility": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "inherit (the collection's) | private | public",
+                        "enum": [
+                            "inherit",
+                            "private",
+                            "public",
+                            null
+                        ]
+                    }
+                },
+                "title": "UpdateSnippetRequest"
             },
             "UpdateTaskRequest": {
                 "type": "object",

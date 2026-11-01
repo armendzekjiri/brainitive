@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers\AppApi\Concerns;
 
+use App\Models\Bookmark;
 use App\Models\Project;
+use App\Models\Snippet;
+use App\Models\SnippetCollection;
 use App\Models\TaskList;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
@@ -39,6 +42,39 @@ trait ResolvesVisible
         abort_unless($list instanceof TaskList && $list->project?->workspace !== null && $request->user()->can('view', $list), 404);
 
         return $list;
+    }
+
+    /** A snippet collection of a workspace the user is a member of (the web: every member reads them). */
+    protected function visibleSnippetCollection(Request $request, int|string $id): SnippetCollection
+    {
+        abort_unless(self::isId($id), 404);
+        $collection = SnippetCollection::with('workspace')->find((int) $id);
+        abort_unless($collection instanceof SnippetCollection && $collection->workspace !== null && $request->user()->hasWorkspaceAccess($collection->workspace), 404);
+
+        return $collection;
+    }
+
+    protected function visibleSnippet(Request $request, int|string $id): Snippet
+    {
+        abort_unless(self::isId($id), 404);
+        $snippet = Snippet::with('collection.workspace')->find((int) $id);
+        abort_unless($snippet instanceof Snippet && $snippet->collection?->workspace !== null && $request->user()->hasWorkspaceAccess($snippet->collection->workspace), 404);
+
+        return $snippet;
+    }
+
+    /**
+     * A bookmark group the user may see: a member of its workspace, and BookmarkPolicy::view (own, shared
+     * with them, public, or a workspace admin). Public groups of other workspaces are only on their share link.
+     */
+    protected function visibleBookmarkGroup(Request $request, int|string $id): Bookmark
+    {
+        abort_unless(self::isId($id), 404);
+        $group = Bookmark::with('workspace')->find((int) $id);
+        $user = $request->user();
+        abort_unless($group instanceof Bookmark && $group->workspace !== null && $user->hasWorkspaceAccess($group->workspace) && $user->can('view', $group), 404);
+
+        return $group;
     }
 
     private static function isId(int|string $id): bool

@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -440,6 +440,47 @@ archived_at, updated_at, target: {type, title, breadcrumb, url, available}|null}
 - Files / images on a capture: not in v1 (the web's captures are text + a link). The share sheet sends a shared
   image's link or text; uploading files to a capture is later.
 
+### Snippets
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/workspaces/{slug}/snippet-collections` | app + verified | Quick switcher "copy snippet": a workspace's collections in the web's order, with `snippets_count`, cursor-paginated, `updated_since`. Not a member → 404 | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+| `POST /api/v1/workspaces/{slug}/snippet-collections` | app + verified | `{name, description?, icon? (emoji), visibility? (private\|public), request_id?}` → 201 `{data: collection detail}`. Workspace editors / admins (403) | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+| `GET /api/v1/snippet-collections/{id}` | app + verified | One collection + `can: {update, delete, manage_snippets}` | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+| `PATCH /api/v1/snippet-collections/{id}` · `DELETE …` | app + verified | Change (sent fields) → `{data: collection detail}` / delete with its snippets → 204. Its creator or a workspace admin (403) | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+| `GET /api/v1/snippet-collections/{id}/snippets` | app + verified | The snippets with their `content`, in the web's order, cursor-paginated, `updated_since` | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+| `POST /api/v1/snippet-collections/{id}/snippets` | app + verified | `{title, content?, language?, description?, visibility? (inherit\|private\|public), request_id?}` → 201 `{data: snippet}`. Workspace editors / admins (403) | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+| `GET /api/v1/snippets/{id}` · `PATCH` · `DELETE` | app + verified | One snippet / change it (sent fields) / delete → 204. Writes: workspace editors / admins (403) | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+
+Collection: `{id, uuid, slug, name, description, icon, visibility: private|public, snippets_count, position, share_url
+(public only), workspace: {slug, name}, url, created_at, updated_at}` (+ `can` on the detail). Snippet: `{id, uuid,
+slug, collection_id, title, description, language, content, visibility: inherit|private|public, effective_visibility,
+share_url (public only), position, url, created_at, updated_at}`.
+- The web's rules (`SnippetPolicy`; `App\Support\Snippets\Snippets` for rules + create, shared with
+  `SnippetController`): every member reads, workspace editors / admins write snippets, a collection is changed by
+  its creator or a workspace admin. Like every input of the web, `content` is trimmed (leading / trailing blank
+  lines and spaces). Search finds snippets too (`GET /search?type=snippets`). Image icons: web only.
+
+### Bookmarks
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/workspaces/{slug}/bookmarks` | app + verified | The bookmark groups the user may see (own, shared with them, public, all for workspace admins), in the web's order, with item counts, cursor-paginated, `updated_since` | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+| `POST /api/v1/workspaces/{slug}/bookmarks` | app + verified | `{name, description?, icon? (emoji), visibility? (private\|public), request_id?}` → 201 `{data: group detail}`. Workspace editors / admins (403) | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+| `GET /api/v1/bookmarks/{id}` | app + verified | One group + `can: {update, delete}`. A private group of someone else, or any group of another workspace → 404 | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+| `PATCH /api/v1/bookmarks/{id}` · `DELETE …` | app + verified | Change name / description / emoji / visibility → `{data: group detail}` (creator, editor collaborators, admins) / delete with items + files → 204 (creator, admins) | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+| `GET /api/v1/bookmarks/{id}/items?type=link\|todo\|note\|file` | app + verified | The group's items in the web's order, cursor-paginated, `updated_since` | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+| `POST /api/v1/bookmarks/{id}/items` | app + verified | `{type: link\|todo\|note\|file, title?, url? (http/https), content?, request_id?}`; a file as multipart `file` (≤ 200 MB, the web's types; scripts / executables → 422) → 201 `{data: item}`. Links get title / favicon / description fetched in the background | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+| `PATCH /api/v1/bookmarks/{id}/items/{item}` · `DELETE …` | app + verified | `{title?, url?, content?, is_completed?}` → `{data: item}` / delete (and its file) → 204. Needs `can.update` (403) | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+
+Group: `{id, uuid, slug, name, description, icon ('' = none), visibility, counts: {links, todos, todos_completed, notes,
+files}, is_owner, position, share_url (public only), workspace: {slug, name}, url, created_at, updated_at}` (+ `can`
+on the detail). Item: `{id, group_id, type, title, url, content, file_url, is_completed, favicon_url,
+page_description, position, created_at, updated_at}`.
+- The web's rules (`BookmarkPolicy`; `App\Support\Bookmarks\Bookmarks` for rules, create, files, deletes, shared
+  with `BookmarkController`). Groups are addressed by id; the path parameter is not `{bookmark}` (that name has a
+  slug binding in the web routes).
+- A public group of another workspace is only reachable through its `share_url` (the web's public page), not the API.
+- Collaborators (invite / roles), image icons and reordering: web only for now.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -584,4 +625,18 @@ Built in: BRAI-398 (desktop) · Mobile scope: Full
 - GET /api/v1/capture-destinations + POST /api/v1/captures/{uuid}/convert — to file it straight into a board, list, doc, bookmark group or snippet collection
 Scope: app · OpenAPI: docs/api/openapi.json#/Captures · Registry: docs/ai/API.md#captures
 Built in: BRAI-398 (desktop) · Mobile scope: Full (files / images on a capture: later)
+```
+
+**BRAI-218** (snippets + bookmark collections)
+```
+## API (ready)
+- GET|POST /api/v1/workspaces/{slug}/snippet-collections — collections (snippets_count) · create (workspace editors / admins)
+- GET|PATCH|DELETE /api/v1/snippet-collections/{id} — one collection with can {update, delete, manage_snippets}
+- GET|POST /api/v1/snippet-collections/{id}/snippets — snippets with content (copy), cursor-paginated · add one
+- GET|PATCH|DELETE /api/v1/snippets/{id}
+- GET|POST /api/v1/workspaces/{slug}/bookmarks — the bookmark groups the user may see, with counts · create
+- GET|PATCH|DELETE /api/v1/bookmarks/{id} — one group with can {update, delete}
+- GET|POST /api/v1/bookmarks/{id}/items — links, to-dos, notes, files (multipart) · PATCH|DELETE /api/v1/bookmarks/{id}/items/{item}
+Scope: app · OpenAPI: docs/api/openapi.json#/Snippets, #/Bookmarks · Registry: docs/ai/API.md#snippets, #bookmarks
+Built in: BRAI-399 (desktop) · Mobile scope: Full (collaborators, image icons, reordering: web only)
 ```
