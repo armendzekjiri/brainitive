@@ -8,6 +8,7 @@ use App\Models\Item;
 use App\Models\Project;
 use App\Models\Snippet;
 use App\Models\SnippetCollection;
+use App\Models\Sprint;
 use App\Models\TaskList;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
@@ -97,6 +98,16 @@ trait ResolvesVisible
         abort_unless($item instanceof Item && $item->board?->project?->workspace !== null && $request->user()->can('view', $item), 404);
 
         return $item;
+    }
+
+    /** A sprint of a board the user can open (BoardPolicy::view). */
+    protected function visibleSprint(Request $request, int|string $id): Sprint
+    {
+        abort_unless(self::isId($id), 404);
+        $sprint = Sprint::with('board.project.workspace')->find((int) $id);
+        abort_unless($sprint instanceof Sprint && $sprint->board?->project?->workspace !== null && $request->user()->can('view', $sprint->board), 404);
+
+        return $sprint;
     }
 
     private static function isId(int|string $id): bool

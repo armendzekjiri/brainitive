@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -614,6 +614,27 @@ Link: `{id, type, label ("is blocked by"), direction: outgoing|incoming, restric
 - An issue the user can't open stays listed as `restricted: true` with `issue: null` (BRAI-435, the web's "Restricted").
 - Checklists: issues have none of their own — use subtasks, or Markdown task lists (`- [ ] …`) in the description.
 
+### Sprints
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/boards/{id}/sprints?status=active,planned,completed` | app + verified | A board's sprints in planning order (default `active,planned`, as the backlog page) with counts + points, cursor-paginated, `updated_since`. Kanban boards have none | Read + move items | BRAI-192 | ready (v1.49.0, BRAI-408) |
+| `GET /api/v1/sprints/{id}` | app + verified | One sprint | Read + move items | BRAI-192 | ready (v1.49.0, BRAI-408) |
+| `GET /api/v1/sprints/{id}/items` | app + verified | Its top-level issues (cards) in backlog order, cursor-paginated, `updated_since` | Read + move items | BRAI-192 | ready (v1.49.0, BRAI-408) |
+| `GET /api/v1/boards/{id}/backlog` | app + verified | Top-level issues in no sprint, in backlog order, cursor-paginated (the card's "sprint 0") | Read + move items | BRAI-192 | ready (v1.49.0, BRAI-408) |
+| `POST /api/v1/sprints/{id}/items` | app + verified | Plan issues into a planned / the active sprint: `{item_ids (≤ 200), request_id?}` → `{data: {moved, sprint_id}}`; subtasks follow their parent, each lands at the end. 403 without `can.manage_sprints`; ids that aren't top-level issues of the board, a completed sprint → 422 `item_ids` (nothing moves) | Read + move items | BRAI-192 | ready (v1.49.0, BRAI-408) |
+| `POST /api/v1/boards/{id}/backlog/items` | app + verified | Back to the backlog, same body / rules → `{data: {moved, sprint_id: null}}`; a Kanban board → 422 | Read + move items | BRAI-192 | ready (v1.49.0, BRAI-408) |
+| `GET /api/v1/sprints/{id}/burndown` | app + verified | `{data: {sprint_id, unit: points\|issues, total, days: [{date, ideal, remaining\|null}]}}` (the Reports page; a completed sprint: its snapshot) | Read-only | BRAI-193 | ready (v1.49.0, BRAI-408) |
+| `GET /api/v1/boards/{id}/velocity` | app + verified | Committed vs. completed of the last completed sprints, oldest first, not paginated → `{data: [{sprint_id, name, committed_points, completed_points, committed_issues, completed_issues}]}` | Read-only | BRAI-193 | ready (v1.49.0, BRAI-408) |
+
+Sprint: `{id, board_id, name, goal, status: planned|active|completed, position, start_date, end_date, started_at, completed_at,
+counts: {issues, done}, points: {total, done}, committed_points, completed_points, committed_issues, completed_issues, url}` —
+counts and points are the top-level issues (subtasks count with their parent), as the backlog page; `committed_*` / `completed_*` are
+set when a sprint starts / completes.
+- Same code as the web: `SprintLifecycle::moveIssues` (shared with the MCP's `move_items_to_sprint`; live boards get the moves),
+  `SprintReport::burndown` / `velocity` (the Reports page). Reading: everybody who can open the board; planning: `BoardPolicy::update`.
+- The running sprint's cards by column are `GET /boards/{id}/items` (a Scrum board shows only the running sprint).
+- Creating, editing, starting, completing sprints and ranking inside the backlog: web only (`can.manage_sprints` → "Open in browser").
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -854,4 +875,24 @@ Built in: BRAI-406 (desktop) · Mobile scope: Read + light edit (checklists = su
 - PATCH /api/v1/items/{id} {fields: {"<field id>": value | null}} — set custom field values
 Scope: app · OpenAPI: docs/api/openapi.json#/Boards · Registry: docs/ai/API.md#boards
 Built in: BRAI-407 (desktop) · Mobile scope: Use views + set field values (field definitions and view editing: web only)
+```
+
+**BRAI-192** (Scrum backlog + sprints)
+```
+## API (ready)
+- GET /api/v1/boards/{id}/sprints?status=active,planned,completed — sprints in planning order with issue counts and points
+- GET /api/v1/sprints/{id} · GET /api/v1/sprints/{id}/items — one sprint and its issues in backlog order
+- GET /api/v1/boards/{id}/backlog — issues in no sprint, in backlog order
+- POST /api/v1/sprints/{id}/items {item_ids} · POST /api/v1/boards/{id}/backlog/items {item_ids} — plan issues into a sprint / back to the backlog (subtasks follow)
+Scope: app · OpenAPI: docs/api/openapi.json#/Sprints · Registry: docs/ai/API.md#sprints
+Built in: BRAI-408 (desktop) · Mobile scope: Read + move items (create / start / complete sprints, ranking: web only)
+```
+
+**BRAI-193** (sprint reports: burndown, velocity)
+```
+## API (ready) — read only
+- GET /api/v1/sprints/{id}/burndown — remaining points (or issues) per day + the ideal line
+- GET /api/v1/boards/{id}/velocity — committed vs. completed of the last completed sprints
+Scope: app · OpenAPI: docs/api/openapi.json#/Sprints · Registry: docs/ai/API.md#sprints
+Built in: BRAI-408 (desktop) · Mobile scope: Read-only
 ```

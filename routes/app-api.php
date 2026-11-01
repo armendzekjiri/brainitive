@@ -22,6 +22,7 @@ use App\Http\Controllers\AppApi\NotificationController;
 use App\Http\Controllers\AppApi\ProjectController;
 use App\Http\Controllers\AppApi\SearchController;
 use App\Http\Controllers\AppApi\SnippetController;
+use App\Http\Controllers\AppApi\SprintController;
 use App\Http\Controllers\AppApi\TaskListController;
 use App\Http\Controllers\AppApi\TimerController;
 use App\Http\Controllers\AppApi\TodayController;
@@ -232,6 +233,17 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::get('items/{item}/links', [IssueLinkController::class, 'index'])->whereNumber('item')->name('items.links.index');
         Route::post('items/{item}/links', [IssueLinkController::class, 'store'])->name('items.links.store');
         Route::delete('items/{item}/links/{link}', [IssueLinkController::class, 'destroy'])->name('items.links.destroy');
+
+        // ── Scrum: sprints, backlog, burndown, velocity (SprintLifecycle, SprintReport: shared with the web + MCP)
+        // creating / starting / completing sprints and ranking: web only
+        Route::get('boards/{board}/sprints', [SprintController::class, 'index'])->whereNumber('board')->name('sprints.index');
+        Route::get('boards/{board}/backlog', [SprintController::class, 'backlog'])->whereNumber('board')->name('sprints.backlog');
+        Route::post('boards/{board}/backlog/items', [SprintController::class, 'moveToBacklog'])->name('sprints.backlog.move');
+        Route::get('boards/{board}/velocity', [SprintController::class, 'velocity'])->whereNumber('board')->name('sprints.velocity');
+        Route::get('sprints/{sprint}', [SprintController::class, 'show'])->whereNumber('sprint')->name('sprints.show');
+        Route::get('sprints/{sprint}/items', [SprintController::class, 'items'])->whereNumber('sprint')->name('sprints.items');
+        Route::post('sprints/{sprint}/items', [SprintController::class, 'moveToSprint'])->name('sprints.move');
+        Route::get('sprints/{sprint}/burndown', [SprintController::class, 'burndown'])->whereNumber('sprint')->name('sprints.burndown');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');
