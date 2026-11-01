@@ -12,9 +12,9 @@ use App\Models\ProjectTemplate;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Entitlements\LimitGate;
+use App\Support\Projects\ProjectCreator;
 use App\Support\Projects\ProjectTransfer;
 use App\Support\Projects\RecentContent;
-use App\Support\Templates\TemplateDocument;
 use App\Support\Templates\TemplateRuns;
 use App\Support\Uploads;
 use Illuminate\Http\JsonResponse;
@@ -81,65 +81,15 @@ class ProjectController extends Controller
             return redirect()->route('projects.show', [$workspace, $existing]);
         }
 
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('projects', 'name')
-                    ->where(fn ($q) => $q->where('workspace_id', $workspace->id)),
-            ],
-            'key' => [
-                'required',
-                'string',
-                'max:10',
-                'alpha',
-                Rule::unique('projects', 'key')
-                    ->where(fn ($q) => $q->where('workspace_id', $workspace->id)),
-            ],
-            'description' => 'nullable|string|max:50000',
-            // Start from a template: "builtin:<key>" or "template:<uuid>" (see TemplateRuns::catalog)
-            'template' => 'nullable|string|max:80',
-            'start_date' => 'nullable|required_with:template|date_format:Y-m-d',
-            'include' => 'nullable|array',
-            // "none" stands for "nothing extra" (an empty array isn't sent by forms)
-            'include.*' => Rule::in([...TemplateDocument::SECTIONS, 'none']),
-            'request_id' => 'nullable|uuid',
-        ]);
+        $validated = $request->validate(ProjectCreator::rules($workspace));
 
-        // Cloud plans: project count and content storage (also covers "from a template")
-        $gate = app(LimitGate::class);
-        $gate->ensureCanCreateProject($workspace);
-        $gate->ensureContentRoom($workspace);
+        // limits, blank or from a template — shared with the App API (BRAI-389)
+        [$project, $board] = ProjectCreator::create($workspace, $request->user(), $validated);
 
-        if (! empty($validated['template'])) {
-            if (isset($validated['include'])) {
-                $validated['include'] = array_values(array_diff($validated['include'], ['none']));
-            }
-            $project = TemplateRuns::createProject($workspace, $request->user(), $validated);
-
+        if ($board === null) {
             return redirect()->route('projects.show', [$workspace, $project])
                 ->with('success', 'Project created from the template.');
         }
-
-        $project = $workspace->projects()->create([
-            'name' => $validated['name'],
-            'slug' => Str::slug($validated['name']),
-            'key' => strtoupper($validated['key']),
-            'description' => $validated['description'] ?? null,
-            'created_by' => $request->user()->id,
-        ]);
-
-        // Creator is added as project admin so they have access
-        $project->addUser($request->user(), 'admin');
-
-        // Create a default board
-        $board = $project->boards()->create([
-            'name' => 'Main Board',
-            'slug' => 'main-board',
-            'type' => 'kanban',
-            'created_by' => $request->user()->id,
-        ]);
 
         return redirect()->route('boards.show', [$workspace, $project, $board])
             ->with('success', 'Project created successfully.');

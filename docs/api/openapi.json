@@ -35,6 +35,9 @@
         },
         {
             "name": "Workspaces"
+        },
+        {
+            "name": "Projects"
         }
     ],
     "security": [
@@ -891,6 +894,283 @@
                     }
                 }
             }
+        },
+        "/workspaces/{workspace}/projects": {
+            "get": {
+                "operationId": "app.v1.projects.index",
+                "summary": "The projects of a workspace the user can open, by name",
+                "tags": [
+                    "Projects"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "path",
+                        "required": true,
+                        "description": "The workspace slug",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `ProjectResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/ProjectCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.projects.store",
+                "description": "A blank project gets a \"Main Board\" and the user as project admin. A template run is\nidempotent with `request_id` (UUID): a retry answers 200 with the project it created.",
+                "summary": "Create a project, blank or from a template (`template` + `start_date`)",
+                "tags": [
+                    "Projects"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "path",
+                        "required": true,
+                        "description": "The workspace slug",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreProjectRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`ProjectResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/ProjectResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`ProjectResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/ProjectResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "402": {
+                        "$ref": "#/components/responses/LimitReached"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspace}/project-templates": {
+            "get": {
+                "operationId": "app.v1.projects.templates",
+                "summary": "The templates a new project can start from (built-in and the workspace's own)",
+                "tags": [
+                    "Projects"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "path",
+                        "required": true,
+                        "description": "The workspace slug",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `ProjectTemplateResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/ProjectTemplateResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/projects/{project}": {
+            "get": {
+                "operationId": "app.v1.projects.show",
+                "summary": "The project home: boards, docs, task lists, plans, helpdesks, lead forms, recently updated",
+                "tags": [
+                    "Projects"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`ProjectDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/ProjectDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -1416,6 +1696,520 @@
                 ],
                 "title": "MeResource"
             },
+            "ProjectCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/ProjectResource"
+                },
+                "title": "ProjectCollection"
+            },
+            "ProjectDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "key": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "an emoji or the URL of an uploaded icon"
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "role": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the user's project role; null for workspace admins who aren't project members"
+                    },
+                    "member_count": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "update": {
+                                "type": "boolean"
+                            },
+                            "manage_members": {
+                                "type": "boolean"
+                            },
+                            "create_boards": {
+                                "type": "boolean"
+                            },
+                            "create_pages": {
+                                "type": "boolean"
+                            },
+                            "create_issues": {
+                                "type": "boolean",
+                                "description": "one board answers for all: createItems depends only on the project role"
+                            }
+                        },
+                        "required": [
+                            "update",
+                            "manage_members",
+                            "create_boards",
+                            "create_pages",
+                            "create_issues"
+                        ]
+                    },
+                    "boards": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "slug": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "type": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "slug",
+                                "name",
+                                "type",
+                                "url"
+                            ]
+                        }
+                    },
+                    "docs": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "uuid": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                },
+                                "parent_id": {
+                                    "type": [
+                                        "integer",
+                                        "null"
+                                    ]
+                                },
+                                "type": {
+                                    "type": "string",
+                                    "description": "page | folder"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "icon": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                },
+                                "is_whiteboard": {
+                                    "type": "boolean"
+                                },
+                                "is_draft": {
+                                    "type": "boolean"
+                                },
+                                "url": {
+                                    "type": "string"
+                                },
+                                "updated_at": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "uuid",
+                                "parent_id",
+                                "type",
+                                "name",
+                                "icon",
+                                "is_whiteboard",
+                                "is_draft",
+                                "url",
+                                "updated_at"
+                            ]
+                        }
+                    },
+                    "task_lists": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "slug": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "slug",
+                                "name",
+                                "url"
+                            ]
+                        }
+                    },
+                    "plans": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "slug": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "slug",
+                                "name",
+                                "url"
+                            ]
+                        }
+                    },
+                    "helpdesks": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "slug": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "slug",
+                                "name",
+                                "url"
+                            ]
+                        }
+                    },
+                    "lead_forms": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "slug": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "status": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "slug",
+                                "name",
+                                "status",
+                                "url"
+                            ]
+                        }
+                    },
+                    "recently_updated": {
+                        "type": "array",
+                        "description": "the project page's \"Recently updated\" (a board / list / helpdesk counts when its content changed)",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "description": "board | list | plan | helpdesk | lead_form | page"
+                                },
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string"
+                                },
+                                "updated_at": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "type",
+                                "id",
+                                "name",
+                                "url",
+                                "updated_at"
+                            ]
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "slug",
+                    "key",
+                    "name",
+                    "description",
+                    "icon",
+                    "color",
+                    "workspace",
+                    "url",
+                    "created_at",
+                    "updated_at",
+                    "role",
+                    "member_count",
+                    "can",
+                    "boards",
+                    "docs",
+                    "task_lists",
+                    "plans",
+                    "helpdesks",
+                    "lead_forms",
+                    "recently_updated"
+                ],
+                "title": "ProjectDetailResource"
+            },
+            "ProjectResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "key": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "an emoji or the URL of an uploaded icon"
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "slug",
+                    "key",
+                    "name",
+                    "description",
+                    "icon",
+                    "color",
+                    "workspace",
+                    "url",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "ProjectResource"
+            },
+            "ProjectTemplateResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "builtin | workspace"
+                    },
+                    "category": {
+                        "type": "string"
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {}
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "summary": {
+                        "type": "string",
+                        "description": "what it sets up: counts per section (boards, docs, lists, plans \u2026)"
+                    },
+                    "version": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "the saved version of a workspace template; null for built-in ones"
+                    }
+                },
+                "required": [
+                    "id",
+                    "source",
+                    "category",
+                    "tags",
+                    "name",
+                    "description",
+                    "icon",
+                    "summary",
+                    "version"
+                ],
+                "title": "ProjectTemplateResource"
+            },
             "RefreshTokenRequest": {
                 "type": "object",
                 "description": "POST /api/v1/auth/refresh: the current refresh token (`brr_\u2026`, single use).",
@@ -1430,6 +2224,71 @@
                     "refresh_token"
                 ],
                 "title": "RefreshTokenRequest"
+            },
+            "StoreProjectRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/workspaces/{slug}/projects` (BRAI-389): the web form's rules (ProjectCreator).\nAuthorized before validation, so somebody outside the workspace gets a 404 and can't probe which\nnames or keys are taken; members who may not create projects get a 403. A retried template\nrun (same `request_id`) skips validation, which would fail on \"name already taken\", and the\ncontroller answers with the project the first request created (as the web form does).",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "key": {
+                        "type": "string",
+                        "maxLength": 10
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 50000
+                    },
+                    "template": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Start from a template: \"builtin:<key>\" or \"template:<uuid>\" (see TemplateRuns::catalog)",
+                        "maxLength": 80
+                    },
+                    "start_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date"
+                    },
+                    "include": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": "string",
+                            "description": "\"none\" stands for \"nothing extra\" (an empty array isn't sent by forms)",
+                            "enum": [
+                                "issues",
+                                "pages",
+                                "task_lists",
+                                "plans",
+                                "none"
+                            ]
+                        }
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "name",
+                    "key"
+                ],
+                "title": "StoreProjectRequest"
             },
             "StoreWorkspaceRequest": {
                 "type": "object",
@@ -2101,6 +2960,33 @@
                                     "description": "Machine-readable: switch on this, not on the message.",
                                     "enum": [
                                         "forbidden"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "message",
+                                "code"
+                            ]
+                        }
+                    }
+                }
+            },
+            "NotFoundHttpException": {
+                "description": "Not found",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Human-readable, safe to show."
+                                },
+                                "code": {
+                                    "type": "string",
+                                    "description": "Machine-readable: switch on this, not on the message.",
+                                    "enum": [
+                                        "not_found"
                                     ]
                                 }
                             },

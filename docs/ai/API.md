@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -151,8 +151,8 @@ ask an admin) — `AppApiErrors::limitReached`, called from `LimitReached::rende
 ### Workspaces
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
-| `GET /api/v1/workspaces` | app | Workspace switcher (tray / menu): the user's workspaces by name, cursor-paginated, `updated_since` | Read + create | BRAI-179 | ready (v1.49.0, BRAI-388) |
-| `GET /api/v1/workspaces/{slug}` | app | One workspace: role, permissions, time zone, counts, plan limits + usage. Not a member / unknown → 404 | Read + create | BRAI-179 | ready (v1.49.0, BRAI-388) |
+| `GET /api/v1/workspaces` | app + verified | Workspace switcher (tray / menu): the user's workspaces by name, cursor-paginated, `updated_since` | Read + create | BRAI-179 | ready (v1.49.0, BRAI-388) |
+| `GET /api/v1/workspaces/{slug}` | app + verified | One workspace: role, permissions, time zone, counts, plan limits + usage. Not a member / unknown → 404 | Read + create | BRAI-179 | ready (v1.49.0, BRAI-388) |
 | `POST /api/v1/workspaces` | app + verified email | First run "create a workspace": `{name, description?}` (name unique per owner, ≤ 255; description ≤ 1000) → 201 `{data: workspace}` with `role: "admin"`; 402 `limit_reached` (free workspaces per owner). | Read + create | BRAI-175, BRAI-179 | ready (v1.49.0, BRAI-386) |
 
 List item / POST / accept-invitation shape (`WorkspaceResource`): `{id, slug, name, role, is_owner,
@@ -164,6 +164,29 @@ can: {update, invite_members, create_projects}, limits_enforced, limits: {…as 
   all projects (what the plan counts); `usage.members` counts open invitations too.
 - Settings, logo, member roles and removals, billing, deleting: web only (`can.update` says whether to
   show an "Open settings" link).
+
+### Projects
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/workspaces/{slug}/projects` | app + verified | Native menu "Go to project", capture destinations: the projects of the workspace the user can open (workspace admins: all; others: their projects), by name, cursor-paginated, `updated_since` | Read + create | BRAI-180 | ready (v1.49.0, BRAI-389) |
+| `GET /api/v1/projects/{id}` | app + verified | Project home: boards, docs (folder tree), task lists, plans, helpdesks, lead forms, recently updated, `can` flags. Can't open / unknown → 404 | Read + create | BRAI-180 | ready (v1.49.0, BRAI-389) |
+| `GET /api/v1/workspaces/{slug}/project-templates` | app + verified | "New project" gallery: built-in (`builtin:<key>`) and the workspace's saved templates (`template:<uuid>`), not paginated. 403 without `can.create_projects` | Read + create | BRAI-180 | ready (v1.49.0, BRAI-389) |
+| `POST /api/v1/workspaces/{slug}/projects` | app + verified | Create a project: `{name, key, description?, template?, start_date? (Y-m-d, required with template), include?: [sections], request_id?: uuid}` → 201 `{data: project}`. Blank = "Main Board" + the user as project admin. 402 `limit_reached` (projects / storage), 403 without `createProjects`, 404 outside the workspace | Read + create | BRAI-180 | ready (v1.49.0, BRAI-389) |
+
+Project (list item, POST): `{id, uuid, slug, key, name, description, icon, color, workspace: {slug,
+name}, url, created_at, updated_at}`. Projects are addressed by **id** (`/projects/{id}`): slugs are
+unique only per workspace and change on rename. `GET /projects/{id}` adds `{role, member_count, can:
+{update, manage_members, create_boards, create_pages, create_issues}, boards: [{id, slug, name, type,
+url}], docs: [{id, uuid, parent_id, type: page|folder, name, icon, is_whiteboard, is_draft, url,
+updated_at}], task_lists, plans, helpdesks: [{id, slug, name, url}], lead_forms: [{…, status}],
+recently_updated: [{type, id, name, url, updated_at}]}`.
+- `docs` is the web's folder tree as a flat list (build the tree from `parent_id`); unpublished drafts
+  only for their author and project admins, and nothing under a parent the user can't see.
+- `role` is the project role (`admin | editor | viewer`), null for a workspace admin who isn't a member.
+- Template runs are idempotent with `request_id`: a retry of a completed run answers 200 with the same
+  project (no validation, as the web form). Editing, moving, archiving projects: web only.
+- All workspace content (Workspaces, Projects and everything after) needs a verified address (403
+  `forbidden`), like the web app; `GET /me` does not, so the app can show "verify your email".
 
 ## Mobile card texts (`## API (ready)`)
 
@@ -177,4 +200,15 @@ The lead pastes these onto the Mobile app cards (they are kept here, not edited 
 - POST /api/v1/workspaces — create a workspace (402 at the free-workspace limit)
 Scope: app · OpenAPI: docs/api/openapi.json#/Workspaces · Registry: docs/ai/API.md#workspaces
 Built in: BRAI-388 (desktop) · Mobile scope: Read + create (settings web only)
+```
+
+**BRAI-180** (projects)
+```
+## API (ready)
+- GET /api/v1/workspaces/{slug}/projects — the projects the user can open, cursor-paginated
+- GET /api/v1/projects/{id} — project home: boards, docs tree, task lists, plans, helpdesks, lead forms, recently updated
+- GET /api/v1/workspaces/{slug}/project-templates — templates for "New project"
+- POST /api/v1/workspaces/{slug}/projects — create a project, blank or from a template (402 at the plan limit)
+Scope: app · OpenAPI: docs/api/openapi.json#/Projects · Registry: docs/ai/API.md#projects
+Built in: BRAI-389 (desktop) · Mobile scope: Read + create
 ```
