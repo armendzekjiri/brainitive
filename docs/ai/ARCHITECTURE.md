@@ -451,7 +451,8 @@ extension: own tokens, guard, throttles; only Support services and policies are 
 - **Endpoints:** `app/Http/Controllers/AppApi/*` (Instance, Auth, Me + MeAvatar, Device, Invitation,
   Workspace, Project, Member, Navigation, Search, Notification, ConnectedApp, DeviceAuth, MyWork, Today,
   Calendar, TaskList, Capture, Snippet, Bookmark, Timer + WorkLog, Board, Issue + IssueActivity + IssueLink, Sprint,
-  Page + PageCollab + DocReview + Link, Whiteboard, Plan, Release, Upload —
+  Page + PageCollab + DocReview + Link, Whiteboard, Plan, Release, Upload, CalendarEvent + Meeting + CalendarFeed, Booking,
+  Helpdesk, Lead, Portal, Insights —
   one `#[Group]` tag per
   `API.md` module), Form Requests in `app/Http/Requests/AppApi/`, Resources in
   `app/Http/Resources/AppApi/`. The tables in `API.md` are the list.
@@ -496,6 +497,17 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   (doc text too). `Controllers\AppApi\Concerns\ResolvesPageReviews`: reviews through a page of an accessible project +
   `PageReviewPolicy` (reviewers see a draft's snapshot, not the draft). Pages are `/pages/{uuid}` with the route parameter `{uuid}`
   (`{page}` has an explicit binding in `AppServiceProvider`).
+- **Shared with the web (phase 08, calendar writes / booking / helpdesk / leads / portals / insights):**
+  `Support\Meetings\MeetingScheduler` (rules, schedule, remove, the meeting row, the notes doc; web `MeetingController`),
+  `Support\CalendarFeed\CalendarFeeds` (feed option rules + enable / disable; web `CalendarFeedController`),
+  `Support\Booking\BookingRows` (the host's pages + booking rows; web `BookingPageController`), `Support\Helpdesks\TicketActions`
+  (reply / internal note, move / resolve, assign; web `TicketController`) + `Sla\SlaStatus` (PHP twin of `lib/sla.ts`, with an SQL
+  filter), `Support\LeadForms\LeadActions` + `LeadFormAnalytics` (web `LeadController` / `LeadFormController`),
+  `FeedbackModeration::counts / tabQuery / row` (web `FeedbackModerationController`), `Deliverables::summary / detail` (web
+  `ClientPortalTeamController`), `Support\ProjectHealth\HealthWindow` (web `ProjectHealthController`). Reused as they were:
+  `CalendarProviders` (+ `CalendarEvents::mapExternalEvent`, now public), `MeetingCalendars`, `BookingService::cancel`,
+  `LeadController::present`, the `Insights\*Insights` classes + `InsightsFilters`, `HealthMetrics`, `WorkloadGrid`.
+  `CalendarProviderException::render` answers in the App API error shape on `/api/v1`.
 - **TV device-code sign-in (BRAI-438):** `Support\AppApi\AppDeviceCodes` (RFC 8628 codes in the cache),
   `AppDeviceSignIn` (device row + `max_devices` + first pair; also used by `/auth/exchange`), `AppClients`
   (`config/app-api.php` → `clients.*.grant` / `platforms`); `Controllers\AppApi\DeviceAuthController`;

@@ -2072,3 +2072,24 @@ Never migrate devdb just to export the spec.
 - **App API uploads skipped the storage limit** before phase 07 (issue attachments, bookmark files: `file.room` is web middleware). Now
   `FileRoom::ensure` inside the idempotent write, so a replayed `request_id` is never refused.
 
+
+
+### App API phase 08: calendar writes, booking, helpdesk, leads, portals, insights (v1.49.0, BRAI-418 … BRAI-424)
+- **Calendar event ids hold the connection:** writes use the list's `event:<connection>:<event id>` (`/calendar/events/{id}`,
+  URL-encoded); the connection must be the user's own (else 404). Provider event ids never contain `/` (the web routes rely on it
+  too). Dates / times default to the user's `effective_timezone`, not the server's (the MCP / web pass the browser zone).
+- **`CalendarProviderException` renders itself** (Laravel calls an exception's own `render()` before the app's renderers), so on
+  `/api/v1` it now returns the App API shape itself (422 `validation_failed` + `errors.calendar`).
+- **Meetings' `conference_provider` without `join_url`** = the provider hasn't returned the link yet (the web shows a warning).
+  The conferencing lookup is cached per connection + `updated_at` (`MeetingCalendars`): tests with a frozen clock `Cache::flush()`.
+- **Host reschedule doesn't exist on the web** (only the guest's manage link), so the API offers cancel only; lead notes don't
+  exist on the web either (card asked for them): deferred until the web has them.
+- **Ticket replies strip mentions** (`TicketReply::body` is sanitized, the thread is the customer's email): Markdown without
+  `@[Name](user:<id>)`. The SLA state is computed twice — `lib/sla.ts` (web) and `SlaStatus` (API, also as SQL for `?sla=`):
+  change both together.
+- **Cursor-paginating arrays:** a paginator whose collection was replaced by row arrays reads the cursor keys from the arrays,
+  so rows must keep the order columns (`BookingRows::rows` keeps `id` + `starts_at`).
+- **Feedback portals are project-admin pages** (`ProjectPolicy::update`): other project members get 403, outsiders 404. Client
+  portals are readable by every project member; clients' addresses only for project admins.
+- **Billing stays web only:** team time in the apps is the Insights `team` tab (hours); the billing time overview (amounts) is not
+  exposed.
