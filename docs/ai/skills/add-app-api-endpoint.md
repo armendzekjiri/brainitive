@@ -83,6 +83,10 @@ Every input goes through a Form Request (Scramble documents the body / query fro
 the web request's rules where the field is the same. Foreign ids are validated against the parent
 (`Rule::exists(...)->where('workspace_id', $this->route('workspace')->id)`).
 
+Creates: accept an optional `request_id` (`'request_id' => ['nullable', 'uuid']`) and run the write through
+`Concerns\CreatesOnce::createOnce()`; answer 201, or 200 on a replay, with two plain
+`return (new XResource($model))->response()` statements (Scramble documents both).
+
 ## 4. Resource — `app/Http/Resources/AppApi/WidgetResource.php`
 - **Explicit fields only**, never `parent::toArray()` / a model's `toArray()`: no hidden columns,
   token hashes, IPs or other people's emails slip out.

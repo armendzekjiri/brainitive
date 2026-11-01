@@ -1996,3 +1996,30 @@ Never migrate devdb just to export the spec.
   comes out as `string` or `{}`: cast through a small `?string` helper, build nested objects inline,
   and wrap lists of arrays in a Resource (`CalendarErrorResource`).
 
+### App API phase 04b: task lists, captures, snippets, bookmarks, time (v1.49.0, BRAI-397 … BRAI-400)
+- **`request_id`, not `Idempotency-Key`.** The registry promised an `Idempotency-Key` header that was never built.
+  Creates now take a `request_id` (uuid) in the body, stored per user + endpoint in `mcp_requests` (tool
+  `app-api:<endpoint>`, pruned after 7 days, same `IdempotentRequest` as the MCP): replay → 200 + the record,
+  other input → 409. Converting a capture needs none (`CaptureConversion` is idempotent by itself).
+- **Scramble and status codes.** `->response()->setStatusCode($replayed ? 200 : 201)`, or `->response()` on a
+  helper's return value, documents the body as `{type: string}`. Two plain return statements on
+  `(new XResource(...))->response()` give typed 201 and 200 answers. A nested list of resources that need extra
+  constructor data (`WorkLogResource($entry, $accessible)`) is typed by wrapping the built resources in the list's
+  `CursorCollection` subclass (`new WorkLogCollection($resources)`).
+- **Form Request names.** `Request::capture()` is static: a Form Request method named `capture()` is a fatal error
+  (`CaptureRequest::ownedCapture()`). `{bookmark}` and `{page}` have explicit route bindings in
+  `AppServiceProvider` (slug lookups): App API routes use `{group}` for bookmark groups.
+- **Inputs are trimmed** (global `TrimStrings`), as on the web: a snippet's `content` loses leading / trailing
+  blank lines and spaces through the API too.
+- **CLI task lists follow project access.** `/api/cli/lists` used to list every list of the user's workspaces,
+  also of projects they aren't in; it now uses `TaskLists::visibleTo()` (the projects the user can open).
+- **Slugs incl. deleted rows.** Task lists and bookmark groups keep their slug when soft-deleted and the
+  `(parent, slug)` index is unique, so new slugs are checked `withTrashed()` (`TaskLists::uniqueSlug`,
+  `Bookmarks::uniqueSlug`); renaming a bookmark group now gets a unique slug too (it used to collide).
+- **Bookmark visibility in the API = member + policy.** `BookmarkPolicy::view` allows any public group, even of
+  another workspace (for the share page); the API also requires workspace membership, so other workspaces' public
+  groups are only on their share link.
+- **Time: never money, own entries only.** Work logs are the user's own (admins change others' on the web's time
+  overview); billed entries answer 422 `entry` (the web's message). Tests that travel past 15 minutes need a fresh
+  app access token (access tokens live 15 minutes).
+
