@@ -12,6 +12,7 @@ use App\Http\Controllers\AppApi\InstanceController;
 use App\Http\Controllers\AppApi\InvitationController;
 use App\Http\Controllers\AppApi\IssueActivityController;
 use App\Http\Controllers\AppApi\IssueController;
+use App\Http\Controllers\AppApi\IssueLinkController;
 use App\Http\Controllers\AppApi\MeAvatarController;
 use App\Http\Controllers\AppApi\MeController;
 use App\Http\Controllers\AppApi\MemberController;
@@ -222,6 +223,12 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::post('items/{item}/attachments', [IssueActivityController::class, 'storeAttachment'])->middleware('throttle:30,1,app.items.attachments.store')->name('items.attachments.store');
         Route::delete('items/{item}/attachments/{attachment}', [IssueActivityController::class, 'destroyAttachment'])->name('items.attachments.destroy');
         Route::get('items/{item}/activity', [IssueActivityController::class, 'activity'])->whereNumber('item')->name('items.activity');
+
+        // ── Subtasks + linked issues (ItemLinks: shared with the web's issue view and the MCP) ─────
+        Route::get('items/{item}/children', [IssueLinkController::class, 'children'])->whereNumber('item')->name('items.children');
+        Route::get('items/{item}/links', [IssueLinkController::class, 'index'])->whereNumber('item')->name('items.links.index');
+        Route::post('items/{item}/links', [IssueLinkController::class, 'store'])->name('items.links.store');
+        Route::delete('items/{item}/links/{link}', [IssueLinkController::class, 'destroy'])->name('items.links.destroy');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');
