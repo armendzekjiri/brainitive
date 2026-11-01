@@ -77,6 +77,9 @@
         },
         {
             "name": "Boards"
+        },
+        {
+            "name": "Issues"
         }
     ],
     "security": [
@@ -6326,6 +6329,90 @@
                         "$ref": "#/components/responses/RateLimited"
                     }
                 }
+            },
+            "post": {
+                "operationId": "app.v1.items.store",
+                "description": "The issue dialog's fields; `description` is Markdown (mentions `@[Name](user:<id>)` notify that\nproject member). Without `column_id` it goes into the board's first column; a Scrum board puts it\ninto the running sprint unless `sprint_id` says where (`null` = backlog). Needs `can.create_items`\nof the board (403). With `request_id` a retry answers 200 with the issue the first call created.",
+                "summary": "Create an issue on a board",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "board",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreIssueRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`IssueDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/IssueDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`IssueDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/IssueDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "402": {
+                        "$ref": "#/components/responses/LimitReached"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
             }
         },
         "/items/{item}/move": {
@@ -6386,6 +6473,266 @@
                     },
                     "403": {
                         "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/items/by-key/{key}": {
+            "get": {
+                "operationId": "app.v1.items.by-key",
+                "description": "Keys are unique per workspace: when the user can open the key in several workspaces, pass\n`workspace` (its slug), otherwise 409.",
+                "summary": "One issue by its key (`WEB-12`), e.g. from a link or a scanned reference",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "key",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "workspace",
+                        "in": "query",
+                        "description": "the workspace's slug, when the key exists in several of the user's workspaces",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 255
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`IssueDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/IssueDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "An error\n\nConflict",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Human-readable, safe to show."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "description": "Machine-readable: switch on this, not on the message.",
+                                            "enum": [
+                                                "conflict"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/items/{item}": {
+            "get": {
+                "operationId": "app.v1.items.show",
+                "summary": "One issue with its description, fields, development and what the user may do",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`IssueDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/IssueDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "app.v1.items.update",
+                "description": "`description` is Markdown; `label_ids` is the whole list; `fields` sets custom field values\n(`{\"<field id>\": value | null}`); `original_estimate` is a duration (\"1h 30m\", \"2d\"). Send the\n`updated_at` you last read to get 409 instead of overwriting someone else's change. Needs\n`can.update` (403).",
+                "summary": "Change an issue; only the sent fields change (`null` clears)",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateIssueRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`IssueDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/IssueDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "An error\n\nConflict",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Human-readable, safe to show."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "description": "Machine-readable: switch on this, not on the message.",
+                                            "enum": [
+                                                "conflict"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "app.v1.items.destroy",
+                "description": "Its creator, project admins and workspace admins (403 otherwise).",
+                "summary": "Delete an issue with its subtasks",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
                     },
                     "429": {
                         "$ref": "#/components/responses/RateLimited"
@@ -8001,6 +8348,75 @@
                 ],
                 "title": "DataExportStateResource"
             },
+            "DevLinkResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "repository": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "owner/name"
+                    },
+                    "identifier": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "branch name, commit sha, PR number, environment"
+                    },
+                    "title": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "state": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "e.g. open | merged | closed | draft, success | failure"
+                    },
+                    "author": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "occurred_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "primary": {
+                        "type": "boolean",
+                        "description": "pull requests: the one the board shows first"
+                    }
+                },
+                "required": [
+                    "id",
+                    "repository",
+                    "identifier",
+                    "title",
+                    "url",
+                    "state",
+                    "author",
+                    "occurred_at",
+                    "primary"
+                ],
+                "title": "DevLinkResource"
+            },
             "DeviceAuthorizationResource": {
                 "type": "object",
                 "properties": {
@@ -8407,6 +8823,505 @@
                     "$ref": "#/components/schemas/IssueResource"
                 },
                 "title": "IssueCollection"
+            },
+            "IssueDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "work_id": {
+                        "type": "string",
+                        "description": "issue:<id> \u2014 for PATCH /me/work/{id}, My Day and the timer"
+                    },
+                    "key": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "board_id": {
+                        "type": "integer"
+                    },
+                    "column_id": {
+                        "type": "integer"
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "the column's name"
+                    },
+                    "done": {
+                        "type": "boolean"
+                    },
+                    "completed_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "type": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "icon": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "color": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "icon",
+                            "color"
+                        ]
+                    },
+                    "priority": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "icon": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "color": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "icon",
+                            "color"
+                        ]
+                    },
+                    "assignee": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "avatar_url": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "avatar_url"
+                        ]
+                    },
+                    "labels": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/LabelResource"
+                        }
+                    },
+                    "start_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "start_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "due_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "due_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "story_points": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "parent_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "the parent issue (subtasks nest 3 levels at most)"
+                    },
+                    "sprint_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "Scrum: the sprint (null = backlog)"
+                    },
+                    "position": {
+                        "type": "integer",
+                        "description": "order inside the column"
+                    },
+                    "counts": {
+                        "type": "object",
+                        "properties": {
+                            "subtasks": {
+                                "type": "integer"
+                            },
+                            "comments": {
+                                "type": "integer"
+                            },
+                            "attachments": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "subtasks",
+                            "comments",
+                            "attachments"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "reporter": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "avatar_url": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "avatar_url"
+                        ]
+                    },
+                    "creator": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "avatar_url": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "avatar_url"
+                        ]
+                    },
+                    "original_estimate_minutes": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "minutes; set / shown as durations (\"1h 30m\", 1d = 8h) on the web"
+                    },
+                    "time_spent_minutes": {
+                        "type": "integer"
+                    },
+                    "release": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "status": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "status"
+                        ]
+                    },
+                    "parent": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "key": {
+                                "type": "string"
+                            },
+                            "title": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "key",
+                            "title"
+                        ]
+                    },
+                    "sprint": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "status": {
+                                "type": "string",
+                                "description": "planned | active | completed"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "status"
+                        ]
+                    },
+                    "fields": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/IssueFieldValueResource"
+                        }
+                    },
+                    "watching": {
+                        "type": "boolean"
+                    },
+                    "development": {
+                        "type": "object",
+                        "description": "GitHub branches, commits, pull requests, deployments linked to the issue (read-only)",
+                        "properties": {
+                            "connected": {
+                                "type": "boolean",
+                                "description": "the project has a GitHub repository connected"
+                            },
+                            "branches": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/components/schemas/DevLinkResource"
+                                }
+                            },
+                            "commits": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/components/schemas/DevLinkResource"
+                                }
+                            },
+                            "commit_count": {
+                                "type": "integer"
+                            },
+                            "pull_requests": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/components/schemas/DevLinkResource"
+                                }
+                            },
+                            "deployments": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/components/schemas/DevLinkResource"
+                                }
+                            },
+                            "merge_column": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "description": "the column a merged pull request moves the issue to (null = none)"
+                            }
+                        },
+                        "required": [
+                            "connected",
+                            "branches",
+                            "commits",
+                            "commit_count",
+                            "pull_requests",
+                            "deployments",
+                            "merge_column"
+                        ]
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "update": {
+                                "type": "boolean"
+                            },
+                            "delete": {
+                                "type": "boolean"
+                            },
+                            "comment": {
+                                "type": "boolean",
+                                "description": "the web lets the people who may edit the issue comment on it"
+                            }
+                        },
+                        "required": [
+                            "update",
+                            "delete",
+                            "comment"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "work_id",
+                    "key",
+                    "title",
+                    "board_id",
+                    "column_id",
+                    "status",
+                    "done",
+                    "completed_at",
+                    "type",
+                    "priority",
+                    "assignee",
+                    "labels",
+                    "start_date",
+                    "start_time",
+                    "due_date",
+                    "due_time",
+                    "story_points",
+                    "parent_id",
+                    "sprint_id",
+                    "position",
+                    "counts",
+                    "url",
+                    "created_at",
+                    "updated_at",
+                    "description",
+                    "reporter",
+                    "creator",
+                    "original_estimate_minutes",
+                    "time_spent_minutes",
+                    "release",
+                    "parent",
+                    "sprint",
+                    "fields",
+                    "watching",
+                    "development",
+                    "can"
+                ],
+                "title": "IssueDetailResource"
+            },
+            "IssueFieldValueResource": {
+                "type": "object",
+                "properties": {
+                    "field_id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "text | number | date | checkbox | select"
+                    },
+                    "value": {},
+                    "display": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "field_id",
+                    "name",
+                    "type",
+                    "value",
+                    "display"
+                ],
+                "title": "IssueFieldValueResource"
             },
             "IssueResource": {
                 "type": "object",
@@ -10772,6 +11687,129 @@
                 ],
                 "title": "StoreInvitationRequest"
             },
+            "StoreIssueRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/boards/{id}/items`: a new issue, the issue dialog's rules (Support\\Boards\\Issues).\nAuthorized before validation: a board the user can't open is a 404, one they may only read a 403\n(BoardPolicy::createItems).",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 100000
+                    },
+                    "type_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "priority_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "assignee_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "start_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "start_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "due_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "due_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "parent_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "story_points": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0
+                    },
+                    "release_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "original_estimate": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 50
+                    },
+                    "column_id": {
+                        "type": "integer"
+                    },
+                    "label_ids": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": "integer"
+                        }
+                    },
+                    "sprint_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "fields": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "maxItems": 50
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "title"
+                ],
+                "title": "StoreIssueRequest"
+            },
             "StoreProjectRequest": {
                 "type": "object",
                 "description": "`POST /api/v1/workspaces/{slug}/projects` (BRAI-389): the web form's rules (ProjectCreator).\nAuthorized before validation, so somebody outside the workspace gets a 404 and can't probe which\nnames or keys are taken; members who may not create projects get a 403. A retried template\nrun (same `request_id`) skips validation, which would fail on \"name already taken\", and the\ncontroller answers with the project the first request created (as the web form does).",
@@ -12101,6 +13139,113 @@
                     }
                 },
                 "title": "UpdateDeviceRequest"
+            },
+            "UpdateIssueRequest": {
+                "type": "object",
+                "description": "`PATCH /api/v1/items/{id}`: only the sent fields change (the issue dialog's rules, Support\\Boards\\Issues).\n`updated_at` (the issue's, as last read) makes it a conditional write: 409 when it changed since.",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 100000
+                    },
+                    "type_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "priority_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "assignee_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "start_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "start_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "due_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "due_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "parent_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "story_points": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "minimum": 0
+                    },
+                    "release_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "original_estimate": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 50
+                    },
+                    "label_ids": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "maxItems": 100
+                    },
+                    "fields": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "maxItems": 50
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "the issue's updated_at as last read: 409 conflict when it changed since"
+                    }
+                },
+                "title": "UpdateIssueRequest"
             },
             "UpdateMeRequest": {
                 "type": "object",

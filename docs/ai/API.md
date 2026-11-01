@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -537,6 +537,31 @@ comments, attachments}, url, created_at, updated_at}`.
 - Creating / renaming / reordering / deleting columns, swimlane setup, done retention, board settings: web only (`can.update`
   says whether to offer "Open in browser").
 
+### Issues
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `POST /api/v1/boards/{id}/items` | app + verified | New issue: `{title, description? (Markdown), column_id? (default: first column), type_id?, priority_id?, assignee_id?, label_ids?, start_date?, start_time?, due_date?, due_time?, story_points?, original_estimate? ("1h 30m"), release_id?, parent_id?, sprint_id?, fields?: {"<field id>": value}, request_id?}` → 201 `{data: issue}`. 403 without `can.create_items`, 404 board not visible, 422 the dialog's rules, 402 `limit_reached` (storage) | Full | BRAI-188 | ready (v1.49.0, BRAI-404) |
+| `GET /api/v1/items/{id}` | app + verified | The issue view: card fields + description, reporter, estimate / time spent, fix version, parent, sprint, custom fields, GitHub development, `watching`, `can` | Full | BRAI-188, BRAI-252 | ready (v1.49.0, BRAI-404) |
+| `GET /api/v1/items/by-key/{KEY}?workspace=` | app + verified | Open `WEB-12` from a link / a typed key (case-insensitive). Not visible → 404; the key in several of the user's workspaces → 409 until `workspace` (slug) says which | Full | BRAI-188 | ready (v1.49.0, BRAI-404) |
+| `PATCH /api/v1/items/{id}` | app + verified | Change the sent fields (as POST, plus `label_ids` = the whole list, `fields` with `null` to clear; no `column_id` / `sprint_id`: move / sprints) + optional `updated_at` (as last read) → `{data: issue}`; changed since → 409 `conflict`. 403 without `can.update` | Full | BRAI-188 | ready (v1.49.0, BRAI-404) |
+| `DELETE /api/v1/items/{id}` | app + verified | Delete with its subtasks → 204. Its creator, project admins, workspace admins (403) | Full | BRAI-188 | ready (v1.49.0, BRAI-404) |
+
+Issue = the card of Boards + `{description (Markdown|null), reporter, creator: {id, name, avatar_url}|null, original_estimate_minutes,
+time_spent_minutes, release: {id, name, status}|null, parent: {id, key, title}|null, sprint: {id, name, status}|null, fields:
+[{field_id, name, type: text|number|date|checkbox|select, value, display}], watching, development: {connected, branches, commits,
+commit_count, pull_requests, deployments, merge_column}, can: {update, delete, comment}}`.
+- Same rules and code as the web's issue dialog (`App\Support\Boards\Issues`: rules, create, update, labels, delete — used by
+  `BoardController` too): the project's enabled types / priorities, assignees who can open the project, a parent on the same board
+  (3 levels, no cycles), "Subtasks must have a parent", the project's labels (others are dropped), active fields of the board
+  (errors come back as `fields.<id>`). Notifications (assignee, mentions), history and live boards as on the web.
+- `description` is Markdown both ways (stored as the editor's HTML, `App\Support\Boards\IssueMarkdown`); a mention is
+  `@[Name](user:<id>)` — the person is notified when they can open the project (otherwise it stays plain text). Formatting the
+  editor has and Markdown doesn't is lost when the app sends `description`: send it only when the user changed it.
+- Custom field values: text → string, number → number, date → `Y-m-d`, checkbox → bool, select → option id (the options:
+  BRAI-407's project config). `original_estimate` is a duration text in, minutes out (1d = 8h, 1w = 5d).
+- `development` is read-only (GitHub branches, commits, pull requests, deployments; at most 30 per kind); connecting repositories:
+  web only. Duplicating, moving to another board, logging work from the issue: web only for now (time: `POST /work-logs`).
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -726,4 +751,23 @@ Registry: docs/ai/API.md#time-tracking · Decided in: BRAI-400
 - POST /api/v1/items/{id}/move {column_id, position?, with_subtasks?} — drag & drop; done column completes it, watchers notified, web boards update live
 Scope: app · OpenAPI: docs/api/openapi.json#/Boards · Registry: docs/ai/API.md#boards
 Built in: BRAI-403 (desktop) · Mobile scope: Read + move cards (columns, swimlanes, board settings: web only)
+```
+
+**BRAI-188** (issues: create, view, edit, assign)
+```
+## API (ready)
+- POST /api/v1/boards/{id}/items — new issue (Markdown description, type, priority, assignee, labels, dates, points, estimate, parent, custom fields; request_id; 402 at the storage limit)
+- GET /api/v1/items/{id} · GET /api/v1/items/by-key/{KEY} — the issue view (description as Markdown, fields, parent, sprint, development, can {…})
+- PATCH /api/v1/items/{id} — change the sent fields; send updated_at to get 409 instead of overwriting a newer change
+- DELETE /api/v1/items/{id} → 204 (with subtasks) · POST /api/v1/items/{id}/move — change the column (Boards)
+Scope: app · OpenAPI: docs/api/openapi.json#/Issues · Registry: docs/ai/API.md#issues
+Built in: BRAI-404 (desktop) · Mobile scope: Full (duplicate, move to another board: web only)
+```
+
+**BRAI-252** (GitHub integration and linked development work)
+```
+## API (ready) — read only
+- GET /api/v1/items/{id} → development: {connected, branches, commits, commit_count, pull_requests (primary, state), deployments, merge_column}
+Scope: app · OpenAPI: docs/api/openapi.json#/Issues · Registry: docs/ai/API.md#issues
+Built in: BRAI-404 (desktop) · Mobile scope: Read-only (connecting repositories, merge transitions: web only)
 ```

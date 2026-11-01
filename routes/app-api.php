@@ -10,6 +10,7 @@ use App\Http\Controllers\AppApi\DeviceAuthController;
 use App\Http\Controllers\AppApi\DeviceController;
 use App\Http\Controllers\AppApi\InstanceController;
 use App\Http\Controllers\AppApi\InvitationController;
+use App\Http\Controllers\AppApi\IssueController;
 use App\Http\Controllers\AppApi\MeAvatarController;
 use App\Http\Controllers\AppApi\MeController;
 use App\Http\Controllers\AppApi\MemberController;
@@ -201,6 +202,13 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::get('boards/{board}', [BoardController::class, 'show'])->whereNumber('board')->name('boards.show');
         Route::get('boards/{board}/items', [BoardController::class, 'items'])->whereNumber('board')->name('boards.items.index');
         Route::post('items/{item}/move', [BoardController::class, 'move'])->name('items.move');
+
+        // ── Issues: create, view, edit, assign, delete (Issues: shared with the web's issue dialog) ─────
+        Route::post('boards/{board}/items', [IssueController::class, 'store'])->name('items.store');
+        Route::get('items/by-key/{key}', [IssueController::class, 'byKey'])->where('key', '[A-Za-z0-9_-]{1,64}')->name('items.by-key');
+        Route::get('items/{item}', [IssueController::class, 'show'])->whereNumber('item')->name('items.show');
+        Route::patch('items/{item}', [IssueController::class, 'update'])->name('items.update');
+        Route::delete('items/{item}', [IssueController::class, 'destroy'])->name('items.destroy');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');
