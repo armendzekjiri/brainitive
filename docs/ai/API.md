@@ -559,6 +559,7 @@ comments, attachments}, url, created_at, updated_at}`.
 | `GET /api/v1/items/by-key/{KEY}?workspace=` | app + verified | Open `WEB-12` from a link / a typed key (case-insensitive). Not visible → 404; the key in several of the user's workspaces → 409 until `workspace` (slug) says which | Full | BRAI-188 | ready (v1.49.0, BRAI-404) |
 | `PATCH /api/v1/items/{id}` | app + verified | Change the sent fields (as POST, plus `label_ids` = the whole list, `fields` with `null` to clear; no `column_id` / `sprint_id`: move / sprints) + optional `updated_at` (as last read) → `{data: issue}`; changed since → 409 `conflict`. 403 without `can.update` | Full | BRAI-188 | ready (v1.49.0, BRAI-404) |
 | `DELETE /api/v1/items/{id}` | app + verified | Delete with its subtasks → 204. Its creator, project admins, workspace admins (403) | Full | BRAI-188 | ready (v1.49.0, BRAI-404) |
+| `GET /api/v1/projects/{id}/items?from=&to=&board=&status=open\|done\|all` | app + verified | Timeline / calendar: the project's issues (every board, subtasks too) whose start … due touch the days `from` … `to` (Y-m-d, default today + 30, ≤ 366 days), sorted by their first day, cursor-paginated, `updated_since`. Reschedule with `PATCH /items/{id}` (`start_date`, `due_date`, times). `board` not in the project → 422 | Read + reschedule | BRAI-194 | ready (v1.49.0, BRAI-409) |
 
 Issue = the card of Boards + `{description (Markdown|null), reporter, creator: {id, name, avatar_url}|null, original_estimate_minutes,
 time_spent_minutes, release: {id, name, status}|null, parent: {id, key, title}|null, sprint: {id, name, status}|null, fields:
@@ -573,6 +574,9 @@ commit_count, pull_requests, deployments, merge_column}, can: {update, delete, c
   editor has and Markdown doesn't is lost when the app sends `description`: send it only when the user changed it.
 - Custom field values: text → string, number → number, date → `Y-m-d`, checkbox → bool, select → option id (the options:
   BRAI-407's project config). `original_estimate` is a duration text in, minutes out (1d = 8h, 1w = 5d).
+- Dated issues (BRAI-409): an issue with only a start or only a due date is that one day; undated ones aren't listed. Done
+  issues are included (the web's list, timeline and calendar keep them; `status=open` leaves them out) — unlike the Kanban board's
+  done retention. Recurring issues and templates: web only. The user's own dated work across projects: `GET /calendar/events`.
 - `development` is read-only (GitHub branches, commits, pull requests, deployments; at most 30 per kind); connecting repositories:
   web only. Duplicating, moving to another board, logging work from the issue: web only for now (time: `POST /work-logs`).
 
@@ -895,4 +899,20 @@ Built in: BRAI-408 (desktop) · Mobile scope: Read + move items (create / start 
 - GET /api/v1/boards/{id}/velocity — committed vs. completed of the last completed sprints
 Scope: app · OpenAPI: docs/api/openapi.json#/Sprints · Registry: docs/ai/API.md#sprints
 Built in: BRAI-408 (desktop) · Mobile scope: Read-only
+```
+
+**BRAI-194** (timeline and calendar issue views)
+```
+## API (ready)
+- GET /api/v1/projects/{id}/items?from=&to=&board=&status= — a project's dated issues (start … due touching the days), sorted by first day, cursor-paginated
+- PATCH /api/v1/items/{id} {start_date, due_date, start_time, due_time} — reschedule (send updated_at to avoid overwriting a newer change)
+Scope: app · OpenAPI: docs/api/openapi.json#/Issues · Registry: docs/ai/API.md#issues
+Built in: BRAI-409 (desktop) · Mobile scope: Read + reschedule
+```
+
+**BRAI-195** (recurring issues and templates)
+```
+## API: web only — open in browser
+Recurring issue rules and issue templates are set up on the web (project settings / board). Issues they create are ordinary issues in the API (GET /api/v1/items/{id}, the board's items).
+Registry: docs/ai/API.md#issues · Decided in: BRAI-409
 ```

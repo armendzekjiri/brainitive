@@ -211,6 +211,8 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
 
         // ── Issues: create, view, edit, assign, delete (Issues: shared with the web's issue dialog) ─────
         Route::post('boards/{board}/items', [IssueController::class, 'store'])->name('items.store');
+        // timeline / calendar: a project's dated issues (reschedule with PATCH items/{item}); recurring issues: web only
+        Route::get('projects/{project}/items', [IssueController::class, 'dated'])->whereNumber('project')->name('items.dated');
         Route::get('items/by-key/{key}', [IssueController::class, 'byKey'])->where('key', '[A-Za-z0-9_-]{1,64}')->name('items.by-key');
         Route::get('items/{item}', [IssueController::class, 'show'])->whereNumber('item')->name('items.show');
         Route::patch('items/{item}', [IssueController::class, 'update'])->name('items.update');

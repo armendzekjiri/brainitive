@@ -6,8 +6,10 @@ use App\Http\Controllers\AppApi\Concerns\CreatesOnce;
 use App\Http\Controllers\AppApi\Concerns\ResolvesVisible;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AppApi\IssueByKeyRequest;
+use App\Http\Requests\AppApi\ListDatedIssuesRequest;
 use App\Http\Requests\AppApi\StoreIssueRequest;
 use App\Http\Requests\AppApi\UpdateIssueRequest;
+use App\Http\Resources\AppApi\IssueCollection;
 use App\Http\Resources\AppApi\IssueDetailResource;
 use App\Http\Resources\AppApi\IssueResource;
 use App\Models\Board;
@@ -143,6 +145,52 @@ class IssueController extends Controller
         Issues::delete($item);
 
         return response()->noContent();
+    }
+
+    /**
+     * The dated issues of a project for a timeline or calendar: every board's issues (subtasks too) whose start
+     * … due dates touch the days `from` … `to`.
+     *
+     * An issue with only a start or only a due date is that one day. Sorted by its first day (start, else due),
+     * cursor-paginated. Reschedule with `PATCH /items/{id}` (`start_date`, `due_date`, times). Unlike the board,
+     * done cards are all here (`status=open` leaves them out), as the web's list, timeline and calendar.
+     *
+     * @throws NotFoundHttpException the project doesn't exist or the user can't open it (404)
+     */
+    public function dated(ListDatedIssuesRequest $request, string $project): IssueCollection
+    {
+        $project = $this->visibleProject($request, $project);
+        $boards = Board::where('project_id', $project->id)->with('project.workspace')->get()->keyBy('id');
+        $boardId = $request->board();
+        if ($boardId !== null && ! $boards->has($boardId)) {
+            throw ValidationException::withMessages(['board' => 'That board is not in this project.']);
+        }
+        [$from, $to] = [$request->from(), $request->to()];
+        $since = $request->updatedSince();
+        $status = $request->status();
+
+        $dated = Item::query()
+            ->select('items.*')
+            ->selectRaw('COALESCE(items.start_date, items.due_date) as first_day')
+            ->whereIn('items.board_id', $boardId !== null ? [$boardId] : $boards->keys()->all())
+            ->where(fn ($q) => $q->whereNotNull('items.start_date')->orWhereNotNull('items.due_date'))
+            // first day ≤ to and last day ≥ from
+            ->whereRaw('COALESCE(items.start_date, items.due_date) <= ?', [$to])
+            ->whereRaw('COALESCE(items.due_date, items.start_date) >= ?', [$from])
+            ->when($status === 'open', fn ($q) => $q->whereNull('items.completed_at'))
+            ->when($status === 'done', fn ($q) => $q->whereNotNull('items.completed_at'))
+            ->withCount(IssueResource::COUNTS);
+
+        // the first day is a column of the sub-select, so the cursor can order by it (and the models keep it)
+        $page = Item::query()->fromSub($dated, 'items')
+            ->with(IssueResource::WITH)
+            ->when($since, fn ($q) => $q->where('updated_at', '>=', $since))
+            ->orderBy('first_day')
+            ->orderBy('id')
+            ->cursorPaginate($request->limit(), ['*'], 'cursor', $request->cursor());
+        $page->getCollection()->each(fn (Item $item) => $item->setRelation('board', $boards[$item->board_id]));
+
+        return new IssueCollection($page);
     }
 
     /** A fresh issue with what IssueDetailResource needs. */

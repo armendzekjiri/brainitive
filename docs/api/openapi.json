@@ -6668,6 +6668,135 @@
                 }
             }
         },
+        "/projects/{project}/items": {
+            "get": {
+                "operationId": "app.v1.items.dated",
+                "description": "An issue with only a start or only a due date is that one day. Sorted by its first day (start, else due),\ncursor-paginated. Reschedule with `PATCH /items/{id}` (`start_date`, `due_date`, times). Unlike the board,\ndone cards are all here (`status=open` leaves them out), as the web's list, timeline and calendar.",
+                "summary": "The dated issues of a project for a timeline or calendar: every board's issues (subtasks too) whose start\n\u2026 due dates touch the days `from` \u2026 `to`",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "description": "first day, Y-m-d (default: the user's today)",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "description": "last day, inclusive (default: from + 30 days); at most 366 days after from",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "board",
+                        "in": "query",
+                        "description": "only issues of this board of the project (its id)",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "open | done | all (default)",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "open",
+                                "done",
+                                "all"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `IssueResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/IssueCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
         "/items/by-key/{key}": {
             "get": {
                 "operationId": "app.v1.items.by-key",
