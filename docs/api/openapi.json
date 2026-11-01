@@ -62,6 +62,9 @@
         },
         {
             "name": "Task lists"
+        },
+        {
+            "name": "Captures"
         }
     ],
     "security": [
@@ -3608,6 +3611,633 @@
                     }
                 }
             }
+        },
+        "/captures": {
+            "get": {
+                "operationId": "app.v1.captures.index",
+                "description": "`state` = inbox (default) | processed | archived; `q` searches the text, URL and source.",
+                "summary": "The user's captures in one state, newest first",
+                "tags": [
+                    "Captures"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "state",
+                        "in": "query",
+                        "description": "inbox (default) | processed | archived",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "inbox",
+                                "processed",
+                                "archived"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "description": "matches the text, the URL and the source",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 255
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `CaptureResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CaptureCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.captures.store",
+                "description": "`source` defaults to the app's name (\"Brainitive Desktop\"). With `request_id` a retry answers 200\nwith the capture the first call created.",
+                "summary": "Save an idea to the inbox",
+                "tags": [
+                    "Captures"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreCaptureRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`CaptureResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CaptureResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`CaptureResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CaptureResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/captures/counts": {
+            "get": {
+                "operationId": "app.v1.captures.counts",
+                "summary": "How many captures the user has in each state (the inbox badge)",
+                "tags": [
+                    "Captures"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CaptureCountsResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CaptureCountsResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/captures/{capture}": {
+            "get": {
+                "operationId": "app.v1.captures.show",
+                "summary": "One capture",
+                "tags": [
+                    "Captures"
+                ],
+                "parameters": [
+                    {
+                        "name": "capture",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CaptureResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CaptureResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "app.v1.captures.update",
+                "summary": "Edit a capture's text, URL, intended type or source (only the sent fields)",
+                "tags": [
+                    "Captures"
+                ],
+                "parameters": [
+                    {
+                        "name": "capture",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateCaptureRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`CaptureResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CaptureResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "app.v1.captures.destroy",
+                "summary": "Delete a capture for good \u2014 archived ones only (422 otherwise), as the web",
+                "tags": [
+                    "Captures"
+                ],
+                "parameters": [
+                    {
+                        "name": "capture",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/captures/{capture}/archive": {
+            "post": {
+                "operationId": "app.v1.captures.archive",
+                "summary": "Archive a capture (it leaves the inbox; nothing is deleted)",
+                "tags": [
+                    "Captures"
+                ],
+                "parameters": [
+                    {
+                        "name": "capture",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CaptureResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CaptureResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/captures/{capture}/restore": {
+            "post": {
+                "operationId": "app.v1.captures.restore",
+                "summary": "Restore an archived capture (back to the inbox, or to processed when it was converted)",
+                "tags": [
+                    "Captures"
+                ],
+                "parameters": [
+                    {
+                        "name": "capture",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CaptureResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CaptureResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/captures/{capture}/preview": {
+            "get": {
+                "operationId": "app.v1.captures.preview",
+                "summary": "The fields the capture becomes for one destination type, to edit before converting",
+                "tags": [
+                    "Captures"
+                ],
+                "parameters": [
+                    {
+                        "name": "capture",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "required": true,
+                        "description": "issue | task | page | bookmark | snippet",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "issue",
+                                "task",
+                                "page",
+                                "bookmark",
+                                "snippet"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CapturePreviewResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CapturePreviewResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/captures/{capture}/convert": {
+            "post": {
+                "operationId": "app.v1.captures.convert",
+                "description": "Atomic and idempotent, as the web: a capture converted before answers 200 with what it became\n(`replayed`); a new conversion 201. The destination needs its own rights (403); archived captures\nand invalid fields \u2192 422.",
+                "summary": "Turn a capture into content: an issue, task, doc, bookmark or snippet",
+                "tags": [
+                    "Captures"
+                ],
+                "parameters": [
+                    {
+                        "name": "capture",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ConvertCaptureRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`CaptureConversionResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CaptureConversionResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`CaptureConversionResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CaptureConversionResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "402": {
+                        "$ref": "#/components/responses/LimitReached"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/capture-destinations": {
+            "get": {
+                "operationId": "app.v1.captures.destinations",
+                "summary": "Where the user can organize captures into, per workspace (only what they may write to)",
+                "tags": [
+                    "Captures"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `CaptureDestinationResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/CaptureDestinationResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -3889,6 +4519,362 @@
                 ],
                 "title": "CalendarEventResource"
             },
+            "CaptureCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/CaptureResource"
+                },
+                "title": "CaptureCollection"
+            },
+            "CaptureConversionResource": {
+                "type": "object",
+                "properties": {
+                    "replayed": {
+                        "type": "boolean"
+                    },
+                    "location": {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "description": "where it is, as the web names it: board item, task list, page, bookmark, snippet collection"
+                            },
+                            "title": {
+                                "type": "string"
+                            },
+                            "workspace": {
+                                "type": "string"
+                            },
+                            "project": {
+                                "type": "string"
+                            },
+                            "breadcrumb": {
+                                "type": "string"
+                            },
+                            "url": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "title",
+                            "workspace",
+                            "project",
+                            "breadcrumb",
+                            "url"
+                        ]
+                    },
+                    "capture": {
+                        "$ref": "#/components/schemas/CaptureResource"
+                    }
+                },
+                "required": [
+                    "replayed",
+                    "location",
+                    "capture"
+                ],
+                "title": "CaptureConversionResource"
+            },
+            "CaptureCountsResource": {
+                "type": "object",
+                "properties": {
+                    "inbox": {
+                        "type": "integer"
+                    },
+                    "processed": {
+                        "type": "integer"
+                    },
+                    "archived": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "inbox",
+                    "processed",
+                    "archived"
+                ],
+                "title": "CaptureCountsResource"
+            },
+            "CaptureDestinationBoardResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "kanban | scrum"
+                    },
+                    "columns": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/CaptureDestinationOptionResource"
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "type",
+                    "columns"
+                ],
+                "title": "CaptureDestinationBoardResource"
+            },
+            "CaptureDestinationOptionResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "icon"
+                ],
+                "title": "CaptureDestinationOptionResource"
+            },
+            "CaptureDestinationProjectResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "key": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "can_create_pages": {
+                        "type": "boolean"
+                    },
+                    "boards": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/CaptureDestinationBoardResource"
+                        }
+                    },
+                    "task_lists": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/CaptureDestinationOptionResource"
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "key",
+                    "icon",
+                    "color",
+                    "can_create_pages",
+                    "boards",
+                    "task_lists"
+                ],
+                "title": "CaptureDestinationProjectResource"
+            },
+            "CaptureDestinationResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "projects": {
+                        "type": "array",
+                        "description": "pages, issues (boards) and tasks (task lists) go into projects",
+                        "items": {
+                            "$ref": "#/components/schemas/CaptureDestinationProjectResource"
+                        }
+                    },
+                    "bookmarks": {
+                        "type": "array",
+                        "description": "bookmark destination_id",
+                        "items": {
+                            "$ref": "#/components/schemas/CaptureDestinationOptionResource"
+                        }
+                    },
+                    "snippet_collections": {
+                        "type": "array",
+                        "description": "snippet destination_id",
+                        "items": {
+                            "$ref": "#/components/schemas/CaptureDestinationOptionResource"
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "projects",
+                    "bookmarks",
+                    "snippet_collections"
+                ],
+                "title": "CaptureDestinationResource"
+            },
+            "CapturePreviewResource": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string"
+                    },
+                    "fields": {
+                        "type": "object"
+                    }
+                },
+                "required": [
+                    "type",
+                    "fields"
+                ],
+                "title": "CapturePreviewResource"
+            },
+            "CaptureResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "the uuid"
+                    },
+                    "text": {
+                        "type": "string"
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "intended_type": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "issue | task | page | bookmark | snippet | null: what the user meant it to become"
+                    },
+                    "source": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "where it came from (\"Brainitive Desktop\", \"Browser extension\", \u2026)"
+                    },
+                    "state": {
+                        "type": "string",
+                        "description": "inbox | processed | archived",
+                        "enum": [
+                            "archived",
+                            "processed",
+                            "inbox"
+                        ]
+                    },
+                    "captured_at": {
+                        "type": "string"
+                    },
+                    "processed_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "archived_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "target": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "description": "issue | task | page | bookmark | snippet"
+                            },
+                            "title": {
+                                "type": "string"
+                            },
+                            "breadcrumb": {
+                                "type": "string"
+                            },
+                            "url": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "description": "null when the user can't open it any more (or it was deleted)"
+                            },
+                            "available": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "type",
+                            "title",
+                            "breadcrumb",
+                            "url",
+                            "available"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "text",
+                    "url",
+                    "intended_type",
+                    "source",
+                    "state",
+                    "captured_at",
+                    "processed_at",
+                    "archived_at",
+                    "updated_at",
+                    "target"
+                ],
+                "title": "CaptureResource"
+            },
             "ConnectedAppResource": {
                 "type": "object",
                 "properties": {
@@ -3959,6 +4945,41 @@
                     "expires_at"
                 ],
                 "title": "ConnectedAppResource"
+            },
+            "ConvertCaptureRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/captures/{id}/convert`: the web's convert dialog. `fields` are the destination type's\nfields (start from `GET /captures/{id}/preview?type=`), validated by ContentCapture::rules().",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "description": "issue | task | page | bookmark | snippet",
+                        "enum": [
+                            "issue",
+                            "task",
+                            "page",
+                            "bookmark",
+                            "snippet"
+                        ]
+                    },
+                    "destination_id": {
+                        "type": "integer",
+                        "description": "a board (issue), task list (task), project (page), bookmark group (bookmark) or snippet collection (snippet) id from GET /capture-destinations"
+                    },
+                    "fields": {
+                        "type": "array",
+                        "description": "the type's fields, e.g. {title, description} for an issue",
+                        "items": {
+                            "type": "string"
+                        },
+                        "minItems": 1
+                    }
+                },
+                "required": [
+                    "type",
+                    "destination_id",
+                    "fields"
+                ],
+                "title": "ConvertCaptureRequest"
             },
             "DataExportResource": {
                 "type": "object",
@@ -5979,6 +7000,57 @@
                 ],
                 "title": "StartDeviceAuthRequest"
             },
+            "StoreCaptureRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/captures`: what a person types into a capture (Capture::rules(), as the web and the extension).",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "maxLength": 20000
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "maxLength": 2048
+                    },
+                    "intended_type": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "issue",
+                            "task",
+                            "page",
+                            "bookmark",
+                            "snippet",
+                            null
+                        ]
+                    },
+                    "source": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "a uuid: a retry with the same one answers 200 with the capture the first call created"
+                    }
+                },
+                "required": [
+                    "text"
+                ],
+                "title": "StoreCaptureRequest"
+            },
             "StoreInvitationRequest": {
                 "type": "object",
                 "description": "`POST /api/v1/workspaces/{slug}/invitations` (BRAI-390): the web's invite rules. Authorized\nbefore validation: outside the workspace \u2192 404, members who aren't admins \u2192 403 (nobody else\nlearns who is a member through \"already a member\").",
@@ -6725,6 +7797,46 @@
                     "avatar"
                 ],
                 "title": "UpdateAvatarRequest"
+            },
+            "UpdateCaptureRequest": {
+                "type": "object",
+                "description": "`PATCH /api/v1/captures/{id}`: Capture::rules(), but only the sent fields change.",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "maxLength": 20000
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uri",
+                        "maxLength": 2048
+                    },
+                    "intended_type": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "issue",
+                            "task",
+                            "page",
+                            "bookmark",
+                            "snippet",
+                            null
+                        ]
+                    },
+                    "source": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    }
+                },
+                "title": "UpdateCaptureRequest"
             },
             "UpdateDeviceRequest": {
                 "type": "object",

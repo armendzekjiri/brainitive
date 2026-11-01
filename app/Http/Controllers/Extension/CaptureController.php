@@ -11,6 +11,7 @@ use App\Models\Item;
 use App\Models\Project;
 use App\Models\SnippetCollection;
 use App\Models\TaskList;
+use App\Support\Captures\CaptureInbox;
 use App\Support\Captures\ContentCapture;
 use App\Support\Mcp\ResourceLocator;
 use App\Support\Uploads;
@@ -116,10 +117,7 @@ class CaptureController extends Controller
     {
         $validated = $request->validate(Capture::rules());
 
-        $capture = Capture::create([
-            'user_id' => $request->user()->id,
-            'source' => ($validated['source'] ?? null) ?: 'Browser extension',
-        ] + $validated);
+        $capture = CaptureInbox::create($request->user(), $validated, 'Browser extension');
 
         return response()->json([
             'created' => true,

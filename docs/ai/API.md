@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -411,6 +411,35 @@ position, url, created_at, updated_at}`.
 - Renaming, describing, deleting lists and watching: web only for now (`can.update` / `can.delete` say whether
   to offer "Open in browser"). Duplicating a task: web only.
 
+### Captures
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/captures?state=inbox\|processed\|archived&q=` | app + verified | The private capture inbox, newest first (`captured_at`), cursor-paginated, `updated_since`; `q` searches text, URL and source | Full | BRAI-217 | ready (v1.49.0, BRAI-398) |
+| `GET /api/v1/captures/counts` | app + verified | Inbox badge → `{data: {inbox, processed, archived}}` | Full | BRAI-217 | ready (v1.49.0, BRAI-398) |
+| `POST /api/v1/captures` | app + verified, 60/min | Global hotkey quick capture / share sheet: `{text, url?, intended_type? (issue\|task\|page\|bookmark\|snippet), source?, request_id?}` → 201 `{data: capture}`; `source` defaults to the app's name ("Brainitive Desktop") | Full (+ share sheet) | BRAI-217, BRAI-258 | ready (v1.49.0, BRAI-398) |
+| `GET /api/v1/captures/{id}` | app + verified | One capture (`id` = uuid) | Full | BRAI-217 | ready (v1.49.0, BRAI-398) |
+| `PATCH /api/v1/captures/{id}` | app + verified | Edit `{text?, url?, intended_type?, source?}` → `{data: capture}` | Full | BRAI-217 | ready (v1.49.0, BRAI-398) |
+| `POST /api/v1/captures/{id}/archive` · `…/restore` | app + verified | Out of the inbox / back (to processed when it was converted) → `{data: capture}` | Full | BRAI-217 | ready (v1.49.0, BRAI-398) |
+| `DELETE /api/v1/captures/{id}` | app + verified | Delete for good → 204; only archived captures (422 `capture` otherwise), as the web | Full | BRAI-217 | ready (v1.49.0, BRAI-398) |
+| `GET /api/v1/captures/{id}/preview?type=` | app + verified | The convert dialog: the fields the capture becomes for a type → `{data: {type, fields}}` (issue `{title, description}`, task `{title, notes}`, page `{title, markdown}`, bookmark `{type, title, url, content}`, snippet `{title, content, language, description}`) | Full | BRAI-217 | ready (v1.49.0, BRAI-398) |
+| `POST /api/v1/captures/{id}/convert` | app + verified, 60/min | `{type, destination_id, fields}` → 201 `{data: {replayed: false, location, capture}}`; converted before → 200 `replayed: true` (nothing new). Destination rights → 403; archived / invalid fields → 422; 402 `limit_reached` (issues, docs) | Full | BRAI-217 | ready (v1.49.0, BRAI-398) |
+| `GET /api/v1/capture-destinations` | app + verified | Where the user can save into, per workspace: `{data: [{id, name, slug, projects: [{id, name, key, icon, color, can_create_pages, boards: [{id, name, type, columns: [{id, name}]}], task_lists: [{id, name}]}], bookmarks: [{id, name, icon}], snippet_collections: [{id, name}]}]}` | Full | BRAI-217 | ready (v1.49.0, BRAI-398) |
+
+Capture: `{id (uuid), text, url, intended_type, source, state: inbox|processed|archived, captured_at, processed_at,
+archived_at, updated_at, target: {type, title, breadcrumb, url, available}|null}`.
+- Same code as the web inbox, the extension's and the MCP's "save to inbox" (`App\Support\Captures\CaptureInbox`,
+  `CaptureConversion`, `CaptureFields`, `CaptureDestinations`). Captures are private: anybody else's id is a 404,
+  checked before validation.
+- `destination_id` per type: issue → a board id, task → a task list id, page → a project id (`can_create_pages`),
+  bookmark → a bookmark group id, snippet → a snippet collection id — all from `GET /capture-destinations`.
+  Destinations list only what the user may write to; the convert checks again (403).
+- `target.url` / `available`: the content's current place while the user can still open it; deleted or out of
+  reach → the title / breadcrumb seen at conversion and `url: null`, `available: false`.
+- `location` of the convert answer = where the new content is (`{type, title, workspace, project, breadcrumb,
+  url}`; `type` as the web names it: `board item`, `task list`, `page`, `bookmark`, `snippet collection`).
+- Files / images on a capture: not in v1 (the web's captures are text + a link). The share sheet sends a shared
+  image's link or text; uploading files to a capture is later.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -532,4 +561,27 @@ Built in: BRAI-394 (desktop) · Mobile scope: Request export (account deletion w
 - DELETE /api/v1/task-lists/{id}/items/{task} → 204 · POST /api/v1/task-lists/{id}/items/reorder {ids}
 Scope: app · OpenAPI: docs/api/openapi.json#/Task lists · Registry: docs/ai/API.md#task-lists
 Built in: BRAI-397 (desktop) · Mobile scope: Full (renaming / deleting lists: web only for now)
+```
+
+**BRAI-217** (captures inbox)
+```
+## API (ready)
+- GET /api/v1/captures?state=inbox|processed|archived&q= — the private inbox, newest first, cursor-paginated
+- GET /api/v1/captures/counts — inbox / processed / archived counts (badge)
+- POST /api/v1/captures — save an idea {text, url?, intended_type?, source?, request_id?}
+- GET|PATCH /api/v1/captures/{uuid} · POST …/archive · POST …/restore · DELETE (archived only) → 204
+- GET /api/v1/captures/{uuid}/preview?type=issue|task|page|bookmark|snippet — the fields to edit before converting
+- POST /api/v1/captures/{uuid}/convert {type, destination_id, fields} — into an issue, task, doc, bookmark or snippet (idempotent; 402 for issues / docs at the storage limit)
+- GET /api/v1/capture-destinations — boards (+ columns), task lists, projects, bookmark groups, snippet collections the user can write to
+Scope: app · OpenAPI: docs/api/openapi.json#/Captures · Registry: docs/ai/API.md#captures
+Built in: BRAI-398 (desktop) · Mobile scope: Full
+```
+
+**BRAI-258** (share sheet → capture)
+```
+## API (ready)
+- POST /api/v1/captures — {text, url?, source?, request_id?}: the shared text / link lands in the private inbox (source defaults to "Brainitive Mobile"); send a request_id so a retried share never saves twice
+- GET /api/v1/capture-destinations + POST /api/v1/captures/{uuid}/convert — to file it straight into a board, list, doc, bookmark group or snippet collection
+Scope: app · OpenAPI: docs/api/openapi.json#/Captures · Registry: docs/ai/API.md#captures
+Built in: BRAI-398 (desktop) · Mobile scope: Full (files / images on a capture: later)
 ```
