@@ -26,7 +26,10 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
 });
 ```
 - Signed-in endpoints go inside the `auth:app` group; public ones (like `GET /instance`) outside it,
-  and they are documented as `security: []` automatically.
+  and they are documented as `security: []` automatically. Workspace content goes in the inner
+  `verified` group (the web needs a verified address for all of it).
+- No `->where()` / `whereUuid()` on POST / PUT / DELETE routes: web.php's GET fallback route turns a
+  constraint mismatch into a 405. Check the id in the controller (`abort_unless(Str::isUuid($id), 404)`).
 - Auth-like public writes add `throttle:app-auth`.
 - Get the device of the call with `AppTokens::currentDevice($request)`.
 
@@ -89,8 +92,23 @@ the web request's rules where the field is the same. Foreign ids are validated a
 
 ## 5. Lists: cursor pagination + `updated_since`
 `?cursor=&limit=` (default 50, max 100) → `{data: [...], next_cursor}`; `updated_since` (ISO-8601)
-for sync. Order by a unique key (`updated_at, id`) so pages are stable. Small bounded lists (like
-devices, ≤ `max_devices`) may skip pagination; say so in `API.md`.
+for sync. Order by a unique key (`name, id` or `updated_at, id`) so pages are stable. Small bounded
+lists (like devices, ≤ `max_devices`) may skip pagination; say so in `API.md`.
+
+```php
+public function index(ListRequest $request, Workspace $workspace): WidgetCollection   // extends CursorCollection
+{
+    $this->visibleWorkspace($request, $workspace);                                     // ResolvesVisible → 404
+    $page = $workspace->widgets()
+        ->when($request->updatedSince(), fn ($q, $since) => $q->where('updated_at', '>=', $since))
+        ->orderBy('name')->orderBy('id')
+        ->cursorPaginate($request->limit(), ['*'], 'cursor', $request->cursor());
+
+    return new WidgetCollection($page);   // class WidgetCollection extends CursorCollection { public $collects = WidgetResource::class; }
+}
+```
+Extra filters: extend `ListRequest` and merge `parent::rules()` (drop `updated_since` with
+`Arr::except` when it can't mean anything, e.g. memberships).
 
 ## 6. Tests — `tests/Feature/AppApi/WidgetsTest.php`
 Use `RefreshDatabase` + `Tests\Feature\AppApi\Concerns\ActsAsAppClient`. At least:

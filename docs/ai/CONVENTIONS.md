@@ -161,8 +161,12 @@ Full conventions and the endpoint registry: [`API.md`](./API.md); recipe:
 - Thin controllers in `App\Http\Controllers\AppApi` → the web's Support services and policies. Form
   Request in, API Resource out with **explicit fields**; dates ISO-8601 UTC.
 - Responses wrapped `{data: ...}` (lists `{data: [...], next_cursor}`, cursor pagination, max 100,
-  `updated_since`); **DELETE → 204**. Only the token responses of `/auth/exchange` and `/auth/refresh`
-  are unwrapped.
+  `updated_since`: `ListRequest` + a `CursorCollection` subclass); **DELETE → 204**. Only the token
+  responses of `/auth/exchange` and `/auth/refresh` are unwrapped.
+- Workspace / project resolution through `ResolvesVisible` (404 for what the user can't open); a Form
+  Request that could leak via 422 does that 404 check in `authorize()`. Workspace content routes go in
+  the `verified` group. No route `where()` on non-GET routes (web.php's GET fallback turns a mismatch
+  into 405) — reject malformed ids in the controller.
 - Errors only through the central renderer (`AppApiErrors`): `{message, code, errors?}`. 404 instead of
   403 when existence must stay secret. A plan limit is 402 `limit_reached` — declare
   `@throws LimitReached` on the controller method so the spec shows it.

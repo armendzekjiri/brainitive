@@ -202,3 +202,13 @@ settings stay web only.
 `e2e/tests/app-api-workspaces.spec.ts` (one journey through the API with a seeded app token:
 workspaces → projects → create project → it appears on the web; pin via API → pin in the web sidebar;
 notification read via API → web bell). Uses `POST /profile/app-devices/e2e-create` for the token.
+
+### Phase 03 — result
+All seven tickets merged into `release/v1.49.0` (`feat/app-api-workspaces`, `-projects`, `-members`,
+`-navigation`, `-search`, `-notifications`, `-connected-apps`, plus `feat/app-api-e2e` with
+`e2e/tests/app-api-workspaces.spec.ts`). No migrations. Deviations from the plan: the workspace
+content routes need a verified address (as the web); `POST /workspaces` moved to the Workspaces tag;
+`GET /workspaces/{slug}/project-templates` added for the template picker; the navigation lists no
+docs (`GET /projects/{id}` has the tree); search pages are numbered (`next_cursor` = page). The
+`## API (ready)` texts for BRAI-179, 180, 181, 182, 183, 184 (+219), 185 (+256) and 262 are in
+`docs/ai/API.md` → "Mobile card texts", for the lead to paste onto the Mobile app cards.
