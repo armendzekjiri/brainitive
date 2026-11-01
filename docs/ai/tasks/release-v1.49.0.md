@@ -566,3 +566,24 @@ Deviations from the plan / cards:
   `POST /feedback-posts/{id}/moderate`; client portal read-only.
 - Insights: one `GET /workspaces/{slug}/insights/{tab}` for the five tabs; workload is per project (as the web), not per
   workspace; "team time" = the Insights team tab — the billing time overview (amounts) and all exports stay web only.
+
+## Fix: MCP `update-page` through `PageWrites` (`fix/mcp-update-page-safe`)
+**Problem:** `update-page` wrote Markdown straight into a published page's `content` (`discardDraft` + `update`): it threw
+away an unpublished draft and ignored live (Yjs) editors; no revision check. The App API (BRAI-411) already writes safely.
+**Plan:**
+- `get-page` returns `status`, `edit_revision`, `has_unpublished_changes`, `draft_markdown` (editors, when a draft exists)
+  and `being_edited`. `markdown` stays the published text (unchanged for readers / today's agents).
+- `update-page` takes optional `expected_revision`; stale → tool error with the current revision, nothing changed (checked
+  before a move and again on the locked row). Without it the tool uses the revision it just read, so a save landing in
+  between is never overwritten (re-read and retried, at most 3 times).
+- Body writes only through `PageWrites`: never-published → `saveDraft` (as the web); published, no draft, nobody editing,
+  no review switch → `publishChanges` (new version "Edited via MCP", watchers notified); published with a draft, live
+  editors or "review required" → `saveDraft` into the draft, result says "publish it in the app". Replacing an existing
+  draft needs `expected_revision` (else refused: the agent must have read `draft_markdown`); `append` adds to the draft.
+- Live signal: `PageCollab` had none (its state only says a document existed). New `PageCollab::editingNow`: a presence
+  heartbeat with `editing` (browsers, every 20 s, 45 s window) or a realtime state store in the last 45 s (typing,
+  also native clients). Best effort; the revision check is the guarantee.
+- Title-only: renames as before (published: version recorded) but keeps the draft (its title follows); "review
+  required" waits in the draft like the web's rename.
+- Tests `tests/Feature/Mcp/UpdatePageToolTest.php`; docs: KNOWLEDGE, CONVENTIONS, server instructions. No MCP e2e
+  pattern exists (MCP is covered by PHPUnit only), so no e2e.
