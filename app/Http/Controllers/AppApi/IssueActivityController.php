@@ -20,6 +20,8 @@ use App\Models\Comment;
 use App\Support\Boards\IssueMarkdown;
 use App\Support\Boards\ItemAttachments;
 use App\Support\Boards\ItemComments;
+use App\Support\Entitlements\LimitReached;
+use App\Support\Files\FileRoom;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -151,6 +153,7 @@ class IssueActivityController extends Controller
      * call stored.
      *
      * @throws NotFoundHttpException the issue doesn't exist or the user can't open it (404)
+     * @throws LimitReached the workspace's file storage is full (402 limit_reached)
      */
     public function storeAttachment(StoreAttachmentRequest $request): JsonResponse
     {
@@ -159,7 +162,12 @@ class IssueActivityController extends Controller
         $payload = ['item' => $item->id, 'name' => $file->getClientOriginalName(), 'size' => $file->getSize(), 'hash' => hash_file('sha256', $file->getRealPath())];
 
         [$attachment, $replayed] = $this->createOnce($request, 'items.attachments.store', Attachment::class, $payload,
-            fn () => ItemAttachments::add($item, $request->user(), $file));
+            function () use ($item, $request, $file) {
+                // the plan's file storage, as the web's `file.room` (BRAI-416); a replay stores nothing
+                FileRoom::ensure($item->board->project->workspace, $file);
+
+                return ItemAttachments::add($item, $request->user(), $file);
+            });
 
         $attachment->load('user');
         if ($replayed) {

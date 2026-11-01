@@ -19,6 +19,8 @@ use App\Models\Bookmark;
 use App\Models\BookmarkItem;
 use App\Models\Workspace;
 use App\Support\Bookmarks\Bookmarks;
+use App\Support\Entitlements\LimitReached;
+use App\Support\Files\FileRoom;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -157,6 +159,7 @@ class BookmarkController extends Controller
      * answers 200 with the item the first call created.
      *
      * @throws NotFoundHttpException the group doesn't exist or the user can't see it (404)
+     * @throws LimitReached a file and the workspace's file storage is full (402 limit_reached)
      */
     public function storeItem(StoreBookmarkItemRequest $request): JsonResponse
     {
@@ -166,7 +169,12 @@ class BookmarkController extends Controller
         $payload = ['group' => $group->id, 'file' => $file ? [$file->getClientOriginalName(), $file->getSize(), hash_file('sha256', $file->getRealPath())] : null] + $data;
 
         [$item, $replayed] = $this->createOnce($request, 'bookmarks.items.store', BookmarkItem::class, $payload,
-            fn () => Bookmarks::createItem($group, $request->user(), $data, $file));
+            function () use ($group, $request, $data, $file) {
+                // the plan's file storage, as the web's `file.room` (BRAI-416); a replay stores nothing
+                FileRoom::ensure($group->workspace, $file);
+
+                return Bookmarks::createItem($group, $request->user(), $data, $file);
+            });
 
         if ($replayed) {
             return (new BookmarkItemResource($item))->response();

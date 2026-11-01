@@ -32,6 +32,7 @@ use App\Http\Controllers\AppApi\SprintController;
 use App\Http\Controllers\AppApi\TaskListController;
 use App\Http\Controllers\AppApi\TimerController;
 use App\Http\Controllers\AppApi\TodayController;
+use App\Http\Controllers\AppApi\UploadController;
 use App\Http\Controllers\AppApi\WhiteboardController;
 use App\Http\Controllers\AppApi\WorkLogController;
 use App\Http\Controllers\AppApi\WorkspaceController;
@@ -286,6 +287,9 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::get('plans/{plan}', [PlanController::class, 'show'])->whereNumber('plan')->name('plans.show');
         Route::get('projects/{project}/releases', [ReleaseController::class, 'index'])->whereNumber('project')->name('releases.index');
         Route::get('releases/{release}', [ReleaseController::class, 'show'])->whereNumber('release')->name('releases.show');
+
+        // ── Files: uploads for rich text (EditorUploads + FileRoom: the web editor's rules and storage limit) ──
+        Route::post('uploads', [UploadController::class, 'store'])->middleware('throttle:30,1,app.uploads.store')->name('uploads.store');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');

@@ -95,6 +95,9 @@
         },
         {
             "name": "Releases"
+        },
+        {
+            "name": "Files"
         }
     ],
     "security": [
@@ -5383,6 +5386,9 @@
                     "404": {
                         "$ref": "#/components/responses/NotFoundHttpException"
                     },
+                    "402": {
+                        "$ref": "#/components/responses/LimitReached"
+                    },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
                     },
@@ -7534,6 +7540,9 @@
                     },
                     "404": {
                         "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "402": {
+                        "$ref": "#/components/responses/LimitReached"
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
@@ -10128,6 +10137,61 @@
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/uploads": {
+            "post": {
+                "operationId": "app.v1.uploads.store",
+                "description": "Multipart: `file` + `workspace` (slug). Answers 201 with the file's public `url` and a `markdown` snippet\n(`![name](url)` / `[name](url)`) to insert into the Markdown you send. The file is stored on the workspace's\nstorage like the web editor's uploads; the same rules: images jpeg / png / gif / webp \u2264 10 MB (no SVG),\ndocuments pdf / office / txt / csv / zip / rar \u2264 20 MB, never stored under the client's name.",
+                "summary": "Upload an image or document to use in a doc, an issue description or a comment",
+                "tags": [
+                    "Files"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreUploadRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`UploadResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/UploadResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "402": {
+                        "$ref": "#/components/responses/LimitReached"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
                     },
                     "429": {
                         "$ref": "#/components/responses/RateLimited"
@@ -18541,6 +18605,28 @@
                 ],
                 "title": "StoreTaskRequest"
             },
+            "StoreUploadRequest": {
+                "type": "object",
+                "description": "`POST /uploads`: an image or document for rich text, the web editor's rules (EditorUploads): images\njpeg / png / gif / webp \u2264 10 MB, documents pdf / office / txt / csv / zip / rar \u2264 20 MB. Authorized before\nvalidation: a workspace the user isn't in is a 404.",
+                "properties": {
+                    "workspace": {
+                        "type": "string",
+                        "description": "the workspace (slug) whose storage the file counts against: the one of the doc / issue it goes into",
+                        "maxLength": 255
+                    },
+                    "file": {
+                        "type": "string",
+                        "format": "binary",
+                        "contentMediaType": "application/octet-stream",
+                        "description": "multipart: an image (jpeg, png, gif, webp \u2264 10 MB) or a document (pdf, doc(x), xls(x), ppt(x), txt, csv, zip, rar \u2264 20 MB)"
+                    }
+                },
+                "required": [
+                    "workspace",
+                    "file"
+                ],
+                "title": "StoreUploadRequest"
+            },
             "StoreWorkLogRequest": {
                 "type": "object",
                 "description": "`POST /api/v1/work-logs`: log time on an issue or a project.",
@@ -20032,6 +20118,48 @@
                     }
                 },
                 "title": "UpdateWorkLogRequest"
+            },
+            "UploadResource": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "public, no token needed (like issue attachments)"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "integer",
+                        "description": "bytes"
+                    },
+                    "mime_type": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "image",
+                            "file"
+                        ]
+                    },
+                    "markdown": {
+                        "type": "string",
+                        "description": "`![name](url)` for images, `[name](url)` for files"
+                    }
+                },
+                "required": [
+                    "url",
+                    "name",
+                    "size",
+                    "mime_type",
+                    "kind",
+                    "markdown"
+                ],
+                "title": "UploadResource"
             },
             "VelocityResource": {
                 "type": "object",

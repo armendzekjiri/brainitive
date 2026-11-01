@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -469,7 +469,7 @@ share_url (public only), position, url, created_at, updated_at}`.
 | `GET /api/v1/bookmarks/{id}` | app + verified | One group + `can: {update, delete}`. A private group of someone else, or any group of another workspace → 404 | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
 | `PATCH /api/v1/bookmarks/{id}` · `DELETE …` | app + verified | Change name / description / emoji / visibility → `{data: group detail}` (creator, editor collaborators, admins) / delete with items + files → 204 (creator, admins) | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
 | `GET /api/v1/bookmarks/{id}/items?type=link\|todo\|note\|file` | app + verified | The group's items in the web's order, cursor-paginated, `updated_since` | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
-| `POST /api/v1/bookmarks/{id}/items` | app + verified | `{type: link\|todo\|note\|file, title?, url? (http/https), content?, request_id?}`; a file as multipart `file` (≤ 200 MB, the web's types; scripts / executables → 422) → 201 `{data: item}`. Links get title / favicon / description fetched in the background | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
+| `POST /api/v1/bookmarks/{id}/items` | app + verified | `{type: link\|todo\|note\|file, title?, url? (http/https), content?, request_id?}`; a file as multipart `file` (≤ 200 MB, the web's types; scripts / executables → 422; 402 `limit_reached` when the file storage is full, since BRAI-416) → 201 `{data: item}`. Links get title / favicon / description fetched in the background | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
 | `PATCH /api/v1/bookmarks/{id}/items/{item}` · `DELETE …` | app + verified | `{title?, url?, content?, is_completed?}` → `{data: item}` / delete (and its file) → 204. Needs `can.update` (403) | Full | BRAI-218 | ready (v1.49.0, BRAI-399) |
 
 Group: `{id, uuid, slug, name, description, icon ('' = none), visibility, counts: {links, todos, todos_completed, notes,
@@ -589,7 +589,7 @@ commit_count, pull_requests, deployments, merge_column}, can: {update, delete, c
 | `GET /api/v1/items/{id}/watchers` | app + verified | `{data: {item_id, watching, watchers: [{id, name, avatar_url}]}}` | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
 | `POST /api/v1/items/{id}/watch` · `DELETE …/watch` | app + verified | Watch / stop watching yourself (anybody who can open the issue) → 200 the watchers (a part of the issue, not 204). Adding / removing other people: web only | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
 | `GET /api/v1/items/{id}/attachments` | app + verified | Files, newest first, cursor-paginated, `updated_since` | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
-| `POST /api/v1/items/{id}/attachments` | app + verified, 30/min | Multipart `file` (≤ 10 MB, as the issue dialog), `request_id?` → 201 `{data: attachment}`. 403 without `can.update` | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
+| `POST /api/v1/items/{id}/attachments` | app + verified, 30/min | Multipart `file` (≤ 10 MB, as the issue dialog), `request_id?` → 201 `{data: attachment}`. 403 without `can.update`, 402 `limit_reached` when the file storage is full (since BRAI-416) | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
 | `DELETE /api/v1/items/{id}/attachments/{attachment}` | app + verified | Remove a file → 204. 403 without `can.update`; a file of another issue → 404 | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
 | `GET /api/v1/items/{id}/activity` | app + verified | The History tab, newest first, cursor-paginated (no `updated_since`: entries never change) | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
 
@@ -602,7 +602,7 @@ e.g. `created`, `updated`, `moved`, `assigned`, `commented`, `labels_changed`, `
   live issue views) and `App\Support\Boards\ItemAttachments` (shared with `BoardController`). People never carry an email address.
 - `url` of a file is the web's public storage link (as the issue dialog's); it needs no token.
 - **Editing / deleting comments: not built** — the web can't either (planned on the card as "own comments"; it comes with the web
-  feature). Uploads go straight to the issue: the shared uploads API (BRAI files card) isn't there yet.
+  feature). Files go straight to the issue; an image / file *inside* a comment or description: `POST /uploads` (Files) + its `markdown`.
 
 #### Subtasks and linked issues (same `Issues` tag)
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
@@ -739,6 +739,24 @@ suffix, outdated, resolved, resolved_at, resolved_by_name, comments: [{uuid, aut
 - What the web's releases pages show members (`ReleasePolicy`: everybody who can open the project). Clients of the client portal
   are not project members and have no app sign-in into a project; they only ever see published notes on the public page
   (`public_url`). Planning, shipping, writing / generating / publishing notes: web only (`can.manage`).
+
+### Files
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `POST /api/v1/uploads` | app + verified, 30/min | Multipart `file` + `workspace` (slug): an image (jpeg, png, gif, webp ≤ 10 MB) or document (pdf, doc(x), xls(x), ppt(x), txt, csv, zip, rar ≤ 20 MB) for rich text → 201 `{data: {url, name, size, mime_type, kind: image\|file, markdown}}`. Not a member → 404; SVG / scripts / executables / other types → 422; storage full → 402 `limit_reached` | Full | BRAI-267 | ready (v1.49.0, BRAI-416) |
+
+- The web editor's upload (`Support\Files\EditorUploads`, shared with `FileController` → `/upload/image`, `/upload/document`): stored on
+  the public disk under `uploads/images|documents/<uuid>.<ext>` (`Uploads`: never the client's name, the extension from the content
+  for images, active types never kept). Put `markdown` (`![name](url)` / `[name](url)`) into the Markdown of a doc, an issue
+  description or a comment; the Markdown converter keeps images both ways (http(s) or site paths only — `data:` / `javascript:` are
+  dropped).
+- **Storage limit:** `Support\Files\FileRoom` (= the web's `file.room`) → 402 `limit_reached` (`limit.kind: files`); since BRAI-416 also
+  on `POST /items/{id}/attachments` and bookmark files (they skipped it before). Checked inside the idempotent write: a replayed
+  `request_id` stores nothing and is never refused.
+- **Files that belong to something have their own upload:** issue attachments (`POST /items/{id}/attachments`), bookmark files
+  (`POST /bookmarks/{id}/items`). There is no "upload first, attach by id" step and no file registry: every file's `url` is its
+  public storage address (no token, as on the web), so there is no `GET /files/{id}`, no signed URL and no server-side thumbnail.
+  Files on captures / tickets: not in the web either (later).
 
 ## Mobile card texts (`## API (ready)`)
 
@@ -1131,4 +1149,15 @@ Built in: BRAI-415 (desktop) · Mobile scope: Read-only (linking rows, creating 
 - GET /api/v1/releases/{id} — description, notes (Markdown + html; working copy and published), issues with state, public page link
 Scope: app · OpenAPI: docs/api/openapi.json#/Releases · Registry: docs/ai/API.md#releases
 Built in: BRAI-415 (desktop) · Mobile scope: Read-only (planning, shipping, notes, publishing: web only)
+```
+
+**BRAI-267** (files, downloads, uploads, sharing and mobile attachments)
+```
+## API (ready)
+- POST /api/v1/uploads (multipart file + workspace) — camera image / file for a doc, issue description or comment: public url + a markdown snippet to insert (images ≤ 10 MB, documents ≤ 20 MB; 402 when the storage is full)
+- POST /api/v1/items/{id}/attachments (multipart, ≤ 10 MB) · GET /api/v1/items/{id}/attachments — files on an issue (402 when the storage is full)
+- POST /api/v1/bookmarks/{id}/items {type: file} (multipart) — files in a bookmark group
+- Downloads: every file's url is its public address (no token); no thumbnails — use the image itself
+Scope: app · OpenAPI: docs/api/openapi.json#/Files · Registry: docs/ai/API.md#files
+Built in: BRAI-416 (desktop) · Mobile scope: Full (resumable uploads, files on captures / tickets: later)
 ```
