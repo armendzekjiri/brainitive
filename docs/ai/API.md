@@ -891,6 +891,26 @@ utm: {utm_source, …}|null, referrer, consent_at, consent_text, assignee: {id, 
   clients, rates) and every CSV / Excel export stay on the web (money never goes to the apps, BRAI-242 / 244 / 245).
 - Web only: writing status updates (and the AI draft), planning workload (capacity, overrides, allocations), exports.
 
+### Web only (no App API in v1, BRAI-424)
+These mobile cards get **no native API in v1**: the apps show a short note and open the web page in the browser (desktop: the
+webview). Their `## API: web only — open in browser` texts are under "Mobile card texts".
+
+| Card | Feature | Why web only | What the app does |
+|---|---|---|---|
+| BRAI-195 | Recurring issues, issue templates | Setup UI on the web | Created issues are ordinary issues (Issues) |
+| BRAI-207, 208, 210 | Whiteboard drawing, live cursors, stickies → issues | Excalidraw editor | View only: `GET /whiteboards/{uuid}` |
+| BRAI-223, 224 | Connecting Google / Microsoft / CalDAV / ICS calendars | OAuth and app passwords stay on the web | Status `GET /calendar/connections`; events through Calendar |
+| BRAI-227 | Booking availability, buffers, rules | Booking page builder | Bookings + share links (Bookings) |
+| BRAI-234 | Helpdesk templates, widget, support page, customer portal | Public-facing setup | Work tickets (Helpdesk) |
+| BRAI-235 | Lead form builder | Builder, publishing, webhooks | Pipeline + analytics (Leads) |
+| BRAI-239 | Share links, embeds, public pages | Public web pages | `public_url` / `url` fields, open in the browser |
+| BRAI-242, 244, 245 | Rates, clients, VAT, billing reports, invoices | Money never goes to the apps | Own time (Time tracking) |
+| BRAI-250, 251 | Automation rule builder, test runner, logs | Admin tooling | — (automation runs on the server) |
+| BRAI-253 | Outgoing webhooks | Secrets and delivery admin | — |
+| BRAI-254, 255 | AI writing, BYO keys, AI meeting notes → issues | Key settings and review flows on the web | Read the results (docs, issues) |
+| BRAI-257 | Extension / CLI / integration entry points | Other clients with their own auth (MCP, CLI, extension) | Deep links = the web URLs of issues, docs, boards |
+| BRAI-260, 261 | Jira / Trello / Notion imports, project export / restore | Long-running admin jobs, file handling | Own data export (`/me/data-export`) |
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -1477,4 +1497,43 @@ Built in: BRAI-423 (desktop) · Mobile scope: Read-only
 - Writing a status update and the AI draft: web only (can_create + url)
 Scope: app · OpenAPI: docs/api/openapi.json#/Insights · Registry: docs/ai/API.md#insights
 Built in: BRAI-423 (desktop) · Mobile scope: Read-only
+```
+
+**BRAI-250** (workflow automation rule builder) · **BRAI-251** (automation test runner, logs and diagnostics)
+```
+## API: web only — open in browser
+Automation rules — triggers, conditions, actions, dry runs, run history and failures — are built and checked on the web (project settings → Automation).
+Their results (moved issues, comments, assignments) reach the apps as ordinary changes and notifications.
+Registry: docs/ai/API.md#web-only-no-app-api-in-v1-brai-424 · Decided in: BRAI-424
+```
+
+**BRAI-253** (workspace outgoing webhooks)
+```
+## API: web only — open in browser
+Webhook endpoints, signing secrets, delivery history, retries and test calls are workspace admin settings on the web.
+Registry: docs/ai/API.md#web-only-no-app-api-in-v1-brai-424 · Decided in: BRAI-424
+```
+
+**BRAI-254** (AI-assisted writing, summaries, bring-your-own-key) · **BRAI-255** (AI meeting notes → issues)
+```
+## API: web only — open in browser
+AI drafting, summaries, the workspace's AI keys and the meeting-notes → issues review run on the web, where the user reviews every proposal before it is saved.
+The apps read what was saved (docs: GET /api/v1/pages/{uuid}, issues: GET /api/v1/items/{id}); a meeting's notes doc: POST /api/v1/meetings/{id}/notes.
+Registry: docs/ai/API.md#web-only-no-app-api-in-v1-brai-424 · Decided in: BRAI-424
+```
+
+**BRAI-257** (extensions, external entry points and app deep links)
+```
+## API: web only — open in browser
+The browser extension, the CLI and MCP clients have their own sign-in and APIs (/api/ext, /api/cli, /mcp) and are not part of the App API.
+Items they create are ordinary issues, captures, bookmarks or docs in the App API; deep links use the web URLs (e.g. /workspaces/{w}/projects/{p}/boards/{b}#item-{id}) — open them in the app when it knows the path, else in the browser. The share sheet: POST /api/v1/captures (BRAI-258).
+Registry: docs/ai/API.md#web-only-no-app-api-in-v1-brai-424 · Decided in: BRAI-424
+```
+
+**BRAI-260** (Jira, Trello and Notion imports) · **BRAI-261** (project export, restore and portable archives)
+```
+## API: web only — open in browser
+Imports (mapping, preview, progress, errors) and project exports / restores are long-running admin jobs on the web.
+The apps offer the user's own data export (POST|GET /api/v1/me/data-export, BRAI-262).
+Registry: docs/ai/API.md#web-only-no-app-api-in-v1-brai-424 · Decided in: BRAI-424
 ```
