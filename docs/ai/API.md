@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -326,6 +326,32 @@ for 24 h and **only in the owner's web session**: open `download_url` in the sys
 is signed in there after the app's sign-in), or in the webview via `POST /auth/web-session` and
 `{url}?to=<urlencoded download_path>`. Account deletion: web only.
 
+### My Work
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/me/work?due=overdue\|today\|upcoming&status=open\|done\|all&updated_since=&cursor=&limit=` | app + verified | Tray "My Work", TV wallboard: issues and list tasks assigned to the user in every project they can open, soonest due first (no due date last), cursor-paginated. `due` takes several, comma separated (`overdue,today`); dates are the user's local day | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
+| `PATCH /api/v1/me/work/{id}` | app + verified | The circle: `{done: bool}` → `{data: work item}`. Issue → its board's first done column (reopen → first open column), watchers notified; task → status (a repeating task with a due date moves to its next date and stays open). 403 without edit rights, 404 not visible / malformed id, 422 board without a done column | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
+| `GET /api/v1/me/my-day` | app + verified | Tray "My Day", TV "Today" panel: today's plan in the user's order → `{data: {date, items: [work item], carry_over_count}}` | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
+| `POST /api/v1/me/my-day/items` | app + verified | `{id: "issue:12"}` → plan it for today (at the end; again = no-op) → the updated My Day. Work the user can't open → 422 `id` | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
+| `PATCH /api/v1/me/my-day/items/{id}` | app + verified | `{done: bool}`, as `PATCH /me/work/{id}` → the updated My Day | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
+| `DELETE /api/v1/me/my-day/items/{id}` | app + verified | Take it off today's plan (the work is untouched) → 200 the updated My Day (a part of the plan, not a resource) | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
+| `POST /api/v1/me/my-day/carry-over` | app + verified | "Bring over": unfinished work of the last 30 days' plans onto today → the updated My Day | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
+
+Work item (one resource for My Work, My Day and `/me/today`): `{id: "issue:<id>"|"task:<id>", type:
+issue|task, key, title, done, status, priority: {id, name, color}|null, due_date (Y-m-d), due_time (H:i),
+project: {id, name, key, color}, workspace: {slug, name}, source: {type: board|list, id, name}, url,
+updated_at}`.
+- Same query as the extension's `ext/v1/my-work` (`App\Support\MyWork\AssignedWork`): assigned to the user,
+  projects they can open (workspace admins: all), open = not `completed_at` and not in a done column /
+  task status not `done`. Tasks have no priority (`null`); `status` is the column name or `To do` / `Done`.
+- `due_date` / `due_time` are the user's wall clock, like on the web; `overdue` / `today` / `upcoming`
+  compare with the user's local today (`effective_timezone` of `GET /me`).
+- Sync: `updated_since` + `status=all` returns what changed, done ones with `done: true`, so the app can
+  drop them. Reassigned work never shows up as a change: reload the full list now and then (e.g. hourly).
+- My Day = the web's My Day (BRAI-74, `MyDayPlan`): one plan per local day; unfinished work of earlier
+  days is **not** moved by itself — `carry_over_count` says how many "Bring over" would add, as the web's
+  button. Work the user can no longer open is left out. Reordering: web only for now.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -396,6 +422,17 @@ Built in: BRAI-393 (desktop) · Mobile scope: Full
 - DELETE /api/v1/me/connected-apps/{id} — revoke (device:<id> or oauth:<client uuid>) → 204
 Scope: app · OpenAPI: docs/api/openapi.json#/Connected apps · Registry: docs/ai/API.md#connected-apps
 Built in: BRAI-394 (desktop) · Mobile scope: View + revoke
+```
+
+**BRAI-215** (My Work + My Day)
+```
+## API (ready)
+- GET /api/v1/me/work?due=overdue|today|upcoming&status=open|done|all&updated_since= — assigned issues + tasks, soonest due first, cursor-paginated
+- PATCH /api/v1/me/work/{id} — {done: true|false}: complete / reopen (issue:<id> or task:<id>), as the web's circle
+- GET /api/v1/me/my-day — today's plan in the user's order + carry_over_count
+- POST /api/v1/me/my-day/items {id} · PATCH /api/v1/me/my-day/items/{id} {done} · DELETE /api/v1/me/my-day/items/{id} · POST /api/v1/me/my-day/carry-over — answer the updated My Day
+Scope: app · OpenAPI: docs/api/openapi.json#/My Work · Registry: docs/ai/API.md#my-work
+Built in: BRAI-396 (desktop) · Mobile scope: Full (reordering My Day: web only for now)
 ```
 
 **BRAI-262** (data export)

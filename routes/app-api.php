@@ -9,6 +9,7 @@ use App\Http\Controllers\AppApi\InvitationController;
 use App\Http\Controllers\AppApi\MeAvatarController;
 use App\Http\Controllers\AppApi\MeController;
 use App\Http\Controllers\AppApi\MemberController;
+use App\Http\Controllers\AppApi\MyWorkController;
 use App\Http\Controllers\AppApi\NavigationController;
 use App\Http\Controllers\AppApi\NotificationController;
 use App\Http\Controllers\AppApi\ProjectController;
@@ -105,6 +106,16 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::post('notifications/{id}/archive', [NotificationController::class, 'archive'])->name('notifications.archive');
         Route::get('me/notification-preferences', [NotificationController::class, 'preferences'])->name('notifications.preferences');
         Route::put('me/notification-preferences', [NotificationController::class, 'updatePreferences'])->name('notifications.preferences.update');
+
+        // ── My Work + My Day (AssignedWork, MyDayPlan, WorkCompletion: shared with the web) ─────────
+        // {id} = issue:<id> | task:<id>, checked in the controller (no route constraint on writes)
+        Route::get('me/work', [MyWorkController::class, 'index'])->name('work.index');
+        Route::patch('me/work/{id}', [MyWorkController::class, 'update'])->name('work.update');
+        Route::get('me/my-day', [MyWorkController::class, 'myDay'])->name('my-day.show');
+        Route::post('me/my-day/items', [MyWorkController::class, 'addToMyDay'])->name('my-day.items.store');
+        Route::patch('me/my-day/items/{id}', [MyWorkController::class, 'updateMyDayItem'])->name('my-day.items.update');
+        Route::delete('me/my-day/items/{id}', [MyWorkController::class, 'removeFromMyDay'])->name('my-day.items.destroy');
+        Route::post('me/my-day/carry-over', [MyWorkController::class, 'carryOver'])->name('my-day.carry-over');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');

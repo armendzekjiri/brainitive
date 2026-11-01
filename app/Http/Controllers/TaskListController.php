@@ -7,6 +7,7 @@ use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\Workspace;
 use App\Rules\ProjectMember;
+use App\Support\Work\WorkCompletion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -174,24 +175,8 @@ class TaskListController extends Controller
             'reminder_minutes' => 'nullable|integer|in:'.implode(',', TaskListItem::REMINDER_OPTIONS),
         ]);
 
-        $isCompleting = isset($validated['status'])
-            && $validated['status'] === 'done'
-            && $item->status !== 'done';
-
-        // Recurring: when completing a recurring item, reset to todo with next due date
-        // Without a due date there is nothing to move: a repeating task then just gets done.
-        if ($isCompleting && $item->recurrence && $item->due_date) {
-            $nextDate = $item->nextDueDate();
-
-            $item->update(array_merge($validated, [
-                'status' => 'todo',
-                'due_date' => $nextDate ? $nextDate->format('Y-m-d') : $item->getRawOriginal('due_date'),
-            ]));
-
-            return back();
-        }
-
-        $item->update($validated);
+        // a repeating task rolls on to its next date (shared with My Work and the App API)
+        WorkCompletion::updateTask($item, $validated);
 
         return back();
     }
