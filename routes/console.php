@@ -11,6 +11,7 @@ use App\Models\InboxNotification;
 use App\Models\LeadFormEvent;
 use App\Models\McpRequest;
 use App\Models\OfflineMutation;
+use App\Models\PendingNotificationEmail;
 use App\Models\PortalLoginToken;
 use App\Models\ProjectExport;
 use App\Models\PushSubscription;
@@ -112,6 +113,8 @@ Schedule::call(fn () => GithubStars::refresh())->hourly()->name('github-stars')-
 Schedule::command('model:prune', ['--model' => [OfflineMutation::class]])->dailyAt('04:35');
 // Web push (BRAI-154): forget subscriptions the push service reported as expired 30 days ago.
 Schedule::command('model:prune', ['--model' => [PushSubscription::class]])->dailyAt('04:40');
+// Notification email digest (BRAI-429): lines no digest could send within 7 days.
+Schedule::command('model:prune', ['--model' => [PendingNotificationEmail::class]])->dailyAt('04:42');
 // Retention (BRAI-156, docs/legal/data-inventory.md): expired password-reset tokens, revoked / expired
 // OAuth tokens and codes (after Passport's 7-day grace), failed queue jobs (which hold payloads) after 30 days.
 Schedule::command('auth:clear-resets')->dailyAt('04:45');

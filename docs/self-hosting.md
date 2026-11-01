@@ -286,6 +286,26 @@ replies back by email in the same thread. Nothing to set up on the server beside
   sender can open at most 10 tickets per hour and helpdesk. *Recently received* in the settings
   shows what came in and why something was ignored or rejected.
 
+## Notification emails (digest)
+
+When several things happen for one person in quick succession (five issues assigned in a row, a
+burst of comments), Brainitive sends **one** email instead of five. Activity emails — assignments,
+mentions, comments, status changes, page updates and sprints — wait
+`NOTIFICATION_EMAIL_DIGEST_SECONDS` (default `60`) from the first one and then go out together, one
+email per person and workspace. A single event arrives as a normal email after that time. The bell,
+browser push and live updates are never delayed, and each person's email settings (Profile →
+Notifications) and access are checked again when the digest is sent.
+
+Account and security mail (verification, password reset, invitations), mail to customers and
+guests (helpdesk replies, portals, bookings, lead confirmations, invoices) and time-critical
+notifications (helpdesk, SLA, leads, bookings, reviews, reminders) are always sent at once.
+
+- **Needs the queue worker** (the `queue` container): the digest is a delayed queue job. With
+  `QUEUE_CONNECTION=sync` there is nothing to wait with, so every email is sent at once as before.
+- **Turn it off** with `NOTIFICATION_EMAIL_DIGEST_SECONDS=0` (one email per notification, at once).
+- Failures are logged and retried 3 times; emails that still couldn't be sent go out with that
+  person's next digest. Waiting emails live in the `pending_notification_emails` table.
+
 ## Legal pages (imprint, privacy, terms)
 
 A self-hosted install never shows Brainitive Cloud's operator data. `/privacy`, `/terms` and `/cookies`

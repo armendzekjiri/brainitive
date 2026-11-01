@@ -6,8 +6,12 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
+use App\Notifications\Contracts\DigestibleMail;
+use App\Support\Notifications\DigestEntry;
+use App\Support\Notifications\MailDigest;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Str;
@@ -21,7 +25,7 @@ use Illuminate\Support\Str;
  * and delivers it on the channels the user picked for the type's category (in-app, push, email).
  * The bell renders these generically from those keys, so a new type needs no frontend change.
  */
-abstract class CatalogNotification extends Notification implements ShouldQueue
+abstract class CatalogNotification extends Notification implements DigestibleMail, ShouldQueue
 {
     use Queueable, RespectsPreferences, SendsWebPush;
 
@@ -81,6 +85,46 @@ abstract class CatalogNotification extends Notification implements ShouldQueue
             ->quote($d['body'])
             ->context($workspace)
             ->action('Open in Brainitive', $d['url']);
+    }
+
+    /**
+     * The model the notification is about, for the notification email digest (BRAI-429): its `view`
+     * policy is checked again before the digest goes out. Only types in MailDigest::TYPES use it;
+     * null = never batched.
+     */
+    protected function digestSubject(): ?Model
+    {
+        return null;
+    }
+
+    /** The subject's own title in the digest list ("WEB-42 · <this>"), if the title doesn't carry it. */
+    protected function digestSubjectTitle(): ?string
+    {
+        return null;
+    }
+
+    /** The digest line: the same title, context, preview and link as the bell and the single email. */
+    public function digestEntry(object $notifiable): ?DigestEntry
+    {
+        $subject = $this->digestSubject();
+        $workspace = $subject ? MailDigest::workspaceOf($subject) : null;
+        if (! $subject || ! $workspace) {
+            return null;
+        }
+        $d = $this->toDatabase($notifiable);
+
+        return new DigestEntry(
+            type: $this->catalogType(),
+            workspace: $workspace,
+            subject: $subject,
+            title: $d['title'],
+            url: $d['url'],
+            mailSubject: $d['title'],
+            subjectKey: $d['subject_key'],
+            subjectTitle: $this->digestSubjectTitle(),
+            context: $d['project_name'],
+            body: $d['body'],
+        );
     }
 
     /** One line of plain text from HTML / rich text, at most 200 characters. */
