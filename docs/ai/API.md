@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270, Bookings 280, Helpdesk 290, Leads 300. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270, Bookings 280, Helpdesk 290, Leads 300, Portals 310. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -853,6 +853,27 @@ utm: {utm_source, …}|null, referrer, consent_at, consent_text, assignee: {id, 
 - The public form (`/f/{slug}`: view, submit, events) and the inbound API are for visitors / other systems, never the App API.
   The builder (questions, logic, design, publishing, webhooks, inbound token, columns): web only (`url`).
 
+### Portals
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/projects/{id}/feedback-portal` | app + verified | The project's feedback portal: `{id, project_id, enabled, slug, title, public_url, counts: {pending, published, rejected, merged}, url}`. Project / workspace admins only (403 for other members); none → 404 | Read + status | BRAI-237 | ready (v1.49.0, BRAI-422) |
+| `GET /api/v1/feedback-portals/{id}/posts?tab=pending\|published\|rejected\|merged` | app + verified | One moderation tab: pending oldest first, published most votes first (default), rejected / merged newest first; cursor-paginated | Read + status | BRAI-237 | ready (v1.49.0, BRAI-422) |
+| `PATCH /api/v1/feedback-posts/{id}` | app + verified | `{status: open\|planned\|building\|released\|declined, note?}` → the idea (followers notified as on the web); merged → 422 | Read + status | BRAI-237 | ready (v1.49.0, BRAI-422) |
+| `POST /api/v1/feedback-posts/{id}/moderate` | app + verified | `{decision: approve\|reject}` → the idea | Read + status | BRAI-237 | ready (v1.49.0, BRAI-422) |
+| `GET /api/v1/projects/{id}/client-portal` | app + verified | The project's client portal: `{id, project_id, title, slug, enabled, public_url, url, can: {publish, manage}}`; every project member; none → 404 | Read-only | BRAI-238 | ready (v1.49.0, BRAI-422) |
+| `GET /api/v1/client-portals/{id}/deliverables` | app + verified | What was shared, current versions first, newest first (≤ 300, not paginated): `{id, uuid, kind: page\|plan, title, version, status: awaiting\|approved\|changes_requested\|superseded\|withdrawn, decision, published_at, published_by, decisions_count, comments_count, last_decision_at}` | Read-only | BRAI-238 | ready (v1.49.0, BRAI-422) |
+| `GET /api/v1/client-deliverables/{id}` | app + verified | One deliverable + `message`, `markdown` / `html` (doc snapshot), `client_url`, `decisions: [{name, email, decision, note, version, created_at}]`, `comments: [{author, from_team, visibility: client\|internal, body, created_at}]`, `versions` | Read-only | BRAI-238 | ready (v1.49.0, BRAI-422) |
+
+- **Team side only.** Voters (feedback) and clients (client portal) are portal users, not workspace members: they sign in on the
+  public portal pages and never use the App API.
+- Feedback = the web's project Feedback page (`FeedbackModeration`: `counts`, `tabQuery`, `row` are shared with
+  `FeedbackModerationController`): project admins see the author's name + address and the linked card, as on the web.
+- Client portal = the web's team page (`ClientPortalPolicy::viewAny`: every project member; `Deliverables::summary` / `detail`
+  shared with `ClientPortalTeamController`): clients' addresses only for project admins (`email: null` otherwise); internal
+  notes are the team's and are listed. Plan snapshots: open `url` (the web renders the Gantt).
+- Web only: portal settings and on / off, merging ideas, creating / linking cards, the audit log, inviting / revoking clients,
+  publishing / withdrawing deliverables, answering clients, share links.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -1375,4 +1396,32 @@ Built in: BRAI-421 (desktop) · Mobile scope: See and move lead cards + analytic
 The lead form builder — questions, conditional logic, design, publishing, embeds, webhooks and the inbound API token — runs on the web.
 The apps read the forms and work their leads (GET /api/v1/projects/{id}/lead-forms → url opens the builder).
 Registry: docs/ai/API.md#leads · Decided in: BRAI-421
+```
+
+**BRAI-237** (feedback portal, voting and public roadmap)
+```
+## API (ready) — moderation + status
+- GET /api/v1/projects/{id}/feedback-portal — the portal, public link and ideas per moderation tab (project admins)
+- GET /api/v1/feedback-portals/{id}/posts?tab=pending|published|rejected|merged — ideas with votes, author, status, linked card; cursor-paginated
+- POST /api/v1/feedback-posts/{id}/moderate {decision: approve|reject} · PATCH /api/v1/feedback-posts/{id} {status: planned|building|released|declined|open, note?} — followers are notified
+Scope: app · OpenAPI: docs/api/openapi.json#/Portals · Registry: docs/ai/API.md#portals
+Built in: BRAI-422 (desktop) · Mobile scope: Read + moderate + status (merging duplicates, settings, cards: web only; voting is the public portal's)
+```
+
+**BRAI-238** (client portal: deliverables and approvals)
+```
+## API (ready) — read only
+- GET /api/v1/projects/{id}/client-portal — the portal, its link and the user's rights
+- GET /api/v1/client-portals/{id}/deliverables — shared docs / plans with version and approval state (awaiting, approved, changes requested, superseded, withdrawn)
+- GET /api/v1/client-deliverables/{id} — snapshot (Markdown + html), the clients' decisions and comments, internal notes, versions
+Scope: app · OpenAPI: docs/api/openapi.json#/Portals · Registry: docs/ai/API.md#portals
+Built in: BRAI-422 (desktop) · Mobile scope: Read-only (inviting clients, publishing, answering: web only)
+```
+
+**BRAI-239** (share links, embeds, public preview and deep links)
+```
+## API: web only — open in browser
+Share links, embeds and the public pages (feedback portal, client portal, booking pages, lead forms, support page, public plans and release notes) are public web pages: the apps open them in the browser.
+The App API returns their addresses (public_url / url fields) for sharing; deep links into the app use the web URLs of issues, docs and boards.
+Registry: docs/ai/API.md#portals · Decided in: BRAI-422
 ```

@@ -30,6 +30,7 @@ use App\Http\Controllers\AppApi\NotificationController;
 use App\Http\Controllers\AppApi\PageCollabController;
 use App\Http\Controllers\AppApi\PageController;
 use App\Http\Controllers\AppApi\PlanController;
+use App\Http\Controllers\AppApi\PortalController;
 use App\Http\Controllers\AppApi\ProjectController;
 use App\Http\Controllers\AppApi\ReleaseController;
 use App\Http\Controllers\AppApi\SearchController;
@@ -186,6 +187,15 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::get('lead-forms/{form}/analytics', [LeadController::class, 'analytics'])->name('lead-forms.analytics');
         Route::get('leads/{lead}', [LeadController::class, 'show'])->name('leads.show');
         Route::patch('leads/{lead}', [LeadController::class, 'update'])->name('leads.update');
+
+        // ── Portals, team side (FeedbackModeration, Deliverables); voters' and clients' side: public routes ─
+        Route::get('projects/{project}/feedback-portal', [PortalController::class, 'feedbackPortal'])->name('feedback-portal.show');
+        Route::get('feedback-portals/{portal}/posts', [PortalController::class, 'feedbackPosts'])->name('feedback-portals.posts');
+        Route::patch('feedback-posts/{post}', [PortalController::class, 'updateFeedbackPost'])->name('feedback-posts.update');
+        Route::post('feedback-posts/{post}/moderate', [PortalController::class, 'moderateFeedbackPost'])->name('feedback-posts.moderate');
+        Route::get('projects/{project}/client-portal', [PortalController::class, 'clientPortal'])->name('client-portal.show');
+        Route::get('client-portals/{portal}/deliverables', [PortalController::class, 'deliverables'])->name('client-portals.deliverables');
+        Route::get('client-deliverables/{deliverable}', [PortalController::class, 'deliverable'])->name('client-deliverables.show');
 
         // ── Task lists + to-dos (TaskLists, WorkCompletion: shared with the web, CLI and MCP) ──────
         // lists and tasks by id; ids on writes are checked in the controller (no route constraint)
