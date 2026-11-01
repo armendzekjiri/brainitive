@@ -9,15 +9,25 @@ use App\Http\Requests\AppApi\ListRequest;
 use App\Http\Requests\AppApi\MoveIssueRequest;
 use App\Http\Resources\AppApi\BoardCollection;
 use App\Http\Resources\AppApi\BoardDetailResource;
+use App\Http\Resources\AppApi\BoardViewResource;
 use App\Http\Resources\AppApi\IssueCollection;
 use App\Http\Resources\AppApi\IssueResource;
+use App\Http\Resources\AppApi\ProjectConfigResource;
 use App\Models\Board;
 use App\Models\BoardColumn;
+use App\Models\BoardView;
 use App\Models\Item;
+use App\Models\ItemPriority;
+use App\Models\ItemType;
+use App\Models\Release;
 use App\Support\Boards\BoardCards;
+use App\Support\Boards\BoardFilters;
+use App\Support\Boards\BoardViewConfig;
 use App\Support\Work\WorkCompletion;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -82,6 +92,11 @@ class BoardController extends Controller
      * finished before its `done_retention_days` unless `include_old_done=1`. Sorted by `column_id`, then the
      * order inside the column (`position`): place them with `column_id` and the board's column order.
      *
+     * Filters are the board page's (and a saved view's `params`, sent as they are): `q`, `assignee`
+     * (me | unassigned | user-<id>), `status` / `labels` / `priority` / `type` (comma-separated ids), `quick`
+     * (recent, due, blocked) and custom fields as `f<field id>` (none | any | yes | no | ~text | option
+     * ids[,none] | min..max).
+     *
      * @throws NotFoundHttpException the board doesn't exist or the user can't open it (404)
      */
     public function items(ListBoardItemsRequest $request, string $board): IssueCollection
@@ -93,7 +108,8 @@ class BoardController extends Controller
         }
         $since = $request->updatedSince();
 
-        $page = IssueResource::eagerLoad(BoardCards::query($board, $request->includeOldDone()))
+        $query = BoardFilters::apply(BoardCards::query($board, $request->includeOldDone()), $board, $request->filters(), $request->user());
+        $page = IssueResource::eagerLoad($query)
             ->when($column, fn ($q) => $q->where('column_id', $column))
             ->when($since, fn ($q) => $q->where('updated_at', '>=', $since))
             ->orderBy('column_id')
@@ -121,6 +137,54 @@ class BoardController extends Controller
         WorkCompletion::moveIssue($item, $column, (int) ($request->validated('position') ?? 0), $request->user(), $request->boolean('with_subtasks'));
 
         return new IssueResource(self::card($item));
+    }
+
+    /**
+     * What an issue form and the board filters offer in a project: issue types, priorities, labels, custom
+     * fields (with options) and fix versions.
+     *
+     * Setting them up (project settings): web only.
+     *
+     * @throws NotFoundHttpException the project doesn't exist or the user can't open it (404)
+     */
+    public function config(Request $request, string $project): ProjectConfigResource
+    {
+        $project = $this->visibleProject($request, $project);
+
+        $project->setRelation('configTypes', ItemType::forProject($project)->orderByRaw('project_id is not null')->orderBy('id')->get());
+        $project->setRelation('configPriorities', ItemPriority::forProject($project)->orderBy('order')->orderBy('id')->get());
+        $project->setRelation('configLabels', $project->labels()->orderBy('name')->get());
+        $project->setRelation('configFields', $project->itemFields()->with('options')->orderBy('position')->orderBy('id')->get());
+        $project->setRelation('configReleases', Release::where('project_id', $project->id)
+            ->whereIn('status', [Release::STATUS_UNRELEASED, Release::STATUS_RELEASED])
+            ->orderByRaw("case status when 'unreleased' then 0 else 1 end")->orderByRaw('release_date is null')->orderBy('release_date')->orderByDesc('id')
+            ->limit(100)->get());
+
+        return new ProjectConfigResource($project);
+    }
+
+    /**
+     * The saved views of a board the user may use: shared ones and their own, in the web's order.
+     *
+     * Each view's `params` are the board filters as `GET /boards/{id}/items` takes them. Creating, changing,
+     * sharing views and picking the default: web only.
+     *
+     * @throws NotFoundHttpException the board doesn't exist or the user can't open it (404)
+     */
+    public function views(Request $request, string $board): AnonymousResourceCollection
+    {
+        $board = $this->visibleBoard($request, $board);
+        $user = $request->user();
+        $defaultId = (int) DB::table('board_view_defaults')->where('user_id', $user->id)->where('board_id', $board->id)->value('board_view_id');
+
+        $views = $board->views()->visibleTo($user)->with('user:id,name')->get()->each(function (BoardView $view) use ($board, $defaultId) {
+            ['params' => $params, 'dropped' => $dropped] = BoardViewConfig::sanitize((array) $view->config, $board);
+            $view->setAttribute('api_params', $params);
+            $view->setAttribute('api_dropped', $dropped);
+            $view->setAttribute('api_default', $view->id === $defaultId);
+        });
+
+        return BoardViewResource::collection($views);
     }
 
     /** A fresh card with what IssueResource needs. */
