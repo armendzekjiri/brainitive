@@ -31,7 +31,8 @@ const row = (page: Page, name: string): Locator =>
     sidebar(page).locator('[data-page-row]').filter({ hasText: name }).first();
 
 async function expand(page: Page, folder: string) {
-    const trigger = row(page, folder).getByRole('button', { name: new RegExp(`${folder}$`) });
+    // the collapsible trigger is the first button of a folder row (then pin, ⋯, +)
+    const trigger = row(page, folder).locator('button').first();
     if ((await trigger.getAttribute('data-state')) !== 'open') await trigger.click();
     await expect(trigger).toHaveAttribute('data-state', 'open');
 }
@@ -63,6 +64,9 @@ async function breadcrumbs(page: Page, projectSlug: string, item: Created) {
 }
 
 test.describe('move pages and folders', () => {
+    // tall enough that the tree isn't under the sidebar footer (drop targets must be hit-testable)
+    test.use({ viewport: { width: 1280, height: 1100 } });
+
     test('reporter case: drop a doc onto a sibling folder, confirm — Cancel keeps it where it was', async ({ page }) => {
         const { project, meetings, log, newFolder } = await setup(page);
         const path = `${project.name} / ${meetings.name} / ${newFolder.name}`;
@@ -160,7 +164,7 @@ test.describe('move pages and folders', () => {
         await page.getByRole('menuitem', { name: 'Move…' }).click();
 
         const dialog = page.getByRole('dialog', { name: `Move “${log.name}”` });
-        await expect(dialog.getByRole('option', { name: new RegExp(`^${meetings.name}`) })).toContainText('Current location');
+        await expect(dialog.getByRole('option', { name: new RegExp(meetings.name) })).toContainText('Current location');
         await dialog.getByRole('option', { name: /^Top level/ }).click();
         await expect(dialog.getByTestId('move-destination-path')).toHaveText(project.name);
         await dialog.getByRole('button', { name: 'Move' }).click();
@@ -181,16 +185,23 @@ test.describe('move pages and folders', () => {
         await page.mouse.up();
         await expect(page.getByRole('alertdialog')).toHaveCount(0);
 
-        // dialog: the subfolder is disabled, the folder itself too
+        // dialog: the subfolder is disabled, the folder itself too (fresh page: WebKit's emulated
+        // drag can leave the pointer state behind and swallow the next menu open)
+        await page.reload();
+        await expand(page, meetings.name);
         await row(page, meetings.name).hover();
         await row(page, meetings.name).getByRole('button', { name: `More actions for ${meetings.name}` }).click();
         await page.getByRole('menuitem', { name: 'Move…' }).click();
         const dialog = page.getByRole('dialog', { name: `Move “${meetings.name}”` });
-        const sub = dialog.getByRole('option', { name: new RegExp(`^${newFolder.name}`) });
+        const sub = dialog.getByRole('option', { name: new RegExp(newFolder.name) });
         await expect(sub).toHaveAttribute('aria-disabled', 'true');
         await expect(sub).toContainText('Inside this folder');
-        await expect(dialog.getByRole('option', { name: new RegExp(`^${meetings.name}`) })).toContainText('This item');
-        await sub.click();
+        await expect(dialog.getByRole('option', { name: new RegExp(meetings.name) })).toContainText('This item');
+        // disabled options can't be chosen, with the mouse (force: Playwright waits for aria-disabled) or the keyboard
+        await sub.click({ force: true });
+        await expect(dialog.getByTestId('move-destination-path')).toHaveText('Choose a folder');
         await expect(dialog.getByRole('button', { name: 'Move' })).toBeDisabled();
+        await dialog.getByRole('combobox', { name: 'Search folders' }).press('ArrowDown');
+        await expect(dialog.getByTestId('move-destination-path')).toHaveText('Choose a folder');
     });
 });

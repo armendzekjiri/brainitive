@@ -1,7 +1,7 @@
 # Move pages, whiteboards and folders (BRAI-431, GitHub #130)
 
 **Branch:** feat/move-pages (from release/v1.48.0)
-**Status:** in-progress
+**Status:** done (awaiting release merge)
 **Started:** 2026-10-31
 
 ## Problem / goal
@@ -68,3 +68,12 @@ We want two Jira-style ways to move an item:
 ## Docs
 ARCHITECTURE (Pages module: mover, route, dialog, DnD), KNOWLEDGE (drop zones / e2e drag notes,
 reorder endpoint restricted, slug unique per parent).
+
+## Results
+- Also fixed: new pages all got `position` 0 (`Page::creating` compared `=== 0`, an unset position is
+  `null`), so sibling order was undefined; sidebar tree now sorts by `id` last.
+- PHPUnit (`TEST_DB_SUFFIX=move`): `PageMoveTest` 15 passed; `tests/Feature/Pages` 135 passed (incl. MCP `parent_uuid`);
+  `ProjectArchiveTest|NotionImporterTest|AccessControlTest|SmartLinksTest` 42 passed.
+- e2e (`E2E_PORT=8170`): `page-move.spec.ts` 5 journeys green in Chromium, Firefox and WebKit
+  (Chromium also `--repeat-each=3`); `custom-sidebar`, `page-icons`, `content` specs green in Chromium.
+- `./vendor/bin/pint --test` (changed PHP) and `npx tsc --noEmit` green.

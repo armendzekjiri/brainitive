@@ -51,7 +51,7 @@ interface PageTreeDndValue {
     /** the row the pointer is over while dragging (for auto-expand), allowed or not */
     hoverId: number | null;
     startDrag: (event: DragEvent, node: PageType) => void;
-    endDrag: () => void;
+    endDrag: (event: DragEvent) => void;
     overRow: (event: DragEvent<HTMLElement>, node: PageType) => void;
     overRoot: (event: DragEvent<HTMLElement>) => void;
     leave: (event: DragEvent<HTMLElement>, nodeId: number | null) => void;
@@ -89,6 +89,7 @@ export function usePageTreeDndState(workspace: Workspace, project: DndProject) {
     const [pending, setPending] = useState<PendingMove | null>(null);
     const [moveItem, setMoveItem] = useState<PageType | null>(null);
     const targetRef = useRef<DropTarget | null>(null);
+    const droppedRef = useRef(false);
     const enabled = !!project.can_edit_pages;
 
     // fresh props from the server replace the optimistic tree
@@ -147,6 +148,17 @@ export function usePageTreeDndState(workspace: Workspace, project: DndProject) {
         }
     }, [tree, workspace.slug, project.slug]);
 
+    const commit = useCallback((node: PageType | null) => {
+        const drop = targetRef.current;
+        droppedRef.current = true;
+        setDragging(null);
+        setHoverId(null);
+        updateTarget(null);
+        if (!drop || !node) return;
+        if (drop.parentChanges) setPending({ node, placement: drop.placement, path: drop.path });
+        else void save(node, drop.placement, false);
+    }, [save, updateTarget]);
+
     const value = useMemo<PageTreeDndValue>(() => ({
         enabled,
         dragging,
@@ -156,9 +168,17 @@ export function usePageTreeDndState(workspace: Workspace, project: DndProject) {
             event.stopPropagation();
             event.dataTransfer.effectAllowed = 'move';
             event.dataTransfer.setData(DRAG_TYPE, String(node.id));
+            droppedRef.current = false;
             setDragging(node);
         },
-        endDrag: () => {
+        endDrag: (event) => {
+            // Some engines (WebKit) end the drag without a drop event on a valid target: the drag
+            // still ended with a "move", so treat it as the drop. A cancelled drag reports "none".
+            if (!droppedRef.current && targetRef.current && event.dataTransfer.dropEffect !== 'none') {
+                commit(dragging);
+                return;
+            }
+            droppedRef.current = true;
             setDragging(null);
             setHoverId(null);
             updateTarget(null);
@@ -204,17 +224,10 @@ export function usePageTreeDndState(workspace: Workspace, project: DndProject) {
         drop: (event) => {
             event.preventDefault();
             event.stopPropagation();
-            const drop = targetRef.current;
-            const node = dragging;
-            setDragging(null);
-            setHoverId(null);
-            updateTarget(null);
-            if (!drop || !node) return;
-            if (drop.parentChanges) setPending({ node, placement: drop.placement, path: drop.path });
-            else void save(node, drop.placement, false);
+            commit(dragging);
         },
         openMove: (node) => setMoveItem(node),
-    }), [enabled, dragging, target, hoverId, resolve, save, updateTarget]);
+    }), [enabled, dragging, target, hoverId, resolve, commit, updateTarget]);
 
     const pendingLabel = pending ? moveItemLabel(pending.node) : 'page';
     const dialogs = (
@@ -283,7 +296,7 @@ export function PageTreeRow({ page, level, children }: { page: PageType; level: 
                 target?.zone === 'inside' && 'bg-primary/10 ring-2 ring-inset ring-primary',
             )}
             onDragStart={(event) => dnd.startDrag(event, page)}
-            onDragEnd={() => { disableDrag(); dnd.endDrag(); }}
+            onDragEnd={(event) => { disableDrag(); dnd.endDrag(event); }}
             onDragOver={(event) => dnd.overRow(event, page)}
             onDragLeave={(event) => dnd.leave(event, page.id)}
             onDrop={(event) => dnd.drop(event)}

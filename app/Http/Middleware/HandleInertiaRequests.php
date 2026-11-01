@@ -90,7 +90,7 @@ class HandleInertiaRequests extends Middleware
     private static function pageTreeRecursive(User $user, int $depth = 7): \Closure
     {
         return function ($query) use ($user, $depth) {
-            $query->visibleTo($user)->orderBy('type', 'desc')->orderBy('position');
+            $query->visibleTo($user)->orderBy('type', 'desc')->orderBy('position')->orderBy('id');
             if ($depth > 0) {
                 $query->with(['children' => self::pageTreeRecursive($user, $depth - 1)]);
             }
@@ -173,7 +173,8 @@ class HandleInertiaRequests extends Middleware
                         $q->visibleTo($user)
                             ->with(['children' => self::pageTreeRecursive($user, 7)])
                             ->orderBy('type', 'desc')
-                            ->orderBy('position');
+                            ->orderBy('position')
+                            ->orderBy('id');
                     },
                 ]);
             }])

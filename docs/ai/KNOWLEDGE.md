@@ -384,6 +384,32 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
   `mouse.up` (passes in Chromium and Firefox). Page rows start with the page's emoji icon, so match
   their text with a regex (`new RegExp(\`${name}$\`)`), not the exact name.
 
+### Moving pages: drop zones, confirmation, positions (BRAI-431, GitHub #130)
+- **Why the old drag couldn't move into a folder:** `DraggableSidebarGroup` reordered one type group
+  (splice on `dragenter`) and saved it through `pages.reorder`, so the parent never changed; that endpoint
+  also took any `parent_id` without a cycle check. Now every parent change goes through `PageMover`, and
+  `pages.reorder` refuses a changed parent.
+- **New pages all had position 0.** `Page::creating` appended only when `position === 0`, but an unset
+  position is `null` in memory, so every page kept the column default 0 and the sidebar order of siblings
+  was whatever Postgres returned. Fixed (null or 0 → last); the sidebar tree also sorts by `id` last, and
+  `PageMover` renumbers a parent's children 0..n on every move.
+- **Slug is unique per parent** (`unique(project_id, parent_id, slug)`): a move into a folder with the
+  same slug used to be a 500. `PageMover` picks `slug-2`, `slug-3`… (pages route by uuid, so links stay).
+- **Drop zones are per row header, not per subtree:** `PageTreeRow` wraps only the header line of a row, so
+  `dragover` on a child never bubbles into its parent folder's zone. Docs / whiteboards / folders are listed
+  apart in the sidebar, so before / after only works next to a row of the same kind; "inside" works on any
+  folder (the item's own parent, itself and its descendants never). Root group headers mean "top level".
+- **Confirmation only when the parent changes;** the tree isn't changed while the dialog is open, so Cancel
+  has nothing to undo. Saves are optimistic and the override resets when fresh props arrive.
+- **WebKit can end a drag without a `drop` event** on a valid target (Playwright WebKit, and the pins drag
+  saves on `dragend` for the same reason): `endDrag` commits the last target unless `dropEffect` is
+  `none` (cancelled). Playwright WebKit can also swallow the next Radix menu open after an emulated drag;
+  the e2e reloads before opening a menu.
+- **e2e drag needs a hit-testable target:** with the default 720 px viewport the project's folder rows sat
+  under the sidebar footer, so `dragover` went to the footer. `page-move.spec.ts` uses a 1100 px tall
+  viewport. Options in the Move dialog start with the folder's emoji: match names without `^`; a disabled
+  option (`aria-disabled`) needs `click({ force: true })`.
+
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
 means adding its param to `BoardViewConfig::PARAM_KEYS` + `normalize()` (allowlist) and, if it

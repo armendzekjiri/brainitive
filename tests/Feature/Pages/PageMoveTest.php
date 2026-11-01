@@ -277,6 +277,18 @@ class PageMoveTest extends TestCase
         $this->assertSame(['Two', 'One', 'Meetings'], $this->order(null));
     }
 
+    public function test_new_pages_are_appended_to_their_parent(): void
+    {
+        $folder = $this->folder('Docs');
+        $this->actingAs($this->editor);
+        foreach (['One', 'Two', 'Three'] as $name) {
+            $this->postJson(route('pages.store', [$this->workspace->slug, $this->project->slug]), ['name' => $name, 'type' => 'page', 'parent_id' => $folder->id])->assertOk();
+        }
+
+        $this->assertSame(['One', 'Two', 'Three'], $this->order($folder));
+        $this->assertSame([0, 1, 2], $this->positions($folder));
+    }
+
     public function test_sidebar_marks_which_projects_allow_page_edits(): void
     {
         $this->actingAs($this->editor)
