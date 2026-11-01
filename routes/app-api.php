@@ -19,6 +19,7 @@ use App\Http\Controllers\AppApi\MemberController;
 use App\Http\Controllers\AppApi\MyWorkController;
 use App\Http\Controllers\AppApi\NavigationController;
 use App\Http\Controllers\AppApi\NotificationController;
+use App\Http\Controllers\AppApi\PageController;
 use App\Http\Controllers\AppApi\ProjectController;
 use App\Http\Controllers\AppApi\SearchController;
 use App\Http\Controllers\AppApi\SnippetController;
@@ -246,6 +247,15 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::get('sprints/{sprint}/items', [SprintController::class, 'items'])->whereNumber('sprint')->name('sprints.items');
         Route::post('sprints/{sprint}/items', [SprintController::class, 'moveToSprint'])->name('sprints.move');
         Route::get('sprints/{sprint}/burndown', [SprintController::class, 'burndown'])->whereNumber('sprint')->name('sprints.burndown');
+
+        // ── Docs: page tree, read, create, edit, publish, move (PageWrites, PageMover: shared with the web) ──
+        // pages by uuid (checked in the controller on writes); text changes need the revision (409), like the web editor
+        Route::get('projects/{project}/pages', [PageController::class, 'index'])->whereNumber('project')->name('pages.index');
+        Route::post('projects/{project}/pages', [PageController::class, 'store'])->middleware('throttle:60,1,app.pages.store')->name('pages.store');
+        Route::get('pages/{uuid}', [PageController::class, 'show'])->whereUuid('uuid')->name('pages.show');
+        Route::patch('pages/{uuid}', [PageController::class, 'update'])->middleware('throttle:120,1,app.pages.update')->name('pages.update');
+        Route::post('pages/{uuid}/publish', [PageController::class, 'publish'])->name('pages.publish');
+        Route::post('pages/{uuid}/move', [PageController::class, 'move'])->name('pages.move');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');

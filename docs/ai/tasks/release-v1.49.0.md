@@ -428,3 +428,51 @@ Deviations from the plan / cards:
 - `## API (ready)` texts for BRAI-187, 188, 189, 190, 191, 192, 193, 194, 252 and the web-only text for BRAI-195 are in
   `docs/ai/API.md` → "Mobile card texts".
 
+
+## Phase 07 — docs, whiteboards, plans, releases, files
+
+Desktop-app board cards 691–696 (epic BRAI-410, card 690): BRAI-411 … BRAI-416, all "API ·" cards, built in card
+order, same flow and definition of done as phase 06 (`feat/app-api-<name>` from `release/v1.49.0`, merged back
+`--no-ff`; PHPUnit incl. Passport → 401, other workspaces / projects → 404, private drafts → 404, viewer vs editor vs
+admin, 422, pagination, 402 on uploads; e2e spec; `API.md` rows + mobile card texts; OpenAPI via
+`TEST_DB_SUFFIX=p07 composer openapi`). New spec tags from 230 on (Docs 230, then Whiteboards, Plans, Releases,
+Files). Pages are addressed by uuid (`/pages/{uuid}`), as on the web and in the MCP.
+Before: `fix/mcp-move-notifies-watchers` — MCP `move_board_item` through `WorkCompletion::moveIssue` (watchers,
+optional `with_subtasks`).
+
+**Docs are live documents (Yjs).** An API write never fights a live session: content writes go through the web
+editor's draft path (`Page::saveDraft`, so a published page's readers see nothing until "publish"), they need the
+`revision` (`edit_revision`) the app last read (409 otherwise — live saves bump it every few seconds), and the write
+starts a new live epoch (`Page::saved` → `PageCollab::reset`), so open browsers reload on the new draft — the web's
+own single-user / fallback save rule. The MCP's `update-page` has no guard (it discards a published page's draft and
+writes `content`); the API follows the web editor instead.
+
+### BRAI-411 docs: tree, read, create, edit, publish, move (`feat/app-api-pages`; `feat/app-api-docs` is BRAI-381's)
+- `GET /projects/{id}/pages?parent=` (flat tree: folders, docs, whiteboards the user may see — drafts only their
+  author's / admins', `Page::visibleTo`), `GET /pages/{uuid}` (Markdown with `@[Name](user:<id>)` mentions, sanitized
+  HTML, `revision`, draft vs published for editors, `can`), `POST /projects/{id}/pages` (doc / folder / whiteboard,
+  Markdown, `publish?`, `request_id`, 402 storage), `PATCH /pages/{uuid}` (name, icon, Markdown + `revision` → 409),
+  `POST /pages/{uuid}/publish` (`ReviewGate`, watchers notified), `POST /pages/{uuid}/move` (`PageMover`).
+- Extract the web's inline create / publish into `Support\Pages\PageWrites`; `PageController` uses it.
+
+### BRAI-412 collab token (`feat/app-api-collab-token`)
+- `POST /pages/{uuid}/collab-token` → `PageCollab::session` (same access rule as `internal/collab/access`), plus
+  bootstrap + draft save through the API, so a native editor is a full peer (otherwise its edits would live only in
+  the Y state, never in the draft).
+
+### BRAI-413 versions, inline comments, reviews, backlinks (`feat/app-api-doc-reviews`)
+- `GET /pages/{uuid}/versions` (+ one version), review threads / replies / resolve, approve / request changes,
+  `GET /pages/{uuid}/backlinks`, `GET /links/resolve?url=` (smart link chips) — reusing `PageReviews`,
+  `ContentReferences`, `SmartLinks`.
+
+### BRAI-414 whiteboards (`feat/app-api-whiteboards`)
+- `GET /whiteboards/{uuid}` (scene JSON, read-only), the exported image. Drawing, templates, sticky → issue: web /
+  desktop webview only.
+
+### BRAI-415 Gantt plans and releases, read (`feat/app-api-plans-releases`)
+- `GET /projects/{id}/plans`, `GET /plans/{id}` (rows, bars, dependencies, linked issues — the MCP's plan reader),
+  `GET /projects/{id}/releases`, `GET /releases/{id}` (notes as Markdown). Editing: web only.
+
+### BRAI-416 files (`feat/app-api-files`)
+- `POST /uploads` (multipart, the web's upload checks: allowlisted extensions, size, storage → 402) and how the apps
+  fetch files; a shared uploads service if issue attachments can use it cheaply.
