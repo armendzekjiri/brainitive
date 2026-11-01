@@ -26,6 +26,7 @@ use App\Support\Boards\ItemComments;
 use App\Support\Boards\ItemFieldValues;
 use App\Support\Boards\ItemLinks;
 use App\Support\Boards\ItemMentions;
+use App\Support\Boards\LinkedIssueVisibility;
 use App\Support\Boards\Swimlanes;
 use App\Support\Entitlements\LimitGate;
 use App\Support\Github\ItemDevelopment;
@@ -123,6 +124,7 @@ class BoardController extends Controller
                 ]);
             },
         ]);
+        LinkedIssueVisibility::mask($board->columns->flatMap->items, $request->user());
 
         $itemTypes = ItemType::forProject($project)->orderBy('id')->get();
         if ($itemTypes->isEmpty()) {
@@ -530,6 +532,7 @@ class BoardController extends Controller
             ->whereIn('column_id', $board->columns()->select('id'))
             ->when($board->isScrum(), fn ($query) => $query->where('sprint_id', $activeSprintId))
             ->get();
+        LinkedIssueVisibility::mask($items, $request->user());
 
         return response()->json(['items' => $items]);
     }
@@ -619,9 +622,9 @@ class BoardController extends Controller
             'creator:id,name,email',
             'watchers:id,name,email,avatar',
             'outgoingLinks.targetItem:id,key,title,board_id',
-            'outgoingLinks.targetItem.board:id,name,slug',
+            'outgoingLinks.targetItem.board:id,name,slug,project_id',
             'incomingLinks.sourceItem:id,key,title,board_id',
-            'incomingLinks.sourceItem.board:id,name,slug',
+            'incomingLinks.sourceItem.board:id,name,slug,project_id',
             'fieldValues' => fn ($q) => $q->select(self::FIELD_VALUE_COLUMNS),
             'attachments' => function ($q) {
                 $q->with('user:id,name,email')->orderBy('created_at', 'desc');
@@ -637,6 +640,7 @@ class BoardController extends Controller
         foreach ($item->attachments as $attachment) {
             $attachment->url = asset('storage/'.$attachment->path);
         }
+        LinkedIssueVisibility::mask([$item], $request->user());
 
         $itemTypes = ItemType::forProject($project)->get();
         $priorities = ItemPriority::forProject($project)->orderBy('order')->get();
@@ -648,6 +652,7 @@ class BoardController extends Controller
         $columns = $board->columns()->orderBy('position')->with([
             'items' => fn ($q) => $this->withCardData($q),
         ])->get();
+        LinkedIssueVisibility::mask($columns->flatMap->items, $request->user());
 
         // Get all items in the project for linking (excluding current item)
         $projectItems = Item::whereHas('board', function ($q) use ($project) {
@@ -1199,9 +1204,9 @@ class BoardController extends Controller
                 'parent:id,key,title,board_id',
                 'watchers:id,name,email,avatar',
                 'outgoingLinks.targetItem:id,key,title,board_id',
-                'outgoingLinks.targetItem.board:id,name,slug',
+                'outgoingLinks.targetItem.board:id,name,slug,project_id',
                 'incomingLinks.sourceItem:id,key,title,board_id',
-                'incomingLinks.sourceItem.board:id,name,slug',
+                'incomingLinks.sourceItem.board:id,name,slug,project_id',
                 'fieldValues' => fn ($q) => $q->select(self::FIELD_VALUE_COLUMNS),
                 // "Repeats weekly" badge of issues created by a recurring template (BRAI-123)
                 'recurringOccurrence:id,item_id,recurring_issue_id',
