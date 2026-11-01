@@ -585,6 +585,21 @@ e.g. `created`, `updated`, `moved`, `assigned`, `commented`, `labels_changed`, `
 - **Editing / deleting comments: not built** — the web can't either (planned on the card as "own comments"; it comes with the web
   feature). Uploads go straight to the issue: the shared uploads API (BRAI files card) isn't there yet.
 
+#### Subtasks and linked issues (same `Issues` tag)
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/items/{id}/children` | app + verified | Direct subtasks (cards) in board order, cursor-paginated, `updated_since`; deeper levels: `counts.subtasks` + this call on them. A new subtask = `POST /boards/{id}/items` with `parent_id` (same board, 3 levels at most → 422) | Read + light edit | BRAI-190 | ready (v1.49.0, BRAI-406) |
+| `GET /api/v1/items/{id}/links` | app + verified | Linked issues read from this issue's side, oldest first, not paginated | Read + light edit | BRAI-190 | ready (v1.49.0, BRAI-406) |
+| `POST /api/v1/items/{id}/links` | app + verified | `{target_id, type: blocks\|is_blocked_by\|duplicates\|is_duplicated_by\|relates_to\|clones\|is_cloned_by}` → 201 the link; already linked that way (either side) → 200 the existing one. 403 without `can.update`; a target the user can't open / the issue itself → 422 `target_id` | Read + light edit | BRAI-190 | ready (v1.49.0, BRAI-406) |
+| `DELETE /api/v1/items/{id}/links/{link}` | app + verified | Remove a link of this issue (added on either side) → 204. 403 without `can.update`; not a link of the issue → 404 | Read + light edit | BRAI-190 | ready (v1.49.0, BRAI-406) |
+
+Link: `{id, type, label ("is blocked by"), direction: outgoing|incoming, restricted, issue: {id, key, title, url}|null}`.
+- One row per link (`App\Support\Boards\ItemLinks`, shared with the web's issue view and the MCP): "A blocks B" added on A reads
+  `blocks` / `outgoing` on A and `is_blocked_by` / `incoming` on B; adding it again from either side changes nothing; adding and
+  removing write the issue's history. Links to issues of other projects are allowed when the user can open both.
+- An issue the user can't open stays listed as `restricted: true` with `issue: null` (BRAI-435, the web's "Restricted").
+- Checklists: issues have none of their own — use subtasks, or Markdown task lists (`- [ ] …`) in the description.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -804,4 +819,14 @@ Built in: BRAI-404 (desktop) · Mobile scope: Read-only (connecting repositories
 - GET /api/v1/items/{id}/activity — the history, newest first, cursor-paginated
 Scope: app · OpenAPI: docs/api/openapi.json#/Issues · Registry: docs/ai/API.md#issues
 Built in: BRAI-405 (desktop) · Mobile scope: Full (editing / deleting comments and managing other watchers: not on the web yet / web only)
+```
+
+**BRAI-190** (subtasks, checklists, issue links)
+```
+## API (ready)
+- GET /api/v1/items/{id}/children — direct subtasks in board order (create one: POST /api/v1/boards/{id}/items with parent_id; 3 levels at most)
+- GET|POST /api/v1/items/{id}/links — linked issues (blocks, is blocked by, duplicates, relates to, clones), read from this issue's side; restricted ones without details
+- DELETE /api/v1/items/{id}/links/{link} → 204
+Scope: app · OpenAPI: docs/api/openapi.json#/Issues · Registry: docs/ai/API.md#issues
+Built in: BRAI-406 (desktop) · Mobile scope: Read + light edit (checklists = subtasks or Markdown task lists in the description)
 ```

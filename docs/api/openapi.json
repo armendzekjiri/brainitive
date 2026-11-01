@@ -7344,6 +7344,272 @@
                     }
                 }
             }
+        },
+        "/items/{item}/children": {
+            "get": {
+                "operationId": "app.v1.items.children",
+                "description": "Their own subtasks: `counts.subtasks` of each, and this call on them.",
+                "summary": "The direct subtasks of an issue, in board order",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `IssueResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/IssueCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/items/{item}/links": {
+            "get": {
+                "operationId": "app.v1.items.links.index",
+                "summary": "The linked issues of an issue, read from its side (oldest link first, not paginated)",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `IssueLinkResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/IssueLinkResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.items.links.store",
+                "description": "Answers 201 with the new link, or 200 with the existing one when the two are already linked that way\n(either side: \"A blocks B\" = \"B is blocked by A\"). Needs `can.update` of the issue (403); the other\nissue must be one the user can open (422 `target_id`).",
+                "summary": "Link the issue to another one",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreIssueLinkRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`IssueLinkResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/IssueLinkResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`IssueLinkResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/IssueLinkResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/items/{item}/links/{link}": {
+            "delete": {
+                "operationId": "app.v1.items.links.destroy",
+                "description": "Needs `can.update` of the issue (403).",
+                "summary": "Remove a link of the issue (added on either side)",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "link",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -10100,6 +10366,64 @@
                 ],
                 "title": "IssueFieldValueResource"
             },
+            "IssueLinkResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "blocks | is_blocked_by | duplicates | is_duplicated_by | relates_to | clones | is_cloned_by"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "\"is blocked by\", as the web shows it"
+                    },
+                    "direction": {
+                        "type": "string",
+                        "description": "outgoing = added on this issue, incoming = added on the other one"
+                    },
+                    "restricted": {
+                        "type": "boolean"
+                    },
+                    "issue": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "key": {
+                                "type": "string"
+                            },
+                            "title": {
+                                "type": "string"
+                            },
+                            "url": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "key",
+                            "title",
+                            "url"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "label",
+                    "direction",
+                    "restricted",
+                    "issue"
+                ],
+                "title": "IssueLinkResource"
+            },
             "IssueResource": {
                 "type": "object",
                 "properties": {
@@ -12539,6 +12863,35 @@
                     "role"
                 ],
                 "title": "StoreInvitationRequest"
+            },
+            "StoreIssueLinkRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/items/{id}/links`: link this issue to another one the user can open (ItemPolicy::update).",
+                "properties": {
+                    "target_id": {
+                        "type": "integer",
+                        "description": "the other issue (any project the user can open; GET /items/by-key/{KEY} finds it by key)",
+                        "minimum": 1
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "read from this issue's side: \"blocks\" = this issue blocks the other one",
+                        "enum": [
+                            "blocks",
+                            "is_blocked_by",
+                            "duplicates",
+                            "is_duplicated_by",
+                            "relates_to",
+                            "clones",
+                            "is_cloned_by"
+                        ]
+                    }
+                },
+                "required": [
+                    "target_id",
+                    "type"
+                ],
+                "title": "StoreIssueLinkRequest"
             },
             "StoreIssueRequest": {
                 "type": "object",
