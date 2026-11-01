@@ -512,8 +512,10 @@ created_at, updated_at}`. Activity option: `{id, name, color, pricing_type: hour
 |---|---|---|---|---|---|
 | `GET /api/v1/projects/{id}/boards` | app + verified | A project's boards in the web's order, cursor-paginated, `updated_since`. Can't open the project → 404 | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
 | `GET /api/v1/boards/{id}` | app + verified | One board: `columns` (WIP limit, done flag, `cards_count`), `swimlanes`, `done_retention_days`, `active_sprint`, `can` | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
-| `GET /api/v1/boards/{id}/items?column=&include_old_done=` | app + verified | The board's cards as the board page shows them, cursor-paginated, `updated_since`; `column` not on the board → 422 | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
+| `GET /api/v1/boards/{id}/items?column=&include_old_done=&q=&assignee=&status=&labels=&priority=&type=&quick=&f<id>=` | app + verified | The board's cards as the board page shows them, cursor-paginated, `updated_since`; `column` not on the board → 422. Filters = the board URL's / a saved view's params (BRAI-407) | Read + move cards | BRAI-187, BRAI-191 | ready (v1.49.0, BRAI-403 / 407) |
 | `POST /api/v1/items/{id}/move` | app + verified | Drag & drop: `{column_id, position? (0 = top), with_subtasks?}` → `{data: card}`. Into a done column completes it (`with_subtasks`: its open subtasks too), out of one reopens it; watchers are notified. 403 without `can.edit_items`, 404 not visible / malformed id, 422 column of another board | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
+| `GET /api/v1/projects/{id}/config` | app + verified | What issue forms and filters offer: `{project_id, types, priorities, labels, fields (with options, board_ids), releases (fix versions: unreleased / released), can: {manage}}`, not paginated | Use views + set field values | BRAI-191 | ready (v1.49.0, BRAI-407) |
+| `GET /api/v1/boards/{id}/views` | app + verified | Saved views the user may use (shared + own, the web's order): `{id, name, is_shared, is_own, owner, is_default, layout, params, dropped}`, not paginated | Use views + set field values | BRAI-191 | ready (v1.49.0, BRAI-407) |
 
 Board: `{id, uuid, slug, name, description, type: kanban|scrum|list, position, project: {id, name, key}, workspace: {slug,
 name}, url, created_at, updated_at}`; `GET /boards/{id}` adds `{columns: [{id, name, slug, color, position, is_done, wip_limit,
@@ -536,6 +538,18 @@ comments, attachments}, url, created_at, updated_at}`.
   status notification. `wip_limit` only warns on the web, it never blocks a move.
 - Creating / renaming / reordering / deleting columns, swimlane setup, done retention, board settings: web only (`can.update`
   says whether to offer "Open in browser").
+- **Filters (BRAI-407)** are the board page's own URL params, so a saved view's `params` go to `/items` as they are
+  (`App\Support\Boards\BoardFilters` applies them in SQL like `Pages/Boards/Show.tsx` + `lib/customFields.ts` in the browser):
+  `q` (title / key contains), `assignee` = `me | unassigned | user-<id>`, `status` / `labels` / `priority` / `type` = comma-separated
+  ids (any of them), `quick` = `recent` (updated ≤ 7 days) / `due` (open, due ≤ 3 days from the user's today, or overdue) / `blocked`
+  (all must match), custom fields `f<field id>` = `none | any | yes | no | ~text | <option ids>[,none] | min..max` (dates
+  `Y-m-d`; a value that doesn't fit the field filters nothing). Malformed `assignee` / id lists / `quick` → 422. `sort`, `view`, `hide`
+  in a view's params are display settings (`layout` = `params.view`): the API ignores them.
+- Saved views: `params` are sanitized as the board does when opening a view (`BoardViewConfig::sanitize`): ids that no longer exist
+  are left out and named in `dropped`. Creating / changing / sharing views and the default view: web only.
+- Config: the enabled issue types (an issue may keep a switched-off one), priorities, labels, active and archived custom fields
+  (`board_ids: null` = every board; archived fields / options aren't offered for new values), fix versions. Setting them up: web only.
+  Members for the assignee picker: `GET /projects/{id}/members`. Setting field values: `PATCH /items/{id}` `fields`.
 
 ### Issues
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
@@ -829,4 +843,15 @@ Built in: BRAI-405 (desktop) · Mobile scope: Full (editing / deleting comments 
 - DELETE /api/v1/items/{id}/links/{link} → 204
 Scope: app · OpenAPI: docs/api/openapi.json#/Issues · Registry: docs/ai/API.md#issues
 Built in: BRAI-406 (desktop) · Mobile scope: Read + light edit (checklists = subtasks or Markdown task lists in the description)
+```
+
+**BRAI-191** (custom fields, filters, saved views)
+```
+## API (ready)
+- GET /api/v1/projects/{id}/config — issue types, priorities, labels, custom fields (+ options, boards), fix versions
+- GET /api/v1/boards/{id}/views — saved views (shared + own, default), params sanitized
+- GET /api/v1/boards/{id}/items?q=&assignee=me|unassigned|user-<id>&status=&labels=&priority=&type=&quick=recent,due,blocked&f<field id>= — the board's filters; a view's params work as they are
+- PATCH /api/v1/items/{id} {fields: {"<field id>": value | null}} — set custom field values
+Scope: app · OpenAPI: docs/api/openapi.json#/Boards · Registry: docs/ai/API.md#boards
+Built in: BRAI-407 (desktop) · Mobile scope: Use views + set field values (field definitions and view editing: web only)
 ```

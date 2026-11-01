@@ -6228,7 +6228,7 @@
         "/boards/{board}/items": {
             "get": {
                 "operationId": "app.v1.boards.items.index",
-                "description": "What the board page shows: subtasks included; a Scrum board only the running sprint (none running \u2192\nno cards; the backlog and other sprints are under Sprints); a Kanban board leaves out done cards\nfinished before its `done_retention_days` unless `include_old_done=1`. Sorted by `column_id`, then the\norder inside the column (`position`): place them with `column_id` and the board's column order.",
+                "description": "What the board page shows: subtasks included; a Scrum board only the running sprint (none running \u2192\nno cards; the backlog and other sprints are under Sprints); a Kanban board leaves out done cards\nfinished before its `done_retention_days` unless `include_old_done=1`. Sorted by `column_id`, then the\norder inside the column (`position`): place them with `column_id` and the board's column order.\n\nFilters are the board page's (and a saved view's `params`, sent as they are): `q`, `assignee`\n(me | unassigned | user-<id>), `status` / `labels` / `priority` / `type` (comma-separated ids), `quick`\n(recent, due, blocked) and custom fields as `f<field id>` (none | any | yes | no | ~text | option\nids[,none] | min..max).",
                 "summary": "The cards of a board, column by column",
                 "tags": [
                     "Boards"
@@ -6287,6 +6287,90 @@
                         "description": "Kanban: also done cards older than the board's done retention (default false)",
                         "schema": {
                             "type": "boolean"
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "description": "title or key contains it",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 200
+                        }
+                    },
+                    {
+                        "name": "assignee",
+                        "in": "query",
+                        "description": "me | unassigned | user-<id>",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "pattern": "^(me|unassigned|user-\\d{1,10})$"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "comma-separated column ids",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "pattern": "^\\d{1,18}(,\\d{1,18})*$"
+                        }
+                    },
+                    {
+                        "name": "labels",
+                        "in": "query",
+                        "description": "comma-separated label ids (any of them)",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "pattern": "^\\d{1,18}(,\\d{1,18})*$"
+                        }
+                    },
+                    {
+                        "name": "priority",
+                        "in": "query",
+                        "description": "comma-separated priority ids",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "pattern": "^\\d{1,18}(,\\d{1,18})*$"
+                        }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "comma-separated issue type ids",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "pattern": "^\\d{1,18}(,\\d{1,18})*$"
+                        }
+                    },
+                    {
+                        "name": "quick",
+                        "in": "query",
+                        "description": "recent, due, blocked (comma-separated; all must match)",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "pattern": "^(recent|due|blocked)(,(recent|due|blocked))*$"
                         }
                     }
                 ],
@@ -6473,6 +6557,107 @@
                     },
                     "403": {
                         "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/projects/{project}/config": {
+            "get": {
+                "operationId": "app.v1.projects.config",
+                "description": "Setting them up (project settings): web only.",
+                "summary": "What an issue form and the board filters offer in a project: issue types, priorities, labels, custom\nfields (with options) and fix versions",
+                "tags": [
+                    "Boards"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`ProjectConfigResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/ProjectConfigResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/boards/{board}/views": {
+            "get": {
+                "operationId": "app.v1.boards.views",
+                "description": "Each view's `params` are the board filters as `GET /boards/{id}/items` takes them. Creating, changing,\nsharing views and picking the default: web only.",
+                "summary": "The saved views of a board the user may use: shared ones and their own, in the web's order",
+                "tags": [
+                    "Boards"
+                ],
+                "parameters": [
+                    {
+                        "name": "board",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `BoardViewResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/BoardViewResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
                     },
                     "429": {
                         "$ref": "#/components/responses/RateLimited"
@@ -8154,6 +8339,57 @@
                 ],
                 "title": "BoardResource"
             },
+            "BoardViewResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "is_shared": {
+                        "type": "boolean",
+                        "description": "shared with everyone on the board (else only its owner sees it)"
+                    },
+                    "is_own": {
+                        "type": "boolean"
+                    },
+                    "owner": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "is_default": {
+                        "type": "boolean",
+                        "description": "the user's default view of this board (the plain board URL opens it)"
+                    },
+                    "layout": {
+                        "type": "string"
+                    },
+                    "params": {
+                        "type": "string"
+                    },
+                    "dropped": {
+                        "type": "array",
+                        "description": "parts of the view that no longer exist on the board (left out of params)",
+                        "items": {}
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "is_shared",
+                    "is_own",
+                    "owner",
+                    "is_default",
+                    "layout",
+                    "params",
+                    "dropped"
+                ],
+                "title": "BoardViewResource"
+            },
             "BookmarkGroupCollection": {
                 "type": "array",
                 "items": {
@@ -9647,6 +9883,33 @@
                 ],
                 "title": "ExchangeCodeRequest"
             },
+            "FieldOptionResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "label": {
+                        "type": "string"
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "archived": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "label",
+                    "color",
+                    "archived"
+                ],
+                "title": "FieldOptionResource"
+            },
             "InstanceResource": {
                 "type": "object",
                 "properties": {
@@ -10666,6 +10929,87 @@
                 ],
                 "title": "IssueResource"
             },
+            "ItemFieldResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "text | number | date | checkbox | select"
+                    },
+                    "board_ids": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "description": "the boards it shows on; null = every board of the project",
+                        "items": {}
+                    },
+                    "archived": {
+                        "type": "boolean",
+                        "description": "archived fields keep their values but are neither shown nor set"
+                    },
+                    "options": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/FieldOptionResource"
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "type",
+                    "board_ids",
+                    "archived",
+                    "options"
+                ],
+                "title": "ItemFieldResource"
+            },
+            "ItemTypeResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "is_default": {
+                        "type": "boolean",
+                        "description": "new issues get this type when none is given"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "icon",
+                    "color",
+                    "is_default"
+                ],
+                "title": "ItemTypeResource"
+            },
             "LabelResource": {
                 "type": "object",
                 "properties": {
@@ -11468,12 +11812,111 @@
                 ],
                 "title": "PinsResource"
             },
+            "PriorityResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "is_default": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "icon",
+                    "color",
+                    "is_default"
+                ],
+                "title": "PriorityResource"
+            },
             "ProjectCollection": {
                 "type": "array",
                 "items": {
                     "$ref": "#/components/schemas/ProjectResource"
                 },
                 "title": "ProjectCollection"
+            },
+            "ProjectConfigResource": {
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "integer"
+                    },
+                    "types": {
+                        "type": "array",
+                        "description": "the enabled types (an issue may keep a switched-off type it already has)",
+                        "items": {
+                            "$ref": "#/components/schemas/ItemTypeResource"
+                        }
+                    },
+                    "priorities": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PriorityResource"
+                        }
+                    },
+                    "labels": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/LabelResource"
+                        }
+                    },
+                    "fields": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ItemFieldResource"
+                        }
+                    },
+                    "releases": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ReleaseOptionResource"
+                        }
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "manage": {
+                                "type": "boolean",
+                                "description": "labels, types, priorities, fields, releases are set up on the web (project settings)"
+                            }
+                        },
+                        "required": [
+                            "manage"
+                        ]
+                    }
+                },
+                "required": [
+                    "project_id",
+                    "types",
+                    "priorities",
+                    "labels",
+                    "fields",
+                    "releases",
+                    "can"
+                ],
+                "title": "ProjectConfigResource"
             },
             "ProjectDetailResource": {
                 "type": "object",
@@ -12026,6 +12469,34 @@
                     "refresh_token"
                 ],
                 "title": "RefreshTokenRequest"
+            },
+            "ReleaseOptionResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "unreleased | released"
+                    },
+                    "release_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "status",
+                    "release_date"
+                ],
+                "title": "ReleaseOptionResource"
             },
             "ReorderTasksRequest": {
                 "type": "object",

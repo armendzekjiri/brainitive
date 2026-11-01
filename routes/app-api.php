@@ -204,6 +204,9 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::get('boards/{board}', [BoardController::class, 'show'])->whereNumber('board')->name('boards.show');
         Route::get('boards/{board}/items', [BoardController::class, 'items'])->whereNumber('board')->name('boards.items.index');
         Route::post('items/{item}/move', [BoardController::class, 'move'])->name('items.move');
+        // what issue forms and filters offer (types, priorities, labels, fields, releases) + saved views
+        Route::get('projects/{project}/config', [BoardController::class, 'config'])->whereNumber('project')->name('projects.config');
+        Route::get('boards/{board}/views', [BoardController::class, 'views'])->whereNumber('board')->name('boards.views');
 
         // ── Issues: create, view, edit, assign, delete (Issues: shared with the web's issue dialog) ─────
         Route::post('boards/{board}/items', [IssueController::class, 'store'])->name('items.store');
