@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AppApi\AuthController;
+use App\Http\Controllers\AppApi\BookmarkController;
 use App\Http\Controllers\AppApi\CalendarController;
 use App\Http\Controllers\AppApi\CaptureController;
 use App\Http\Controllers\AppApi\ConnectedAppController;
@@ -16,6 +17,7 @@ use App\Http\Controllers\AppApi\NavigationController;
 use App\Http\Controllers\AppApi\NotificationController;
 use App\Http\Controllers\AppApi\ProjectController;
 use App\Http\Controllers\AppApi\SearchController;
+use App\Http\Controllers\AppApi\SnippetController;
 use App\Http\Controllers\AppApi\TaskListController;
 use App\Http\Controllers\AppApi\TodayController;
 use App\Http\Controllers\AppApi\WorkspaceController;
@@ -151,6 +153,30 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::get('captures/{capture}/preview', [CaptureController::class, 'preview'])->whereUuid('capture')->name('captures.preview');
         Route::post('captures/{capture}/convert', [CaptureController::class, 'convert'])->middleware('throttle:60,1,app.captures.convert')->name('captures.convert');
         Route::get('capture-destinations', [CaptureController::class, 'destinations'])->name('captures.destinations');
+
+        // ── Snippets (Snippets: shared with the web; SnippetPolicy) ──────────────────────────────
+        Route::get('workspaces/{workspace:slug}/snippet-collections', [SnippetController::class, 'index'])->name('snippet-collections.index');
+        Route::post('workspaces/{workspace:slug}/snippet-collections', [SnippetController::class, 'store'])->name('snippet-collections.store');
+        Route::get('snippet-collections/{collection}', [SnippetController::class, 'show'])->whereNumber('collection')->name('snippet-collections.show');
+        Route::patch('snippet-collections/{collection}', [SnippetController::class, 'update'])->name('snippet-collections.update');
+        Route::delete('snippet-collections/{collection}', [SnippetController::class, 'destroy'])->name('snippet-collections.destroy');
+        Route::get('snippet-collections/{collection}/snippets', [SnippetController::class, 'snippets'])->whereNumber('collection')->name('snippets.index');
+        Route::post('snippet-collections/{collection}/snippets', [SnippetController::class, 'storeSnippet'])->name('snippets.store');
+        Route::get('snippets/{snippet}', [SnippetController::class, 'showSnippet'])->whereNumber('snippet')->name('snippets.show');
+        Route::patch('snippets/{snippet}', [SnippetController::class, 'updateSnippet'])->name('snippets.update');
+        Route::delete('snippets/{snippet}', [SnippetController::class, 'destroySnippet'])->name('snippets.destroy');
+
+        // ── Bookmarks (Bookmarks: shared with the web; BookmarkPolicy) ───────────────────────────
+        // {group}, not {bookmark}: that parameter has a slug binding in AppServiceProvider
+        Route::get('workspaces/{workspace:slug}/bookmarks', [BookmarkController::class, 'index'])->name('bookmarks.index');
+        Route::post('workspaces/{workspace:slug}/bookmarks', [BookmarkController::class, 'store'])->name('bookmarks.store');
+        Route::get('bookmarks/{group}', [BookmarkController::class, 'show'])->whereNumber('group')->name('bookmarks.show');
+        Route::patch('bookmarks/{group}', [BookmarkController::class, 'update'])->name('bookmarks.update');
+        Route::delete('bookmarks/{group}', [BookmarkController::class, 'destroy'])->name('bookmarks.destroy');
+        Route::get('bookmarks/{group}/items', [BookmarkController::class, 'items'])->whereNumber('group')->name('bookmarks.items.index');
+        Route::post('bookmarks/{group}/items', [BookmarkController::class, 'storeItem'])->name('bookmarks.items.store');
+        Route::patch('bookmarks/{group}/items/{item}', [BookmarkController::class, 'updateItem'])->name('bookmarks.items.update');
+        Route::delete('bookmarks/{group}/items/{item}', [BookmarkController::class, 'destroyItem'])->name('bookmarks.items.destroy');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');
