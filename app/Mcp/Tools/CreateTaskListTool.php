@@ -6,8 +6,8 @@ use App\Mcp\Tools\Concerns\InteractsWithBrainitive;
 use App\Models\TaskList;
 use App\Support\Mcp\IdempotentRequest;
 use App\Support\Mcp\ResourceLocator;
+use App\Support\TaskLists\TaskLists;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
-use Illuminate\Support\Str;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
@@ -37,19 +37,7 @@ class CreateTaskListTool extends Tool
             $this->authorizeFor($user, 'create', [TaskList::class, $project]);
 
             $run = IdempotentRequest::run($user, 'create_task_list', $v['request_id'], ['project' => $project->id, 'name' => $v['name'], 'description' => $v['description'] ?? null], function () use ($project, $user, $v) {
-                $slug = Str::slug($v['name']) ?: 'list';
-                for ($base = $slug, $n = 2; $project->taskLists()->withTrashed()->where('slug', $slug)->exists(); $n++) {
-                    $slug = "{$base}-{$n}";
-                }
-
-                $list = $project->taskLists()->create([
-                    'name' => $v['name'],
-                    'slug' => $slug,
-                    'description' => $v['description'] ?? null,
-                    'position' => ($project->taskLists()->max('position') ?? 0) + 1,
-                    'created_by' => $user->id,
-                ]);
-                $list->watchers()->syncWithoutDetaching([$user->id]);
+                $list = TaskLists::create($project, $user, $v['name'], $v['description'] ?? null);
 
                 return ['task_list_slug' => $list->slug, 'location' => ResourceLocator::locate($list)];
             });

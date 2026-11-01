@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -28,7 +28,7 @@ logic underneath (Support services, policies) is shared.
 | Errors | `{"message": "…", "code": "…", "errors"?: {field: [..]}}` — 400 `bad_request` / `invalid_grant`, 401 `unauthenticated`, 402 `limit_reached` (+ `limit` object, see Invitations), 403 `forbidden`, 404 `not_found`, 405 `method_not_allowed`, 409 `conflict`, 410 `gone`, 422 `validation_failed`, 429 `rate_limited`, 500 `server_error`. 404 instead of 403 when the user must not learn that something exists. Documented once for all endpoints (`App\Support\AppApi\OpenApi`); a 402 needs `@throws LimitReached` on the controller method. |
 | Dates | ISO-8601 UTC (`2026-11-01T09:16:04Z`). |
 | Lists | Cursor pagination `?cursor=&limit=` (default 50, max 100) → `{data: [...], next_cursor}`; `updated_since` for sync. Server side: `ListRequest` (rules + `limit()` / `cursor()` / `updatedSince()`) and a `CursorCollection` subclass per list. An unknown / stale cursor starts again at the first page. |
-| Writes | `Idempotency-Key` header accepted; updates carry `revision` / `updated_at` → 409 on conflict. |
+| Writes | Creates take an optional `request_id` (uuid): a retry with the same id and input answers **200** with what the first call created (201 the first time); the same id with other input → 409 `conflict` (`Concerns\CreatesOnce`, stored 7 days like the MCP's writes). Updates carry `revision` / `updated_at` → 409 on conflict where a resource has one. |
 | Limits | `throttle:app-api` 240/min per token + 600/min per IP; `throttle:app-auth` 20/min per IP on exchange / refresh. |
 | CORS | None. Native clients only; browsers can't call it cross-origin. |
 | Versioning | `info.version` of the spec is the **API** version (`1.0.0`, `config/scramble.php`), not the app release. Additive changes (new endpoint, new optional field) stay in v1; removing / renaming a field or changing a meaning needs `/api/v2`. Apps learn the server's minimum app versions from `GET /instance`. |
@@ -383,6 +383,34 @@ project: {id, name, key}|null, url, external_url, done, read_only}`.
 - **Later (phase 08):** creating / moving / deleting events on writable calendars, meetings
   (Meet / Teams links), the private ICS feed link (`GET /me/calendar-feed`). Connecting providers: web only.
 
+### Task lists
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/projects/{id}/task-lists` | app + verified | A project's lists, in the web's order (position), with `counts: {todo, done}`, cursor-paginated, `updated_since`. Can't open the project → 404 | Full | BRAI-216 | ready (v1.49.0, BRAI-397) |
+| `POST /api/v1/projects/{id}/task-lists` | app + verified | New list `{name, description?, request_id?}` → 201 `{data: list detail}` (at the end; the creator watches it). 403 for viewers (project admins / editors and workspace admins create), 404 outside | Full | BRAI-216 | ready (v1.49.0, BRAI-397) |
+| `GET /api/v1/task-lists/{id}` | app + verified | One list: the list fields + `can: {update, delete, manage_items}` + `watching` | Full | BRAI-216 | ready (v1.49.0, BRAI-397) |
+| `GET /api/v1/task-lists/{id}/items?status=todo\|done\|all` | app + verified | The list's tasks in its order (position), cursor-paginated, `updated_since` (deleted tasks don't come back: reload now and then) | Full | BRAI-216 | ready (v1.49.0, BRAI-397) |
+| `POST /api/v1/task-lists/{id}/items` | app + verified | Add a task `{title, notes? (Markdown), assignee_id?, due_date?, due_time? (H:i), start_date?, start_time?, recurrence? (daily\|weekly\|monthly\|yearly), reminder_minutes? (0\|10\|60\|1440), request_id?}` → 201 `{data: task}`. 403 without `can.manage_items`; an assignee who can't open the project → 422 | Full | BRAI-216 | ready (v1.49.0, BRAI-397) |
+| `PATCH /api/v1/task-lists/{id}/items/{task}` | app + verified | Change only the sent fields (`null` clears); `status: done\|todo`. Completing a **repeating** task with a due date keeps it `todo` and moves `due_date` to the next date, as the web → `{data: task}` | Full | BRAI-216 | ready (v1.49.0, BRAI-397) |
+| `DELETE /api/v1/task-lists/{id}/items/{task}` | app + verified | Delete a task → 204 | Full | BRAI-216 | ready (v1.49.0, BRAI-397) |
+| `POST /api/v1/task-lists/{id}/items/reorder` | app + verified | `{ids: [every task id, top to bottom]}` → positions 1, 2, 3 …; ids of other lists are ignored → `{data: list detail}` | Full | BRAI-216 | ready (v1.49.0, BRAI-397) |
+
+List: `{id, uuid, slug, name, description, position, counts: {todo, done}, project: {id, name, key}, workspace:
+{slug, name}, url, created_at, updated_at}`; the detail (`GET`, `POST`, reorder) adds `can` and `watching`.
+Task: `{id, work_id: "task:<id>", list_id, title, status: todo|done, done, notes (Markdown|null), assignee: {id,
+name, avatar_url}|null, due_date (Y-m-d), due_time (H:i), start_date, start_time, recurrence, reminder_minutes,
+position, url, created_at, updated_at}`.
+- Same rules and code as the web (`TaskListPolicy`; `App\Support\TaskLists\TaskLists` for create / rules /
+  reorder, also used by the CLI and the MCP; `WorkCompletion::updateTask` for done + repeating tasks).
+  Everybody who can open the project reads; project admins / editors and workspace admins write.
+- `notes` is Markdown both ways; the web stores the editor's HTML, so formatting the editor has and Markdown
+  doesn't (colours, alignment) is lost when a task is saved through the API with `notes`. Send `notes` only
+  when the user changed them.
+- Dates / times are the user's wall clock, like on the web. `work_id` is what `PATCH /me/work/{id}` and My Day
+  take; assigned tasks also show in `GET /me/work`.
+- Renaming, describing, deleting lists and watching: web only for now (`can.update` / `can.delete` say whether
+  to offer "Open in browser"). Duplicating a task: web only.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -490,4 +518,18 @@ Built in: BRAI-418 read part (desktop) · Mobile scope: Status only (connecting 
 - GET /api/v1/me/data-export — status of the latest exports + download link (opens in the web session)
 Scope: app · OpenAPI: docs/api/openapi.json#/Connected apps · Registry: docs/ai/API.md#connected-apps
 Built in: BRAI-394 (desktop) · Mobile scope: Request export (account deletion web only)
+```
+
+**BRAI-216** (task lists + recurring to-dos)
+```
+## API (ready)
+- GET /api/v1/projects/{id}/task-lists — a project's lists in order, with todo / done counts, cursor-paginated
+- POST /api/v1/projects/{id}/task-lists — new list {name, description?} (project admins / editors)
+- GET /api/v1/task-lists/{id} — one list: counts, can {update, delete, manage_items}, watching
+- GET /api/v1/task-lists/{id}/items?status=todo|done|all — the tasks in order, cursor-paginated, updated_since
+- POST /api/v1/task-lists/{id}/items — add a task {title, notes (Markdown), assignee_id, due_date, due_time, start_date, start_time, recurrence, reminder_minutes}
+- PATCH /api/v1/task-lists/{id}/items/{task} — change sent fields; status done on a repeating task moves it to its next date
+- DELETE /api/v1/task-lists/{id}/items/{task} → 204 · POST /api/v1/task-lists/{id}/items/reorder {ids}
+Scope: app · OpenAPI: docs/api/openapi.json#/Task lists · Registry: docs/ai/API.md#task-lists
+Built in: BRAI-397 (desktop) · Mobile scope: Full (renaming / deleting lists: web only for now)
 ```

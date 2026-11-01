@@ -6,12 +6,11 @@ use App\Models\Project;
 use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\Workspace;
-use App\Rules\ProjectMember;
+use App\Support\TaskLists\TaskLists;
 use App\Support\Work\WorkCompletion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class TaskListController extends Controller
@@ -27,20 +26,7 @@ class TaskListController extends Controller
             'description' => 'nullable|string|max:1000',
         ]);
 
-        $slug = $this->uniqueSlug($project, Str::slug($validated['name']));
-
-        $position = $project->taskLists()->max('position') + 1;
-
-        $taskList = $project->taskLists()->create([
-            'name' => $validated['name'],
-            'slug' => $slug,
-            'description' => $validated['description'] ?? null,
-            'position' => $position,
-            'created_by' => $request->user()->id,
-        ]);
-
-        // Auto-watch creator
-        $taskList->watchers()->syncWithoutDetaching([$request->user()->id]);
+        $taskList = TaskLists::create($project, $request->user(), $validated['name'], $validated['description'] ?? null);
 
         return redirect()->route('task-lists.show', [$workspace->slug, $project->slug, $taskList->slug])
             ->with('success', 'List created successfully.');
@@ -84,7 +70,7 @@ class TaskListController extends Controller
         ]);
 
         if (isset($validated['name'])) {
-            $validated['slug'] = $this->uniqueSlug($project, Str::slug($validated['name']), $taskList->id);
+            $validated['slug'] = TaskLists::uniqueSlug($project, $validated['name'], $taskList->id);
         }
 
         $taskList->update($validated);
@@ -124,35 +110,9 @@ class TaskListController extends Controller
     {
         $this->authorize('manageItems', $taskList);
 
-        $validated = $request->validate([
-            'title' => 'required|string|max:500',
-            'description' => 'nullable|array',
-            // Only people in this workspace can be assigned.
-            'assignee_id' => ['nullable', 'integer', Rule::in($this->memberIds($workspace)), new ProjectMember($taskList->project)],
-            'due_date' => 'nullable|date',
-            'due_time' => 'nullable|date_format:H:i',
-            'start_date' => 'nullable|date',
-            'start_time' => 'nullable|date_format:H:i',
-            'recurrence' => 'nullable|in:daily,weekly,monthly,yearly',
-            'reminder_minutes' => 'nullable|integer|in:'.implode(',', TaskListItem::REMINDER_OPTIONS),
-        ]);
+        $validated = $request->validate(['description' => 'nullable|array'] + TaskLists::taskRules($taskList));
 
-        $position = $taskList->items()->max('position') + 1;
-
-        $item = $taskList->items()->create([
-            'title' => $validated['title'],
-            'description' => $validated['description'] ?? null,
-            'status' => 'todo',
-            'assignee_id' => $validated['assignee_id'] ?? null,
-            'due_date' => $validated['due_date'] ?? null,
-            'due_time' => $validated['due_time'] ?? null,
-            'start_date' => $validated['start_date'] ?? null,
-            'start_time' => $validated['start_time'] ?? null,
-            'recurrence' => $validated['recurrence'] ?? null,
-            'reminder_minutes' => $validated['reminder_minutes'] ?? null,
-            'position' => $position,
-            'created_by' => $request->user()->id,
-        ]);
+        $item = TaskLists::createTask($taskList, $request->user(), $validated);
 
         return back()->with(['newItem' => $item->load('assignee:id,name,email,avatar')]);
     }
@@ -161,19 +121,7 @@ class TaskListController extends Controller
     {
         $this->authorize('manageItems', $taskList);
 
-        $validated = $request->validate([
-            'title' => 'sometimes|required|string|max:500',
-            'description' => 'nullable|array',
-            'status' => 'sometimes|in:todo,done',
-            // Only people in this workspace can be assigned.
-            'assignee_id' => ['nullable', 'integer', Rule::in($this->memberIds($workspace)), new ProjectMember($taskList->project)],
-            'due_date' => 'nullable|date',
-            'due_time' => 'nullable|date_format:H:i',
-            'start_date' => 'nullable|date',
-            'start_time' => 'nullable|date_format:H:i',
-            'recurrence' => 'nullable|in:daily,weekly,monthly,yearly',
-            'reminder_minutes' => 'nullable|integer|in:'.implode(',', TaskListItem::REMINDER_OPTIONS),
-        ]);
+        $validated = $request->validate(['description' => 'nullable|array'] + TaskLists::taskRules($taskList, update: true));
 
         // a repeating task rolls on to its next date (shared with My Work and the App API)
         WorkCompletion::updateTask($item, $validated);
@@ -221,36 +169,8 @@ class TaskListController extends Controller
             'items.*.position' => 'required|integer',
         ]);
 
-        foreach ($validated['items'] as $data) {
-            $taskList->items()->where('id', $data['id'])->update(['position' => $data['position']]);
-        }
+        TaskLists::reorder($taskList, collect($validated['items'])->mapWithKeys(fn (array $row) => [(int) $row['id'] => (int) $row['position']])->all());
 
         return response()->json(['ok' => true]);
-    }
-
-    // ─── Helpers ──────────────────────────────────────────────────────────────
-
-    /** @return list<int> */
-    private function memberIds(Workspace $workspace): array
-    {
-        return $workspace->users()->pluck('users.id')->all();
-    }
-
-    private function uniqueSlug(Project $project, string $base, ?int $excludeId = null): string
-    {
-        $slug = $base ?: 'list';
-        $original = $slug;
-        $counter = 1;
-
-        while (
-            $project->taskLists()
-                ->where('slug', $slug)
-                ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
-                ->exists()
-        ) {
-            $slug = $original.'-'.$counter++;
-        }
-
-        return $slug;
     }
 }

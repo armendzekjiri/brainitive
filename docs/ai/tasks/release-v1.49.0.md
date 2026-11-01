@@ -298,3 +298,47 @@ Deviations from the plan / card:
   the private ICS feed link. Connecting providers stays web only.
 - `## API (ready)` texts for BRAI-215, BRAI-222 and BRAI-229 are in `docs/ai/API.md` → "Mobile card texts".
 
+
+## Phase 04b — task lists, captures, snippets, bookmarks, time tracking
+
+Desktop-app board cards 677–680 (epic BRAI-395, card 675): BRAI-397, BRAI-398, BRAI-399, BRAI-400. Card
+681 (BRAI-401, quick switcher) is a desktop UI card, not built here. Same flow as phase 03 / 04a
+(`feat/app-api-<name>` from `release/v1.49.0`, merged back `--no-ff`), same definition of done (tests incl.
+Passport → 401 and other users' data → 404, e2e spec, `API.md` rows + mobile card texts, OpenAPI).
+New spec tags: Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190.
+Creates take an optional `request_id` (uuid): a retry answers 200 with what the first call created
+(`IdempotentRequest`, the MCP's store, keyed per user + endpoint).
+
+### BRAI-397 task lists + recurring to-dos (`feat/app-api-task-lists`)
+- `GET|POST /projects/{id}/task-lists`, `GET /task-lists/{id}` (counts + `can`), `GET /task-lists/{id}/items`
+  (`status=todo|done|all`, cursor), `POST /task-lists/{id}/items`, `PATCH|DELETE /task-lists/{id}/items/{item}`,
+  `POST /task-lists/{id}/items/reorder` `{ids}`. Tasks carry `notes` as Markdown (stored as the editor's HTML),
+  recurrence + reminder fields; completing a repeating task rolls it on (`WorkCompletion::updateTask`).
+- Extract: list create (slug incl. trashed, position, creator watches) and task create / rules / reorder of
+  `TaskListController` → `App\Support\TaskLists\TaskLists`; used by the web, the CLI (`/api/cli/lists*`, whose
+  list query becomes the shared "lists of projects the user can open"), the MCP tool and `ContentCapture`.
+- Reuse: `TaskListPolicy` (view / create / manageItems), `ResolvesVisible`.
+
+### BRAI-398 captures inbox (`feat/app-api-captures`)
+- `GET /captures?state=inbox|processed|archived&q=` (cursor, newest first), `POST /captures`, `PATCH /captures/{id}`,
+  `POST /captures/{id}/archive|restore`, `DELETE /captures/{id}` (archived only, as the web), `GET
+  /captures/{id}/preview?type=` (the convert dialog's fields), `POST /captures/{id}/convert` (`CaptureConversion`,
+  idempotent), `GET /capture-destinations` (`CaptureDestinations`). Owner only; others' captures → 404.
+- Files on a capture: the web has none (captures are text + url) → deferred, no migration.
+
+### BRAI-399 snippets + bookmark collections (`feat/app-api-snippets-bookmarks`)
+- Snippets: `GET|POST /workspaces/{slug}/snippet-collections`, `GET|PATCH|DELETE /snippet-collections/{id}`,
+  `GET|POST /snippet-collections/{id}/snippets`, `GET|PATCH|DELETE /snippets/{id}`.
+- Bookmarks: `GET|POST /workspaces/{slug}/bookmarks` (groups visible to the user), `GET|PATCH|DELETE
+  /bookmarks/{id}`, `GET|POST /bookmarks/{id}/items` (link / note / todo / file), `PATCH|DELETE
+  /bookmarks/{id}/items/{item}`. Collaborators and icons upload: web only.
+- Extract the inline create / rules of `SnippetController` and `BookmarkController` → `App\Support\Snippets\Snippets`,
+  `App\Support\Bookmarks\Bookmarks` (web + API; the MCP tools keep theirs).
+
+### BRAI-400 time tracking (`feat/app-api-time-tracking`)
+- `GET /me/timer`, `POST /me/timer/start {id: "issue:<id>"}`, `POST /me/timer/stop {timer_id, time?, note?,
+  activity_id?, spent_on?}`, `POST /me/timer/discard {timer_id}`; `GET /work-logs?workspace=&from=&to=`,
+  `POST /work-logs`, `GET|PATCH|DELETE /work-logs/{id}` (own entries; billed = read-only), `GET
+  /me/timesheet?workspace=&week=` (+ activities, loggable projects). Rates, clients, VAT, invoices: web only.
+- Extract `WorkTimerController` start / stop / discard → `App\Support\Billing\WorkTimers` and
+  `TimesheetController` store / update / destroy → `App\Support\Billing\TimeEntries` (web + API).
