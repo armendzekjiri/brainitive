@@ -47,6 +47,9 @@
         },
         {
             "name": "Search"
+        },
+        {
+            "name": "Notifications"
         }
     ],
     "security": [
@@ -1749,6 +1752,342 @@
                     }
                 }
             }
+        },
+        "/notifications": {
+            "get": {
+                "operationId": "app.v1.notifications.index",
+                "summary": "The inbox, newest first: `filter` = all | unread | mentions | assigned; `archived=1` for the archive",
+                "tags": [
+                    "Notifications"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "filter",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "all",
+                                "unread",
+                                "mentions",
+                                "assigned"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "archived",
+                        "in": "query",
+                        "description": "true: the archived notifications instead of the inbox",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `NotificationResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/NotificationCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/notifications/unread-count": {
+            "get": {
+                "operationId": "app.v1.notifications.unread-count",
+                "summary": "The badge count: unread notifications in the inbox",
+                "tags": [
+                    "Notifications"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`UnreadCountResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/UnreadCountResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/notifications/read-all": {
+            "post": {
+                "operationId": "app.v1.notifications.read-all",
+                "summary": "Mark every inbox notification read",
+                "tags": [
+                    "Notifications"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`UnreadCountResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/UnreadCountResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/notifications/{id}/read": {
+            "post": {
+                "operationId": "app.v1.notifications.read",
+                "summary": "Mark one notification read; answers the new unread count",
+                "tags": [
+                    "Notifications"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`UnreadCountResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/UnreadCountResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/notifications/{id}/archive": {
+            "post": {
+                "operationId": "app.v1.notifications.archive",
+                "summary": "Archive one notification (it leaves the inbox and counts as read); answers the new unread count",
+                "tags": [
+                    "Notifications"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`UnreadCountResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/UnreadCountResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/notification-preferences": {
+            "get": {
+                "operationId": "app.v1.notifications.preferences",
+                "summary": "Per category, which channels deliver (in-app, push, email)",
+                "tags": [
+                    "Notifications"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`NotificationPreferencesResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/NotificationPreferencesResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "put": {
+                "operationId": "app.v1.notifications.preferences.update",
+                "summary": "Change channels per category; only the sent ones change",
+                "tags": [
+                    "Notifications"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateNotificationPreferencesRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`NotificationPreferencesResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/NotificationPreferencesResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -2633,6 +2972,120 @@
                     "recent"
                 ],
                 "title": "NavigationResource"
+            },
+            "NotificationCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/NotificationResource"
+                },
+                "title": "NotificationCollection"
+            },
+            "NotificationPreferencesResource": {
+                "type": "object",
+                "properties": {
+                    "categories": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "key": {
+                                    "type": "string"
+                                },
+                                "label": {
+                                    "type": "string"
+                                },
+                                "description": {
+                                    "type": "string"
+                                },
+                                "channels": {
+                                    "type": "object",
+                                    "properties": {
+                                        "in_app": {
+                                            "type": "boolean"
+                                        },
+                                        "push": {
+                                            "type": "boolean"
+                                        },
+                                        "email": {
+                                            "type": "boolean"
+                                        }
+                                    },
+                                    "required": [
+                                        "in_app",
+                                        "push",
+                                        "email"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "key",
+                                "label",
+                                "description",
+                                "channels"
+                            ]
+                        }
+                    }
+                },
+                "required": [
+                    "categories"
+                ],
+                "title": "NotificationPreferencesResource"
+            },
+            "NotificationResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "category": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "mentions, assignments, comments, due, \u2026 (NotificationCatalog::CATEGORIES)"
+                    },
+                    "data": {
+                        "type": "object"
+                    },
+                    "read": {
+                        "type": "boolean"
+                    },
+                    "read_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "archived_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "category",
+                    "data",
+                    "read",
+                    "read_at",
+                    "archived_at",
+                    "created_at"
+                ],
+                "title": "NotificationResource"
             },
             "PinResource": {
                 "type": "object",
@@ -3569,6 +4022,18 @@
                 ],
                 "title": "TokenResource"
             },
+            "UnreadCountResource": {
+                "type": "object",
+                "properties": {
+                    "unread_count": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "unread_count"
+                ],
+                "title": "UnreadCountResource"
+            },
             "UpdateAvatarRequest": {
                 "type": "object",
                 "description": "`POST /api/v1/me/avatar` (BRAI-384): multipart `avatar`, the web Profile page's image rules.",
@@ -3652,6 +4117,25 @@
                     }
                 },
                 "title": "UpdateMeRequest"
+            },
+            "UpdateNotificationPreferencesRequest": {
+                "type": "object",
+                "description": "`PUT /api/v1/me/notification-preferences` (BRAI-393): Profile \u2192 Notifications. Partial: only the\nsent categories and channels change \u2014 `{preferences: {\"mentions\": {\"push\": false}}}`.",
+                "properties": {
+                    "preferences": {
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "items": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                },
+                "required": [
+                    "preferences"
+                ],
+                "title": "UpdateNotificationPreferencesRequest"
             },
             "UpdatePinsRequest": {
                 "type": "object",

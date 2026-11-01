@@ -8,6 +8,7 @@ use App\Http\Controllers\AppApi\MeAvatarController;
 use App\Http\Controllers\AppApi\MeController;
 use App\Http\Controllers\AppApi\MemberController;
 use App\Http\Controllers\AppApi\NavigationController;
+use App\Http\Controllers\AppApi\NotificationController;
 use App\Http\Controllers\AppApi\ProjectController;
 use App\Http\Controllers\AppApi\SearchController;
 use App\Http\Controllers\AppApi\WorkspaceController;
@@ -89,6 +90,15 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
 
         // ── Search (SearchService: the web's search, MCP and the extension share it) ─────────────
         Route::get('search', SearchController::class)->name('search');
+
+        // ── Notifications (NotificationInbox, shared with the web bell) ─────────────────────────
+        Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+        Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unread-count');
+        Route::post('notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+        Route::post('notifications/{id}/read', [NotificationController::class, 'read'])->name('notifications.read');
+        Route::post('notifications/{id}/archive', [NotificationController::class, 'archive'])->name('notifications.archive');
+        Route::get('me/notification-preferences', [NotificationController::class, 'preferences'])->name('notifications.preferences');
+        Route::put('me/notification-preferences', [NotificationController::class, 'updatePreferences'])->name('notifications.preferences.update');
 
     });
 
