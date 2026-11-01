@@ -3,6 +3,7 @@
 namespace App\Mcp\Tools\Concerns;
 
 use App\Models\Plan;
+use App\Support\Plans\PlanReader;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Auth\Authenticatable;
 
@@ -37,8 +38,8 @@ trait InteractsWithPlans
      */
     protected function planRange(Plan $plan): array
     {
-        $dates = collect($plan->data['rows'] ?? [])->flatMap(fn ($row) => $row['bars'] ?? []);
+        $range = PlanReader::range($plan);
 
-        return ['start' => (string) ($dates->min('start') ?? ''), 'end' => (string) ($dates->max('end') ?? '')];
+        return ['start' => (string) ($range['start'] ?? ''), 'end' => (string) ($range['end'] ?? '')];
     }
 }

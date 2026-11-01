@@ -23,7 +23,9 @@ use App\Http\Controllers\AppApi\NavigationController;
 use App\Http\Controllers\AppApi\NotificationController;
 use App\Http\Controllers\AppApi\PageCollabController;
 use App\Http\Controllers\AppApi\PageController;
+use App\Http\Controllers\AppApi\PlanController;
 use App\Http\Controllers\AppApi\ProjectController;
+use App\Http\Controllers\AppApi\ReleaseController;
 use App\Http\Controllers\AppApi\SearchController;
 use App\Http\Controllers\AppApi\SnippetController;
 use App\Http\Controllers\AppApi\SprintController;
@@ -278,6 +280,12 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
 
         // ── Whiteboards: the scene, read-only (drawing, templates, stickies → issues: web / desktop webview) ──
         Route::get('whiteboards/{uuid}', [WhiteboardController::class, 'show'])->whereUuid('uuid')->name('whiteboards.show');
+
+        // ── Gantt plans + releases, read-only (PlanReader: shared with the MCP; editing: web only) ──────
+        Route::get('projects/{project}/plans', [PlanController::class, 'index'])->whereNumber('project')->name('plans.index');
+        Route::get('plans/{plan}', [PlanController::class, 'show'])->whereNumber('plan')->name('plans.show');
+        Route::get('projects/{project}/releases', [ReleaseController::class, 'index'])->whereNumber('project')->name('releases.index');
+        Route::get('releases/{release}', [ReleaseController::class, 'show'])->whereNumber('release')->name('releases.show');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');

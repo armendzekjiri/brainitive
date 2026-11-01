@@ -3,8 +3,7 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\InteractsWithPlans;
-use App\Models\Item;
-use App\Support\Plans\PlanIssueSync;
+use App\Support\Plans\PlanReader;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -30,32 +29,31 @@ class GetPlanTool extends Tool
             return Response::error($e->getMessage());
         }
 
-        $data = $plan->data ?? ['rows' => [], 'dependencies' => []];
-        $items = Item::whereIn('id', PlanIssueSync::linkedIds($data))->get(['id', 'key', 'title', 'board_id'])
-            ->filter(fn (Item $i) => $request->user()->can('view', $i))->keyBy('id');
+        // the reader shared with the App API: linked issues only when the user may open them
+        $read = PlanReader::read($plan, $request->user());
 
         return Response::structured([
             'name' => $plan->name,
             'description' => $plan->description ?? '',
             'edit_revision' => (int) $plan->edit_revision,
-            'rows' => collect($data['rows'] ?? [])->map(fn (array $row) => [
+            'rows' => array_map(fn (array $row) => [
                 'id' => $row['id'],
-                'name' => $row['name'] ?? '',
-                'level' => (int) ($row['level'] ?? 0),
+                'name' => $row['name'],
+                'level' => $row['level'],
                 'who' => $row['who'] ?? '',
                 'status' => $row['status'] ?? '',
                 'notes' => $row['notes'] ?? '',
-                'linked_issue' => isset($row['itemId'], $items[$row['itemId']]) ? $items[$row['itemId']]->key.' '.$items[$row['itemId']]->title : '',
-                'bars' => collect($row['bars'] ?? [])->map(fn (array $bar) => [
+                'linked_issue' => $row['issue'] ? $row['issue']['key'].' '.$row['issue']['title'] : '',
+                'bars' => array_map(fn (array $bar) => [
                     'id' => $bar['id'],
                     'start' => $bar['start'],
                     'end' => $bar['end'],
                     'type' => $bar['type'],
                     'label' => $bar['label'] ?? '',
-                    'progress' => (int) ($bar['progress'] ?? 0),
-                ])->values()->all(),
-            ])->values()->all(),
-            'dependencies' => array_values($data['dependencies'] ?? []),
+                    'progress' => $bar['progress'] ?? 0,
+                ], $row['bars']),
+            ], $read['rows']),
+            'dependencies' => $read['dependencies'],
             'url' => $this->planUrl($plan),
         ]);
     }
