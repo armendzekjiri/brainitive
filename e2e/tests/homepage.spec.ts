@@ -5,7 +5,7 @@ import { expect, test } from '../fixtures';
  * The public homepage (Pages/Welcome.tsx) shows what the latest releases shipped (BRAI-98).
  * When a release adds feature cards to the homepage, add their titles here.
  */
-const SPOTLIGHT = ['Brainitive in your terminal', 'Emails that look like Brainitive', 'Privacy by default'];
+const SPOTLIGHT = ['One email, not ten', 'Brainitive in your terminal', 'Emails that look like Brainitive'];
 const NEW_FEATURES = [
     'Command line (CLI)',
     'AI agents (MCP)',

@@ -68,6 +68,8 @@ three switches: **In-app**, **Push** and **Email**.
 
 Every email from Brainitive has a **Manage notifications** link at the bottom that brings you straight here.
 
+**Fewer emails at once.** When several things happen for you within a minute (assignments, comments, mentions, status changes, page and sprint updates), Brainitive waits that minute and sends **one email per workspace** listing all of them, each with a link. The bell and push notifications still arrive instantly. Sign-in, security, invitation, helpdesk, booking and other time-critical emails are never held back.
+
 ### Morning task summary
 
 Below the table, **Morning task summary** sends you one summary at 8:00 of your list tasks that are due today or

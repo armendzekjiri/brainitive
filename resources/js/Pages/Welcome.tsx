@@ -402,6 +402,20 @@ const SPOTLIGHT: {
     shortcut?: string;
 }[] = [
     {
+        key: 'email-digest',
+        version: 'v1.48',
+        icon: Inbox,
+        color: '#69A748',
+        title: 'One email, not ten',
+        description:
+            'Five issues assigned in a row, a burst of comments, a page full of mentions: everything that happens for you within a minute arrives as one email per workspace. The bell and push stay instant.',
+        points: [
+            'Every entry links straight to its issue or doc',
+            'Sign-in, security and customer emails never wait',
+            'Self-hosters choose the wait, or turn it off',
+        ],
+    },
+    {
         key: 'cli',
         version: 'v1.47',
         icon: Terminal,
@@ -427,20 +441,6 @@ const SPOTLIGHT: {
             '“Manage notifications” in every member email',
             'Helpdesk customers see your helpdesk’s name',
             'Test web push on each of your devices',
-        ],
-    },
-    {
-        key: 'privacy',
-        version: 'v1.44',
-        icon: ShieldCheck,
-        color: '#0E83DC',
-        title: 'Privacy by default',
-        description:
-            'No third-party fonts or trackers in your browser, a clear privacy policy, imprint and data processing agreement — and your public pages name you as the operator.',
-        points: [
-            'Your privacy & imprint links on support pages and forms',
-            'Optional consent checkbox on lead forms',
-            'Data processing agreement for teams',
         ],
     },
 ];
@@ -851,7 +851,7 @@ export default function Welcome({
                     icon: PanelLeft,
                     title: 'Your sidebar, your way',
                     description:
-                        'Hide what you don’t use, choose what each project shows and pin the boards, lists and docs you open every day.',
+                        'Hide what you don’t use, pin and reorder what you open every day, and drag docs into folders — or move them with “Move…”.',
                     isNew: true,
                 },
                 {
@@ -1179,7 +1179,7 @@ export default function Welcome({
                     icon: Bot,
                     title: 'AI agents (MCP)',
                     description:
-                        'Connect ChatGPT or Claude over MCP to work with issues, docs, sprints and plans — or hand it a Jira export and let it set up the whole project: columns, types, fields, members and cards.',
+                        'Connect ChatGPT or Claude over MCP to work with issues, docs, sprints, plans and the links between them — or hand it a Jira export and let it set up the whole project: columns, types, fields, members and cards.',
                     isNew: true,
                 },
                 {
@@ -1206,7 +1206,7 @@ export default function Welcome({
                     icon: Bell,
                     title: 'Notifications & push',
                     description:
-                        'A grouped inbox for comments, mentions, due dates, sprints and assignments — choose in-app, push or email per category.',
+                        'A grouped inbox for comments, mentions, due dates, sprints and assignments — choose in-app, push or email per category, with bursts bundled into one email.',
                     isNew: true,
                 },
                 {
