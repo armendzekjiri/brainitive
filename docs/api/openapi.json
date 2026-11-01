@@ -101,6 +101,9 @@
         },
         {
             "name": "Bookings"
+        },
+        {
+            "name": "Helpdesk"
         }
     ],
     "security": [
@@ -11129,6 +11132,464 @@
                     }
                 }
             }
+        },
+        "/projects/{project}/helpdesks": {
+            "get": {
+                "operationId": "app.v1.helpdesks.index",
+                "description": "Not paginated (a project has a handful).",
+                "summary": "The helpdesks of a project, in the web's order, with their statuses and open ticket counts",
+                "tags": [
+                    "Helpdesk"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `HelpdeskResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/HelpdeskResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/helpdesks/{helpdesk}": {
+            "get": {
+                "operationId": "app.v1.helpdesks.show",
+                "description": "Assignees: `GET /workspaces/{slug}/members`.",
+                "summary": "One helpdesk: statuses, the project's priorities (for `PATCH /tickets/{id}`), open count",
+                "tags": [
+                    "Helpdesk"
+                ],
+                "parameters": [
+                    {
+                        "name": "helpdesk",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`HelpdeskDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/HelpdeskDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/helpdesks/{helpdesk}/tickets": {
+            "get": {
+                "operationId": "app.v1.helpdesks.tickets",
+                "description": "`status=open` (default: not in a done column) | `done` | `all`; `column`, `assignee=me|unassigned|<id>`,\n`priority`, `sla=breached|at_risk|on_track|paused|met|none` (the web's SLA filter). Cursor-paginated,\n`updated_since`.",
+                "summary": "The tickets of a helpdesk, newest first",
+                "tags": [
+                    "Helpdesk"
+                ],
+                "parameters": [
+                    {
+                        "name": "helpdesk",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "open",
+                                "done",
+                                "all"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "column",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "assignee",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^(me|unassigned|[1-9][0-9]{0,17})$"
+                        }
+                    },
+                    {
+                        "name": "priority",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "sla",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "breached",
+                                "at_risk",
+                                "on_track",
+                                "paused",
+                                "met",
+                                "none"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `TicketResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TicketCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/tickets/{ticket}": {
+            "get": {
+                "operationId": "app.v1.tickets.show",
+                "description": "Internal notes are in the thread with `internal: true` (agents only, as the web).",
+                "summary": "One ticket with its whole thread (oldest first), custom fields, files and `can.update`",
+                "tags": [
+                    "Helpdesk"
+                ],
+                "parameters": [
+                    {
+                        "name": "ticket",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`TicketDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TicketDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "app.v1.tickets.update",
+                "description": "Only the sent fields change. Moving into a done column resolves it: `resolution_message` is saved as a\nreply and `notify_contact` emails the customer; watchers hear about the status change, a new assignee is\nnotified. Send the `updated_at` you read to get 409 instead of overwriting a newer change. Project viewers\n\u2192 403.",
+                "summary": "Change a ticket: status (column), assignee, priority, subject",
+                "tags": [
+                    "Helpdesk"
+                ],
+                "parameters": [
+                    {
+                        "name": "ticket",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateTicketRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`TicketDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TicketDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Human-readable, safe to show."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "description": "Machine-readable: switch on this, not on the message.",
+                                            "enum": [
+                                                "conflict"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/tickets/{ticket}/replies": {
+            "post": {
+                "operationId": "app.v1.tickets.replies.store",
+                "description": "The reply is emailed to the customer (through the helpdesk's mailbox when one is connected); an internal\nnote never is. Watchers are notified. 201, or 200 on a replayed `request_id`. Project viewers \u2192 403.",
+                "summary": "Reply to the customer, or add an internal note",
+                "tags": [
+                    "Helpdesk"
+                ],
+                "parameters": [
+                    {
+                        "name": "ticket",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreTicketReplyRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`TicketReplyResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TicketReplyResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`TicketReplyResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TicketReplyResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -14073,6 +14534,179 @@
                     "archived"
                 ],
                 "title": "FieldOptionResource"
+            },
+            "HelpdeskDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "project_id": {
+                        "type": "integer"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "columns": {
+                        "type": "array",
+                        "description": "the statuses in board order; is_done = resolved",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "color": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                },
+                                "is_done": {
+                                    "type": "boolean"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "color",
+                                "is_done"
+                            ]
+                        }
+                    },
+                    "open_count": {
+                        "type": "integer",
+                        "description": "tickets not in a done column"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "manage_tickets": {
+                                "type": "boolean",
+                                "description": "reply, change status / assignee / priority (project editors and admins)"
+                            }
+                        },
+                        "required": [
+                            "manage_tickets"
+                        ]
+                    },
+                    "priorities": {
+                        "type": "string",
+                        "description": "the project's priorities, most important first (priority_id of PATCH /tickets/{id})"
+                    }
+                },
+                "required": [
+                    "id",
+                    "project_id",
+                    "slug",
+                    "name",
+                    "description",
+                    "columns",
+                    "open_count",
+                    "url",
+                    "can",
+                    "priorities"
+                ],
+                "title": "HelpdeskDetailResource"
+            },
+            "HelpdeskResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "project_id": {
+                        "type": "integer"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "columns": {
+                        "type": "array",
+                        "description": "the statuses in board order; is_done = resolved",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "color": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                },
+                                "is_done": {
+                                    "type": "boolean"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "color",
+                                "is_done"
+                            ]
+                        }
+                    },
+                    "open_count": {
+                        "type": "integer",
+                        "description": "tickets not in a done column"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "manage_tickets": {
+                                "type": "boolean",
+                                "description": "reply, change status / assignee / priority (project editors and admins)"
+                            }
+                        },
+                        "required": [
+                            "manage_tickets"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "project_id",
+                    "slug",
+                    "name",
+                    "description",
+                    "columns",
+                    "open_count",
+                    "url",
+                    "can"
+                ],
+                "title": "HelpdeskResource"
             },
             "InstanceResource": {
                 "type": "object",
@@ -20450,6 +21084,33 @@
                 ],
                 "title": "StoreTaskRequest"
             },
+            "StoreTicketReplyRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/tickets/{id}/replies`: an agent's reply (emailed to the customer) or an internal note. Needs\nedit rights on the ticket (project editors / admins, as the web).",
+                "properties": {
+                    "body": {
+                        "type": "string",
+                        "description": "Markdown (no @mentions: the thread is the customer's email; they come out as plain \"@Name\"); images / files: links from POST /uploads",
+                        "maxLength": 50000
+                    },
+                    "internal": {
+                        "type": "boolean",
+                        "description": "true: an internal note the customer never sees (default false: a reply to the customer)"
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "retry key: the same id + input answers 200 with the reply the first call created"
+                    }
+                },
+                "required": [
+                    "body"
+                ],
+                "title": "StoreTicketReplyRequest"
+            },
             "StoreUploadRequest": {
                 "type": "object",
                 "description": "`POST /uploads`: an image or document for rich text, the web editor's rules (EditorUploads): images\njpeg / png / gif / webp \u2264 10 MB, documents pdf / office / txt / csv / zip / rar \u2264 20 MB. Authorized before\nvalidation: a workspace the user isn't in is a 404.",
@@ -20943,6 +21604,405 @@
                     "updated_at"
                 ],
                 "title": "TaskResource"
+            },
+            "TicketCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/TicketResource"
+                },
+                "title": "TicketCollection"
+            },
+            "TicketDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "key": {
+                        "type": "string"
+                    },
+                    "helpdesk_id": {
+                        "type": "integer"
+                    },
+                    "subject": {
+                        "type": "string"
+                    },
+                    "status": {},
+                    "priority": {},
+                    "assignee": {},
+                    "contact": {},
+                    "sla": {},
+                    "created_at": {},
+                    "updated_at": {},
+                    "completed_at": {},
+                    "url": {},
+                    "description_markdown": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "what the customer wrote first (sanitized HTML) as Markdown + HTML"
+                    },
+                    "description_html": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "fields": {
+                        "type": "array",
+                        "description": "custom fields of the helpdesk with this ticket's values",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "label": {
+                                    "type": "string"
+                                },
+                                "type": {
+                                    "type": "string"
+                                },
+                                "value": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "label",
+                                "type",
+                                "value"
+                            ]
+                        }
+                    },
+                    "attachments": {
+                        "type": "array",
+                        "description": "files on the ticket itself (reply files are on their reply)",
+                        "items": {
+                            "type": "array",
+                            "items": {}
+                        }
+                    },
+                    "replies": {
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "items": {}
+                        }
+                    },
+                    "watching": {
+                        "type": "boolean"
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "update": {
+                                "type": "boolean",
+                                "description": "reply, add internal notes, change status / assignee / priority (TicketPolicy::update)"
+                            }
+                        },
+                        "required": [
+                            "update"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "key",
+                    "helpdesk_id",
+                    "subject",
+                    "status",
+                    "priority",
+                    "assignee",
+                    "contact",
+                    "sla",
+                    "created_at",
+                    "updated_at",
+                    "completed_at",
+                    "url",
+                    "description_markdown",
+                    "description_html",
+                    "fields",
+                    "attachments",
+                    "replies",
+                    "watching",
+                    "can"
+                ],
+                "title": "TicketDetailResource"
+            },
+            "TicketReplyResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "from": {
+                        "type": "string",
+                        "description": "contact (the customer) | agent",
+                        "enum": [
+                            "contact",
+                            "agent"
+                        ]
+                    },
+                    "author": {
+                        "anyOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer"
+                                    },
+                                    "name": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "name"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "null"
+                                    },
+                                    "name": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "name"
+                                ]
+                            }
+                        ]
+                    },
+                    "internal": {
+                        "type": "boolean",
+                        "description": "never sent to the customer"
+                    },
+                    "body_markdown": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "body_html": {
+                        "type": "string",
+                        "description": "sanitized HTML, for rendering"
+                    },
+                    "email_status": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "agent replies through a connected mailbox: queued | sent | failed (null otherwise)"
+                    },
+                    "attachments": {
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "items": {}
+                        }
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "from",
+                    "author",
+                    "internal",
+                    "body_markdown",
+                    "body_html",
+                    "email_status",
+                    "attachments",
+                    "created_at"
+                ],
+                "title": "TicketReplyResource"
+            },
+            "TicketResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "key": {
+                        "type": "string"
+                    },
+                    "helpdesk_id": {
+                        "type": "integer"
+                    },
+                    "subject": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "the column = its status",
+                        "properties": {
+                            "column_id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "is_done": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "column_id",
+                            "name",
+                            "is_done"
+                        ]
+                    },
+                    "priority": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "color": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "color"
+                        ]
+                    },
+                    "assignee": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {}
+                    },
+                    "contact": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "the customer who wrote in",
+                        "properties": {
+                            "name": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "email": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "email"
+                        ]
+                    },
+                    "sla": {
+                        "type": "object",
+                        "properties": {
+                            "state": {
+                                "type": "string"
+                            },
+                            "due_at": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "description": "respond / resolve: the deadline"
+                            },
+                            "at_risk": {
+                                "type": "boolean",
+                                "description": "respond / resolve: past the warning time"
+                            },
+                            "breached_since": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "breached_targets": {
+                                "type": "array",
+                                "description": "first_response and / or resolution",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "required": [
+                            "state",
+                            "due_at",
+                            "at_risk",
+                            "breached_since",
+                            "breached_targets"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "completed_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "when it went into a done column"
+                    },
+                    "url": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "key",
+                    "helpdesk_id",
+                    "subject",
+                    "status",
+                    "priority",
+                    "assignee",
+                    "contact",
+                    "sla",
+                    "created_at",
+                    "updated_at",
+                    "completed_at",
+                    "url"
+                ],
+                "title": "TicketResource"
             },
             "TimeActivityResource": {
                 "type": "object",
@@ -22016,6 +23076,57 @@
                     }
                 },
                 "title": "UpdateTaskRequest"
+            },
+            "UpdateTicketRequest": {
+                "type": "object",
+                "description": "`PATCH /api/v1/tickets/{id}`: the sent fields change \u2014 status (column), assignee, priority, subject.\nMoving into a done column can carry the closing message and email the customer, as the web's \"Resolve\".",
+                "properties": {
+                    "subject": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "column_id": {
+                        "type": "integer",
+                        "description": "a column of the ticket's helpdesk (its status)"
+                    },
+                    "position": {
+                        "type": "integer",
+                        "description": "place in the column, 0 = top (default)",
+                        "minimum": 0
+                    },
+                    "resolution_message": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "into a done column: a closing message, saved as a reply to the customer",
+                        "maxLength": 20000
+                    },
+                    "notify_contact": {
+                        "type": "boolean",
+                        "description": "into a done column: email the customer that it's resolved"
+                    },
+                    "assignee_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "a workspace member, or null"
+                    },
+                    "priority_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "a priority of the project (GET /helpdesks/{id} \u2192 priorities), or null"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "the time of the ticket the app last read (updated_at): 409 when it changed since"
+                    }
+                },
+                "title": "UpdateTicketRequest"
             },
             "UpdateWorkLogRequest": {
                 "type": "object",
