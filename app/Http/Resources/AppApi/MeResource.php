@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\AppApi;
 
+use App\Http\Resources\AppApi\Concerns\PresentsWorkspaceLimits;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\AppApi\AppTokens;
@@ -20,6 +21,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  */
 class MeResource extends JsonResource
 {
+    use PresentsWorkspaceLimits;
+
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
@@ -62,28 +65,13 @@ class MeResource extends JsonResource
     /** @return array<string, mixed> */
     private function workspace(Workspace $workspace, User $user, Entitlements $entitlements): array
     {
-        $limits = $entitlements->limits($workspace);
-
         return [
             'slug' => $workspace->slug,
             'name' => $workspace->name,
             'role' => $workspace->pivot?->role,
             'is_owner' => $workspace->owner_id === $user->id,
             'logo_url' => $workspace->logo_display,
-            'limits' => [
-                'plan_name' => $limits->plan,
-                'free' => $limits->free,
-                'unlimited' => $limits->isUnlimited(),
-                'members' => $limits->members,
-                'projects' => $limits->projects,
-                'content_bytes' => $limits->contentBytes,
-                'file_bytes' => $limits->fileBytes,
-                'versions' => [
-                    'keep_latest' => $limits->versions->keepLatest,
-                    'keep_days' => $limits->versions->keepDays,
-                ],
-                'grace_until' => $limits->graceUntil?->toIso8601ZuluString(),
-            ],
+            'limits' => $this->limitsOf($workspace, $entitlements),
             // "Plan & billing" on the web; null on self-hosted installs
             'billing_url' => $entitlements->billingUrl($workspace),
         ];

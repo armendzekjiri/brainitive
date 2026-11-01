@@ -4,7 +4,13 @@ namespace Tests\Feature\AppApi;
 
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use Dedoc\Scramble\Generator;
+use Dedoc\Scramble\Infer\Context;
+use Dedoc\Scramble\Infer\Reflector\ClassReflector;
+use Dedoc\Scramble\Infer\Reflector\MethodReflector;
+use Dedoc\Scramble\Infer\Reflector\PropertyReflector;
+use Dedoc\Scramble\Infer\Services\FileNameResolver;
 use Dedoc\Scramble\Scramble;
+use Dedoc\Scramble\Support\Helpers\JsonResourceHelper;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Facades\Route;
@@ -26,6 +32,24 @@ class OpenApiSpecTest extends TestCase
     use RefreshDatabase;
 
     private const SPEC = 'docs/api/openapi.json';
+
+    /**
+     * Scramble keeps inference state in statics (the extension broker of the first app instance,
+     * reflection caches). A test that rendered the docs earlier in the same PHPUnit process
+     * (ApiDocsAccessTest) would otherwise change what this export infers, e.g. a cursor list's
+     * description: start every test from a clean slate so the file is the same in any test order.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Context::reset();
+        foreach ([ClassReflector::class, MethodReflector::class, PropertyReflector::class] as $reflector) {
+            (fn () => static::$cache = [])->bindTo(null, $reflector)();
+        }
+        JsonResourceHelper::$jsonResourcesModelTypesCache = [];
+        FileNameResolver::$nameContextCache = [];
+    }
 
     private const REGENERATE = 'composer openapi (= OPENAPI_WRITE=1 php artisan test --filter=OpenApiSpecTest; in a worktree add TEST_DB_SUFFIX=<name>)';
 
@@ -81,7 +105,7 @@ class OpenApiSpecTest extends TestCase
     public function test_every_operation_is_tagged_with_its_registry_module(): void
     {
         // the modules of docs/ai/API.md, in order: #[Group('<Module>', weight: n)] on each AppApi controller
-        $modules = ['Instance', 'Auth', 'Account', 'Devices', 'Invitations'];
+        $modules = ['Instance', 'Auth', 'Account', 'Devices', 'Invitations', 'Workspaces'];
 
         foreach ($this->generate()['paths'] ?? [] as $path => $operations) {
             foreach ($operations as $method => $operation) {
