@@ -445,7 +445,7 @@ final class CalendarEvents
      * @param  array<string, mixed>  $event
      * @return array<string, mixed>
      */
-    private static function mapExternalEvent(CalendarConnection $conn, CalendarProvider $provider, array $event, bool $readOnly): array
+    public static function mapExternalEvent(CalendarConnection $conn, CalendarProvider $provider, array $event, bool $readOnly): array
     {
         return [
             'id' => $event['id'],

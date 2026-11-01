@@ -27,6 +27,9 @@ class FakeCalendarProvider extends BaseCalendarProvider
     /** connectWithForm returns a PendingConnection (picker) instead of creating rows. */
     public static bool $pick = false;
 
+    /** @var list<string> meeting kinds the calendar offers (google_meet, teams); created events then carry a join link */
+    public static array $conference = [];
+
     /** @var list<array<string, mixed>> normalized events listEvents returns */
     public static array $events = [];
 
@@ -40,6 +43,7 @@ class FakeCalendarProvider extends BaseCalendarProvider
         self::$pick = false;
         self::$events = [];
         self::$calls = [];
+        self::$conference = [];
     }
 
     public function key(): string
@@ -68,7 +72,12 @@ class FakeCalendarProvider extends BaseCalendarProvider
 
     public function capabilities(): array
     {
-        return ['write' => self::$writable, 'tasks' => false];
+        return ['write' => self::$writable, 'tasks' => false, 'conferencing' => self::$conference !== []];
+    }
+
+    public function conferenceProviders(CalendarConnection $connection): array
+    {
+        return self::$conference;
     }
 
     public function connectWithForm(User $user, array $input): array|PendingConnection
@@ -127,10 +136,14 @@ class FakeCalendarProvider extends BaseCalendarProvider
         $this->assertWritable($connection);
         self::$calls[] = ['create', $data];
         $input = EventInput::from($data);
+        $conference = $this->requestedConference($connection, $data);
+        $extra = ['description' => $data['description'] ?? null, 'location' => $data['location'] ?? null] + ($conference ? [
+            'conference_url' => 'https://meet.fake.test/abc', 'conference_provider' => $conference,
+        ] : []);
 
         return $input->isAllDay()
-            ? NormalizedEvent::allDay('new-1', $data['title'], $input->startDate(), $input->endDate())
-            : NormalizedEvent::timed('new-1', $data['title'], $input->start(), $input->end(), $input->timezone());
+            ? NormalizedEvent::allDay('new-1', $data['title'], $input->startDate(), $input->endDate(), $extra)
+            : NormalizedEvent::timed('new-1', $data['title'], $input->start(), $input->end(), $input->timezone(), $extra);
     }
 
     public function updateEvent(CalendarConnection $connection, string $eventId, array $data): array
