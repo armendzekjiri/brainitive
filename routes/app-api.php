@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\AppApi\AuthController;
+use App\Http\Controllers\AppApi\InstanceController;
+use App\Http\Controllers\AppApi\MeAvatarController;
+use App\Http\Controllers\AppApi\MeController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use Illuminate\Support\Facades\Route;
 
@@ -18,6 +21,7 @@ use Illuminate\Support\Facades\Route;
 */
 
 // ── Instance (public) ───────────────────────────────────────────────────────────────────────
+Route::get('instance', InstanceController::class)->name('instance');
 
 // ── Auth (public): code exchange, refresh ────────────────────────────────────────────────────
 
@@ -34,6 +38,10 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
     Route::post('auth/web-session', [AuthController::class, 'webSession'])->name('auth.web-session');
 
     // ── Account ───────────────────────────────────────────────────────────────────────────────
+    Route::get('me', [MeController::class, 'show'])->name('me.show');
+    Route::patch('me', [MeController::class, 'update'])->name('me.update');
+    Route::post('me/avatar', [MeAvatarController::class, 'store'])->name('me.avatar.store');
+    Route::delete('me/avatar', [MeAvatarController::class, 'destroy'])->name('me.avatar.destroy');
 
     // ── Devices ───────────────────────────────────────────────────────────────────────────────
 

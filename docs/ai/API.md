@@ -56,6 +56,13 @@ Columns: **Mobile** = scope in the mobile app (Full / Read + light edit / Read-o
 ### Instance
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
+| `GET /api/v1/instance` | none (public) | first-run "connect a server" screen: check it's Brainitive, show its name + version, which sign-in buttons exist, refuse a too-old app (`min_versions`) | Full | BRAI-171 | ready (v1.49.0, BRAI-354) |
+
+`{data: {name, url, version, api_version: "1", sign_in: {password, google, github, microsoft},
+sign_up_open, email_verification_required, min_versions: {desktop, mobile}, authorize_path}}`.
+Only what the login page already shows; sign-in flags use the Login page's rule
+(`App\Support\Auth\SignInMethods`). `Cache-Control: public, max-age=300`. `version` is `null` when
+the server can't read its changelog (a stripped package).
 
 ### Auth
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
@@ -71,6 +78,26 @@ Columns: **Mobile** = scope in the mobile app (Full / Read + light edit / Read-o
 ### Account
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
+| `GET /api/v1/me` | app | tray header, account menu, workspace switcher, limits | Full | BRAI-176 | ready (v1.49.0, BRAI-384) |
+| `PATCH /api/v1/me` | app | edit name / bio / phone, sync the OS time zone, daily digest on/off | Full | BRAI-176 | ready (v1.49.0, BRAI-384) |
+| `POST /api/v1/me/avatar` | app | upload a profile picture (multipart `avatar`, JPEG/PNG ≤ 2 MB) | Full | BRAI-176 | ready (v1.49.0, BRAI-384) |
+| `DELETE /api/v1/me/avatar` | app | remove the profile picture | Full | BRAI-176 | ready (v1.49.0, BRAI-384) |
+
+`GET /me` → `{data: {id, name, email, email_verified, email_verified_at, avatar_url, bio, phone,
+timezone, effective_timezone, task_digest, is_instance_admin, created_at, limits_enforced,
+workspaces: [{slug, name, role, is_owner, logo_url, billing_url, limits: {plan_name, free,
+unlimited, members, projects, content_bytes, file_bytes, versions: {keep_latest, keep_days},
+grace_until}}], device: {id, name, client, platform, app_version}}}`. The PATCH and both avatar
+calls answer with the same object.
+- `email_verified` is also `true` when the instance doesn't require verification.
+- `timezone` is `null` until a browser or app sent one; `effective_timezone` is what reminders use.
+- Limits come from the Entitlements contract (all `null` + `unlimited: true` on self-hosted);
+  `billing_url` is the web "Plan & billing" page, `null` without billing.
+- PATCH fields (all optional, the web Profile page's rules): `name`, `bio`, `phone`, `timezone`
+  (IANA, old names accepted), `task_digest`. **`email` → 422**: a new address has to be verified,
+  so it is changed on the web only. Password, account deletion and notification settings: web only.
+- There is no language or theme on the server (the web app keeps the theme per browser), so the
+  apps keep those locally.
 
 ### Devices
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
