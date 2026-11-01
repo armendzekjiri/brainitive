@@ -10,6 +10,7 @@ use App\Http\Controllers\AppApi\DeviceAuthController;
 use App\Http\Controllers\AppApi\DeviceController;
 use App\Http\Controllers\AppApi\InstanceController;
 use App\Http\Controllers\AppApi\InvitationController;
+use App\Http\Controllers\AppApi\IssueActivityController;
 use App\Http\Controllers\AppApi\IssueController;
 use App\Http\Controllers\AppApi\MeAvatarController;
 use App\Http\Controllers\AppApi\MeController;
@@ -209,6 +210,18 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::get('items/{item}', [IssueController::class, 'show'])->whereNumber('item')->name('items.show');
         Route::patch('items/{item}', [IssueController::class, 'update'])->name('items.update');
         Route::delete('items/{item}', [IssueController::class, 'destroy'])->name('items.destroy');
+
+        // ── An issue's comments, watchers, files, history (ItemComments, ItemAttachments: shared with the web)
+        // editing / deleting comments: not on the web either
+        Route::get('items/{item}/comments', [IssueActivityController::class, 'comments'])->whereNumber('item')->name('items.comments.index');
+        Route::post('items/{item}/comments', [IssueActivityController::class, 'storeComment'])->middleware('throttle:60,1,app.items.comments.store')->name('items.comments.store');
+        Route::get('items/{item}/watchers', [IssueActivityController::class, 'watchers'])->whereNumber('item')->name('items.watchers');
+        Route::post('items/{item}/watch', [IssueActivityController::class, 'watch'])->name('items.watch');
+        Route::delete('items/{item}/watch', [IssueActivityController::class, 'unwatch'])->name('items.unwatch');
+        Route::get('items/{item}/attachments', [IssueActivityController::class, 'attachments'])->whereNumber('item')->name('items.attachments.index');
+        Route::post('items/{item}/attachments', [IssueActivityController::class, 'storeAttachment'])->middleware('throttle:30,1,app.items.attachments.store')->name('items.attachments.store');
+        Route::delete('items/{item}/attachments/{attachment}', [IssueActivityController::class, 'destroyAttachment'])->name('items.attachments.destroy');
+        Route::get('items/{item}/activity', [IssueActivityController::class, 'activity'])->whereNumber('item')->name('items.activity');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');

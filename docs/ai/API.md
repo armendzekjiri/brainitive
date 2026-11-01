@@ -562,6 +562,29 @@ commit_count, pull_requests, deployments, merge_column}, can: {update, delete, c
 - `development` is read-only (GitHub branches, commits, pull requests, deployments; at most 30 per kind); connecting repositories:
   web only. Duplicating, moving to another board, logging work from the issue: web only for now (time: `POST /work-logs`).
 
+#### Comments, watchers, files, history (same `Issues` tag)
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/items/{id}/comments` | app + verified | The discussion, oldest first, replies with `parent_id`, cursor-paginated, `updated_since` | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
+| `POST /api/v1/items/{id}/comments` | app + verified, 60/min | `{body (Markdown, ≤ 20 000), parent_id?, request_id?}` → 201 `{data: comment}`. Mentions, watcher / assignee / reporter notifications, history and webhooks as on the web. 403 without `can.comment` (the web's rule: people who may edit the issue), 422 `parent_id` of another issue | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
+| `GET /api/v1/items/{id}/watchers` | app + verified | `{data: {item_id, watching, watchers: [{id, name, avatar_url}]}}` | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
+| `POST /api/v1/items/{id}/watch` · `DELETE …/watch` | app + verified | Watch / stop watching yourself (anybody who can open the issue) → 200 the watchers (a part of the issue, not 204). Adding / removing other people: web only | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
+| `GET /api/v1/items/{id}/attachments` | app + verified | Files, newest first, cursor-paginated, `updated_since` | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
+| `POST /api/v1/items/{id}/attachments` | app + verified, 30/min | Multipart `file` (≤ 10 MB, as the issue dialog), `request_id?` → 201 `{data: attachment}`. 403 without `can.update` | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
+| `DELETE /api/v1/items/{id}/attachments/{attachment}` | app + verified | Remove a file → 204. 403 without `can.update`; a file of another issue → 404 | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
+| `GET /api/v1/items/{id}/activity` | app + verified | The History tab, newest first, cursor-paginated (no `updated_since`: entries never change) | Full | BRAI-189 | ready (v1.49.0, BRAI-405) |
+
+Comment: `{id, item_id, parent_id, body (Markdown, mentions @[Name](user:<id>)), author: {id, name, avatar_url}|null, created_at,
+updated_at}`. Attachment: `{id, item_id, name, mime_type, size (bytes), url, uploaded_by: {id, name, avatar_url}|null, created_at}`.
+History entry: `{id, action, changes: {field: {from, to}}, metadata: {…}, user: {id, name, avatar_url}|null, created_at}` — `action`
+e.g. `created`, `updated`, `moved`, `assigned`, `commented`, `labels_changed`, `field_changed`, `attachment_added`,
+`attachment_removed`, `work_logged`; show a generic line for an unknown one.
+- Same code as the issue dialog: `ItemComments::add` (history, mentions, "commented on" for watchers / assignee / reporter, webhooks,
+  live issue views) and `App\Support\Boards\ItemAttachments` (shared with `BoardController`). People never carry an email address.
+- `url` of a file is the web's public storage link (as the issue dialog's); it needs no token.
+- **Editing / deleting comments: not built** — the web can't either (planned on the card as "own comments"; it comes with the web
+  feature). Uploads go straight to the issue: the shared uploads API (BRAI files card) isn't there yet.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -770,4 +793,15 @@ Built in: BRAI-404 (desktop) · Mobile scope: Full (duplicate, move to another b
 - GET /api/v1/items/{id} → development: {connected, branches, commits, commit_count, pull_requests (primary, state), deployments, merge_column}
 Scope: app · OpenAPI: docs/api/openapi.json#/Issues · Registry: docs/ai/API.md#issues
 Built in: BRAI-404 (desktop) · Mobile scope: Read-only (connecting repositories, merge transitions: web only)
+```
+
+**BRAI-189** (comments, mentions, watchers, attachments, history)
+```
+## API (ready)
+- GET|POST /api/v1/items/{id}/comments — the discussion (oldest first, replies via parent_id) · comment in Markdown, mentions @[Name](user:<id>) notify; request_id
+- GET /api/v1/items/{id}/watchers · POST|DELETE /api/v1/items/{id}/watch — watch / unwatch yourself
+- GET|POST /api/v1/items/{id}/attachments (multipart file ≤ 10 MB) · DELETE /api/v1/items/{id}/attachments/{attachment}
+- GET /api/v1/items/{id}/activity — the history, newest first, cursor-paginated
+Scope: app · OpenAPI: docs/api/openapi.json#/Issues · Registry: docs/ai/API.md#issues
+Built in: BRAI-405 (desktop) · Mobile scope: Full (editing / deleting comments and managing other watchers: not on the web yet / web only)
 ```

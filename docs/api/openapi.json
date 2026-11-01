@@ -6739,6 +6739,611 @@
                     }
                 }
             }
+        },
+        "/items/{item}/comments": {
+            "get": {
+                "operationId": "app.v1.items.comments.index",
+                "summary": "The comments of an issue, oldest first; replies carry `parent_id`",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `CommentResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CommentCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.items.comments.store",
+                "description": "`body` is Markdown; a mention `@[Name](user:<id>)` notifies that project member, the watchers, assignee\nand reporter get \"commented on\", as on the web. Needs `can.comment` of the issue (403). With\n`request_id` a retry answers 200 with the comment the first call posted.",
+                "summary": "Comment on an issue (or reply to one of its comments)",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreCommentRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`CommentResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CommentResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`CommentResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CommentResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/items/{item}/watchers": {
+            "get": {
+                "operationId": "app.v1.items.watchers",
+                "summary": "Who watches the issue, and whether the user does",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`WatchersResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WatchersResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/items/{item}/watch": {
+            "post": {
+                "operationId": "app.v1.items.watch",
+                "description": "Anybody who can open the issue. Watching again changes nothing.",
+                "summary": "Watch the issue (comments and status changes notify the user); answers the watchers",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`WatchersResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WatchersResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "app.v1.items.unwatch",
+                "summary": "Stop watching the issue; answers the watchers (a part of the issue, so 200, not 204)",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`WatchersResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WatchersResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/items/{item}/attachments": {
+            "get": {
+                "operationId": "app.v1.items.attachments.index",
+                "summary": "The files on an issue, newest first",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `AttachmentResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/AttachmentCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.items.attachments.store",
+                "description": "Needs `can.update` of the issue (403). With `request_id` a retry answers 200 with the file the first\ncall stored.",
+                "summary": "Add a file to an issue (multipart `file`, \u2264 10 MB)",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreAttachmentRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`AttachmentResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/AttachmentResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`AttachmentResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/AttachmentResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/items/{item}/attachments/{attachment}": {
+            "delete": {
+                "operationId": "app.v1.items.attachments.destroy",
+                "description": "Needs `can.update` of the issue (403).",
+                "summary": "Remove a file from an issue",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "attachment",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/items/{item}/activity": {
+            "get": {
+                "operationId": "app.v1.items.activity",
+                "summary": "The history of an issue, newest first (what the issue dialog's History tab shows)",
+                "tags": [
+                    "Issues"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `ActivityResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/ActivityCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -6751,6 +7356,56 @@
             }
         },
         "schemas": {
+            "ActivityCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/ActivityResource"
+                },
+                "title": "ActivityCollection"
+            },
+            "ActivityResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "action": {
+                        "type": "string"
+                    },
+                    "changes": {
+                        "type": "string"
+                    },
+                    "metadata": {
+                        "type": "string"
+                    },
+                    "user": {
+                        "anyOf": [
+                            {
+                                "description": "null for automations / imports, or when the account is gone",
+                                "$ref": "#/components/schemas/PersonResource"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "action",
+                    "changes",
+                    "metadata",
+                    "user",
+                    "created_at"
+                ],
+                "title": "ActivityResource"
+            },
             "AddMyDayItemRequest": {
                 "type": "object",
                 "description": "`POST /api/v1/me/my-day/items`: the work to plan for today.",
@@ -6765,6 +7420,67 @@
                     "id"
                 ],
                 "title": "AddMyDayItemRequest"
+            },
+            "AttachmentCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/AttachmentResource"
+                },
+                "title": "AttachmentCollection"
+            },
+            "AttachmentResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "item_id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "mime_type": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "size": {
+                        "type": "integer",
+                        "description": "bytes"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "uploaded_by": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/PersonResource"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "item_id",
+                    "name",
+                    "mime_type",
+                    "size",
+                    "url",
+                    "uploaded_by",
+                    "created_at"
+                ],
+                "title": "AttachmentResource"
             },
             "BoardCollection": {
                 "type": "array",
@@ -8137,6 +8853,67 @@
                     "target"
                 ],
                 "title": "CaptureResource"
+            },
+            "CommentCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/CommentResource"
+                },
+                "title": "CommentCollection"
+            },
+            "CommentResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "item_id": {
+                        "type": "integer"
+                    },
+                    "parent_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "the comment this one replies to (null = a top-level comment)"
+                    },
+                    "body": {
+                        "type": "string"
+                    },
+                    "author": {
+                        "anyOf": [
+                            {
+                                "description": "null when the author's account is gone",
+                                "$ref": "#/components/schemas/PersonResource"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "item_id",
+                    "parent_id",
+                    "body",
+                    "author",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "CommentResource"
             },
             "ConnectedAppResource": {
                 "type": "object",
@@ -10292,6 +11069,29 @@
                 ],
                 "title": "NotificationResource"
             },
+            "PersonResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "avatar_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "avatar_url"
+                ],
+                "title": "PersonResource"
+            },
             "PinResource": {
                 "type": "object",
                 "properties": {
@@ -11507,6 +12307,29 @@
                 ],
                 "title": "StopTimerRequest"
             },
+            "StoreAttachmentRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/items/{id}/attachments` (multipart): one file, \u2264 10 MB, as the issue dialog.",
+                "properties": {
+                    "file": {
+                        "type": "string",
+                        "format": "binary",
+                        "contentMediaType": "application/octet-stream",
+                        "description": "Maximum file size: 10240 kilobytes."
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "file"
+                ],
+                "title": "StoreAttachmentRequest"
+            },
             "StoreBookmarkGroupRequest": {
                 "type": "object",
                 "description": "`POST /api/v1/workspaces/{slug}/bookmarks` (BRAI-399): the web's fields, the icon as an emoji. Outside\nthe workspace \u2192 404 before validation; members who aren't editors / admins \u2192 403 (BookmarkPolicy::create).",
@@ -11661,6 +12484,36 @@
                     "text"
                 ],
                 "title": "StoreCaptureRequest"
+            },
+            "StoreCommentRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/items/{id}/comments`: Markdown, optionally a reply to a comment of the issue. The web lets\nthe people who may edit the issue comment (ItemPolicy::update \u2192 403 otherwise).",
+                "properties": {
+                    "body": {
+                        "type": "string",
+                        "description": "Markdown; mentions as @[Name](user:<id>)",
+                        "maxLength": 20000
+                    },
+                    "parent_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "reply to this comment of the issue",
+                        "minimum": 1
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid"
+                    }
+                },
+                "required": [
+                    "body"
+                ],
+                "title": "StoreCommentRequest"
             },
             "StoreInvitationRequest": {
                 "type": "object",
@@ -13561,6 +14414,29 @@
                     }
                 },
                 "title": "UpdateWorkLogRequest"
+            },
+            "WatchersResource": {
+                "type": "object",
+                "properties": {
+                    "item_id": {
+                        "type": "integer"
+                    },
+                    "watching": {
+                        "type": "boolean"
+                    },
+                    "watchers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PersonResource"
+                        }
+                    }
+                },
+                "required": [
+                    "item_id",
+                    "watching",
+                    "watchers"
+                ],
+                "title": "WatchersResource"
             },
             "WebSessionResource": {
                 "type": "object",
