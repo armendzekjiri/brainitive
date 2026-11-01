@@ -2828,6 +2828,45 @@
                 }
             }
         },
+        "/me/today": {
+            "get": {
+                "operationId": "app.v1.today",
+                "description": "Open work assigned to the user that is overdue or due today (soonest first, \u2264 100), today's My Day\nand today's events of connected calendars and bookings, for the user's local day. Send the last\n`ETag` as `If-None-Match`: nothing changed \u2192 304 without a body. Refresh every few minutes: the\nconnected calendars are read live.",
+                "summary": "Everything for today in one call",
+                "tags": [
+                    "My Work"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`TodayResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TodayResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "304": {
+                        "description": ""
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
         "/calendar/events": {
             "get": {
                 "operationId": "app.v1.calendar.events",
@@ -2921,7 +2960,9 @@
                                         "errors": {
                                             "type": "array",
                                             "description": "calendars that failed this time: [{connection_id, message}]",
-                                            "items": {}
+                                            "items": {
+                                                "$ref": "#/components/schemas/CalendarErrorResource"
+                                            }
                                         }
                                     },
                                     "required": [
@@ -3089,6 +3130,23 @@
                     "sync_error_at"
                 ],
                 "title": "CalendarConnectionResource"
+            },
+            "CalendarErrorResource": {
+                "type": "object",
+                "properties": {
+                    "connection_id": {
+                        "type": "integer"
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "why, e.g. \"Reconnect this calendar.\""
+                    }
+                },
+                "required": [
+                    "connection_id",
+                    "message"
+                ],
+                "title": "CalendarErrorResource"
             },
             "CalendarEventResource": {
                 "type": "object",
@@ -5428,6 +5486,55 @@
                     "name"
                 ],
                 "title": "StoreWorkspaceRequest"
+            },
+            "TodayResource": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "description": "the user's local date (Y-m-d) and zone"
+                    },
+                    "timezone": {
+                        "type": "string"
+                    },
+                    "work": {
+                        "type": "array",
+                        "description": "open work assigned to the user, overdue first, then due today (at most 100), as GET /me/work?due=overdue,today",
+                        "items": {
+                            "$ref": "#/components/schemas/WorkItemResource"
+                        }
+                    },
+                    "my_day": {
+                        "type": "array",
+                        "description": "today's plan in the user's order, as GET /me/my-day",
+                        "items": {
+                            "$ref": "#/components/schemas/WorkItemResource"
+                        }
+                    },
+                    "events": {
+                        "type": "array",
+                        "description": "today's events of connected calendars and bookings, as GET /calendar/events?sources[]=external&sources[]=booking",
+                        "items": {
+                            "$ref": "#/components/schemas/CalendarEventResource"
+                        }
+                    },
+                    "errors": {
+                        "type": "array",
+                        "description": "calendars that failed this time",
+                        "items": {
+                            "$ref": "#/components/schemas/CalendarErrorResource"
+                        }
+                    }
+                },
+                "required": [
+                    "date",
+                    "timezone",
+                    "work",
+                    "my_day",
+                    "events",
+                    "errors"
+                ],
+                "title": "TodayResource"
             },
             "TokenResource": {
                 "type": "object",

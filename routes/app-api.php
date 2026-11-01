@@ -15,6 +15,7 @@ use App\Http\Controllers\AppApi\NavigationController;
 use App\Http\Controllers\AppApi\NotificationController;
 use App\Http\Controllers\AppApi\ProjectController;
 use App\Http\Controllers\AppApi\SearchController;
+use App\Http\Controllers\AppApi\TodayController;
 use App\Http\Controllers\AppApi\WorkspaceController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use Illuminate\Support\Facades\Route;
@@ -117,6 +118,8 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::patch('me/my-day/items/{id}', [MyWorkController::class, 'updateMyDayItem'])->name('my-day.items.update');
         Route::delete('me/my-day/items/{id}', [MyWorkController::class, 'removeFromMyDay'])->name('my-day.items.destroy');
         Route::post('me/my-day/carry-over', [MyWorkController::class, 'carryOver'])->name('my-day.carry-over');
+        // the TV wallboard: work due today / overdue + My Day + today's events in one call (ETag → 304)
+        Route::get('me/today', TodayController::class)->name('today');
 
         // ── Calendar, read part (CalendarEvents: the web calendar's sources) ─────────────────────
         Route::get('calendar/events', [CalendarController::class, 'events'])->name('calendar.events');

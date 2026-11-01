@@ -8,6 +8,7 @@ import { projectPath, request } from '../helpers/workload';
  * App API v1 My Work + My Day (v1.49.0, BRAI-396), as the desktop / TV app calls it: an issue assigned
  * to the owner shows in GET /me/work, goes on My Day through the API and is completed there — and the
  * web's My Day shows the same plan and the same tick, because both share MyDayPlan and WorkCompletion.
+ * GET /me/today (the TV wallboard) carries the plan too and answers 304 when nothing changed.
  */
 
 async function seedToken(page: Page): Promise<string> {
@@ -46,6 +47,13 @@ test.describe('app api: my work and my day', () => {
         // plan it for today through the API → the web's My Day lists it
         const day = await ok(await page.request.post('/api/v1/me/my-day/items', { headers: auth, data: { id: ref } }));
         expect(day.data.items.map((row: { id: string }) => row.id)).toContain(ref);
+
+        // the TV wallboard's one call shows it too, and an unchanged refresh is a 304
+        const today = await page.request.get('/api/v1/me/today', { headers: auth });
+        expect((await ok(today)).data.my_day.map((row: { id: string }) => row.id)).toContain(ref);
+        const etag = today.headers()['etag'];
+        expect(etag).toBeTruthy();
+        expect((await page.request.get('/api/v1/me/today', { headers: { ...auth, 'If-None-Match': etag } })).status()).toBe(304);
 
         await page.goto('/my-work');
         const myDay = page.getByRole('region', { name: 'My Day' });
