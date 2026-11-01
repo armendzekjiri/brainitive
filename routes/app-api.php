@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AppApi\AuthController;
+use App\Http\Controllers\AppApi\CalendarController;
 use App\Http\Controllers\AppApi\ConnectedAppController;
 use App\Http\Controllers\AppApi\DeviceAuthController;
 use App\Http\Controllers\AppApi\DeviceController;
@@ -116,6 +117,10 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::patch('me/my-day/items/{id}', [MyWorkController::class, 'updateMyDayItem'])->name('my-day.items.update');
         Route::delete('me/my-day/items/{id}', [MyWorkController::class, 'removeFromMyDay'])->name('my-day.items.destroy');
         Route::post('me/my-day/carry-over', [MyWorkController::class, 'carryOver'])->name('my-day.carry-over');
+
+        // ── Calendar, read part (CalendarEvents: the web calendar's sources) ─────────────────────
+        Route::get('calendar/events', [CalendarController::class, 'events'])->name('calendar.events');
+        Route::get('calendar/connections', [CalendarController::class, 'connections'])->name('calendar.connections');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');

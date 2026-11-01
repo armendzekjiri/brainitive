@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -352,6 +352,33 @@ updated_at}`.
   days is **not** moved by itself — `carry_over_count` says how many "Bring over" would add, as the web's
   button. Work the user can no longer open is left out. Reordering: web only for now.
 
+### Calendar
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/calendar/events?from=&to=&sources[]=&me_only=&show_completed=` | app + verified | Tray "next meeting", TV wallboard "next meeting in 12 min", mobile agenda: everything the web calendar shows for the user's local days `from`…`to` (Y-m-d, inclusive, ≤ 62 days; default today + 7), sorted, not paginated → `{data: [event], from, to, timezone, errors: [{connection_id, message}]}` | Full (read) | BRAI-222 | ready (v1.49.0, BRAI-418 read part) |
+| `GET /api/v1/calendar/connections` | app + verified | Settings → calendars: the user's connected calendars / Google Tasks lists with status → `{data: [{id, provider, provider_label, kind, account_email, account_name, name, color, is_active, read_only, sync_error, sync_error_at}]}`, not paginated. Connecting / removing: web only | Status only | BRAI-229 | ready (v1.49.0, BRAI-418 read part) |
+
+Event: `{id, type: issue|task|event|google_task|booking, work_id, title, all_day, start, end, location,
+conference_url, conference_provider, color, calendar: {connection_id, name, provider, provider_label}|null,
+project: {id, name, key}|null, url, external_url, done, read_only}`.
+- Same sources as the web calendar (`App\Support\Calendar\CalendarEvents`, shared with
+  `CalendarController@index`): connected calendars of any provider + Google Tasks (`external`), the
+  user's bookings (`booking`), dated issues (`board`) and list tasks (`list`) of every project they can
+  open — all of them, as the web; `me_only=1` = only work assigned to the user, `show_completed=0`
+  hides completed work. `sources[]` limits to some (default all).
+- Timed: `start` / `end` are ISO-8601 UTC instants; all-day: `Y-m-d` and `end` is the **last day**
+  (inclusive). Brainitive's own dates / times are the user's wall clock (`timezone` in the response).
+  An event is listed when it touches one of the user's local days in the range.
+- `id` is unique per occurrence (`task:<id>:<date>` for every date of a repeating task;
+  `event:<connection>:<event id>`); `work_id` (`issue:<id>` / `task:<id>`) is what `PATCH /me/work/{id}`
+  takes. `conference_url` is an https join link (Meet / Teams) when the event has one; `color` is the
+  calendar's colour (events) or the project's (work).
+- A calendar that fails to load is left out, listed in `errors`, and its `sync_error` shows in
+  `/calendar/connections` (as the web's "Reconnect …" warning). Calls go to the providers live: refresh
+  every few minutes, not every few seconds.
+- **Later (phase 08):** creating / moving / deleting events on writable calendars, meetings
+  (Meet / Teams links), the private ICS feed link (`GET /me/calendar-feed`). Connecting providers: web only.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -433,6 +460,22 @@ Built in: BRAI-394 (desktop) · Mobile scope: View + revoke
 - POST /api/v1/me/my-day/items {id} · PATCH /api/v1/me/my-day/items/{id} {done} · DELETE /api/v1/me/my-day/items/{id} · POST /api/v1/me/my-day/carry-over — answer the updated My Day
 Scope: app · OpenAPI: docs/api/openapi.json#/My Work · Registry: docs/ai/API.md#my-work
 Built in: BRAI-396 (desktop) · Mobile scope: Full (reordering My Day: web only for now)
+```
+
+**BRAI-222** (unified calendar, read part)
+```
+## API (ready) — read part
+- GET /api/v1/calendar/events?from=&to=&sources[]=&me_only= — connected calendars, Google Tasks, bookings and dated issues / tasks for the user's local days (≤ 62), sorted; timed = UTC instants, all-day = dates (end inclusive)
+Scope: app · OpenAPI: docs/api/openapi.json#/Calendar · Registry: docs/ai/API.md#calendar
+Built in: BRAI-418 read part (desktop) · Mobile scope: Read now; creating / moving events: API in phase 08
+```
+
+**BRAI-229** (calendar feed + provider status, status part)
+```
+## API (ready) — provider status
+- GET /api/v1/calendar/connections — connected calendars and Google Tasks lists: name, colour, provider, read-only, sync_error ("Reconnect …")
+Scope: app · OpenAPI: docs/api/openapi.json#/Calendar · Registry: docs/ai/API.md#calendar
+Built in: BRAI-418 read part (desktop) · Mobile scope: Status only (connecting providers: web only; the private feed link: API in phase 08)
 ```
 
 **BRAI-262** (data export)
