@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -188,6 +188,18 @@ recently_updated: [{type, id, name, url, updated_at}]}`.
 - All workspace content (Workspaces, Projects and everything after) needs a verified address (403
   `forbidden`), like the web app; `GET /me` does not, so the app can show "verify your email".
 
+### Members
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/workspaces/{slug}/members` | app + verified | Assignee / mention pickers: the workspace's members by name with their workspace role, `?q=` (name or email), cursor-paginated | Read + invite | BRAI-181 | ready (v1.49.0, BRAI-390) |
+| `GET /api/v1/projects/{id}/members` | app + verified | Same for a project, with the project role. Can't open the project → 404 | Read + invite | BRAI-181 | ready (v1.49.0, BRAI-390) |
+| `POST /api/v1/workspaces/{slug}/invitations` | app + verified | Invite `{email, role: admin\|editor\|member\|viewer}` → 201 `{data: {result, email, role, member, expires_at}}`. An existing account joins at once (`member_added`, `member` set); any other address gets the invitation email (`invitation_sent`, valid 30 days, a repeat refreshes it). Admins only (403), outside → 404, already a member → 422 `email`, 402 `limit_reached` (member limit) | Read + invite | BRAI-181 | ready (v1.49.0, BRAI-390) |
+
+Member: `{id, name, email, avatar_url, role}` — what the web's pickers get. No `updated_since` on these
+lists (joining doesn't change the member's record): reload them when opening a picker. The web asks
+"send an invitation?" before mailing an unknown address; the apps ask in their own UI and then POST.
+Role changes, removals, cancelling invitations, project membership: web only.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -211,4 +223,14 @@ Built in: BRAI-388 (desktop) · Mobile scope: Read + create (settings web only)
 - POST /api/v1/workspaces/{slug}/projects — create a project, blank or from a template (402 at the plan limit)
 Scope: app · OpenAPI: docs/api/openapi.json#/Projects · Registry: docs/ai/API.md#projects
 Built in: BRAI-389 (desktop) · Mobile scope: Read + create
+```
+
+**BRAI-181** (members)
+```
+## API (ready)
+- GET /api/v1/workspaces/{slug}/members — workspace members with role, ?q= filter, cursor-paginated
+- GET /api/v1/projects/{id}/members — project members with project role
+- POST /api/v1/workspaces/{slug}/invitations — invite by email (admins; 402 at the member limit)
+Scope: app · OpenAPI: docs/api/openapi.json#/Members · Registry: docs/ai/API.md#members
+Built in: BRAI-390 (desktop) · Mobile scope: Read + invite (roles and removals web only)
 ```

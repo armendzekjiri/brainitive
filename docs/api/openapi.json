@@ -38,6 +38,9 @@
         },
         {
             "name": "Projects"
+        },
+        {
+            "name": "Members"
         }
     ],
     "security": [
@@ -1171,6 +1174,257 @@
                     }
                 }
             }
+        },
+        "/workspaces/{workspace}/members": {
+            "get": {
+                "operationId": "app.v1.members.workspace",
+                "summary": "The workspace's members by name, with their workspace role",
+                "tags": [
+                    "Members"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "path",
+                        "required": true,
+                        "description": "The workspace slug",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "description": "part of the name or email address",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 100
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `MemberResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MemberCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/projects/{project}/members": {
+            "get": {
+                "operationId": "app.v1.members.project",
+                "summary": "The project's members by name, with their project role",
+                "tags": [
+                    "Members"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "description": "part of the name or email address",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 100
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `MemberResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MemberCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspace}/invitations": {
+            "post": {
+                "operationId": "app.v1.members.invite",
+                "summary": "Invite somebody by email: an existing account joins at once, anybody else gets an invitation\nemail (valid 30 days; a repeat refreshes it)",
+                "tags": [
+                    "Members"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "path",
+                        "required": true,
+                        "description": "The workspace slug",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreInvitationRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`InvitationResultResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/InvitationResultResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "402": {
+                        "$ref": "#/components/responses/LimitReached"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -1459,6 +1713,62 @@
                 ],
                 "title": "InvitationResource"
             },
+            "InvitationResultResource": {
+                "type": "object",
+                "properties": {
+                    "result": {
+                        "type": "string",
+                        "description": "member_added | invitation_sent"
+                    },
+                    "email": {
+                        "type": "string"
+                    },
+                    "role": {
+                        "type": "string"
+                    },
+                    "member": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "email": {
+                                "type": "string"
+                            },
+                            "avatar_url": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "email",
+                            "avatar_url"
+                        ]
+                    },
+                    "expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the invitation link works until then (30 days)"
+                    }
+                },
+                "required": [
+                    "result",
+                    "email",
+                    "role",
+                    "member",
+                    "expires_at"
+                ],
+                "title": "InvitationResultResource"
+            },
             "MeResource": {
                 "type": "object",
                 "properties": {
@@ -1695,6 +2005,47 @@
                     "device"
                 ],
                 "title": "MeResource"
+            },
+            "MemberCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/MemberResource"
+                },
+                "title": "MemberCollection"
+            },
+            "MemberResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "email": {
+                        "type": "string"
+                    },
+                    "avatar_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "role": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "email",
+                    "avatar_url",
+                    "role"
+                ],
+                "title": "MemberResource"
             },
             "ProjectCollection": {
                 "type": "array",
@@ -2224,6 +2575,31 @@
                     "refresh_token"
                 ],
                 "title": "RefreshTokenRequest"
+            },
+            "StoreInvitationRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/workspaces/{slug}/invitations` (BRAI-390): the web's invite rules. Authorized\nbefore validation: outside the workspace \u2192 404, members who aren't admins \u2192 403 (nobody else\nlearns who is a member through \"already a member\").",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "maxLength": 255
+                    },
+                    "role": {
+                        "type": "string",
+                        "enum": [
+                            "admin",
+                            "editor",
+                            "member",
+                            "viewer"
+                        ]
+                    }
+                },
+                "required": [
+                    "email",
+                    "role"
+                ],
+                "title": "StoreInvitationRequest"
             },
             "StoreProjectRequest": {
                 "type": "object",

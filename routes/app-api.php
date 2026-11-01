@@ -6,6 +6,7 @@ use App\Http\Controllers\AppApi\InstanceController;
 use App\Http\Controllers\AppApi\InvitationController;
 use App\Http\Controllers\AppApi\MeAvatarController;
 use App\Http\Controllers\AppApi\MeController;
+use App\Http\Controllers\AppApi\MemberController;
 use App\Http\Controllers\AppApi\ProjectController;
 use App\Http\Controllers\AppApi\WorkspaceController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
@@ -74,6 +75,11 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::post('workspaces/{workspace:slug}/projects', [ProjectController::class, 'store'])->name('projects.store');
         Route::get('workspaces/{workspace:slug}/project-templates', [ProjectController::class, 'templates'])->name('projects.templates');
         Route::get('projects/{project}', [ProjectController::class, 'show'])->whereNumber('project')->name('projects.show');
+
+        // ── Members (role changes and removals: web only) ──────────────────────────────────────
+        Route::get('workspaces/{workspace:slug}/members', [MemberController::class, 'workspace'])->name('members.workspace');
+        Route::get('projects/{project}/members', [MemberController::class, 'project'])->whereNumber('project')->name('members.project');
+        Route::post('workspaces/{workspace:slug}/invitations', [MemberController::class, 'invite'])->name('members.invite');
 
     });
 
