@@ -197,6 +197,12 @@ Full conventions and the endpoint registry: [`API.md`](./API.md); recipe:
   middleware doesn't run on `/api/v1`.
 - Filters mirror the web's own URL params instead of a second filter language: `GET /boards/{id}/items` takes the board URL /
   saved-view params (`BoardFilters`), so a saved view's `params` work as they are.
+- Public-facing modules (helpdesk customers, lead forms, booking pages, feedback / client portals) expose **only the member /
+  agent side** in the App API, with exactly the web's role checks and customer-data rules; their public / guest routes never get
+  an `/api/v1` twin. External providers (calendars) are written through the web's provider layer (`CalendarProviders`); the API
+  never runs an OAuth connect flow.
+- When an endpoint returns what a web page computes (Insights, health, workload), call the page's Support class and pass its
+  arrays through a Resource that types the top level; don't re-derive numbers in the API.
 - The spec's `info.version` is the API version (`1.0.0`), not the app release; breaking changes → `/api/v2`.
 - Web ↔ desktop: call native features only through `resources/js/lib/desktop.ts` (feature-detected,
   no-op in a browser); never import `@tauri-apps/api` into the web app.

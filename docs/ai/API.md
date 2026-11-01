@@ -121,7 +121,47 @@ instead. BRAI-168 (Backend / mobile API inventory) links this registry.
 
 ## Endpoints
 
-Columns: **Mobile** = scope in the mobile app (Full / Read + light edit / Read-only / web only);
+### App API v1: complete endpoint overview
+The entry point for the desktop, mobile and TV apps: module → OpenAPI tag → main paths (all under `/api/v1`). Details, shapes and
+rules in each module's section below; the typed spec is `docs/api/openapi.json`.
+
+| Module | Tag | Main paths |
+|---|---|---|
+| Instance | Instance | `GET /instance` (public) |
+| Auth | Auth | `POST /auth/exchange`, `/auth/refresh`, `/auth/logout`, `/auth/web-session`; TV: `POST /auth/device`, `/auth/device/token` |
+| Account | Account | `GET\|PATCH /me`, `POST\|DELETE /me/avatar` |
+| Devices | Devices | `GET /devices`, `PATCH /devices/current`, `DELETE /devices/{id}` |
+| Invitations & onboarding | Invitations | `GET /invitations/{token}`, `POST /invitations/{token}/accept` |
+| Workspaces | Workspaces | `GET\|POST /workspaces`, `GET /workspaces/{slug}` |
+| Projects | Projects | `GET\|POST /workspaces/{slug}/projects`, `GET /projects/{id}`, `GET /workspaces/{slug}/project-templates` |
+| Members | Members | `GET /workspaces/{slug}/members`, `GET /projects/{id}/members`, `POST /workspaces/{slug}/invitations` |
+| Navigation | Navigation | `GET /me/navigation`, `PUT /me/pins` |
+| Search | Search | `GET /search` |
+| Notifications | Notifications | `GET /notifications`, `…/unread-count`, `POST …/{id}/read\|archive`, `…/read-all`, `GET\|PUT /me/notification-preferences` |
+| Connected apps | Connected apps | `GET\|DELETE /me/connected-apps…`, `GET\|POST /me/data-export` |
+| My Work | My Work | `GET /me/work`, `PATCH /me/work/{id}`, `/me/my-day…`, `GET /me/today` |
+| Calendar | Calendar | `GET /calendar/events`, `/calendar/connections`; `POST /calendar/events`, `GET\|PATCH\|DELETE /calendar/events/{id}`, `GET /calendar/meeting-calendars`, `GET\|POST /meetings`, `DELETE /meetings/{id}`, `POST /meetings/{id}/notes`, `GET\|PUT\|DELETE /me/calendar-feed`, `POST /me/calendar-feed/reset` |
+| Task lists | Task lists | `GET\|POST /projects/{id}/task-lists`, `GET /task-lists/{id}`, `GET\|POST /task-lists/{id}/items`, `PATCH\|DELETE …/items/{task}`, `POST …/items/reorder` |
+| Captures | Captures | `GET\|POST /captures`, `GET\|PATCH\|DELETE /captures/{uuid}`, `…/archive\|restore\|preview\|convert`, `GET /capture-destinations` |
+| Snippets | Snippets | `/workspaces/{slug}/snippet-collections`, `/snippet-collections/{id}…`, `/snippets/{id}` |
+| Bookmarks | Bookmarks | `/workspaces/{slug}/bookmarks`, `/bookmarks/{id}…`, `/bookmarks/{id}/items…` |
+| Time tracking | Time tracking | `/me/timer…`, `/work-logs…`, `GET /me/timesheet` |
+| Boards | Boards | `GET /projects/{id}/boards`, `GET /boards/{id}`, `GET /boards/{id}/items`, `GET /boards/{id}/views`, `POST /items/{id}/move`, `GET /projects/{id}/config` |
+| Issues | Issues | `POST /boards/{id}/items`, `GET\|PATCH\|DELETE /items/{id}`, `/items/by-key/{KEY}`, comments, watchers, attachments, activity, children, links, `GET /projects/{id}/items` (dated) |
+| Sprints | Sprints | `GET /boards/{id}/sprints`, `/sprints/{id}…`, `/boards/{id}/backlog…`, burndown, velocity |
+| Docs | Docs | `GET\|POST /projects/{id}/pages`, `GET\|PATCH /pages/{uuid}`, publish, move, collab, versions, reviews, links, `GET /links/resolve` |
+| Whiteboards | Whiteboards | `GET /whiteboards/{uuid}` |
+| Plans | Plans | `GET /projects/{id}/plans`, `GET /plans/{id}` |
+| Releases | Releases | `GET /projects/{id}/releases`, `GET /releases/{id}` |
+| Files | Files | `POST /uploads` |
+| Bookings | Bookings | `GET /booking-pages`, `GET /bookings`, `GET /bookings/{uuid}`, `POST /bookings/{uuid}/cancel` |
+| Helpdesk | Helpdesk | `GET /projects/{id}/helpdesks`, `GET /helpdesks/{id}`, `GET /helpdesks/{id}/tickets`, `GET\|PATCH /tickets/{id}`, `POST /tickets/{id}/replies` |
+| Leads | Leads | `GET /projects/{id}/lead-forms`, `GET /lead-forms/{id}/leads`, `GET /lead-forms/{id}/analytics`, `GET\|PATCH /leads/{id}` |
+| Portals | Portals | `GET /projects/{id}/feedback-portal`, `GET /feedback-portals/{id}/posts`, `PATCH /feedback-posts/{id}`, `POST /feedback-posts/{id}/moderate`, `GET /projects/{id}/client-portal`, `GET /client-portals/{id}/deliverables`, `GET /client-deliverables/{id}` |
+| Insights | Insights | `GET /workspaces/{slug}/insights/{tab}`, `GET /projects/{id}/health`, `GET /projects/{id}/workload` |
+| Web only | — | see "Web only (no App API in v1)" |
+
+Columns of the module tables: **Mobile** = scope in the mobile app (Full / Read + light edit / Read-only / web only);
 **Card** = the Mobile app board card that carries the `## API` section.
 
 ### Instance

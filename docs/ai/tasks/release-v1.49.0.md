@@ -548,3 +548,21 @@ as the web (`CalendarProviders`), faked in tests.
 ### BRAI-424 web-only mobile cards (docs only)
 - `API.md` → "Mobile card texts": `## API: web only — open in browser` for BRAI-195, 207, 208, 210, 223, 224, 227, 234, 235,
   239, 242, 244, 245, 250, 251, 253, 254, 255, 257, 260, 261, and the matching rows. The board is not touched.
+
+### Phase 08 — result
+Merged into `release/v1.49.0`: `feat/app-api-calendar-writes` (BRAI-418 rest), `feat/app-api-bookings` (BRAI-419),
+`feat/app-api-helpdesk` (BRAI-420), `feat/app-api-leads` (BRAI-421), `feat/app-api-portals` (BRAI-422),
+`feat/app-api-insights` (BRAI-423), `docs/app-api-web-only` (BRAI-424, API.md only). No migrations. New spec tags: Bookings 280,
+Helpdesk 290, Leads 300, Portals 310, Insights 320 (meetings and the feed link are in Calendar). e2e: `app-api-calendar-writes`,
+`-bookings`, `-helpdesk`, `-leads`, `-portals`, `-insights`. API.md starts its Endpoints with the complete overview table.
+Deviations from the plan / cards:
+- Calendar writes are `POST /calendar/events` + `GET|PATCH|DELETE /calendar/events/{id}` with the list's `event:<connection>:<id>`
+  id (not per connection path); meetings are `GET|POST /meetings` (`subject_type` + `subject_id`) + `DELETE /meetings/{id}` +
+  `POST /meetings/{id}/notes` (the notes doc, BRAI-225 asks for notes); the ICS link is `GET|PUT|DELETE /me/calendar-feed` +
+  `POST /me/calendar-feed/reset`. Default time zone = the user's.
+- Bookings: no host reschedule (the web has none; rescheduling is the guest's manage link). Leads: no notes (the web has none);
+  `GET /lead-forms/{id}/analytics` added for BRAI-236. Helpdesk: reply bodies are Markdown without mentions; ticket attachments
+  from the app later (links from `POST /uploads` meanwhile). Portals: feedback = project admins (as the web), plus
+  `POST /feedback-posts/{id}/moderate`; client portal read-only.
+- Insights: one `GET /workspaces/{slug}/insights/{tab}` for the five tabs; workload is per project (as the web), not per
+  workspace; "team time" = the Insights team tab — the billing time overview (amounts) and all exports stay web only.
