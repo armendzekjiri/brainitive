@@ -200,6 +200,9 @@ require __DIR__.'/calendar-feed.php';
 // Public booking pages (v1.45.0, BRAI-158): /book/{slug}, free slots, booking, the guest's manage link
 require __DIR__.'/booking.php';
 
+// Native sign-in for the desktop / mobile apps (v1.49.0, BRAI-355): consent page + webview session
+require __DIR__.'/app-auth.php';
+
 // Workspace invitation (guest can view; auth user with matching email can accept)
 Route::get('/invite/{token}', [InvitationController::class, 'show'])->name('invitations.show');
 

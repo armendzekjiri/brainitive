@@ -8,6 +8,7 @@ use App\Models\InstanceAdmin;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Admin\UserDeletion;
+use App\Support\AppApi\AppTokens;
 use App\Support\SignOutEverywhere;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -173,6 +174,7 @@ class UserController extends Controller
 
         $user->forceFill(['suspended_at' => now()])->save();
         $this->signOutEverywhere($user);
+        AppTokens::revokeAllFor($user, 'suspended');
         AdminAuditLog::record('user.suspended', $user);
 
         return back()->with('success', "{$user->name} is suspended and signed out everywhere.");
