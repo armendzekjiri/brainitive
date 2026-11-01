@@ -275,3 +275,26 @@ that signs in without a browser and refreshes every few minutes. Same branch flo
 ### Web fix (`fix/web-projects-index`)
 - `GET /workspaces/{slug}/projects` rendered the missing `Projects/Index` page → redirect to the
   workspace home (`workspaces.show`); the unused query goes. Feature test.
+
+### Phase 04a — result
+Merged into `release/v1.49.0`: `feat/app-api-device-code` (BRAI-438), `feat/app-api-my-work` (BRAI-396),
+`feat/app-api-calendar` (BRAI-418 read part), `feat/app-api-today` (`GET /me/today`),
+`fix/web-projects-index`. No migrations (`app_devices.client` / `platform` are strings: `tv` /
+`android_tv` fit). New spec tags: My Work 130, Calendar 140.
+Deviations from the plan / card:
+- `POST /auth/device` takes the same `device` object as `/auth/exchange` (`{client, device: {name,
+  platform, app_version, os_version?}}`), not a bare `device_name`: the token step creates the device
+  row, which needs platform and version. The error codes are 400 (RFC 8628 §3.5); `slow_down` also
+  returns the new `interval`. An unknown or already used device code answers `invalid_grant`.
+- My Day lives under `/me/my-day` (decided by the lead, as the web's `/my-day`), with done / undone at
+  `PATCH /me/my-day/items/{id}` and also `PATCH /me/work/{id}`; `POST /me/my-day/carry-over` is the web's
+  "Bring over" (the plan is never carried over by itself; `carry_over_count` says how many would come).
+  Reordering My Day stays web only for now. `DELETE /me/my-day/items/{id}` answers 200 + the plan (a part
+  of the plan, not a resource).
+- `/me/work` takes `status=open|done|all` (default open) so `updated_since` can report completed work.
+- `GET /me/today` also carries My Day (the TV "Today" panel), and its `events` are calendar events +
+  bookings only (dated work is in `work`).
+- **Left for phase 08 (BRAI-418):** `POST|PATCH|DELETE` calendar events, meetings (Meet / Teams),
+  the private ICS feed link. Connecting providers stays web only.
+- `## API (ready)` texts for BRAI-215, BRAI-222 and BRAI-229 are in `docs/ai/API.md` → "Mobile card texts".
+
