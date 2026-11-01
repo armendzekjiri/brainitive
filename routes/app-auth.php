@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AppAuthController;
+use App\Http\Controllers\AppDeviceApprovalController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -19,6 +20,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/app/authorize', [AppAuthController::class, 'store'])
         ->middleware('throttle:30,1,app.authorize.store')
         ->name('app.authorize.store');
+
+    // Device-code sign-in (TV, RFC 8628, BRAI-438): confirm the code the TV shows. GET never approves.
+    Route::get('/app/device', [AppDeviceApprovalController::class, 'show'])
+        ->middleware('throttle:app-device-entry')
+        ->name('app.device');
+    Route::post('/app/device', [AppDeviceApprovalController::class, 'store'])
+        ->middleware('throttle:app-device-entry')
+        ->name('app.device.store');
 });
 
 // The app's webview: a one-time code (POST /api/v1/auth/web-session) → a remembered web session

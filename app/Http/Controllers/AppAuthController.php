@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AppDevice;
 use App\Support\AppApi\AppAuthCodes;
+use App\Support\AppApi\AppClients;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -104,7 +105,8 @@ class AppAuthController extends Controller
     private function params(array $input): array|string
     {
         $validator = Validator::make($input, [
-            'client' => ['required', 'string', Rule::in(array_keys((array) config('app-api.clients')))],
+            // only clients that sign in through the browser (the TV uses the device code, /app/device)
+            'client' => ['required', 'string', Rule::in(AppClients::using(AppClients::AUTHORIZATION_CODE))],
             'code_challenge' => ['required', 'string', 'size:43', 'regex:/^[A-Za-z0-9_-]{43}$/'],
             'code_challenge_method' => ['required', 'string', Rule::in(['S256'])],
             'state' => ['required', 'string', 'max:255'],
