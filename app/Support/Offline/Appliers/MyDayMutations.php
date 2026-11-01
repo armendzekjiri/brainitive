@@ -34,24 +34,17 @@ final class MyDayMutations
             throw new SyncAbort(SyncOutcome::deleted($type === 'board' ? IssueMutations::ENTITY : ListTaskMutations::ENTITY, 'This task was deleted while you were offline.'));
         }
 
-        $today = MyDayPlan::today($ctx->user);
-        $entry = MyDayEntry::firstOrCreate(
-            ['user_id' => $ctx->user->id, 'work_type' => $type, 'work_id' => $id, 'plan_date' => $today],
-            ['position' => (int) MyDayEntry::where('user_id', $ctx->user->id)->where('plan_date', $today)->max('position') + 1],
-        );
+        $entry = MyDayPlan::add($ctx->user, $type, $id);
 
-        return SyncOutcome::applied(self::ENTITY, ['work_type' => $type, 'work_id' => $id, 'plan_date' => $today], $entry->id);
+        return SyncOutcome::applied(self::ENTITY, ['work_type' => $type, 'work_id' => $id, 'plan_date' => MyDayPlan::today($ctx->user)], $entry->id);
     }
 
     public static function remove(MutationContext $ctx): SyncOutcome
     {
         [$type, $id] = self::work($ctx);
-        $today = MyDayPlan::today($ctx->user);
+        MyDayPlan::remove($ctx->user, $type, $id);
 
-        MyDayEntry::where('user_id', $ctx->user->id)->where('plan_date', $today)
-            ->where('work_type', $type)->where('work_id', $id)->delete();
-
-        return SyncOutcome::applied(self::ENTITY, ['work_type' => $type, 'work_id' => $id, 'plan_date' => $today, 'removed' => true]);
+        return SyncOutcome::applied(self::ENTITY, ['work_type' => $type, 'work_id' => $id, 'plan_date' => MyDayPlan::today($ctx->user), 'removed' => true]);
     }
 
     /** @return array{0: string, 1: int} */

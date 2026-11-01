@@ -17,7 +17,6 @@ use App\Models\Release;
 use App\Models\Sprint;
 use App\Models\User;
 use App\Models\Workspace;
-use App\Notifications\ItemStatusChangedNotification;
 use App\Rules\ProjectMember;
 use App\Support\Billing\TimeLog;
 use App\Support\Billing\TimeLogActivities;
@@ -33,6 +32,7 @@ use App\Support\Github\ItemDevelopment;
 use App\Support\Live\BoardLive;
 use App\Support\References\ContentReferences;
 use App\Support\Uploads;
+use App\Support\Work\WorkCompletion;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\JsonResponse;
@@ -699,36 +699,16 @@ class BoardController extends Controller
             'with_subtasks' => 'nullable|boolean',
         ]);
 
-        $oldColumn = $item->column;
         $newColumn = BoardColumn::findOrFail($validated['column_id']);
 
-        $item->moveToColumn($newColumn, $validated['position']);
+        // move + tell the watchers about a new status (shared with My Work and the App API)
+        WorkCompletion::moveIssue($item, $newColumn, $validated['position'], $request->user());
 
         if ($newColumn->is_done_column && $request->boolean('with_subtasks')) {
             Item::whereIn('id', $item->descendantIds())
                 ->whereHas('column', fn ($q) => $q->where('is_done_column', false))
                 ->get()
                 ->each(fn (Item $child) => $child->moveToColumn($newColumn, 0));
-        }
-
-        // Notify all watchers when the column (status) actually changed
-        if ($oldColumn && $oldColumn->id !== $newColumn->id) {
-            $item->load('watchers');
-            $actorId = $request->user()->id;
-
-            foreach ($item->watchers->filter(fn ($w) => $w->hasProjectAccess($project)) as $watcher) {
-                // Don't notify the person who performed the move
-                if ($watcher->id === $actorId) {
-                    continue;
-                }
-
-                $watcher->notify(new ItemStatusChangedNotification(
-                    item: $item,
-                    oldColumn: $oldColumn,
-                    newColumn: $newColumn,
-                    actor: $request->user(),
-                ));
-            }
         }
 
         return back();

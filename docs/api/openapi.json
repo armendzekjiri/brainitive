@@ -53,6 +53,9 @@
         },
         {
             "name": "Connected apps"
+        },
+        {
+            "name": "My Work"
         }
     ],
     "security": [
@@ -2426,6 +2429,401 @@
                     }
                 }
             }
+        },
+        "/me/work": {
+            "get": {
+                "operationId": "app.v1.work.index",
+                "description": "Board issues and list tasks of every project the user can open, soonest due first (no due date\nlast). `due` = overdue | today | upcoming (or several, comma separated), by the user's local date;\n`status` = open (default) | done | all. For a cheap refresh pass `updated_since` with\n`status=all`: entries that were completed since then come back with `done: true`.",
+                "summary": "The work assigned to the user",
+                "tags": [
+                    "My Work"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "due",
+                        "in": "query",
+                        "description": "overdue | today | upcoming, or several comma separated (overdue,today); by the user's local date",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^(overdue|today|upcoming)(,(overdue|today|upcoming))*$",
+                            "maxLength": 40
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "open (default) | done | all",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "open",
+                                "done",
+                                "all"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `WorkItemResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WorkItemCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/work/{id}": {
+            "patch": {
+                "operationId": "app.v1.work.update",
+                "description": "The web's circle in My Work: an issue moves to its board's first done column (or back to the first\nopen one) and its watchers are told; a list task changes its status (a repeating one with a due date\nmoves on to its next date and stays open). Needs edit rights (403); a board without a done column \u2192 422.",
+                "summary": "Complete or reopen a piece of work",
+                "tags": [
+                    "My Work"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkDoneRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`WorkItemResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WorkItemResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/my-day": {
+            "get": {
+                "operationId": "app.v1.my-day.show",
+                "summary": "My Day: what the user planned for their local today, in their order",
+                "tags": [
+                    "My Work"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`MyDayResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MyDayResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/my-day/items": {
+            "post": {
+                "operationId": "app.v1.my-day.items.store",
+                "description": "Work the user can't open (or a malformed id) \u2192 422 on `id`.",
+                "summary": "Put work on today's plan (at the end; twice changes nothing). Answers the updated My Day",
+                "tags": [
+                    "My Work"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AddMyDayItemRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`MyDayResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MyDayResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/my-day/items/{id}": {
+            "patch": {
+                "operationId": "app.v1.my-day.items.update",
+                "summary": "Complete or reopen work on today's plan, as `PATCH /me/work/{id}`. Answers the updated My Day",
+                "tags": [
+                    "My Work"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/WorkDoneRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`MyDayResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MyDayResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "app.v1.my-day.items.destroy",
+                "summary": "Take work off today's plan (the work itself is not touched). Answers the updated My Day",
+                "tags": [
+                    "My Work"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`MyDayResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MyDayResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/my-day/carry-over": {
+            "post": {
+                "operationId": "app.v1.my-day.carry-over",
+                "summary": "\"Bring over\": unfinished work of the last 30 days' plans onto today. Answers the updated My Day",
+                "tags": [
+                    "My Work"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`MyDayResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MyDayResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -2438,6 +2836,21 @@
             }
         },
         "schemas": {
+            "AddMyDayItemRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/me/my-day/items`: the work to plan for today.",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "issue:<id> or task:<id>, as in GET /me/work",
+                        "maxLength": 40
+                    }
+                },
+                "required": [
+                    "id"
+                ],
+                "title": "AddMyDayItemRequest"
+            },
             "ConnectedAppResource": {
                 "type": "object",
                 "properties": {
@@ -3276,6 +3689,30 @@
                     "role"
                 ],
                 "title": "MemberResource"
+            },
+            "MyDayResource": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "description": "the user's local date (Y-m-d) the plan is for"
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/WorkItemResource"
+                        }
+                    },
+                    "carry_over_count": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "date",
+                    "items",
+                    "carry_over_count"
+                ],
+                "title": "MyDayResource"
             },
             "NavigationProjectResource": {
                 "type": "object",
@@ -4817,6 +5254,217 @@
                     "url"
                 ],
                 "title": "WebSessionResource"
+            },
+            "WorkDoneRequest": {
+                "type": "object",
+                "description": "`PATCH /api/v1/me/work/{id}` and `PATCH /api/v1/me/my-day/items/{id}`: done or open again.",
+                "properties": {
+                    "done": {
+                        "type": "boolean",
+                        "description": "true: complete it (issue \u2192 the board's first done column); false: reopen it"
+                    }
+                },
+                "required": [
+                    "done"
+                ],
+                "title": "WorkDoneRequest"
+            },
+            "WorkItemCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/WorkItemResource"
+                },
+                "title": "WorkItemCollection"
+            },
+            "WorkItemResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "issue:<id> | task:<id>: use it for PATCH /me/work/{id} and My Day"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "issue",
+                            "task"
+                        ]
+                    },
+                    "key": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "done": {
+                        "type": "boolean"
+                    },
+                    "status": {
+                        "description": "issues: the board column; tasks: To do / Done",
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            },
+                            {
+                                "type": "string",
+                                "enum": [
+                                    "Done",
+                                    "To do"
+                                ]
+                            }
+                        ]
+                    },
+                    "priority": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "color": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "color"
+                        ]
+                    },
+                    "due_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the user's wall clock: Y-m-d and H:i"
+                    },
+                    "due_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "project": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "key": {
+                                "type": "string"
+                            },
+                            "color": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "key",
+                            "color"
+                        ]
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "source": {
+                        "description": "where it lives: a board or a task list",
+                        "anyOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "const": "board"
+                                    },
+                                    "id": {
+                                        "type": "integer"
+                                    },
+                                    "name": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "type",
+                                    "id",
+                                    "name"
+                                ]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "const": "list"
+                                    },
+                                    "id": {
+                                        "type": "integer"
+                                    },
+                                    "name": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "type",
+                                    "id",
+                                    "name"
+                                ]
+                            }
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "key",
+                    "title",
+                    "done",
+                    "status",
+                    "priority",
+                    "due_date",
+                    "due_time",
+                    "project",
+                    "workspace",
+                    "source",
+                    "url",
+                    "updated_at"
+                ],
+                "title": "WorkItemResource"
             },
             "WorkspaceCollection": {
                 "type": "array",
