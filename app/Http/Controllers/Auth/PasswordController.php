@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Support\AppApi\AppTokens;
 use App\Support\SignOutEverywhere;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,6 +28,7 @@ class PasswordController extends Controller
 
         // a changed password must lock out whoever knew the old one: other browsers, apps, CLI
         SignOutEverywhere::run($request->user(), $request->session()->getId());
+        AppTokens::revokeAllFor($request->user(), 'password_changed');
 
         return back();
     }

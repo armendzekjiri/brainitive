@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AppApi\AuthController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use Illuminate\Support\Facades\Route;
 
@@ -20,9 +21,17 @@ use Illuminate\Support\Facades\Route;
 
 // ── Auth (public): code exchange, refresh ────────────────────────────────────────────────────
 
+Route::middleware('throttle:app-auth')->group(function () {
+    Route::post('auth/exchange', [AuthController::class, 'exchange'])->name('auth.exchange');
+    Route::post('auth/refresh', [AuthController::class, 'refresh'])->name('auth.refresh');
+});
+
 Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function () {
 
     // ── Auth: sign out, webview session ──────────────────────────────────────────────────────
+
+    Route::post('auth/logout', [AuthController::class, 'logout'])->name('auth.logout');
+    Route::post('auth/web-session', [AuthController::class, 'webSession'])->name('auth.web-session');
 
     // ── Account ───────────────────────────────────────────────────────────────────────────────
 

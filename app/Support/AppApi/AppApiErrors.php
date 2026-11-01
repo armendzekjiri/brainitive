@@ -63,10 +63,13 @@ final class AppApiErrors
         return config('app.debug') ? null : self::json(500, self::defaultMessage(500));
     }
 
-    /** @param  array<string, array<int, string>>|null  $errors */
-    public static function json(int $status, string $message, ?array $errors = null): JsonResponse
+    /**
+     * @param  array<string, array<int, string>>|null  $errors
+     * @param  string|null  $code  overrides the status code's default (e.g. `invalid_grant` on 400 / 401)
+     */
+    public static function json(int $status, string $message, ?array $errors = null, ?string $code = null): JsonResponse
     {
-        $body = ['message' => $message, 'code' => self::CODES[$status] ?? 'error'];
+        $body = ['message' => $message, 'code' => $code ?? self::CODES[$status] ?? 'error'];
         if ($errors !== null) {
             $body['errors'] = $errors;
         }
