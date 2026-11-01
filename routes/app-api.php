@@ -13,6 +13,7 @@ use App\Http\Controllers\AppApi\DeviceAuthController;
 use App\Http\Controllers\AppApi\DeviceController;
 use App\Http\Controllers\AppApi\DocReviewController;
 use App\Http\Controllers\AppApi\HelpdeskController;
+use App\Http\Controllers\AppApi\InsightsController;
 use App\Http\Controllers\AppApi\InstanceController;
 use App\Http\Controllers\AppApi\InvitationController;
 use App\Http\Controllers\AppApi\IssueActivityController;
@@ -196,6 +197,11 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::get('projects/{project}/client-portal', [PortalController::class, 'clientPortal'])->name('client-portal.show');
         Route::get('client-portals/{portal}/deliverables', [PortalController::class, 'deliverables'])->name('client-portals.deliverables');
         Route::get('client-deliverables/{deliverable}', [PortalController::class, 'deliverable'])->name('client-deliverables.show');
+
+        // ── Insights, project health, workload: read-only summaries (the web's Support classes) ────
+        Route::get('workspaces/{workspace:slug}/insights/{tab}', [InsightsController::class, 'insights'])->name('insights.show');
+        Route::get('projects/{project}/health', [InsightsController::class, 'health'])->name('projects.health');
+        Route::get('projects/{project}/workload', [InsightsController::class, 'workload'])->name('projects.workload');
 
         // ── Task lists + to-dos (TaskLists, WorkCompletion: shared with the web, CLI and MCP) ──────
         // lists and tasks by id; ids on writes are checked in the controller (no route constraint)

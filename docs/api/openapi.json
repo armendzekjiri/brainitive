@@ -110,6 +110,9 @@
         },
         {
             "name": "Portals"
+        },
+        {
+            "name": "Insights"
         }
     ],
     "security": [
@@ -12378,6 +12381,268 @@
                     }
                 }
             }
+        },
+        "/workspaces/{workspace}/insights/{tab}": {
+            "get": {
+                "operationId": "app.v1.insights.show",
+                "description": "Workspace admins only (403 for members; 404 for others), as the web. Filters: `period` (default last_30)\nor `period=custom&from=&to=`, `project`.",
+                "summary": "One tab of the workspace's Insights: overview, team, projects, helpdesk or usage",
+                "tags": [
+                    "Insights"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "path",
+                        "required": true,
+                        "description": "The workspace slug",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "tab",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "period",
+                        "in": "query",
+                        "description": "this_month | last_month | last_30 (default) | last_90 | custom (with from + to)",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "this_month",
+                                "last_month",
+                                "last_30",
+                                "last_90",
+                                "custom"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "description": "custom: first / last local day, Y-m-d (at most a year)",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "project",
+                        "in": "query",
+                        "description": "only this project of the workspace (id)",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`InsightsResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/InsightsResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/projects/{project}/health": {
+            "get": {
+                "operationId": "app.v1.projects.health",
+                "description": "Every project member, as the web. `from` / `to` (local days, \u2264 a year; default the last 14 days), `tz`.",
+                "summary": "A project's health: live metrics of a period and the saved status updates",
+                "tags": [
+                    "Insights"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "tz",
+                        "in": "query",
+                        "description": "IANA zone of the dates, default the user's",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "description": "first / last local day, Y-m-d (at most a year; default the last 14 days up to today)",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`ProjectHealthResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/ProjectHealthResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/projects/{project}/workload": {
+            "get": {
+                "operationId": "app.v1.projects.workload",
+                "description": "Every project member, as the web. `from` (any day of the first week), `weeks` 4 | 6 | 8 | 12.",
+                "summary": "A project's workload: capacity vs planned hours per member and week",
+                "tags": [
+                    "Insights"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "description": "any day of the first week, Y-m-d (moved to its Monday); default this week",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "weeks",
+                        "in": "query",
+                        "description": "4 | 6 (default) | 8 | 12 weeks",
+                        "schema": {
+                            "type": "integer",
+                            "enum": [
+                                "4",
+                                "6",
+                                "8",
+                                "12"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`WorkloadResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WorkloadResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -16019,6 +16284,58 @@
                     "can"
                 ],
                 "title": "HelpdeskResource"
+            },
+            "InsightsResource": {
+                "type": "object",
+                "properties": {
+                    "tab": {
+                        "type": "string",
+                        "description": "overview | team | projects | helpdesk | usage"
+                    },
+                    "filters": {
+                        "type": "object",
+                        "description": "what was computed: period, from / to (local days), project, timezone",
+                        "properties": {
+                            "period": {
+                                "type": "string"
+                            },
+                            "from": {
+                                "type": "string"
+                            },
+                            "to": {
+                                "type": "string"
+                            },
+                            "project": {
+                                "type": "string"
+                            },
+                            "timezone": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "period",
+                            "from",
+                            "to",
+                            "project",
+                            "timezone"
+                        ]
+                    },
+                    "projects": {
+                        "type": "string",
+                        "description": "the projects the `project` filter can pick"
+                    },
+                    "insights": {
+                        "type": "string",
+                        "description": "the tab's numbers, as the web page gets them"
+                    }
+                },
+                "required": [
+                    "tab",
+                    "filters",
+                    "projects",
+                    "insights"
+                ],
+                "title": "InsightsResource"
             },
             "InstanceResource": {
                 "type": "object",
@@ -20151,6 +20468,46 @@
                     "recently_updated"
                 ],
                 "title": "ProjectDetailResource"
+            },
+            "ProjectHealthResource": {
+                "type": "object",
+                "properties": {
+                    "from": {
+                        "type": "string"
+                    },
+                    "to": {
+                        "type": "string"
+                    },
+                    "timezone": {
+                        "type": "string"
+                    },
+                    "metrics": {
+                        "type": "string",
+                        "description": "values, unknown and lists per metric, as the web's Health page"
+                    },
+                    "reports": {
+                        "type": "array",
+                        "description": "status updates: {id, status: on_track|at_risk|off_track, summary, author, as_of, created_at, ai_assisted}",
+                        "items": {}
+                    },
+                    "can_create": {
+                        "type": "boolean",
+                        "description": "writing a status update (web only for now)"
+                    },
+                    "url": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "from",
+                    "to",
+                    "timezone",
+                    "metrics",
+                    "reports",
+                    "can_create",
+                    "url"
+                ],
+                "title": "ProjectHealthResource"
             },
             "ProjectResource": {
                 "type": "object",
@@ -25498,6 +25855,60 @@
                     "updated_at"
                 ],
                 "title": "WorkLogResource"
+            },
+            "WorkloadResource": {
+                "type": "object",
+                "properties": {
+                    "from": {
+                        "type": "string",
+                        "description": "the Monday of the first week"
+                    },
+                    "weeks_count": {
+                        "type": "integer"
+                    },
+                    "timezone": {
+                        "type": "string"
+                    },
+                    "current_week": {
+                        "type": "string"
+                    },
+                    "weeks": {
+                        "type": "string",
+                        "description": "[{week, label, \u2026, is_current, is_past}]"
+                    },
+                    "members": {
+                        "type": "string",
+                        "description": "[{id, name, avatar_display, capacity_minutes, work, cells: [{week, capacity_minutes, allocated_minutes, load_percent, state, allocations, \u2026}]}]"
+                    },
+                    "team": {
+                        "type": "string",
+                        "description": "[{week, capacity_minutes, allocated_minutes, unset, over}]"
+                    },
+                    "review": {
+                        "type": "string",
+                        "description": "hints: over-planned, unestimated, \u2026"
+                    },
+                    "can_plan": {
+                        "type": "boolean",
+                        "description": "planning (capacity, allocations): web only"
+                    },
+                    "url": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "from",
+                    "weeks_count",
+                    "timezone",
+                    "current_week",
+                    "weeks",
+                    "members",
+                    "team",
+                    "review",
+                    "can_plan",
+                    "url"
+                ],
+                "title": "WorkloadResource"
             },
             "WorkspaceCollection": {
                 "type": "array",
