@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -121,7 +121,7 @@ calls answer with the same object.
   `billing_url` is the web "Plan & billing" page, `null` without billing.
 - PATCH fields (all optional, the web Profile page's rules): `name`, `bio`, `phone`, `timezone`
   (IANA, old names accepted), `task_digest`. **`email` → 422**: a new address has to be verified,
-  so it is changed on the web only. Password, account deletion and notification settings: web only.
+  so it is changed on the web only. Password and account deletion: web only (notification settings: see Notifications).
 - There is no language or theme on the server (the web app keeps the theme per browser), so the
   apps keep those locally.
 
@@ -240,6 +240,25 @@ bookmarks, captures, files}, fuzzy, places: [{type, id, title, subtitle, url, wo
   moved project) and snippets / bookmarks by their own; personal captures have no workspace and are
   left out when filtering by one.
 
+### Notifications
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/notifications?filter=all\|unread\|mentions\|assigned&archived=&cursor=&limit=` | app + verified | Tray inbox / native notifications: the web's inbox (bell), newest first, cursor-paginated (no `updated_since`: start again from the first page) | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
+| `GET /api/v1/notifications/unread-count` | app + verified | Dock / tray badge → `{data: {unread_count}}` | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
+| `POST /api/v1/notifications/{id}/read` | app + verified | Mark one read → `{data: {unread_count}}`. Not the user's / unknown → 404 | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
+| `POST /api/v1/notifications/read-all` | app + verified | Mark all inbox rows read → `{data: {unread_count: 0}}` | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
+| `POST /api/v1/notifications/{id}/archive` | app + verified | Archive one (leaves the inbox, counts as read) → `{data: {unread_count}}`. Not the user's → 404 | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
+| `GET /api/v1/me/notification-preferences` | app + verified | Settings → Notifications: `{data: {categories: [{key, label, description, channels: {in_app, push, email}}]}}` (effective: the user's choice or the default) | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
+| `PUT /api/v1/me/notification-preferences` | app + verified | `{preferences: {"<category>": {"in_app"?, "push"?, "email"?: bool}}}` — partial, only sent channels change → same shape as GET; unknown category / channel → 422 | Full | BRAI-183 | ready (v1.49.0, BRAI-393) |
+
+Notification: `{id (uuid), type, category, data, read, read_at, archived_at, created_at}` — the rows
+of the web bell (`NotificationInbox`, shared). `type` is e.g. `mentioned`, `item_assigned`,
+`item_commented`; `category` the catalog group (null for an unknown type); `data` the type's payload
+the web renders (`actor_name`, `item_title`, `url` …, different per type — show a generic row with
+`data.url` for types the app doesn't know). Every read / archive is announced on the user's live
+channel, so the web bell follows at once. `push` in the preferences is browser push today and the
+apps' push once it ships (APNs / FCM via the device's `push_token`).
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -290,4 +309,15 @@ Built in: BRAI-391 (desktop) · Mobile scope: Full (recent list kept on the devi
 - GET /api/v1/search?q=&type=&workspace=&project[]=&status=&assignee=&updated=&limit=&cursor= — global search (the web's ranking + visibility), page cursor, counts per group, places by name
 Scope: app · OpenAPI: docs/api/openapi.json#/Search · Registry: docs/ai/API.md#search
 Built in: BRAI-392 (desktop) · Mobile scope: Full
+```
+
+**BRAI-183** (notifications)
+```
+## API (ready)
+- GET /api/v1/notifications?filter=all|unread|mentions|assigned&archived= — the inbox, newest first, cursor-paginated
+- GET /api/v1/notifications/unread-count — badge count
+- POST /api/v1/notifications/{id}/read · POST /api/v1/notifications/read-all · POST /api/v1/notifications/{id}/archive — answer the new unread count
+- GET|PUT /api/v1/me/notification-preferences — per category: in_app / push / email (partial update)
+Scope: app · OpenAPI: docs/api/openapi.json#/Notifications · Registry: docs/ai/API.md#notifications
+Built in: BRAI-393 (desktop) · Mobile scope: Full
 ```

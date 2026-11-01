@@ -113,6 +113,35 @@ final class NotificationCatalog
         ])->values()->all();
     }
 
+    /**
+     * Rules of a (partial) preferences update: {preferences: {"<category>": {"in_app"|"push"|"email": bool}}}
+     * (Profile → Notifications, App API `PUT /me/notification-preferences`).
+     *
+     * @return array<string, mixed>
+     */
+    public static function preferenceRules(): array
+    {
+        return [
+            'preferences' => ['required', 'array:'.implode(',', array_keys(self::CATEGORIES))],
+            'preferences.*' => ['required', 'array:'.implode(',', self::CHANNELS)],
+            'preferences.*.*' => ['required', 'boolean'],
+        ];
+    }
+
+    /**
+     * Save a validated partial update: only the sent categories and channels change.
+     *
+     * @param  array<string, array<string, mixed>>  $preferences
+     */
+    public static function updatePreferences(User $user, array $preferences): void
+    {
+        $stored = is_array($user->notification_preferences) ? $user->notification_preferences : [];
+        foreach ($preferences as $category => $channels) {
+            $stored[$category] = array_replace(self::preferences($user, $category), array_map('boolval', $channels));
+        }
+        $user->update(['notification_preferences' => $stored]);
+    }
+
     /** Laravel channel names for a type: 'database', WebPushChannel::class, 'mail'. */
     public static function channels(object $notifiable, string $type): array
     {
