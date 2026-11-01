@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\AppApi\UpdateAvatarRequest;
 use App\Http\Resources\AppApi\MeResource;
 use App\Support\Profile\Avatar;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\Request;
 
 /** The profile picture from the desktop / mobile apps (BRAI-384): same storage as the web Profile page. */
+#[Group('Account', weight: 30)]
 class MeAvatarController extends Controller
 {
     /** Upload a new profile picture (multipart `avatar`: JPEG or PNG, at most 2 MB). */

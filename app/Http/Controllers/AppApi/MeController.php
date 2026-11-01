@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\AppApi\UpdateMeRequest;
 use App\Http\Resources\AppApi\MeResource;
 use App\Models\User;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\Request;
 
 /** The signed-in account in the desktop / mobile apps (BRAI-384). */
+#[Group('Account', weight: 30)]
 class MeController extends Controller
 {
     /** The signed-in user, their workspaces and limits, and the current device. */

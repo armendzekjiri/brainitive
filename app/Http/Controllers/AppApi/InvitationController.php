@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\AppApi\InvitationResource;
 use App\Http\Resources\AppApi\WorkspaceResource;
 use App\Models\WorkspaceInvitation;
+use App\Support\Entitlements\LimitReached;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -14,6 +16,7 @@ use Illuminate\Http\Request;
  * (App\Http\Controllers\InvitationController): only the invited address accepts, expired ones
  * can't be, a workspace over its member limit blocks (402), a member just closes the invitation.
  */
+#[Group('Invitations', weight: 50)]
 class InvitationController extends Controller
 {
     public function show(string $token): InvitationResource
@@ -21,7 +24,11 @@ class InvitationController extends Controller
         return new InvitationResource($this->find($token));
     }
 
-    /** Join the workspace → the workspace with the user's role. */
+    /**
+     * Join the workspace → the workspace with the user's role.
+     *
+     * @throws LimitReached the workspace is at its member limit (402 limit_reached)
+     */
     public function accept(Request $request, string $token): JsonResponse
     {
         $invitation = $this->find($token);

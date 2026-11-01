@@ -1928,3 +1928,11 @@ The Cloud CLI defaults to `https://www.brainitive.app`, matching the OAuth metad
 
 ### Marketing homepage may be outside Inertia
 On Brainitive Cloud nginx can serve `/` from the separate website. Links from Laravel pages to `/` must use a native `<a>` so the browser performs a full navigation; Inertia links can display the website HTML in an error modal. Self-hosted installations work with the same anchors.
+
+### The OpenAPI spec depends on the database schema (BRAI-381, v1.49.0)
+Scramble reads each model's column types from the database (`ModelInfo`), so `php artisan scramble:export`
+against a dev database that misses a migration (warning MD001 "table … does not exist") writes a
+different `docs/api/openapi.json` than CI does. Regenerate it with `composer openapi` instead
+(`OPENAPI_WRITE=1 php artisan test --filter=OpenApiSpecTest`, `TEST_DB_SUFFIX=<name>` in a worktree):
+the export then runs on the migrated test database, the same one the drift test checks against.
+Never migrate devdb just to export the spec.

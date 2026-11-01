@@ -152,6 +152,27 @@ class Example extends Model
 - Extension endpoints resolve models by numeric id and authorize with the same policies as the
   app — never a new permission rule.
 
+### App API v1 (desktop + mobile apps, v1.49.0)
+Full conventions and the endpoint registry: [`API.md`](./API.md); recipe:
+[skills/add-app-api-endpoint.md](./skills/add-app-api-endpoint.md).
+- `/api/v1` lives in `routes/app-api.php` only (names `app.v1.*`, group `app-api`, signed-in routes
+  `auth:app`). It is **not** MCP / CLI / extension: Passport tokens get 401 there, app tokens get 401
+  on `/mcp`, `/api/cli`, `/api/ext` — tests assert both.
+- Thin controllers in `App\Http\Controllers\AppApi` → the web's Support services and policies. Form
+  Request in, API Resource out with **explicit fields**; dates ISO-8601 UTC.
+- Responses wrapped `{data: ...}` (lists `{data: [...], next_cursor}`, cursor pagination, max 100,
+  `updated_since`); **DELETE → 204**. Only the token responses of `/auth/exchange` and `/auth/refresh`
+  are unwrapped.
+- Errors only through the central renderer (`AppApiErrors`): `{message, code, errors?}`. 404 instead of
+  403 when existence must stay secret. A plan limit is 402 `limit_reached` — declare
+  `@throws LimitReached` on the controller method so the spec shows it.
+- Every endpoint: `#[Group('<API.md module>', weight: n)]` on the controller, tests (incl. Passport
+  token → 401, cross-workspace 404, 422), `composer openapi` (commits `docs/api/openapi.json`; the
+  drift test fails otherwise), a row in `API.md`, and the `## API (ready)` section on its Mobile app card.
+- The spec's `info.version` is the API version (`1.0.0`), not the app release; breaking changes → `/api/v2`.
+- Web ↔ desktop: call native features only through `resources/js/lib/desktop.ts` (feature-detected,
+  no-op in a browser); never import `@tauri-apps/api` into the web app.
+
 ### Migrations
 ```php
 $table->id();

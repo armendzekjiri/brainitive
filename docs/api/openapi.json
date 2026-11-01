@@ -1,0 +1,1720 @@
+{
+    "openapi": "3.1.2",
+    "info": {
+        "title": "Brainitive App API",
+        "version": "1.0.0",
+        "description": "The JSON API of the first-party **Brainitive Desktop** and **Brainitive Mobile** apps. Every\nBrainitive server (Brainitive Cloud or self-hosted) serves it under `/api/v1`.\n\nIt is separate from the MCP server, the CLI and the browser extension: own tokens, own guard, own\nrate limits. Conventions (full text in `docs/ai/API.md` of the repository):\n\n- **Auth:** `Authorization: Bearer bra_...` - a 15-minute access token from the native sign-in\n  (`/app/authorize` in the system browser -> `POST /auth/exchange`). Refresh with\n  `POST /auth/refresh` (`brr_...`, 60 days, single use; replaying an old one revokes the device).\n  Tokens of the MCP / CLI / extension clients get 401 here.\n- **Errors:** always `{\"message\": \"...\", \"code\": \"...\", \"errors\"?: {\"field\": [\"...\"]}}` - 401\n  `unauthenticated`, 403 `forbidden`, 404 `not_found`, 409 `conflict`, 422 `validation_failed`,\n  429 `rate_limited`. A 404 can also mean \"exists, but not for you\".\n- **Dates:** ISO-8601 UTC.\n- **Lists:** cursor pagination `?cursor=&limit=` (default 50, max 100) -> `{data, next_cursor}`;\n  `updated_since` for sync.\n- **Writes:** `Idempotency-Key` accepted; updates carry `revision` / `updated_at` -> 409 on conflict."
+    },
+    "servers": [
+        {
+            "url": "https://{instance}/api/v1",
+            "description": "Your Brainitive server",
+            "variables": {
+                "instance": {
+                    "default": "www.brainitive.app",
+                    "description": "Host of the Brainitive server: Brainitive Cloud or your self-hosted domain."
+                }
+            }
+        }
+    ],
+    "tags": [
+        {
+            "name": "Instance"
+        },
+        {
+            "name": "Auth"
+        },
+        {
+            "name": "Account"
+        },
+        {
+            "name": "Devices"
+        },
+        {
+            "name": "Invitations"
+        }
+    ],
+    "security": [
+        {
+            "appToken": []
+        }
+    ],
+    "paths": {
+        "/instance": {
+            "get": {
+                "operationId": "app.v1.instance",
+                "summary": "Instance info: name, version, sign-in methods and minimum app versions",
+                "tags": [
+                    "Instance"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`InstanceResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/InstanceResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": []
+            }
+        },
+        "/auth/exchange": {
+            "post": {
+                "operationId": "app.v1.auth.exchange",
+                "description": "Creates the device (signing out the least recently used one beyond the per-user limit).\nA wrong, used or expired code, or a verifier that doesn't match its challenge \u2192 400 `invalid_grant`.",
+                "summary": "Exchange the one-time code from the consent page for the first token pair",
+                "tags": [
+                    "Auth"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ExchangeCodeRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`TokenResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TokenResource"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "The sign-in code is invalid or has expired. Please sign in again."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "const": "invalid_grant"
+                                        },
+                                        "errors": {
+                                            "type": "null"
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code",
+                                        "errors"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": []
+            }
+        },
+        "/auth/refresh": {
+            "post": {
+                "operationId": "app.v1.auth.refresh",
+                "summary": "Rotate the token pair. The refresh token works once; presenting an already-used one again\nsigns the whole device out (reuse = a stolen copy) and emails the user. Clients must send\none refresh at a time: two parallel refreshes with the same token count as reuse",
+                "tags": [
+                    "Auth"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RefreshTokenRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "401": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "The refresh token is invalid. Please sign in again."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "const": "invalid_grant"
+                                        },
+                                        "errors": {
+                                            "type": "null"
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code",
+                                        "errors"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`TokenResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TokenResource"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                },
+                "security": []
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "operationId": "app.v1.auth.logout",
+                "summary": "Sign this device out: its tokens stop working at once",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/auth/web-session": {
+            "post": {
+                "operationId": "app.v1.auth.web-session",
+                "summary": "A one-time link (60 s) that signs the app's webview into the web app, remembered. Append\n`?to=/path` (a relative path on this site) to land somewhere other than the dashboard",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`WebSessionResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WebSessionResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me": {
+            "get": {
+                "operationId": "app.v1.me.show",
+                "summary": "The signed-in user, their workspaces and limits, and the current device",
+                "tags": [
+                    "Account"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`MeResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MeResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "app.v1.me.update",
+                "summary": "Change the profile (name, bio, phone) and preferences (time zone, daily digest)",
+                "tags": [
+                    "Account"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateMeRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`MeResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MeResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/avatar": {
+            "post": {
+                "operationId": "app.v1.me.avatar.store",
+                "summary": "Upload a new profile picture (multipart `avatar`: JPEG or PNG, at most 2 MB)",
+                "tags": [
+                    "Account"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateAvatarRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`MeResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MeResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "app.v1.me.avatar.destroy",
+                "summary": "Remove the profile picture",
+                "tags": [
+                    "Account"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`MeResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/MeResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/devices": {
+            "get": {
+                "operationId": "app.v1.devices.index",
+                "summary": "The user's active devices, most recently used first; `current` marks the calling one",
+                "tags": [
+                    "Devices"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {}
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/devices/current": {
+            "patch": {
+                "operationId": "app.v1.devices.current.update",
+                "summary": "The calling device updates its name, versions or push token",
+                "tags": [
+                    "Devices"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateDeviceRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`DeviceResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DeviceResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/devices/{device}": {
+            "delete": {
+                "operationId": "app.v1.devices.destroy",
+                "summary": "Sign one of the user's devices out: its tokens stop working at once. The calling one = sign out",
+                "tags": [
+                    "Devices"
+                ],
+                "parameters": [
+                    {
+                        "name": "device",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/invitations/{token}": {
+            "get": {
+                "operationId": "app.v1.invitations.show",
+                "tags": [
+                    "Invitations"
+                ],
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`InvitationResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/InvitationResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/invitations/{token}/accept": {
+            "post": {
+                "operationId": "app.v1.invitations.accept",
+                "summary": "Join the workspace \u2192 the workspace with the user's role",
+                "tags": [
+                    "Invitations"
+                ],
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`WorkspaceResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WorkspaceResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "An error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Human-readable, safe to show."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "description": "Machine-readable: switch on this, not on the message.",
+                                            "enum": [
+                                                "conflict"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "410": {
+                        "description": "An error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Human-readable, safe to show."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "description": "Machine-readable: switch on this, not on the message.",
+                                            "enum": [
+                                                "gone"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "An error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Human-readable, safe to show."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "description": "Machine-readable: switch on this, not on the message.",
+                                            "enum": [
+                                                "forbidden"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "402": {
+                        "$ref": "#/components/responses/LimitReached"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/workspaces": {
+            "post": {
+                "operationId": "app.v1.workspaces.store",
+                "summary": "Create a workspace owned by the user (first run)",
+                "tags": [
+                    "Invitations"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreWorkspaceRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`WorkspaceResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WorkspaceResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "402": {
+                        "$ref": "#/components/responses/LimitReached"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "appToken": {
+                "type": "http",
+                "description": "Access token from POST /auth/exchange or POST /auth/refresh. 15 minutes; refresh before it expires. Passport tokens (MCP / CLI / extension) are rejected.",
+                "scheme": "bearer",
+                "bearerFormat": "bra_... (opaque access token)"
+            }
+        },
+        "schemas": {
+            "DeviceResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "client": {
+                        "type": "string"
+                    },
+                    "platform": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "app_version": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "os_version": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "has_push_token": {
+                        "type": "boolean"
+                    },
+                    "current": {
+                        "type": "boolean",
+                        "description": "the device of the calling app token; always false on the web Profile page"
+                    },
+                    "last_used_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "client",
+                    "platform",
+                    "name",
+                    "app_version",
+                    "os_version",
+                    "has_push_token",
+                    "current",
+                    "last_used_at",
+                    "created_at"
+                ],
+                "title": "DeviceResource"
+            },
+            "ExchangeCodeRequest": {
+                "type": "object",
+                "description": "POST /api/v1/auth/exchange: the one-time code from brainitive://auth/callback, the PKCE\nverifier and the device that signs in. Whether the platform fits the client is checked after\nthe code is known (AuthController::exchange).",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "maxLength": 128
+                    },
+                    "code_verifier": {
+                        "type": "string",
+                        "description": "RFC 7636: 43\u2013128 unreserved characters",
+                        "pattern": "^[A-Za-z0-9\\-._~]+$",
+                        "minLength": 43,
+                        "maxLength": 128
+                    },
+                    "device": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "maxLength": 120
+                            },
+                            "platform": {
+                                "type": "string",
+                                "enum": [
+                                    "macos",
+                                    "windows",
+                                    "linux",
+                                    "ios",
+                                    "android"
+                                ]
+                            },
+                            "app_version": {
+                                "type": "string",
+                                "maxLength": 32
+                            },
+                            "os_version": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "maxLength": 64
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "platform",
+                            "app_version"
+                        ]
+                    }
+                },
+                "required": [
+                    "code",
+                    "code_verifier",
+                    "device"
+                ],
+                "title": "ExchangeCodeRequest"
+            },
+            "InstanceResource": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "version": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "api_version": {
+                        "type": "string",
+                        "const": "1"
+                    },
+                    "sign_in": {
+                        "type": "object",
+                        "properties": {
+                            "password": {
+                                "type": "boolean"
+                            },
+                            "google": {
+                                "type": "boolean"
+                            },
+                            "github": {
+                                "type": "boolean"
+                            },
+                            "microsoft": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "password",
+                            "google",
+                            "github",
+                            "microsoft"
+                        ]
+                    },
+                    "sign_up_open": {
+                        "type": "boolean"
+                    },
+                    "email_verification_required": {
+                        "type": "boolean"
+                    },
+                    "min_versions": {
+                        "type": "object",
+                        "properties": {
+                            "desktop": {
+                                "type": "string"
+                            },
+                            "mobile": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "desktop",
+                            "mobile"
+                        ]
+                    },
+                    "authorize_path": {
+                        "type": "string",
+                        "const": "/app/authorize"
+                    }
+                },
+                "required": [
+                    "name",
+                    "url",
+                    "version",
+                    "api_version",
+                    "sign_in",
+                    "sign_up_open",
+                    "email_verification_required",
+                    "min_versions",
+                    "authorize_path"
+                ],
+                "title": "InstanceResource"
+            },
+            "InvitationResource": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string"
+                    },
+                    "role": {
+                        "type": "string"
+                    },
+                    "expires_at": {
+                        "type": "string"
+                    },
+                    "expired": {
+                        "type": "boolean"
+                    },
+                    "accepted": {
+                        "type": "boolean"
+                    },
+                    "email_matches": {
+                        "type": "boolean"
+                    },
+                    "already_member": {
+                        "type": "boolean"
+                    },
+                    "can_accept": {
+                        "type": "boolean",
+                        "description": "a member accepting just closes the invitation (same as the web)"
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "slug": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "description": "only members learn the slug before accepting; the app opens it right away"
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "slug"
+                        ]
+                    },
+                    "inviter": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "name"
+                        ]
+                    }
+                },
+                "required": [
+                    "email",
+                    "role",
+                    "expires_at",
+                    "expired",
+                    "accepted",
+                    "email_matches",
+                    "already_member",
+                    "can_accept",
+                    "workspace",
+                    "inviter"
+                ],
+                "title": "InvitationResource"
+            },
+            "MeResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "email": {
+                        "type": "string"
+                    },
+                    "email_verified": {
+                        "type": "boolean",
+                        "description": "true also when the instance does not require verification (User::hasVerifiedEmail)"
+                    },
+                    "email_verified_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "avatar_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "bio": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "phone": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "timezone": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "null until a browser or app sent one; effective_timezone is what reminders use"
+                    },
+                    "effective_timezone": {
+                        "type": "string"
+                    },
+                    "task_digest": {
+                        "type": "boolean"
+                    },
+                    "is_instance_admin": {
+                        "type": "boolean"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "limits_enforced": {
+                        "type": "string"
+                    },
+                    "workspaces": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "slug": {
+                                    "type": "string"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "role": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                },
+                                "is_owner": {
+                                    "type": "boolean"
+                                },
+                                "logo_url": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                },
+                                "limits": {
+                                    "type": "object",
+                                    "properties": {
+                                        "plan_name": {
+                                            "type": "string"
+                                        },
+                                        "free": {
+                                            "type": "boolean"
+                                        },
+                                        "unlimited": {
+                                            "type": "boolean"
+                                        },
+                                        "members": {
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ]
+                                        },
+                                        "projects": {
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ]
+                                        },
+                                        "content_bytes": {
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ]
+                                        },
+                                        "file_bytes": {
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ]
+                                        },
+                                        "versions": {
+                                            "type": "object",
+                                            "properties": {
+                                                "keep_latest": {
+                                                    "type": "integer"
+                                                },
+                                                "keep_days": {
+                                                    "type": [
+                                                        "integer",
+                                                        "null"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "keep_latest",
+                                                "keep_days"
+                                            ]
+                                        },
+                                        "grace_until": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "plan_name",
+                                        "free",
+                                        "unlimited",
+                                        "members",
+                                        "projects",
+                                        "content_bytes",
+                                        "file_bytes",
+                                        "versions",
+                                        "grace_until"
+                                    ]
+                                },
+                                "billing_url": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "\"Plan & billing\" on the web; null on self-hosted installs"
+                                }
+                            },
+                            "required": [
+                                "slug",
+                                "name",
+                                "role",
+                                "is_owner",
+                                "logo_url",
+                                "limits",
+                                "billing_url"
+                            ]
+                        }
+                    },
+                    "device": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "client": {
+                                "type": "string"
+                            },
+                            "platform": {
+                                "type": "string"
+                            },
+                            "app_version": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "client",
+                            "platform",
+                            "app_version"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "email",
+                    "email_verified",
+                    "email_verified_at",
+                    "avatar_url",
+                    "bio",
+                    "phone",
+                    "timezone",
+                    "effective_timezone",
+                    "task_digest",
+                    "is_instance_admin",
+                    "created_at",
+                    "limits_enforced",
+                    "workspaces",
+                    "device"
+                ],
+                "title": "MeResource"
+            },
+            "RefreshTokenRequest": {
+                "type": "object",
+                "description": "POST /api/v1/auth/refresh: the current refresh token (`brr_\u2026`, single use).",
+                "properties": {
+                    "refresh_token": {
+                        "type": "string",
+                        "description": "anything longer than our tokens is answered as an invalid grant, not a validation error",
+                        "maxLength": 4096
+                    }
+                },
+                "required": [
+                    "refresh_token"
+                ],
+                "title": "RefreshTokenRequest"
+            },
+            "StoreWorkspaceRequest": {
+                "type": "object",
+                "description": "A new workspace: the web form (WorkspaceController::store) and the apps' first run\n(POST /api/v1/workspaces). Names are unique per owner among their live workspaces.",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 1000
+                    }
+                },
+                "required": [
+                    "name"
+                ],
+                "title": "StoreWorkspaceRequest"
+            },
+            "TokenResource": {
+                "type": "object",
+                "properties": {
+                    "token_type": {
+                        "type": "string"
+                    },
+                    "access_token": {
+                        "type": "string"
+                    },
+                    "expires_in": {
+                        "type": "string"
+                    },
+                    "refresh_token": {
+                        "type": "string"
+                    },
+                    "refresh_expires_in": {
+                        "type": "string"
+                    },
+                    "device": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "platform": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "platform"
+                        ]
+                    }
+                },
+                "required": [
+                    "token_type",
+                    "access_token",
+                    "expires_in",
+                    "refresh_token",
+                    "refresh_expires_in",
+                    "device"
+                ],
+                "title": "TokenResource"
+            },
+            "UpdateAvatarRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/me/avatar` (BRAI-384): multipart `avatar`, the web Profile page's image rules.",
+                "properties": {
+                    "avatar": {
+                        "type": "string",
+                        "format": "binary",
+                        "contentMediaType": "application/octet-stream",
+                        "description": "Maximum file size: 2048 kilobytes."
+                    }
+                },
+                "required": [
+                    "avatar"
+                ],
+                "title": "UpdateAvatarRequest"
+            },
+            "UpdateDeviceRequest": {
+                "type": "object",
+                "description": "PATCH /api/v1/devices/current: the calling app updates what it knows about itself (after an\nupdate, a rename, or once it has a push token). Only the sent fields change; a null push_token\nremoves it.",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 120
+                    },
+                    "app_version": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 32
+                    },
+                    "os_version": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 64
+                    },
+                    "push_token": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "APNs device token / FCM registration token; stored encrypted, never returned",
+                        "maxLength": 4096
+                    }
+                },
+                "title": "UpdateDeviceRequest"
+            },
+            "UpdateMeRequest": {
+                "type": "object",
+                "description": "`PATCH /api/v1/me` (BRAI-384): the fields the web Profile page edits, each optional. Same rules\nas the web (ProfileUpdateRequest). The email address is web only: a new one must be verified.",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "bio": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 1000
+                    },
+                    "phone": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 50
+                    },
+                    "timezone": {
+                        "type": "string",
+                        "description": "all_with_bc: browsers still report old names such as \"Asia/Calcutta\"."
+                    },
+                    "task_digest": {
+                        "type": "boolean"
+                    },
+                    "email": {
+                        "type": "string"
+                    }
+                },
+                "title": "UpdateMeRequest"
+            },
+            "WebSessionResource": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "url"
+                ],
+                "title": "WebSessionResource"
+            },
+            "WorkspaceResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "role": {
+                        "type": "null"
+                    }
+                },
+                "required": [
+                    "id",
+                    "slug",
+                    "name",
+                    "role"
+                ],
+                "title": "WorkspaceResource"
+            }
+        },
+        "responses": {
+            "RateLimited": {
+                "description": "Too many requests. Retry after the `Retry-After` header (seconds).",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Human-readable, safe to show."
+                                },
+                                "code": {
+                                    "type": "string",
+                                    "description": "Machine-readable: switch on this, not on the message.",
+                                    "enum": [
+                                        "rate_limited"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "message",
+                                "code"
+                            ]
+                        }
+                    }
+                }
+            },
+            "ValidationException": {
+                "description": "Validation error",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Human-readable, safe to show."
+                                },
+                                "code": {
+                                    "type": "string",
+                                    "description": "Machine-readable: switch on this, not on the message.",
+                                    "enum": [
+                                        "validation_failed"
+                                    ]
+                                },
+                                "errors": {
+                                    "type": "object",
+                                    "description": "The messages of each field that failed validation.",
+                                    "additionalProperties": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            },
+                            "required": [
+                                "message",
+                                "code",
+                                "errors"
+                            ]
+                        }
+                    }
+                }
+            },
+            "AuthenticationException": {
+                "description": "Unauthenticated",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Human-readable, safe to show."
+                                },
+                                "code": {
+                                    "type": "string",
+                                    "description": "Machine-readable: switch on this, not on the message.",
+                                    "enum": [
+                                        "unauthenticated"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "message",
+                                "code"
+                            ]
+                        }
+                    }
+                }
+            },
+            "ModelNotFoundException": {
+                "description": "Not found",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Human-readable, safe to show."
+                                },
+                                "code": {
+                                    "type": "string",
+                                    "description": "Machine-readable: switch on this, not on the message.",
+                                    "enum": [
+                                        "not_found"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "message",
+                                "code"
+                            ]
+                        }
+                    }
+                }
+            },
+            "LimitReached": {
+                "description": "A plan limit of the workspace was reached",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Human-readable, safe to show."
+                                },
+                                "code": {
+                                    "type": "string",
+                                    "description": "Machine-readable: switch on this, not on the message.",
+                                    "enum": [
+                                        "limit_reached"
+                                    ]
+                                },
+                                "limit": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {
+                                            "type": "string",
+                                            "enum": [
+                                                "members",
+                                                "projects",
+                                                "workspaces",
+                                                "content",
+                                                "files"
+                                            ]
+                                        },
+                                        "limit": {
+                                            "type": "integer"
+                                        },
+                                        "usage": {
+                                            "type": "integer"
+                                        },
+                                        "plan": {
+                                            "type": "string"
+                                        },
+                                        "workspace": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "Workspace name; null for a per-owner limit."
+                                        },
+                                        "billing_url": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "Web \"Plan & billing\" page; null when this user can't upgrade (ask an admin)."
+                                        }
+                                    },
+                                    "required": [
+                                        "kind",
+                                        "limit",
+                                        "usage",
+                                        "plan",
+                                        "workspace",
+                                        "billing_url"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "message",
+                                "code",
+                                "limit"
+                            ]
+                        }
+                    }
+                }
+            },
+            "AuthorizationException": {
+                "description": "Authorization error",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "message": {
+                                    "type": "string",
+                                    "description": "Human-readable, safe to show."
+                                },
+                                "code": {
+                                    "type": "string",
+                                    "description": "Machine-readable: switch on this, not on the message.",
+                                    "enum": [
+                                        "forbidden"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "message",
+                                "code"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

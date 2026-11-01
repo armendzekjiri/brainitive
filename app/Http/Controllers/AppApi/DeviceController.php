@@ -7,6 +7,7 @@ use App\Http\Requests\AppApi\UpdateDeviceRequest;
 use App\Http\Resources\AppApi\DeviceResource;
 use App\Models\AppDevice;
 use App\Support\AppApi\AppTokens;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -16,6 +17,7 @@ use Illuminate\Http\Response;
  * by the sign-in exchange; here the apps list them, update their own, and sign any of them out.
  * Another user's device is a 404.
  */
+#[Group('Devices', weight: 40)]
 class DeviceController extends Controller
 {
     /** The user's active devices, most recently used first; `current` marks the calling one. */

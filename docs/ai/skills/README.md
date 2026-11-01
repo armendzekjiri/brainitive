@@ -9,6 +9,7 @@ way** without reverse-engineering it. Each recipe assumes you've read
 | [add-crud-feature.md](./add-crud-feature.md) | Adding a new entity end-to-end (model → migration → policy → controller → routes → page → tests) |
 | [add-inertia-page.md](./add-inertia-page.md) | Adding/changing a frontend page wired to a controller + typed props |
 | [add-mcp-tool.md](./add-mcp-tool.md) | Exposing a capability to AI clients via the MCP server |
+| [add-app-api-endpoint.md](./add-app-api-endpoint.md) | Adding an endpoint to the desktop / mobile App API (`/api/v1`): route, controller, Form Request, Resource, tests, OpenAPI, [`API.md`](../API.md) row, mobile card |
 | [add-notification.md](./add-notification.md) | Notifying a user in-app + by browser push (and/or email) |
 | [review-checklist.md](./review-checklist.md) | Reviewing a diff before the PR (backend, frontend, database, security lanes; Claude Code subagents in `.claude/agents/`) |
 | [track-work-in-brainitive.md](./track-work-in-brainitive.md) | Tracking the task on the Brainitive board when MCP is connected (create card → Testing) |
