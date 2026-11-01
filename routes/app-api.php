@@ -8,11 +8,13 @@ use App\Http\Controllers\AppApi\CaptureController;
 use App\Http\Controllers\AppApi\ConnectedAppController;
 use App\Http\Controllers\AppApi\DeviceAuthController;
 use App\Http\Controllers\AppApi\DeviceController;
+use App\Http\Controllers\AppApi\DocReviewController;
 use App\Http\Controllers\AppApi\InstanceController;
 use App\Http\Controllers\AppApi\InvitationController;
 use App\Http\Controllers\AppApi\IssueActivityController;
 use App\Http\Controllers\AppApi\IssueController;
 use App\Http\Controllers\AppApi\IssueLinkController;
+use App\Http\Controllers\AppApi\LinkController;
 use App\Http\Controllers\AppApi\MeAvatarController;
 use App\Http\Controllers\AppApi\MeController;
 use App\Http\Controllers\AppApi\MemberController;
@@ -257,6 +259,17 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::patch('pages/{uuid}', [PageController::class, 'update'])->middleware('throttle:120,1,app.pages.update')->name('pages.update');
         Route::post('pages/{uuid}/publish', [PageController::class, 'publish'])->name('pages.publish');
         Route::post('pages/{uuid}/move', [PageController::class, 'move'])->name('pages.move');
+        // history, reviews (inline threads, decisions), links / backlinks, smart link chips (PageReviews, ContentLinkFormatter,
+        // SmartLinks: shared with the web). Requesting reviews, restoring versions: web only
+        Route::get('pages/{uuid}/versions', [DocReviewController::class, 'versions'])->whereUuid('uuid')->name('pages.versions.index');
+        Route::get('pages/{uuid}/versions/{version}', [DocReviewController::class, 'version'])->whereUuid('uuid')->whereNumber('version')->name('pages.versions.show');
+        Route::get('pages/{uuid}/reviews', [DocReviewController::class, 'reviews'])->whereUuid('uuid')->name('pages.reviews.index');
+        Route::get('pages/{uuid}/reviews/{review}', [DocReviewController::class, 'review'])->whereUuid('uuid')->whereUuid('review')->name('pages.reviews.show');
+        Route::post('pages/{uuid}/reviews/{review}/decision', [DocReviewController::class, 'decide'])->middleware('throttle:30,1,app.pages.reviews.decide')->name('pages.reviews.decide');
+        Route::post('pages/{uuid}/reviews/{review}/comments', [DocReviewController::class, 'storeComment'])->middleware('throttle:60,1,app.pages.reviews.comments')->name('pages.reviews.comments.store');
+        Route::patch('pages/{uuid}/review-threads/{thread}', [DocReviewController::class, 'resolveThread'])->name('pages.reviews.threads.update');
+        Route::get('pages/{uuid}/links', [DocReviewController::class, 'links'])->whereUuid('uuid')->name('pages.links');
+        Route::get('links/resolve', [LinkController::class, 'resolve'])->middleware('throttle:240,1,app.links.resolve')->name('links.resolve');
         // live co-editing for native clients: the browser's three calls (PageCollab), same throttles as the web
         Route::post('pages/{uuid}/collab-token', [PageCollabController::class, 'token'])->middleware('throttle:60,1,app.pages.collab.token')->name('pages.collab.token');
         Route::post('pages/{uuid}/collab/bootstrap', [PageCollabController::class, 'bootstrap'])->middleware('throttle:30,1,app.pages.collab.bootstrap')->name('pages.collab.bootstrap');

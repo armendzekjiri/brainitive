@@ -678,6 +678,33 @@ name, type}], creator, last_edited_by, watching, can: {update, delete, publish, 
 - Icons from the app are emoji (`data:` / `http` / `/…` → 422); uploading image icons, duplicating, unpublishing, archiving,
   deleting, version restore, review requests: web only for now. Whiteboard scenes: Whiteboards.
 
+#### History, reviews, links (same `Docs` tag)
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/pages/{uuid}/versions` | app + verified | The history (every publish; whiteboards also their checkpoints), newest first, cursor-paginated | Read | BRAI-201 | ready (v1.49.0, BRAI-413) |
+| `GET /api/v1/pages/{uuid}/versions/{version}` | app + verified | One version with its text (`markdown`, `html`; null for a whiteboard). Restore: web only | Read | BRAI-201 | ready (v1.49.0, BRAI-413) |
+| `GET /api/v1/pages/{uuid}/reviews` | app + verified | The doc's reviews the user may see, newest first, not paginated: editors all, a reviewer theirs (also on a draft they can't open); nobody else → 404 | Read + reply + approve | BRAI-202 | ready (v1.49.0, BRAI-413) |
+| `GET /api/v1/pages/{uuid}/reviews/{review}` | app + verified | One review: snapshot (`snapshot_markdown`, `snapshot_html`), reviewers + decisions, `my_decision`, `threads`, `can: {decide, comment, open_page}` | Read + reply + approve | BRAI-202 | ready (v1.49.0, BRAI-413) |
+| `POST /api/v1/pages/{uuid}/reviews/{review}/decision` | app + verified, 30/min | `{decision: approved\|changes_requested, comment?}` → the review. Active reviewers of an open review (403) | Read + reply + approve | BRAI-202 | ready (v1.49.0, BRAI-413) |
+| `POST /api/v1/pages/{uuid}/reviews/{review}/comments` | app + verified, 60/min | `{body, parent_uuid? (reply), quote?, prefix?, suffix?, request_id?}` → 201 the thread. New threads: open reviews (403); a quote not in the snapshot → 422 `quote` | Read + reply + approve | BRAI-202 | ready (v1.49.0, BRAI-413) |
+| `PATCH /api/v1/pages/{uuid}/review-threads/{thread}` | app + verified | `{resolved}` → the thread (anyone who sees its review) | Read + reply + approve | BRAI-202 | ready (v1.49.0, BRAI-413) |
+| `GET /api/v1/pages/{uuid}/links` | app + verified | `{data: {related, referenced_by}}`: what the page links to and its backlinks (smart links, issues, plan rows, whiteboard cards, manual links), visible content only | Read | BRAI-203 | ready (v1.49.0, BRAI-413) |
+| `GET /api/v1/links/resolve?workspace=&refs[]=&urls[]=` | app + verified, 240/min | Smart link chips: per requested ref (`item:12`, `page:<uuid>`, `ticket:5`, `plan:3`) or Brainitive URL (≤ 100 each), in order: `{requested, state: ok\|restricted\|not_found, ref, type, label, key, title, url, status, due_date, person, priority, project}` | Read | BRAI-203 | ready (v1.49.0, BRAI-413) |
+
+Version: `{version, name, icon, message, author, created_at}` (+ `markdown`, `html` on one). Review: `{uuid, number, status:
+pending|approved|changes_requested|published|cancelled, stale, snapshot_name, message, requested_by: {id, name}, created_at, closed_at,
+url, reviewers: [{user_id, name, decision, comment, decided_at, active}]}`. Thread: `{uuid, review_uuid, review_number, quote, prefix,
+suffix, outdated, resolved, resolved_at, resolved_by_name, comments: [{uuid, author: {id, name}, body, created_at}]}`. Link entry:
+`{type: item|page|ticket|plan, kind, id, key, uuid, title, url, status, origin: manual|derived|manual+derived, derived_from}`.
+- Same code as the web: `PageReviews` (decide, comment, resolve + their notifications), `ReviewPresenter` (summary, threads),
+  `PageReviewPolicy` — a reviewer reads the **snapshot** of a draft they can't open (`can.open_page: false`), never the draft;
+  `QuoteAnchor` (quotes are plain text of the snapshot, `prefix` / `suffix` a few characters around it to place it); history =
+  `PageVersion`; links = `ContentLinkFormatter::references` (the MCP's `get_page`); chips = `SmartLinks::resolve` (+ `refFromUrl`,
+  since Markdown keeps the link but not the `data-smart-link` ref): restricted content never shows a title.
+- An approved review stays open (status `approved`, `can.decide` true: the reviewer may change their mind) until the doc is
+  published (`POST /pages/{uuid}/publish`) or the draft changes (`stale`). Comment bodies are plain text.
+- Web only: requesting / cancelling reviews, "review required", restoring versions, adding / removing related content.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -985,4 +1012,35 @@ Built in: BRAI-411 (desktop) · Mobile scope: Light edit in Markdown (the full b
 - POST /api/v1/pages/{uuid}/collab/bootstrap {epoch, claim} · PUT /api/v1/pages/{uuid}/collab/draft {epoch, html, name, icon, vector, baseline?} — the browser's bootstrap + live save; 409 + epoch = document replaced, reconnect
 Scope: app · OpenAPI: docs/api/openapi.json#/Docs · Registry: docs/ai/API.md#docs
 Built in: BRAI-412 (desktop) · Mobile scope: Later — v1 reads (GET /pages/{uuid}) and edits Markdown with the revision check (BRAI-199)
+```
+
+**BRAI-201** (version history, duplicate, restore, document metadata)
+```
+## API (ready) — history read part
+- GET /api/v1/pages/{uuid}/versions — published versions, newest first (author, note), cursor-paginated
+- GET /api/v1/pages/{uuid}/versions/{version} — one version's text (Markdown + html)
+- GET /api/v1/pages/{uuid} — metadata: creator, last editor, version, published_at, watching, breadcrumbs
+Scope: app · OpenAPI: docs/api/openapi.json#/Docs · Registry: docs/ai/API.md#docs
+Built in: BRAI-413 (desktop) · Mobile scope: Read (restore, duplicate: web only)
+```
+
+**BRAI-202** (inline comments, review requests and approvals)
+```
+## API (ready)
+- GET /api/v1/pages/{uuid}/reviews · GET /api/v1/pages/{uuid}/reviews/{review} — reviews the user may see; snapshot as Markdown, reviewers, threads, can {decide, comment}
+- POST /api/v1/pages/{uuid}/reviews/{review}/decision {decision: approved|changes_requested, comment?}
+- POST /api/v1/pages/{uuid}/reviews/{review}/comments {body, parent_uuid? | quote + prefix + suffix} — new thread on a passage or a reply; request_id
+- PATCH /api/v1/pages/{uuid}/review-threads/{thread} {resolved}
+Scope: app · OpenAPI: docs/api/openapi.json#/Docs · Registry: docs/ai/API.md#docs
+Built in: BRAI-413 (desktop) · Mobile scope: Read + reply + approve (requesting / cancelling reviews, "review required": web only)
+```
+
+**BRAI-203** (smart links, linked issues and backlinks)
+```
+## API (ready)
+- GET /api/v1/pages/{uuid}/links — related content + backlinks (referenced by) of a doc, visible content only
+- GET /api/v1/links/resolve?workspace=&refs[]=item:12&urls[]=<brainitive link> — live chips (title, status, assignee, priority); restricted ones without a title
+- Issues: GET /api/v1/items/{id}/links (linked issues, BRAI-190)
+Scope: app · OpenAPI: docs/api/openapi.json#/Docs · Registry: docs/ai/API.md#docs
+Built in: BRAI-413 (desktop) · Mobile scope: Read (linking content: web only)
 ```
