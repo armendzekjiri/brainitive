@@ -50,6 +50,9 @@
         },
         {
             "name": "Notifications"
+        },
+        {
+            "name": "Connected apps"
         }
     ],
     "security": [
@@ -2088,6 +2091,148 @@
                     }
                 }
             }
+        },
+        "/me/connected-apps": {
+            "get": {
+                "operationId": "app.v1.connected-apps.index",
+                "summary": "Every app with access to the account: signed-in devices first (most recently used), then MCP / CLI / extension",
+                "tags": [
+                    "Connected apps"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `ConnectedAppResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/ConnectedAppResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/connected-apps/{id}": {
+            "delete": {
+                "operationId": "app.v1.connected-apps.destroy",
+                "summary": "Revoke an app's access at once: a device is signed out (the calling one = sign out), a\nPassport client loses all of this account's tokens",
+                "tags": [
+                    "Connected apps"
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/data-export": {
+            "get": {
+                "operationId": "app.v1.data-export.show",
+                "summary": "The state of \"Download my data\": the newest export, the last few, when a new one is allowed",
+                "tags": [
+                    "Connected apps"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`DataExportStateResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DataExportStateResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.data-export.store",
+                "summary": "Request a copy of all the user's data (a ZIP, prepared in the background; a notification and an\nemail follow when it's ready). One per hour",
+                "tags": [
+                    "Connected apps"
+                ],
+                "responses": {
+                    "202": {
+                        "description": "`DataExportStateResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/DataExportStateResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -2100,6 +2245,181 @@
             }
         },
         "schemas": {
+            "ConnectedAppResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "pass to DELETE /me/connected-apps/{id}"
+                    },
+                    "kind": {
+                        "type": "string",
+                        "description": "desktop | mobile | mcp | cli | extension | oauth"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "platform": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "devices only: macos, windows, linux, ios, android"
+                    },
+                    "app_version": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "scopes": {
+                        "type": "array",
+                        "description": "Passport clients only: what the app may do (mcp:use, capture)",
+                        "items": {}
+                    },
+                    "current": {
+                        "type": "boolean",
+                        "description": "the device making this request"
+                    },
+                    "connected_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "last_used_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "devices only"
+                    },
+                    "expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Passport clients only: when the newest token runs out"
+                    }
+                },
+                "required": [
+                    "id",
+                    "kind",
+                    "name",
+                    "platform",
+                    "app_version",
+                    "scopes",
+                    "current",
+                    "connected_at",
+                    "last_used_at",
+                    "expires_at"
+                ],
+                "title": "ConnectedAppResource"
+            },
+            "DataExportResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "queued | running | ready | failed | expired"
+                    },
+                    "file_size": {
+                        "type": "integer"
+                    },
+                    "counts": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "what the ZIP holds, per kind (issues, docs, comments \u2026)"
+                    },
+                    "error": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "finished_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "expires_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "download_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "null unless ready; needs the owner's web session"
+                    },
+                    "download_path": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the same link relative to the server, for /auth/web-session ?to="
+                    }
+                },
+                "required": [
+                    "id",
+                    "status",
+                    "file_size",
+                    "counts",
+                    "error",
+                    "created_at",
+                    "finished_at",
+                    "expires_at",
+                    "download_url",
+                    "download_path"
+                ],
+                "title": "DataExportResource"
+            },
+            "DataExportStateResource": {
+                "type": "object",
+                "properties": {
+                    "latest": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/DataExportResource"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "exports": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/DataExportResource"
+                        }
+                    },
+                    "available_in": {
+                        "type": "integer",
+                        "description": "seconds until a new request is allowed (0 = now)"
+                    }
+                },
+                "required": [
+                    "latest",
+                    "exports",
+                    "available_in"
+                ],
+                "title": "DataExportStateResource"
+            },
             "DeviceResource": {
                 "type": "object",
                 "properties": {

@@ -5,7 +5,6 @@ namespace App\Http\Controllers\AppApi;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AppApi\UpdateDeviceRequest;
 use App\Http\Resources\AppApi\DeviceResource;
-use App\Models\AppDevice;
 use App\Support\AppApi\AppTokens;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
@@ -42,11 +41,7 @@ class DeviceController extends Controller
     /** Sign one of the user's devices out: its tokens stop working at once. The calling one = sign out. */
     public function destroy(Request $request, int $device): Response
     {
-        $target = $request->user()->appDevices()->active()->whereKey($device)->first();
-        abort_unless($target instanceof AppDevice, 404);
-
-        $current = AppTokens::currentDevice($request)?->is($target) ?? false;
-        AppTokens::revoke($target, $current ? 'sign_out' : 'user');
+        abort_unless(AppTokens::signOutDevice($request->user(), $device, $request), 404);
 
         return response()->noContent();
     }
