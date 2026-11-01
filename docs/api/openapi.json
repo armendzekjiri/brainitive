@@ -104,6 +104,9 @@
         },
         {
             "name": "Helpdesk"
+        },
+        {
+            "name": "Leads"
         }
     ],
     "security": [
@@ -11590,6 +11593,334 @@
                     }
                 }
             }
+        },
+        "/projects/{project}/lead-forms": {
+            "get": {
+                "operationId": "app.v1.lead-forms.index",
+                "description": "Not paginated.",
+                "summary": "The lead forms of a project with their pipeline columns and lead counts, in the web's order",
+                "tags": [
+                    "Leads"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `LeadFormResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/LeadFormResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/lead-forms/{form}/leads": {
+            "get": {
+                "operationId": "app.v1.lead-forms.leads",
+                "description": "With `column`: that column in board order (as the web's board); without: all, newest first. `assignee=me|\nunassigned|<id>`. Cursor-paginated, `updated_since`.",
+                "summary": "The leads of a lead form",
+                "tags": [
+                    "Leads"
+                ],
+                "parameters": [
+                    {
+                        "name": "form",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "column",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "name": "assignee",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^(me|unassigned|[1-9][0-9]{0,17})$"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `LeadResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/LeadCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/lead-forms/{form}/analytics": {
+            "get": {
+                "operationId": "app.v1.lead-forms.analytics",
+                "summary": "A lead form's funnel for the last 7 / 30 / 90 days (the web's Analytics tab)",
+                "tags": [
+                    "Leads"
+                ],
+                "parameters": [
+                    {
+                        "name": "form",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "days",
+                        "in": "query",
+                        "description": "the last 7, 30 (default) or 90 days",
+                        "schema": {
+                            "type": "integer",
+                            "enum": [
+                                "7",
+                                "30",
+                                "90"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`LeadFormAnalyticsResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/LeadFormAnalyticsResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/leads/{lead}": {
+            "get": {
+                "operationId": "app.v1.leads.show",
+                "summary": "One lead: contact details, answers, UTM, consent",
+                "tags": [
+                    "Leads"
+                ],
+                "parameters": [
+                    {
+                        "name": "lead",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`LeadResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/LeadResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "app.v1.leads.update",
+                "description": "Only the sent fields change. `position` places it in the column (0 = top; default: the end); a new\nassignee is notified. Project viewers \u2192 403; an assignee who can't open the project \u2192 422.",
+                "summary": "Move a lead to another pipeline column and / or change its contact details or assignee",
+                "tags": [
+                    "Leads"
+                ],
+                "parameters": [
+                    {
+                        "name": "lead",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateLeadRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`LeadResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/LeadResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -15830,6 +16161,274 @@
                     "color"
                 ],
                 "title": "LabelResource"
+            },
+            "LeadCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/LeadResource"
+                },
+                "title": "LeadCollection"
+            },
+            "LeadFormAnalyticsResource": {
+                "type": "object",
+                "properties": {
+                    "days": {
+                        "type": "integer"
+                    },
+                    "views": {
+                        "type": "integer"
+                    },
+                    "starts": {
+                        "type": "integer"
+                    },
+                    "submits": {
+                        "type": "integer"
+                    },
+                    "conversion": {
+                        "type": [
+                            "number",
+                            "null"
+                        ],
+                        "description": "submits / views in %, one decimal; null without views"
+                    },
+                    "leads": {
+                        "type": "integer",
+                        "description": "leads created in the range (any source)"
+                    },
+                    "series": {
+                        "type": "array",
+                        "description": "one entry per day (the server's dates), oldest first",
+                        "items": {}
+                    },
+                    "steps": {
+                        "type": "array",
+                        "description": "sessions that reached each step; conditional steps are skipped by some visitors (not a drop-off)",
+                        "items": {}
+                    }
+                },
+                "required": [
+                    "days",
+                    "views",
+                    "starts",
+                    "submits",
+                    "conversion",
+                    "leads",
+                    "series",
+                    "steps"
+                ],
+                "title": "LeadFormAnalyticsResource"
+            },
+            "LeadFormResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "project_id": {
+                        "type": "integer"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "draft | published"
+                    },
+                    "public_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the public form (when published)"
+                    },
+                    "leads_count": {
+                        "type": "integer"
+                    },
+                    "columns": {
+                        "type": "array",
+                        "description": "the pipeline in board order",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "color": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ]
+                                },
+                                "is_done": {
+                                    "type": "boolean"
+                                },
+                                "leads_count": {
+                                    "type": "integer"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "color",
+                                "is_done",
+                                "leads_count"
+                            ]
+                        }
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "manage_leads": {
+                                "type": "boolean",
+                                "description": "move leads, change contact details / assignee (project editors and admins)"
+                            }
+                        },
+                        "required": [
+                            "manage_leads"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "project_id",
+                    "slug",
+                    "name",
+                    "status",
+                    "public_url",
+                    "leads_count",
+                    "columns",
+                    "url",
+                    "can"
+                ],
+                "title": "LeadFormResource"
+            },
+            "LeadResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "number": {
+                        "type": "integer",
+                        "description": "#number on the board"
+                    },
+                    "lead_form_id": {
+                        "type": "integer"
+                    },
+                    "column_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "its pipeline column"
+                    },
+                    "name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "email": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "phone": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "company": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "form | api | import \u2026"
+                    },
+                    "answers": {
+                        "type": "array",
+                        "description": "[{id, label, type, display}] in form order; type removed = a question deleted since",
+                        "items": {}
+                    },
+                    "utm": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "description": "utm_source, utm_medium, utm_campaign, utm_term, utm_content (as sent)",
+                        "items": {}
+                    },
+                    "referrer": {},
+                    "consent_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "consent_text": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "assignee": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {}
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "number",
+                    "lead_form_id",
+                    "column_id",
+                    "name",
+                    "email",
+                    "phone",
+                    "company",
+                    "source",
+                    "answers",
+                    "utm",
+                    "referrer",
+                    "consent_at",
+                    "consent_text",
+                    "assignee",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "LeadResource"
             },
             "MeResource": {
                 "type": "object",
@@ -22773,6 +23372,58 @@
                     }
                 },
                 "title": "UpdateIssueRequest"
+            },
+            "UpdateLeadRequest": {
+                "type": "object",
+                "description": "`PATCH /api/v1/leads/{id}`: move a lead to a pipeline column and / or change its contact details and assignee.\nAuthorized before validation: a lead of a project the user can't open is a 404, project viewers a 403\n(LeadFormPolicy::manageLeads).",
+                "properties": {
+                    "column_id": {
+                        "type": "integer",
+                        "description": "a column of the lead's form (its pipeline stage)"
+                    },
+                    "position": {
+                        "type": "integer",
+                        "description": "place in the column, 0 = top (default: keep it where it lands, the end)",
+                        "minimum": 0
+                    },
+                    "name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    },
+                    "email": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "email",
+                        "maxLength": 255
+                    },
+                    "phone": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 60
+                    },
+                    "company": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    },
+                    "assignee_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "a member of the project, or null"
+                    }
+                },
+                "title": "UpdateLeadRequest"
             },
             "UpdateMeRequest": {
                 "type": "object",

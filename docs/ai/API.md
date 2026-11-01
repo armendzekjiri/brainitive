@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270, Bookings 280, Helpdesk 290. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270, Bookings 280, Helpdesk 290, Leads 300. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -834,6 +834,25 @@ at_risk, breached_since, breached_targets: [first_response|resolution]}, created
 - Web only: creating / deleting tickets and helpdesks, columns, custom fields, SLA rules and business hours, templates, the
   widget, the support page, the mailbox / forwarding setup, resending a failed email, watching.
 
+### Leads
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/projects/{id}/lead-forms` | app + verified | A project's lead forms (read): `{id, project_id, slug, name, status: draft\|published, public_url, leads_count, columns: [{id, name, color, is_done, leads_count}], url, can: {manage_leads}}`, not paginated | Read | BRAI-236 | ready (v1.49.0, BRAI-421) |
+| `GET /api/v1/lead-forms/{id}/leads?column=&assignee=me\|unassigned\|<id>` | app + verified | The leads: one pipeline column in board order (`column`), or all newest first; cursor-paginated, `updated_since` | Read + move | BRAI-236 | ready (v1.49.0, BRAI-421) |
+| `GET /api/v1/leads/{id}` | app + verified | One lead | Read + move | BRAI-236 | ready (v1.49.0, BRAI-421) |
+| `PATCH /api/v1/leads/{id}` | app + verified | `{column_id?, position? (0 = top; default end), name?, email?, phone?, company?, assignee_id?}` → the lead; viewers → 403; an assignee who can't open the project → 422 | Read + move | BRAI-236 | ready (v1.49.0, BRAI-421) |
+| `GET /api/v1/lead-forms/{id}/analytics?days=7\|30\|90` | app + verified | The funnel: `{days, views, starts, submits, conversion, leads, series: [{date, views, submits}], steps: [{index, title, conditional, sessions}]}` (unique sessions) | Read | BRAI-236 | ready (v1.49.0, BRAI-421) |
+
+Lead: `{id, uuid, number, lead_form_id, column_id, name, email, phone, company, source, answers: [{id, label, type, display}],
+utm: {utm_source, …}|null, referrer, consent_at, consent_text, assignee: {id, name, avatar_url}|null, created_at, updated_at}`.
+- The member side of lead forms (`LeadFormPolicy`): every project member reads forms and leads (what the web's lead board and lead
+  sheet show: `LeadController::present`); project editors / admins and workspace admins move, edit and assign them. Never the
+  visitor's IP / browser, the form's webhook URL / secret or its inbound token. Shared with the web: `Support\LeadForms\LeadActions`
+  (move with the column's order, contact edits, assignment notification) and `LeadFormAnalytics` (the Analytics tab).
+- **No lead notes:** the web has none (the card's `POST /leads/{id}/notes` waits for a web feature). Deleting leads: web only.
+- The public form (`/f/{slug}`: view, submit, events) and the inbound API are for visitors / other systems, never the App API.
+  The builder (questions, logic, design, publishing, webhooks, inbound token, columns): web only (`url`).
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -1337,4 +1356,23 @@ Built in: BRAI-420 (desktop) · Mobile scope: Badges + filter (rules and reports
 Helpdesk templates, the website widget, the public support page, the customer portal and their share controls are set up on the web (helpdesk settings).
 The apps work the tickets (GET /api/v1/helpdesks/{id}/tickets, GET|PATCH /api/v1/tickets/{id}, POST /api/v1/tickets/{id}/replies); the helpdesk's url opens its settings.
 Registry: docs/ai/API.md#helpdesk · Decided in: BRAI-420
+```
+
+**BRAI-236** (leads pipeline and form analytics)
+```
+## API (ready)
+- GET /api/v1/projects/{id}/lead-forms — a project's lead forms with the pipeline columns and lead counts
+- GET /api/v1/lead-forms/{id}/leads?column=&assignee= — the leads of one column in board order (or all, newest first): contact, answers, UTM, referrer, consent; cursor-paginated
+- GET|PATCH /api/v1/leads/{id} {column_id, position, name, email, phone, company, assignee_id} — move between columns, edit, assign (the assignee is notified)
+- GET /api/v1/lead-forms/{id}/analytics?days=7|30|90 — views, starts, submits, conversion, daily series, step drop-off
+Scope: app · OpenAPI: docs/api/openapi.json#/Leads · Registry: docs/ai/API.md#leads
+Built in: BRAI-421 (desktop) · Mobile scope: See and move lead cards + analytics (new-lead alerts: notifications; webhooks: web only)
+```
+
+**BRAI-235** (lead form builder)
+```
+## API: web only — open in browser
+The lead form builder — questions, conditional logic, design, publishing, embeds, webhooks and the inbound API token — runs on the web.
+The apps read the forms and work their leads (GET /api/v1/projects/{id}/lead-forms → url opens the builder).
+Registry: docs/ai/API.md#leads · Decided in: BRAI-421
 ```
