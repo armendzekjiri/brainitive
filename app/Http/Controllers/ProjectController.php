@@ -30,28 +30,14 @@ use Inertia\Response;
 class ProjectController extends Controller
 {
     /**
-     * Display a listing of projects in a workspace.
+     * There is no separate projects page: the workspace home lists the projects (only the ones the
+     * user can open). Old links and bookmarks to /workspaces/{slug}/projects land there.
      */
-    public function index(Request $request, Workspace $workspace): Response
+    public function index(Workspace $workspace): RedirectResponse
     {
         $this->authorize('view', $workspace);
 
-        $query = $workspace->projects()
-            ->withCount('boards')
-            ->with('creator:id,name')
-            ->latest();
-
-        // Workspace admins see all projects; others only projects they are assigned to
-        if ($request->user()->workspaceRole($workspace) !== 'admin') {
-            $query->whereHas('users', fn ($q) => $q->where('user_id', $request->user()->id));
-        }
-
-        $projects = $query->get();
-
-        return Inertia::render('Projects/Index', [
-            'workspace' => $workspace,
-            'projects' => $projects,
-        ]);
+        return redirect()->route('workspaces.show', $workspace);
     }
 
     /**

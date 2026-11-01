@@ -1967,6 +1967,6 @@ Never migrate devdb just to export the spec.
 - **Search by workspace:** `search_entries.workspace_id` is not rewritten when a project moves, so the
   workspace filter matches project content through `projects.workspace_id` and only snippets /
   bookmarks by their own `workspace_id` (`TableSearchEngine::visibleEntries`).
-- **Known web gap (not fixed here):** `GET /workspaces/{slug}/projects` (web) renders
-  `Projects/Index`, which doesn't exist in `resources/js/Pages` — the page errors; the workspace home
-  lists projects instead.
+- **`GET /workspaces/{slug}/projects` (web) redirects to the workspace home** (fixed in v1.49.0 phase
+  04a): it used to render a `Projects/Index` page that never existed. The workspace home lists the
+  projects; there is no separate projects page.
