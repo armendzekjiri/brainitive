@@ -65,6 +65,9 @@ Expired subscriptions pruned 30 days after `expired_at`.
 Outgoing via SMTP (Cloud: MXroute; config also supports ses/postmark/resend; admin-console SMTP
 password encrypted). Inbound helpdesk: Postmark / Mailgun forwarding webhooks, or IMAP polling every
 minute (mailbox passwords encrypted). `helpdesk_inbound_emails` pruned after 180 days.
+Notification email digest (BRAI-429): `pending_notification_emails` holds a member's waiting activity
+email lines (title, issue key/title, context, short comment preview, link) for ~60 s; deleted once
+sent, leftovers pruned after 7 days. No new recipient or processor.
 
 ## 6. AI — P (workspace's instruction)
 

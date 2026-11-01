@@ -29,7 +29,7 @@ class PageMentions
         $url = route('pages.show', [$project->workspace->slug, $project->slug, $page->uuid]);
         foreach (User::whereIn('id', $new)->get() as $user) {
             if ($user->hasProjectAccess($project)) {
-                $user->notify(new MentionNotification('page', (string) $page->name, $url, $actor));
+                $user->notify(new MentionNotification('page', (string) $page->name, $url, $actor, $page));
             }
         }
     }

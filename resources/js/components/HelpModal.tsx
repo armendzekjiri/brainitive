@@ -101,6 +101,22 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.48.0',
+        title: 'One email instead of ten, move docs anywhere, and links for AI',
+        tag: 'Feature',
+        date: '2026-11-01',
+        items: [
+            'Fewer emails: when several things happen for you within a minute (five issues assigned in a row, a burst of comments), you get one email listing all of them, per workspace. The bell and push notifications stay instant; sign-in, security and customer emails are never held back.',
+            'Move pages, whiteboards and folders: drag one onto a folder in the sidebar to put it inside (Brainitive asks before moving it to another folder), or use "Move…" in the ⋯ menu to pick any folder from a searchable list.',
+            'New pages now appear at the end of their folder, and dropping a page onto a folder no longer leaves it where it was.',
+            'Item types: you can turn off as many as you like and they stay off. Turned-off types are no longer offered when you create or edit an issue; issues that already have one keep it. Project-specific types can be turned off and on too.',
+            'AI assistants (MCP) can read, add and remove Related content, see what links to an issue or doc (Referenced by), and manage Linked issues — for example, connect a meeting issue to the doc with its notes.',
+            'Linked issues from projects you can\'t open now show as "Restricted", without their key or title.',
+            'Self-hosted: instance admins see when a new Brainitive version is out, in Instance admin → Overview and in a small notice they can dismiss, with links to the release notes and the upgrade guide. Nothing is installed automatically; turn the anonymous daily check off with BRAINITIVE_UPDATE_CHECK=false.',
+            'Self-hosted: NOTIFICATION_EMAIL_DIGEST_SECONDS (default 60, 0 = off) sets how long emails wait to be bundled; it needs the queue worker.',
+        ]
+    },
+    {
         version: 'v1.47.3',
         title: 'Sidebar pins, project tools, live editing and done columns',
         tag: 'Fix',

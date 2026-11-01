@@ -126,6 +126,9 @@ export function appEnv(): Record<string, string> {
         // live channels: the server global-setup starts; browsers only with the `X-E2E-Live: 1` opt-in
         LIVE_URL: `ws://127.0.0.1:${LIVE.port}/live`,
         LIVE_PUBLISH_URL: `http://127.0.0.1:${LIVE.port}`,
+        // update-check.spec.ts (BRAI-433): e2e runs as Cloud (LEGAL_CLOUD below), where the update check is off by
+        // default — force it on. The e2e server never calls GitHub; the spec records a release with --fake-latest.
+        BRAINITIVE_UPDATE_CHECK: 'true',
         // legal.spec.ts (BRAI-156): Brainitive Cloud's legal pages (imprint, DPA, sub-processors) like production
         LEGAL_CLOUD: 'true',
         // analytics-consent.spec.ts: requests with `X-E2E-Analytics: 1` count as brainitive.app for analytics (consent

@@ -83,4 +83,15 @@ jobs:
             php artisan optimize:clear
             echo ">>> Restarting queue workers (if running)..."
             (php artisan queue:restart 2>/dev/null || true)
+            # realtime server (live editing, BRAI-434): only where its systemd unit is installed;
+            # a failed restart warns instead of failing the deploy (editors fall back to editing alone)
+            if systemctl cat brainitive-realtime >/dev/null 2>&1; then
+              echo ">>> Realtime server: installing dependencies and restarting..."
+              npm --prefix realtime ci --omit=dev --silent
+              if sudo -n systemctl restart brainitive-realtime && sleep 2 && systemctl is-active --quiet brainitive-realtime; then
+                echo ">>> brainitive-realtime restarted"
+              else
+                echo "::warning::brainitive-realtime did not restart. Run: sudo systemctl restart brainitive-realtime"
+              fi
+            fi
             echo ">>> Deployment finished."

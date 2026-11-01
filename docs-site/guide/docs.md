@@ -13,7 +13,14 @@ Docs (also called pages) are your project's wiki: specs, meeting notes, how-tos.
 1. Click **Add content** under the project in the sidebar and choose **Page**.
 2. Give it a name. The doc opens in the editor.
 
-Organize docs in a tree: **Add Subpage** inside a doc, or create a **Folder** from **Add content** and put docs and whiteboards in it. Choose a different **Parent** to move a doc.
+Organize docs in a tree: **Add Subpage** inside a doc, or create a **Folder** from **Add content** and put docs and whiteboards in it.
+
+To move a doc, whiteboard or folder:
+
+- **Drag it in the sidebar.** Drop it in the middle of a folder to put it inside; the folder lights up and shows where it goes. Drop it above or below a row to change the order. When it changes folder, Brainitive asks first; **Cancel** leaves it where it was.
+- **Use Move…** in the ⋯ menu (in the sidebar or at the top of the doc). Search the project's folders, pick one or **Top level**, and the full path shows before you move.
+
+A folder can't go into one of its own subfolders. Viewers can't move content.
 
 ## Writing
 

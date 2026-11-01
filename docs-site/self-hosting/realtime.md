@@ -196,4 +196,6 @@ npm --prefix realtime ci --omit=dev
 sudo systemctl restart brainitive-realtime
 ```
 
+Automate it in your deploy script: run both lines after `npm run build`, only when the `brainitive-realtime` unit exists (`systemctl cat brainitive-realtime`). The deploy user needs passwordless sudo for `systemctl restart brainitive-realtime`. Docker restarts the `realtime` container with `docker compose up -d`.
+
 Browsers reconnect by themselves.

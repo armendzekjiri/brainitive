@@ -133,8 +133,8 @@ class Page extends Model
                 $page->slug = $originalSlug.'-'.$count++;
             }
 
-            // Set position to last
-            if ($page->position === 0) {
+            // Set position to last (no position given = null; BRAI-431: it used to stay 0 for all)
+            if ($page->position === null || $page->position === 0) {
                 $maxPosition = static::where('project_id', $page->project_id)
                     ->where('parent_id', $page->parent_id)
                     ->max('position') ?? -1;

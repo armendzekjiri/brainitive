@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\Sprint;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 
 /** A sprint with issues assigned to you was completed (category: sprints). */
 class SprintCompletedNotification extends CatalogNotification
@@ -18,6 +19,11 @@ class SprintCompletedNotification extends CatalogNotification
     public function catalogType(): string
     {
         return 'sprint_completed';
+    }
+
+    protected function digestSubject(): ?Model
+    {
+        return $this->sprint->board;
     }
 
     protected function message(object $notifiable): array

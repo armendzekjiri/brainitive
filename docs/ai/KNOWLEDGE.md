@@ -384,6 +384,32 @@ no modifiers, not in inputs / contenteditable / textboxes / Excalidraw / open di
   `mouse.up` (passes in Chromium and Firefox). Page rows start with the page's emoji icon, so match
   their text with a regex (`new RegExp(\`${name}$\`)`), not the exact name.
 
+### Moving pages: drop zones, confirmation, positions (BRAI-431, GitHub #130)
+- **Why the old drag couldn't move into a folder:** `DraggableSidebarGroup` reordered one type group
+  (splice on `dragenter`) and saved it through `pages.reorder`, so the parent never changed; that endpoint
+  also took any `parent_id` without a cycle check. Now every parent change goes through `PageMover`, and
+  `pages.reorder` refuses a changed parent.
+- **New pages all had position 0.** `Page::creating` appended only when `position === 0`, but an unset
+  position is `null` in memory, so every page kept the column default 0 and the sidebar order of siblings
+  was whatever Postgres returned. Fixed (null or 0 → last); the sidebar tree also sorts by `id` last, and
+  `PageMover` renumbers a parent's children 0..n on every move.
+- **Slug is unique per parent** (`unique(project_id, parent_id, slug)`): a move into a folder with the
+  same slug used to be a 500. `PageMover` picks `slug-2`, `slug-3`… (pages route by uuid, so links stay).
+- **Drop zones are per row header, not per subtree:** `PageTreeRow` wraps only the header line of a row, so
+  `dragover` on a child never bubbles into its parent folder's zone. Docs / whiteboards / folders are listed
+  apart in the sidebar, so before / after only works next to a row of the same kind; "inside" works on any
+  folder (the item's own parent, itself and its descendants never). Root group headers mean "top level".
+- **Confirmation only when the parent changes;** the tree isn't changed while the dialog is open, so Cancel
+  has nothing to undo. Saves are optimistic and the override resets when fresh props arrive.
+- **WebKit can end a drag without a `drop` event** on a valid target (Playwright WebKit, and the pins drag
+  saves on `dragend` for the same reason): `endDrag` commits the last target unless `dropEffect` is
+  `none` (cancelled). Playwright WebKit can also swallow the next Radix menu open after an emulated drag;
+  the e2e reloads before opening a menu.
+- **e2e drag needs a hit-testable target:** with the default 720 px viewport the project's folder rows sat
+  under the sidebar footer, so `dragover` went to the footer. `page-move.spec.ts` uses a 1100 px tall
+  viewport. Options in the Move dialog start with the folder's emoji: match names without `^`; a disabled
+  option (`aria-disabled`) needs `click({ force: true })`.
+
 ### Saved board views store the URL params
 A saved view is the board's own query string, not a second filter language: adding a board filter
 means adding its param to `BoardViewConfig::PARAM_KEYS` + `normalize()` (allowlist) and, if it
@@ -1120,6 +1146,26 @@ also wait for read / archive actions in flight (a page older than the action is 
 - **Email logos** (`public/images/email/logo.png`, `logo-dark.png`) must be RGBA PNGs: the first 256-colour
   versions had no tRNS chunk and transparent pixels rendered black. Keep explicit width / height (220 px).
 
+### Notification email digest: window, claim, what never batches (BRAI-429, 2026-11-01)
+- **Fixed window per user + workspace:** the first activity email opens it (`due_at = now + interval`, whole
+  seconds) and queues one delayed `SendNotificationDigest`; later emails join while `due_at` is in the
+  future, anything after opens the next window (even if the old job hasn't run yet). Never extended.
+- **Claiming:** `UPDATE … SET claim_token WHERE claim_token IS NULL AND due_at <= now` with a token made in
+  the job's constructor — a retry finds what it claimed before, another job can't take it. A cache lock per
+  user + workspace serialises senders. Rows are deleted after the mail; a crash in between can resend
+  (at-least-once). `failed()` releases the claim, so the lines go out with the next digest; rows older
+  than 7 days are pruned. A job that runs early (nothing due) releases itself until the window ends.
+- **Sync queue = off:** a "delayed" sync job runs at once, before the window ends, so `MailDigest::enabled()`
+  is false there (e2e, dev.brainitive.app, `QUEUE_CONNECTION=sync` self-hosters, plain PHPUnit). Tests that
+  exercise it set `queue.default=database` + `Queue::fake()` and call the job's `handle()` after `travel()`.
+- **Only `MailDigest::TYPES` batch, and only for classes implementing `DigestibleMail`.** Account / guest /
+  billing / helpdesk / SLA / leads / bookings / reviews / reminders / workspace notices stay immediate. A
+  notification that can't build a line (no subject / workspace, e.g. a `MentionNotification` without
+  `subject`) is mailed at once by the channel — never dropped.
+- **Send-time checks:** user exists, not suspended, still in the workspace, email still on for the type's
+  category, the subject still exists **in that workspace** and `view` passes (`MailDigest::SUBJECTS` is the
+  allow-list of classes loaded from `subject_type`). The bell is never deduped or delayed.
+
 ### Legal & privacy: one config, customer pages, no third-party loads (v1.44.0, BRAI-156)
 - **Cloud vs self-hosted:** `config/legal.php` is read only through `LegalInfo`. Cloud = `LEGAL_CLOUD` or an
   APP_URL host in `LegalInfo::CLOUD_HOSTS`; the operator's own facts are `CLOUD_DEFAULTS` — never config
@@ -1294,6 +1340,17 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `display_errors = Off` and logs to stderr.
 - **There is no automatic first admin.** Instance admins are made with
   `php artisan make:instance-admin <email>` (also in the self-hosting guide).
+- **The app version is the newest `CHANGELOG` entry in `HelpModal.tsx` — for the backend too (BRAI-433).**
+  `App\Support\AppVersion` parses it at runtime (the file is in the Docker image and every checkout), so the
+  release workflow, the update check and project exports can't disagree. Don't add a `VERSION` file or an
+  `APP_VERSION` env; `config('app.version')` is only a runtime override for tests. Keep `version: 'vX.Y.Z'` as the
+  version key of the first entry (the release script needs it as well).
+- **Update check (BRAI-433): pages never call GitHub.** Only the daily `brainitive:check-update` does; pages read
+  `instance_settings.settings.update_check`. Off on Brainitive Cloud / dev by default (`LegalInfo::isCloud()`);
+  `BRAINITIVE_UPDATE_CHECK` forces it. PHPUnit forces it off (phpunit.xml); e2e forces it on (e2e runs as Cloud) but
+  the e2e server refuses to fetch — specs record a release with `brainitive:check-update --fake-latest=X.Y.Z`
+  (APP_ENV=e2e only) and `--clear` afterwards. In tests, `Http::fake` stubs stack (the first match wins) — fake once
+  with a closure when a test needs several answers.
 - **Cloud is free during early access; the prices are planned, not live.** There is no
   billing and no plan-limit enforcement in the code, and the homepage, Terms and Refund
   policy all say so. Don't add copy that implies payment is taken until billing ships. Building billing needs a new dependency (e.g. Cashier) and must
@@ -1395,7 +1452,24 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   add the relation. The CLI API group is scoped (`{taskList}/items/{item}`).
 - **Default (global) item types are shared by every workspace.** Projects switch them off
   in `projects.settings.disabled_item_types` (`Project::disabledItemTypeIds()`, honoured by
-  `ItemType::forProject`). Projects never edit the global row.
+  `ItemType::forProject`). Projects never edit the global row. A project's own types are switched
+  off on their row (`is_active`); `forProject` leaves both out (since BRAI-430). Go through
+  `ItemType::setEnabledFor()` instead of writing either by hand.
+  - Switched-off types are only hidden from pickers and refused by validation. Cards that already
+    have one keep it and show it (`item.item_type` is loaded per card, not looked up in the list).
+    Edits accept it through `ItemType::selectableIdsFor($project, $item->item_type_id)`. The issue
+    panel lists it disabled, as "(turned off)", and the type swimlanes give it its own lane.
+  - A new issue without a type gets `ItemType::defaultIdFor($project)`, never
+    `ItemType::where('is_default', true)`: the project may have switched Task off. With every type
+    off it gets none (`item_type_id` is nullable). There is no "no enabled types → all types"
+    fallback any more.
+  - Default types switched off on the shared row (older versions did that instance-wide) show as
+    "Off instance-wide" without a toggle: a project can't switch them back on.
+- **`Collection::each()` stops at the first callback that returns `false`.** An arrow fn returns
+  its expression, so `->each(fn ($t) => $t->is_active = …)` ended the loop at the first switched-off
+  type. The project settings page then showed every later switched-off type as on, which made
+  turning off a second type look broken (BRAI-430 / GitHub #133). Use `map()`, or a closure with
+  a body, for side effects.
 - **Feature tests don't catch a missing Inertia page.** `withoutVite()` skips the manifest,
   so `Inertia::render('Tickets/Show')` passed tests while production returned 500 (the file
   never existed). For a new render, assert `assertInertia(fn ($p) => $p->component(...))` and
@@ -1763,7 +1837,7 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **Why Go, why MCP.** The ask was a binary people install with one `curl | sh` and use without any
   runtime, on macOS, Linux and Windows. Go gives a cgo-free static binary per target from one
   `go build` matrix (~8 MB). Instead of growing the old `/api/cli` REST surface (8 endpoints, password
-  login that can't work for Google / GitHub / Microsoft accounts), the CLI calls the MCP tools: the 71
+  login that can't work for Google / GitHub / Microsoft accounts), the CLI calls the MCP tools: the 71 (76 since BRAI-432)
   tools *are* the API, and `brainitive tool <name>` reaches a new tool the moment it is registered.
   Trade-off: rich tables need the tool's output shape, so the friendly commands are typed wrappers.
 - **Tool names on the wire are the class names in kebab case** (`create-board-item-tool`), not the
@@ -1801,6 +1875,28 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   then `createToken('x', ['mcp:use', 'capture'])`), `php artisan serve --port 8099`, and run the binary
   with `BRAINITIVE_TOKEN` / `BRAINITIVE_SERVER`. `php artisan tinker <file>` drops into the REPL and
   hangs in a non-interactive shell — use `--execute="include '...';"`.
+
+### MCP links: related content vs linked issues (BRAI-432, GitHub #132)
+- **Two different things in the UI, two tool pairs.** "Related content" / "Referenced by" are
+  `content_references` (issue, doc / whiteboard, ticket, plan — one project; issue → issue refused);
+  "Linked issues" are `item_links` with a type. `link_related_content` for item ↔ item answers "use
+  link_issues". Task-list tasks can't be linked (not in the UI either).
+- **Visibility differs on purpose.** Related content the user can't see is left out entirely (as
+  `ContentReferences::forEndpoint` does for the UI — a private draft never shows, not even as a count).
+  A linked issue the user can't open (an old cross-project link; the picker only offers the project's
+  issues, MCP only links inside the project) is listed as `restricted: true`, `id: 0`, no key / title /
+  url. The web views do the same since BRAI-435: `LinkedIssueVisibility::mask()` runs on every
+  place BoardController loads `outgoingLinks.targetItem` / `incomingLinks.sourceItem` (board, live
+  card refetch, issue page). It needs the other issue's `board:…,project_id` loaded; a new place that
+  loads links must call it too, or titles from other projects leak again.
+- **"A blocks B" = "B is_blocked_by A".** `ItemLinks::find` matches the inverse row from the other issue,
+  so `link_issues` is a no-op for it and the issue view now refuses it as "This link already exists."
+  (before, both rows could be added). `unlink_issues` with a type removes either representation.
+- **Doc uuids are a Postgres `uuid` column:** `where('uuid', 'BRAI-12')` is a query error, not "no rows".
+  `InteractsWithContentLinks` checks `Str::isUuid()` before looking a page up by uuid.
+- **Endpoints from `ContentReferences::resolve()` carry a slim board / helpdesk** (`id, slug, project_id`):
+  `ResourceLocator::locate()` on them has no board name for the breadcrumb. Use
+  `ContentLinkFormatter::locate()`, which reloads those relations.
 
 ### CLI Cloud OAuth origin
 The Cloud CLI defaults to `https://www.brainitive.app`, matching the OAuth metadata. Keep strict same-origin checks for all servers; the non-www Cloud alias can be normalized explicitly, while existing signed-in configurations stay untouched until sign-in.

@@ -412,7 +412,7 @@ final class ProjectArchiveRestorer
         $options = ImportMappings::map($this->run, 'option');
         $doneColumns = $boards->flatMap(fn (Board $b) => $b->columns)->where('is_done_column', true)->pluck('id')->flip();
         $subtaskTypes = ItemType::forProject($this->project)->where('slug', 'subtask')->pluck('id')->flip();
-        $defaultType = ItemType::forProject($this->project)->where('is_default', true)->value('id');
+        $defaultType = ItemType::defaultIdFor($this->project);
         $defaultPriority = ItemPriority::forProject($this->project)->where('is_default', true)->value('id');
 
         foreach ($issues as $doc) {

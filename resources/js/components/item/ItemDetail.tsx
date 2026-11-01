@@ -8,6 +8,7 @@ import ShareButton from '@/components/share/ShareButton';
 import SubjectMeetings from '@/components/meetings/SubjectMeetings';
 import { Video } from 'lucide-react';
 import { itemTree, MAX_ITEM_DEPTH } from '@/lib/itemTree';
+import { typeOptionsFor } from '@/lib/itemTypes';
 import { issueSnapshot, useOfflineSnapshot } from '@/lib/offline/snapshots';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -1373,9 +1374,13 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                             <div key={`out-${link.id}`} className="flex items-center justify-between py-1.5 px-2 rounded-md -mx-2 group hover:bg-muted/40 transition-colors">
                                 <div className="flex items-center gap-2 min-w-0">
                                     <span className="text-sm text-muted-foreground shrink-0">{linkTypeOptions.find(o => o.value === link.link_type)?.label || link.link_type}</span>
-                                    <Link href={route('boards.items.show', [workspace.slug, project.slug, link.target_item?.board?.slug, link.target_item_id])} className="text-sm text-primary hover:underline truncate">
-                                        <span className="font-mono text-sm mr-1">{link.target_item?.key}</span>{link.target_item?.title}
-                                    </Link>
+                                    {link.restricted ? (
+                                        <span className="text-sm text-muted-foreground italic">Restricted</span>
+                                    ) : (
+                                        <Link href={route('boards.items.show', [workspace.slug, project.slug, link.target_item?.board?.slug, link.target_item_id])} className="text-sm text-primary hover:underline truncate">
+                                            <span className="font-mono text-sm mr-1">{link.target_item?.key}</span>{link.target_item?.title}
+                                        </Link>
+                                    )}
                                 </div>
                                 <Button variant="ghost" size="icon" className="size-6 opacity-0 group-hover:opacity-100 shrink-0" onClick={() => handleDeleteLink(link.id)}>
                                     <X className="size-3" />
@@ -1386,9 +1391,13 @@ export function ItemDetailMain({ d, className }: { d: ItemDetail; className?: st
                             <div key={`in-${link.id}`} className="flex items-center justify-between py-1.5 px-2 rounded-md -mx-2 group hover:bg-muted/40 transition-colors">
                                 <div className="flex items-center gap-2 min-w-0">
                                     <span className="text-sm text-muted-foreground shrink-0">{linkTypeOptions.find(o => o.value === inverseLinkType(link.link_type))?.label || link.link_type}</span>
-                                    <Link href={route('boards.items.show', [workspace.slug, project.slug, link.source_item?.board?.slug, link.source_item_id])} className="text-sm text-primary hover:underline truncate">
-                                        <span className="font-mono text-sm mr-1">{link.source_item?.key}</span>{link.source_item?.title}
-                                    </Link>
+                                    {link.restricted ? (
+                                        <span className="text-sm text-muted-foreground italic">Restricted</span>
+                                    ) : (
+                                        <Link href={route('boards.items.show', [workspace.slug, project.slug, link.source_item?.board?.slug, link.source_item_id])} className="text-sm text-primary hover:underline truncate">
+                                            <span className="font-mono text-sm mr-1">{link.source_item?.key}</span>{link.source_item?.title}
+                                        </Link>
+                                    )}
                                 </div>
                                 <Button variant="ghost" size="icon" className="size-6 opacity-0 group-hover:opacity-100 shrink-0" onClick={() => handleDeleteLink(link.id)}>
                                     <X className="size-3" />
@@ -1596,7 +1605,9 @@ export function ItemDetailSidebar({ d, inSheet = false }: { d: ItemDetail; inShe
     const [detailsOpen, setDetailsOpen] = useState(true);
     if (!item) return null;
 
-    const isSubtaskType = itemTypes.some((t) => t.slug === 'subtask' && t.id.toString() === itemTypeId);
+    // A type the project switched off stays on the card (and in its picker) until changed
+    const typeOptions = typeOptionsFor(itemTypes, item.item_type);
+    const isSubtaskType = typeOptions.types.some((t) => t.slug === 'subtask' && t.id.toString() === itemTypeId);
     const currentColumn = columns.find((col) => col.id.toString() === columnId);
     const category = statusCategory(currentColumn, columns);
 
@@ -1682,9 +1693,12 @@ export function ItemDetailSidebar({ d, inSheet = false }: { d: ItemDetail; inShe
                             <SelectValue placeholder="None" />
                         </SelectTrigger>
                         <SelectContent>
-                            {itemTypes.map((type) => (
-                                <SelectItem key={type.id} value={type.id.toString()}>
-                                    <div className="flex items-center gap-2"><ItemTypeIcon type={type} />{type.name}</div>
+                            {typeOptions.types.map((type) => (
+                                <SelectItem key={type.id} value={type.id.toString()} disabled={type.id === typeOptions.offId}>
+                                    <div className="flex items-center gap-2">
+                                        <ItemTypeIcon type={type} />{type.name}
+                                        {type.id === typeOptions.offId && <span className="text-xs text-muted-foreground">(turned off)</span>}
+                                    </div>
                                 </SelectItem>
                             ))}
                         </SelectContent>

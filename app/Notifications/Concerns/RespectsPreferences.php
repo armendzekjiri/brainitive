@@ -3,8 +3,11 @@
 namespace App\Notifications\Concerns;
 
 use App\Models\User;
+use App\Notifications\Channels\DigestMailChannel;
+use App\Notifications\Contracts\DigestibleMail;
 use App\Notifications\Messages\BrandedMailMessage;
 use App\Notifications\NotificationCatalog;
+use App\Support\Notifications\MailDigest;
 use NotificationChannels\WebPush\WebPushChannel;
 
 /**
@@ -20,7 +23,7 @@ trait RespectsPreferences
 {
     protected function channelsFor(object $notifiable, string $type): array
     {
-        return array_values(array_filter(
+        $channels = array_values(array_filter(
             NotificationCatalog::channels($notifiable, $type),
             fn (string $channel) => match ($channel) {
                 'mail' => method_exists($this, 'toMail'),
@@ -28,6 +31,13 @@ trait RespectsPreferences
                 default => true,
             },
         ));
+
+        // Activity emails wait for the notification email digest (BRAI-429); bell and push stay instant.
+        if ($this instanceof DigestibleMail && MailDigest::batches($notifiable, $type)) {
+            $channels = array_map(fn (string $channel) => $channel === 'mail' ? DigestMailChannel::class : $channel, $channels);
+        }
+
+        return $channels;
     }
 
     /**

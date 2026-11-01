@@ -11,6 +11,7 @@ use App\Models\Page;
 use App\Models\Project;
 use App\Models\Ticket;
 use App\Models\Workspace;
+use App\Support\Updates\UpdateCheck;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -57,6 +58,8 @@ class OverviewController extends Controller
                 'registration_open' => InstanceSettings::allowsRegistration(),
                 'email_verification' => InstanceSettings::requiresEmailVerification(),
             ],
+            // BRAI-433: running version + the latest release the daily check found (no request-time HTTP)
+            'updates' => UpdateCheck::status(),
         ]);
     }
 

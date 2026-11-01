@@ -1,9 +1,9 @@
 import AdminShell from '@/components/admin/AdminShell';
-import { bytes } from '@/components/admin/format';
+import { bytes, relative } from '@/components/admin/format';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Link } from '@inertiajs/react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ArrowUpCircle, CheckCircle2 } from 'lucide-react';
 
 interface Props {
     stats: {
@@ -34,6 +34,88 @@ interface Props {
         registration_open: boolean;
         email_verification: boolean;
     };
+    /** BRAI-433: running version + the latest release found by the daily check (UpdateCheck::status). */
+    updates: {
+        enabled: boolean;
+        current: string | null;
+        latest: string | null;
+        release_url: string | null;
+        published_at: string | null;
+        checked_at: string | null;
+        failed_at: string | null;
+        update_available: boolean;
+        releases_url: string;
+        upgrade_docs_url: string;
+    };
+}
+
+const day = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—');
+
+function ExternalLink({ href, children }: { href: string; children: React.ReactNode }) {
+    return (
+        <a href={href} target="_blank" rel="noopener noreferrer" className="font-medium text-primary underline-offset-2 hover:underline">
+            {children}
+        </a>
+    );
+}
+
+/** Running version, latest release and where to read how to upgrade — awareness only, no self-update. */
+function UpdatesCard({ updates }: { updates: Props['updates'] }) {
+    const failedSinceLastCheck = !!updates.failed_at && (!updates.checked_at || updates.failed_at > updates.checked_at);
+
+    return (
+        <Card className="md:col-span-2" role="region" aria-labelledby="admin-updates-title">
+            <CardHeader>
+                <CardTitle id="admin-updates-title">Updates</CardTitle>
+                <CardDescription>
+                    {updates.enabled
+                        ? 'Brainitive checks GitHub once a day for a new release. Nothing about this instance is sent, and nothing is installed for you.'
+                        : 'The update check is off (BRAINITIVE_UPDATE_CHECK=false, or this is Brainitive Cloud).'}
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Row label="Running version">{updates.current ? `v${updates.current}` : 'Unknown'}</Row>
+                {updates.enabled && (
+                    <>
+                        <Row label="Latest release">
+                            {updates.latest ? (
+                                <span className="inline-flex items-center gap-2">
+                                    {updates.release_url ? <ExternalLink href={updates.release_url}>v{updates.latest}</ExternalLink> : `v${updates.latest}`}
+                                    {updates.update_available ? (
+                                        <Badge>Update available</Badge>
+                                    ) : (
+                                        <Badge variant="secondary">
+                                            <CheckCircle2 className="mr-1 size-3" />
+                                            Up to date
+                                        </Badge>
+                                    )}
+                                </span>
+                            ) : (
+                                'Not checked yet'
+                            )}
+                        </Row>
+                        {updates.latest && <Row label="Published">{day(updates.published_at)}</Row>}
+                        <Row label="Last check">
+                            {relative(updates.checked_at, 'Never')}
+                            {failedSinceLastCheck && <span className="block text-xs font-normal text-muted-foreground">The last attempt failed (offline or rate-limited). It retries tomorrow.</span>}
+                        </Row>
+                    </>
+                )}
+                <p className="mt-3 text-sm text-muted-foreground">
+                    {updates.enabled && !updates.checked_at && (
+                        <>
+                            The scheduler checks daily; run <code>php artisan brainitive:check-update</code> to check now.{' '}
+                        </>
+                    )}
+                    <ExternalLink href={updates.releases_url}>All releases</ExternalLink>
+                    {' · '}
+                    <ExternalLink href={`${updates.upgrade_docs_url}#docker`}>Upgrade with Docker</ExternalLink>
+                    {' · '}
+                    <ExternalLink href={`${updates.upgrade_docs_url}#manual-install`}>Upgrade a manual install</ExternalLink>
+                </p>
+            </CardContent>
+        </Card>
+    );
 }
 
 function Stat({ label, value, hint }: { label: string; value: number | string; hint?: string }) {
@@ -55,11 +137,29 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     );
 }
 
-export default function Overview({ stats, system }: Props) {
+export default function Overview({ stats, system, updates }: Props) {
     const usingLogMailer = system.mail.startsWith('log') || system.mail.startsWith('array');
 
     return (
         <AdminShell title="Overview">
+            {updates.update_available && updates.latest && (
+                <div className="mb-6 flex items-start gap-3 rounded-lg border border-sky-500/40 bg-sky-500/10 p-4 text-sm" data-testid="admin-update-available">
+                    <ArrowUpCircle className="size-4 mt-0.5 text-sky-600 shrink-0" />
+                    <div>
+                        <span className="font-semibold">Brainitive v{updates.latest} available</span>
+                        {updates.current && <> — this instance runs v{updates.current}</>}
+                        {updates.published_at && <> (released {day(updates.published_at)})</>}.{' '}
+                        {updates.release_url && (
+                            <>
+                                <ExternalLink href={updates.release_url}>Release notes</ExternalLink>
+                                {' · '}
+                            </>
+                        )}
+                        <ExternalLink href={updates.upgrade_docs_url}>How to upgrade</ExternalLink>
+                    </div>
+                </div>
+            )}
+
             {usingLogMailer && (
                 <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
                     <AlertTriangle className="size-4 mt-0.5 text-amber-600 shrink-0" />
@@ -134,6 +234,8 @@ export default function Overview({ stats, system }: Props) {
                         </Row>
                     </CardContent>
                 </Card>
+
+                <UpdatesCard updates={updates} />
             </div>
         </AdminShell>
     );

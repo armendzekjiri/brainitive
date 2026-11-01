@@ -2,6 +2,8 @@
 
 namespace App\Support\Imports\Archive;
 
+use App\Support\AppVersion;
+
 /**
  * The portable project archive (v1.41.0, BRAI-81): a ZIP written by ProjectArchiveWriter and
  * restored as a NEW project by ProjectArchiveImporter. Documented in docs/project-export.md.
@@ -33,7 +35,7 @@ final class ProjectArchive
 
     public const VERSION = 1;
 
-    /** The Brainitive release that writes this format (no app-wide version constant exists). */
+    /** Fallback only: the release that introduced this format. The running version comes from AppVersion (BRAI-433). */
     public const APP_VERSION = '1.41.0';
 
     public const MODULES = ['project.json', 'people.json', 'boards.json', 'issues.json', 'pages.json', 'task_lists.json', 'plans.json', 'helpdesks.json'];
@@ -85,6 +87,6 @@ final class ProjectArchive
 
     public static function appVersion(): string
     {
-        return (string) (config('app.version') ?: self::APP_VERSION);
+        return AppVersion::current() ?? self::APP_VERSION;
     }
 }

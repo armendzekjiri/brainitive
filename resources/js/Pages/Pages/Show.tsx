@@ -121,7 +121,8 @@ import {
 import ShareButton from '@/components/share/ShareButton';
 import ExtractActionItemsDialog from '@/components/meetingNotes/ExtractActionItemsDialog';
 import SubjectMeetings from '@/components/meetings/SubjectMeetings';
-import { Video } from 'lucide-react';
+import { FolderInput, Video } from 'lucide-react';
+import { MovePageDialog } from '@/components/page/MovePageDialog';
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -702,6 +703,10 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
 
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
+    // "Move…" (BRAI-431): the destinations come from the sidebar's tree of this project
+    const [moveOpen, setMoveOpen] = useState(false);
+    const sharedProps = usePage<PageProps>().props;
+    const sidebarProject = sharedProps.currentWorkspace?.projects?.find((p) => p.id === project.id) as (Project & { pages?: PageType[] }) | undefined;
     const [addSubpageOpen, setAddSubpageOpen] = useState(false);
     const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
     const [changeNoteDialogOpen, setChangeNoteDialogOpen] = useState(false);
@@ -1526,6 +1531,12 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
                                                 Schedule meeting
                                             </DropdownMenuItem>
                                         )}
+                                        {can.update && (
+                                            <DropdownMenuItem onClick={() => setMoveOpen(true)}>
+                                                <FolderInput className="size-4 mr-2" />
+                                                Move…
+                                            </DropdownMenuItem>
+                                        )}
                                         {can.create && (
                                             <DropdownMenuItem onClick={triggerDuplicate}>
                                                 <Files className="size-4 mr-2" />
@@ -1922,6 +1933,15 @@ export default function PageShow({ workspace, project, page, breadcrumbs, can, r
             </AlertDialog>
 
             {/* Duplicate Page Dialog */}
+            {can.update && (
+                <MovePageDialog
+                    open={moveOpen}
+                    onOpenChange={setMoveOpen}
+                    workspaceSlug={workspace.slug}
+                    project={{ name: project.name, slug: project.slug, pages: sidebarProject?.pages }}
+                    item={{ id: page.id, uuid: page.uuid, name: page.name, type: page.type, is_whiteboard: page.is_whiteboard, parent_id: page.parent_id ?? null }}
+                />
+            )}
             <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
                 <DialogContent>
                     <DialogHeader>

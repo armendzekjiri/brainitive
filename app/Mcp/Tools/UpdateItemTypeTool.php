@@ -14,7 +14,7 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 
 #[IsIdempotent]
-#[Description('Change an item type. A project\'s own type can be renamed / recoloured; an instance-wide type can only be switched on or off for this project (is_active).')]
+#[Description('Change an item type. A project\'s own type can be renamed / recoloured and switched on or off (is_active); an instance-wide type can only be switched on or off for this project. Switched-off types are left out of get_project_config and can\'t be given to issues; existing issues keep them.')]
 class UpdateItemTypeTool extends Tool
 {
     use InteractsWithBrainitive;
@@ -48,17 +48,18 @@ class UpdateItemTypeTool extends Tool
                 if (! array_key_exists('is_active', $v)) {
                     throw new ToolError("\"{$type->name}\" is an instance-wide type: only is_active can be changed for this project. Create a project type with create_item_type instead.");
                 }
-                $disabled = collect($project->disabledItemTypeIds())->reject(fn (int $id) => $id === $type->id);
-                if (! $v['is_active']) {
-                    $disabled->push($type->id);
-                }
-                $project->update(['settings' => array_merge($project->settings ?? [], ['disabled_item_types' => $disabled->values()->all()])]);
+                $type->setEnabledFor($project, (bool) $v['is_active']);
             } else {
                 $changes = array_intersect_key($v, array_flip(['name', 'color', 'icon', 'description']));
-                if ($changes === []) {
-                    throw new ToolError('Provide a name, color, icon or description to change.');
+                if ($changes === [] && ! array_key_exists('is_active', $v)) {
+                    throw new ToolError('Provide a name, color, icon, description or is_active to change.');
                 }
-                $type->update($changes);
+                if ($changes !== []) {
+                    $type->update($changes);
+                }
+                if (array_key_exists('is_active', $v)) {
+                    $type->setEnabledFor($project, (bool) $v['is_active']);
+                }
             }
 
             return Response::structured(['updated' => true, 'type_id' => $type->id, 'name' => $type->fresh()->name]);
@@ -82,7 +83,7 @@ class UpdateItemTypeTool extends Tool
             'color' => $schema->string()->description('New hex color (project types only).'),
             'icon' => $schema->string()->description('New Lucide icon name (project types only).'),
             'description' => $schema->string()->description('New description (project types only).'),
-            'is_active' => $schema->boolean()->description('Instance-wide types: show (true) or hide (false) the type in this project.'),
+            'is_active' => $schema->boolean()->description('Switch the type on (true) or off (false) for this project.'),
         ];
     }
 }

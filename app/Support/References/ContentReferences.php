@@ -65,6 +65,17 @@ class ContentReferences
     }
 
     /**
+     * A live endpoint of the project the user can view, or null (missing, trashed, another
+     * project, or not visible — all answer the same). Used by the web UI and the MCP tools.
+     */
+    public static function visibleEndpoint(User $user, Project $project, string $type, int $id): ?Model
+    {
+        $model = self::resolve($project, $type, $id);
+
+        return $model !== null && $user->can('view', $model) ? $model : null;
+    }
+
+    /**
      * Add a manual reference; a repeated link returns the existing row (`wasRecentlyCreated`
      * false), never a second one.
      *

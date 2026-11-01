@@ -79,6 +79,8 @@ export interface Project {
     pages_count?: number;
     /** Lead generation forms (BRAI-93), in the sidebar next to the helpdesks */
     lead_forms?: LeadFormSummary[];
+    /** Sidebar only (BRAI-431): the user may reorder / move pages (PagePolicy create). */
+    can_edit_pages?: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -440,6 +442,9 @@ export interface ItemType {
     icon?: string | null;
     icon_display?: string | null;
     color?: string;
+    /** null = a default (instance-wide) type */
+    project_id?: number | null;
+    is_default?: boolean;
 }
 
 export interface ItemPriority {
@@ -464,6 +469,8 @@ export interface ItemLink {
     source_item_id: number;
     target_item_id: number;
     link_type: 'blocks' | 'is_blocked_by' | 'duplicates' | 'is_duplicated_by' | 'relates_to' | 'clones' | 'is_cloned_by';
+    /** The other issue is in a project the viewer can't open: no id, key, title or board (BRAI-435) */
+    restricted?: boolean;
     source_item?: {
         id: number;
         key: string;
@@ -569,6 +576,15 @@ export interface PagePresenceUser {
     editing: boolean;
 }
 
+/** A newer Brainitive release than the running one, not yet dismissed by this instance admin (BRAI-433). */
+export interface UpdateNotice {
+    current: string;
+    latest: string;
+    release_url: string | null;
+    published_at: string | null;
+    upgrade_docs_url: string;
+}
+
 export type PageProps<
     T extends Record<string, unknown> = Record<string, unknown>,
 > = T & {
@@ -591,6 +607,8 @@ export type PageProps<
     githubRepo?: { url: string; stars: number | null };
     /** Running focus timer (BRAI-74), null when none. */
     activeTimer?: ActiveTimer | null;
+    /** "New version available" (BRAI-433, UpdateCheck::noticeFor): instance admins of self-hosted installs only. */
+    updateNotice?: UpdateNotice | null;
     // Shared layout data
     workspaces?: Workspace[];
     currentWorkspace?: Workspace & {
@@ -607,7 +625,6 @@ export type PageProps<
     /** When on a board page, the current board id for GlobalCreateModal pre-selection */
     currentBoardId?: number | null;
     currentPageUuid?: string | null;
-    itemTypes?: ItemType[];
     priorities?: ItemPriority[];
     planTemplates?: { key: string; name: string; description: string }[];
     /** Unread notification count shared by HandleInertiaRequests middleware */

@@ -35,6 +35,9 @@ class ToolDiscoveryTest extends TestCase
             'update-item-type-tool' => 'idempotentHint', 'create-priority-tool' => 'idempotentHint', 'update-priority-tool' => 'idempotentHint',
             'create-item-field-tool' => 'idempotentHint', 'update-item-field-tool' => 'idempotentHint', 'create-task-list-tool' => 'idempotentHint',
             'create-board-items-tool' => 'idempotentHint', 'capture-to-inbox-tool' => 'idempotentHint',
+            // BRAI-432: related content, referenced by, linked issues
+            'list-content-links-tool' => 'readOnlyHint', 'link-related-content-tool' => 'idempotentHint',
+            'unlink-related-content-tool' => 'idempotentHint', 'link-issues-tool' => 'idempotentHint', 'unlink-issues-tool' => 'idempotentHint',
         ];
 
         foreach ($expected as $name => $hint) {
@@ -44,5 +47,8 @@ class ToolDiscoveryTest extends TestCase
             $this->assertTrue($tools[$name]['annotations'][$hint] ?? false, "{$name} lacks {$hint}");
         }
         $this->assertContains('request_id', $tools['update-plan-tool']['inputSchema']['required']);
+        foreach (['link-related-content-tool', 'unlink-related-content-tool', 'link-issues-tool', 'unlink-issues-tool'] as $name) {
+            $this->assertContains('request_id', $tools[$name]['inputSchema']['required']);
+        }
     }
 }

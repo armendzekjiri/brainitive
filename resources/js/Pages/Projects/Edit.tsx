@@ -54,7 +54,7 @@ interface ProjectMember extends User {
     pivot: { role: ProjectMemberRole };
 }
 
-type ProjectItemType = ItemType & { project_id?: number | null; description?: string | null; is_default?: boolean; is_active?: boolean };
+type ProjectItemType = ItemType & { project_id?: number | null; description?: string | null; is_default?: boolean; is_active?: boolean; instance_off?: boolean };
 
 interface Props extends PageProps {
     workspace: Workspace;
@@ -683,7 +683,7 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                     Item types
                                 </CardTitle>
                                 <CardDescription>
-                                    Types for board items (e.g. Task, Bug, Story). Default types are shared; add project-specific types below.
+                                    Types for board items (e.g. Task, Bug, Story). Default types are shared; add project-specific types below. A type you turn off is no longer offered for issues; issues that have it keep it.
                                 </CardDescription>
                             </div>
                             <Dialog open={createItemTypeOpen} onOpenChange={setCreateItemTypeOpen}>
@@ -714,10 +714,13 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                 <div className="space-y-2">
                                     {projectItemTypes.map((type) => {
                                         const isGlobal = type.project_id == null;
-                                        const isDisabled = isGlobal && type.is_active === false;
+                                        // is_active = enabled for this project (default and own types alike)
+                                        const isDisabled = type.is_active === false;
                                         return (
                                             <div
                                                 key={type.id}
+                                                data-testid={`item-type-${type.slug}`}
+                                                data-enabled={isDisabled ? 'false' : 'true'}
                                                 className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${isDisabled ? 'bg-muted/10 opacity-75' : 'bg-muted/20 hover:bg-muted/40'}`}
                                             >
                                                 <div className="flex items-center gap-3">
@@ -730,9 +733,9 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                                         <p className="font-medium">{type.name}</p>
                                                         <p className="text-xs text-muted-foreground font-mono">{type.slug}</p>
                                                     </div>
-                                                    {isGlobal && (
+                                                    {(isGlobal || isDisabled) && (
                                                         <Badge variant="secondary" className="text-[10px]">
-                                                            {isDisabled ? 'Disabled' : 'Default'}
+                                                            {type.instance_off ? 'Off instance-wide' : isDisabled ? 'Disabled' : 'Default'}
                                                         </Badge>
                                                     )}
                                                 </div>
@@ -773,53 +776,26 @@ export default function ProjectsEdit({ auth, workspace, project, workspaceUsers,
                                                         </DialogContent>
                                                     </Dialog>
                                                     )}
-                                                    {isGlobal ? (
-                                                        isDisabled ? (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="size-8 text-green-600 hover:text-green-700"
-                                                                title="Enable"
-                                                                onClick={() =>
-                                                                    router.put(
-                                                                        route('projects.item-types.update', [workspace.slug, project.slug, type.id]),
-                                                                        {
-                                                                            name: type.name,
-                                                                            slug: type.slug,
-                                                                            color: type.color ?? '',
-                                                                            icon: type.icon ?? '',
-                                                                            description: type.description ?? '',
-                                                                            is_active: true,
-                                                                        }
-                                                                    )
-                                                                }
-                                                            >
-                                                                <Power className="size-4" />
-                                                            </Button>
-                                                        ) : (
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="size-8 text-amber-600 hover:text-amber-700"
-                                                                title="Disable (hide from boards)"
-                                                                onClick={() =>
-                                                                    router.put(
-                                                                        route('projects.item-types.update', [workspace.slug, project.slug, type.id]),
-                                                                        {
-                                                                            name: type.name,
-                                                                            slug: type.slug,
-                                                                            color: type.color ?? '',
-                                                                            icon: type.icon ?? '',
-                                                                            description: type.description ?? '',
-                                                                            is_active: false,
-                                                                        }
-                                                                    )
-                                                                }
-                                                            >
-                                                                <PowerOff className="size-4" />
-                                                            </Button>
-                                                        )
-                                                    ) : (
+                                                    {/* On / off for this project; cards that have the type keep it */}
+                                                    {!type.instance_off && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className={`size-8 ${isDisabled ? 'text-green-600 hover:text-green-700' : 'text-amber-600 hover:text-amber-700'}`}
+                                                        title={isDisabled ? 'Enable' : 'Disable (hide from boards)'}
+                                                        aria-label={isDisabled ? `Enable ${type.name}` : `Disable ${type.name}`}
+                                                        onClick={() =>
+                                                            router.put(
+                                                                route('projects.item-types.update', [workspace.slug, project.slug, type.id]),
+                                                                { is_active: isDisabled },
+                                                                { preserveScroll: true }
+                                                            )
+                                                        }
+                                                    >
+                                                        {isDisabled ? <Power className="size-4" /> : <PowerOff className="size-4" />}
+                                                    </Button>
+                                                    )}
+                                                    {!isGlobal && (
                                                         <AlertDialog>
                                                             <AlertDialogTrigger asChild>
                                                                 <Button

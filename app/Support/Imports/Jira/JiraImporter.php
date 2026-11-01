@@ -192,7 +192,7 @@ class JiraImporter implements Importer
         $rootSprints = $sprints !== [] ? $this->rootSprints($export, $hierarchy['parents'], $progress) : [];
         $labels = [];
         $subtaskTypes = ItemType::forProject($project)->where('slug', 'subtask')->pluck('id')->flip();
-        $defaultType = ItemType::forProject($project)->where('is_default', true)->value('id') ?? ItemType::forProject($project)->value('id');
+        $defaultType = ItemType::defaultIdFor($project);
         $defaultPriority = ItemPriority::forProject($project)->where('is_default', true)->value('id');
         $positions = Item::where('board_id', $board->id)->selectRaw('column_id, max(position) as top')->groupBy('column_id')->pluck('top', 'column_id')->map(fn ($top) => (int) $top)->all();
         $backlog = (int) (Item::where('board_id', $board->id)->max('backlog_position') ?? 0);

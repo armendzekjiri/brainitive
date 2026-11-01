@@ -142,7 +142,7 @@ class ProjectIssues
             throw new \DomainException('This board has no columns yet.');
         }
 
-        $typeId = ItemType::where('is_default', true)->value('id');
+        $typeId = ItemType::defaultIdFor($project); // the project may have switched the global default off
         $priorityId = ItemPriority::where('is_default', true)->value('id');
 
         $ids = DB::transaction(function () use ($issues, $board, $column, $project, $typeId, $priorityId, $user) {
