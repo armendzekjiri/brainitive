@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -507,6 +507,36 @@ created_at, updated_at}`. Activity option: `{id, name, color, pricing_type: hour
   logged and `url: null`. `source: legacy` (logged before the timesheet existed): only date, activity and note change.
 - Picking an issue for a log: `GET /search?type=issues&project[]=` or `GET /me/work`; projects from `GET /me/timesheet`.
 
+### Boards
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/projects/{id}/boards` | app + verified | A project's boards in the web's order, cursor-paginated, `updated_since`. Can't open the project → 404 | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
+| `GET /api/v1/boards/{id}` | app + verified | One board: `columns` (WIP limit, done flag, `cards_count`), `swimlanes`, `done_retention_days`, `active_sprint`, `can` | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
+| `GET /api/v1/boards/{id}/items?column=&include_old_done=` | app + verified | The board's cards as the board page shows them, cursor-paginated, `updated_since`; `column` not on the board → 422 | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
+| `POST /api/v1/items/{id}/move` | app + verified | Drag & drop: `{column_id, position? (0 = top), with_subtasks?}` → `{data: card}`. Into a done column completes it (`with_subtasks`: its open subtasks too), out of one reopens it; watchers are notified. 403 without `can.edit_items`, 404 not visible / malformed id, 422 column of another board | Read + move cards | BRAI-187 | ready (v1.49.0, BRAI-403) |
+
+Board: `{id, uuid, slug, name, description, type: kanban|scrum|list, position, project: {id, name, key}, workspace: {slug,
+name}, url, created_at, updated_at}`; `GET /boards/{id}` adds `{columns: [{id, name, slug, color, position, is_done, wip_limit,
+cards_count}], done_retention_days, swimlanes: {mode: none|custom|assignee|priority|type|release, rest_name, lanes: [{id, name,
+color, rules: {priority_ids, type_ids, label_ids, assignee_ids, release_ids, overdue}}]}, active_sprint: {id, name, goal,
+start_date, end_date}|null, can: {update, create_items, edit_items, delete_any_item, manage_sprints}}`.
+Card (issue on a board): `{id, work_id: "issue:<id>", key, title, board_id, column_id, status (column name), done, completed_at,
+type: {id, name, icon, color}|null, priority: {id, name, icon, color}|null, assignee: {id, name, avatar_url}|null, labels: [{id,
+name, color}], start_date, start_time, due_date, due_time, story_points, parent_id, sprint_id, position, counts: {subtasks,
+comments, attachments}, url, created_at, updated_at}`.
+- The cards are what the web board shows (`App\Support\Boards\BoardCards`): subtasks are cards too (`parent_id`); a **Scrum**
+  board shows only the running sprint (none running → no cards; backlog and planned sprints: see Sprints); a **Kanban** board
+  leaves out done cards finished more than `done_retention_days` ago (`include_old_done=1` lists them too).
+- Sorted by `column_id`, then `position` inside the column: group them by `column_id` and lay the columns out in the order of
+  `GET /boards/{id}`. `?column=` loads one column (a mobile column view).
+- Swimlanes: the app evaluates the rules as the web does (`resources/js/lib/swimlanes.ts`): first lane whose rules all match
+  (any listed id per rule; assignee / release id `0` = none), the rest in `rest_name`; `assignee` / `priority` / `type` /
+  `release` modes group by that field.
+- Moves go through `WorkCompletion::moveIssue` (the board's drag & drop): open boards on the web update live, watchers get the
+  status notification. `wip_limit` only warns on the web, it never blocks a move.
+- Creating / renaming / reordering / deleting columns, swimlane setup, done retention, board settings: web only (`can.update`
+  says whether to offer "Open in browser").
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -685,4 +715,15 @@ Built in: BRAI-400 (desktop) · Mobile scope: Full for own time (rates, clients,
 Rates, clients, VAT, billing reports and invoices stay on the web (workspace admins; money is never sent to the apps).
 The apps log time with the member-facing activity list (GET /api/v1/me/timer, GET /api/v1/me/timesheet → activities).
 Registry: docs/ai/API.md#time-tracking · Decided in: BRAI-400
+```
+
+**BRAI-187** (boards + columns)
+```
+## API (ready)
+- GET /api/v1/projects/{id}/boards — a project's boards (kanban / scrum), cursor-paginated
+- GET /api/v1/boards/{id} — columns (WIP limit, done, card counts), swimlanes, done retention, running sprint, can {…}
+- GET /api/v1/boards/{id}/items?column=&include_old_done= — the cards as the board shows them (Scrum: running sprint), cursor-paginated, updated_since
+- POST /api/v1/items/{id}/move {column_id, position?, with_subtasks?} — drag & drop; done column completes it, watchers notified, web boards update live
+Scope: app · OpenAPI: docs/api/openapi.json#/Boards · Registry: docs/ai/API.md#boards
+Built in: BRAI-403 (desktop) · Mobile scope: Read + move cards (columns, swimlanes, board settings: web only)
 ```

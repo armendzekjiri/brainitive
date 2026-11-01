@@ -701,15 +701,9 @@ class BoardController extends Controller
 
         $newColumn = BoardColumn::findOrFail($validated['column_id']);
 
-        // move + tell the watchers about a new status (shared with My Work and the App API)
-        WorkCompletion::moveIssue($item, $newColumn, $validated['position'], $request->user());
-
-        if ($newColumn->is_done_column && $request->boolean('with_subtasks')) {
-            Item::whereIn('id', $item->descendantIds())
-                ->whereHas('column', fn ($q) => $q->where('is_done_column', false))
-                ->get()
-                ->each(fn (Item $child) => $child->moveToColumn($newColumn, 0));
-        }
+        // move (+ the open subtasks into a done column) and tell the watchers about a new status
+        // (shared with My Work and the App API)
+        WorkCompletion::moveIssue($item, $newColumn, $validated['position'], $request->user(), $request->boolean('with_subtasks'));
 
         return back();
     }

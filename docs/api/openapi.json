@@ -74,6 +74,9 @@
         },
         {
             "name": "Time tracking"
+        },
+        {
+            "name": "Boards"
         }
     ],
     "security": [
@@ -6082,6 +6085,313 @@
                     }
                 }
             }
+        },
+        "/projects/{project}/boards": {
+            "get": {
+                "operationId": "app.v1.boards.index",
+                "summary": "The boards of a project, in the web's order",
+                "tags": [
+                    "Boards"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `BoardResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BoardCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/boards/{board}": {
+            "get": {
+                "operationId": "app.v1.boards.show",
+                "summary": "One board: columns (WIP limits, card counts), swimlanes, done retention, the running sprint, what the\nuser may do",
+                "tags": [
+                    "Boards"
+                ],
+                "parameters": [
+                    {
+                        "name": "board",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`BoardDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BoardDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/boards/{board}/items": {
+            "get": {
+                "operationId": "app.v1.boards.items.index",
+                "description": "What the board page shows: subtasks included; a Scrum board only the running sprint (none running \u2192\nno cards; the backlog and other sprints are under Sprints); a Kanban board leaves out done cards\nfinished before its `done_retention_days` unless `include_old_done=1`. Sorted by `column_id`, then the\norder inside the column (`position`): place them with `column_id` and the board's column order.",
+                "summary": "The cards of a board, column by column",
+                "tags": [
+                    "Boards"
+                ],
+                "parameters": [
+                    {
+                        "name": "board",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "column",
+                        "in": "query",
+                        "description": "one column of the board (its id)",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "name": "include_old_done",
+                        "in": "query",
+                        "description": "Kanban: also done cards older than the board's done retention (default false)",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `IssueResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/IssueCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/items/{item}/move": {
+            "post": {
+                "operationId": "app.v1.items.move",
+                "description": "Moving into a done column completes it (with `with_subtasks: true` also its open subtasks); out of one\nreopens it. Watchers hear about the new status. Needs the right to edit cards (403).",
+                "summary": "Move a card to a column of its board (drag & drop); answers the card",
+                "tags": [
+                    "Boards"
+                ],
+                "parameters": [
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MoveIssueRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`IssueResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/IssueResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -6108,6 +6418,412 @@
                     "id"
                 ],
                 "title": "AddMyDayItemRequest"
+            },
+            "BoardCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/BoardResource"
+                },
+                "title": "BoardCollection"
+            },
+            "BoardColumnResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "is_done": {
+                        "type": "boolean",
+                        "description": "cards here count as done (moving a card in completes it)"
+                    },
+                    "wip_limit": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "null = no limit; the web warns (doesn't block) when a column is over it"
+                    },
+                    "cards_count": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "slug",
+                    "color",
+                    "position",
+                    "is_done",
+                    "wip_limit",
+                    "cards_count"
+                ],
+                "title": "BoardColumnResource"
+            },
+            "BoardDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "kanban | scrum | list"
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "project": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "key": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "key"
+                        ]
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "columns": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/BoardColumnResource"
+                        }
+                    },
+                    "done_retention_days": {
+                        "type": "integer",
+                        "description": "Kanban: done cards finished more than this many days ago are left out (0 = all are shown)"
+                    },
+                    "swimlanes": {
+                        "type": "object",
+                        "properties": {
+                            "mode": {
+                                "type": "string"
+                            },
+                            "rest_name": {
+                                "type": "string"
+                            },
+                            "lanes": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string"
+                                        },
+                                        "name": {
+                                            "type": "string"
+                                        },
+                                        "color": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "rules": {
+                                            "type": "object",
+                                            "properties": {
+                                                "priority_ids": {
+                                                    "type": "array",
+                                                    "items": {}
+                                                },
+                                                "type_ids": {
+                                                    "type": "array",
+                                                    "items": {}
+                                                },
+                                                "label_ids": {
+                                                    "type": "array",
+                                                    "items": {}
+                                                },
+                                                "assignee_ids": {
+                                                    "type": "array",
+                                                    "items": {}
+                                                },
+                                                "release_ids": {
+                                                    "type": "array",
+                                                    "items": {}
+                                                },
+                                                "overdue": {
+                                                    "type": "boolean"
+                                                }
+                                            },
+                                            "required": [
+                                                "priority_ids",
+                                                "type_ids",
+                                                "label_ids",
+                                                "assignee_ids",
+                                                "release_ids",
+                                                "overdue"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "id",
+                                        "name",
+                                        "color",
+                                        "rules"
+                                    ]
+                                }
+                            }
+                        },
+                        "required": [
+                            "mode",
+                            "rest_name",
+                            "lanes"
+                        ]
+                    },
+                    "active_sprint": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "Scrum: the running sprint (the board shows only its cards); null on Kanban or between sprints",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "goal": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "start_date": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "end_date": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "goal",
+                            "start_date",
+                            "end_date"
+                        ]
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "update": {
+                                "type": "boolean",
+                                "description": "board settings, columns, swimlanes (web only)"
+                            },
+                            "create_items": {
+                                "type": "boolean"
+                            },
+                            "edit_items": {
+                                "type": "boolean",
+                                "description": "edit, move and assign cards (ItemPolicy::update)"
+                            },
+                            "delete_any_item": {
+                                "type": "boolean",
+                                "description": "delete cards someone else created (everyone may delete their own)"
+                            },
+                            "manage_sprints": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "update",
+                            "create_items",
+                            "edit_items",
+                            "delete_any_item",
+                            "manage_sprints"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "slug",
+                    "name",
+                    "description",
+                    "type",
+                    "position",
+                    "project",
+                    "workspace",
+                    "url",
+                    "created_at",
+                    "updated_at",
+                    "columns",
+                    "done_retention_days",
+                    "swimlanes",
+                    "active_sprint",
+                    "can"
+                ],
+                "title": "BoardDetailResource"
+            },
+            "BoardResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "kanban | scrum | list"
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "project": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "key": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "key"
+                        ]
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "slug",
+                    "name",
+                    "description",
+                    "type",
+                    "position",
+                    "project",
+                    "workspace",
+                    "url",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "BoardResource"
             },
             "BookmarkGroupCollection": {
                 "type": "array",
@@ -7685,6 +8401,278 @@
                 ],
                 "title": "InvitationResultResource"
             },
+            "IssueCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/IssueResource"
+                },
+                "title": "IssueCollection"
+            },
+            "IssueResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "work_id": {
+                        "type": "string",
+                        "description": "issue:<id> \u2014 for PATCH /me/work/{id}, My Day and the timer"
+                    },
+                    "key": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "board_id": {
+                        "type": "integer"
+                    },
+                    "column_id": {
+                        "type": "integer"
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "the column's name"
+                    },
+                    "done": {
+                        "type": "boolean"
+                    },
+                    "completed_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "type": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "icon": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "color": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "icon",
+                            "color"
+                        ]
+                    },
+                    "priority": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "icon": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "color": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "icon",
+                            "color"
+                        ]
+                    },
+                    "assignee": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "avatar_url": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "avatar_url"
+                        ]
+                    },
+                    "labels": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/LabelResource"
+                        }
+                    },
+                    "start_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "start_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "due_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "due_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "story_points": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "parent_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "the parent issue (subtasks nest 3 levels at most)"
+                    },
+                    "sprint_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "Scrum: the sprint (null = backlog)"
+                    },
+                    "position": {
+                        "type": "integer",
+                        "description": "order inside the column"
+                    },
+                    "counts": {
+                        "type": "object",
+                        "properties": {
+                            "subtasks": {
+                                "type": "integer"
+                            },
+                            "comments": {
+                                "type": "integer"
+                            },
+                            "attachments": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "subtasks",
+                            "comments",
+                            "attachments"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "work_id",
+                    "key",
+                    "title",
+                    "board_id",
+                    "column_id",
+                    "status",
+                    "done",
+                    "completed_at",
+                    "type",
+                    "priority",
+                    "assignee",
+                    "labels",
+                    "start_date",
+                    "start_time",
+                    "due_date",
+                    "due_time",
+                    "story_points",
+                    "parent_id",
+                    "sprint_id",
+                    "position",
+                    "counts",
+                    "url",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "IssueResource"
+            },
+            "LabelResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "color"
+                ],
+                "title": "LabelResource"
+            },
             "MeResource": {
                 "type": "object",
                 "properties": {
@@ -7962,6 +8950,31 @@
                     "role"
                 ],
                 "title": "MemberResource"
+            },
+            "MoveIssueRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/items/{id}/move`: a column of the issue's board, as the web's drag & drop.",
+                "properties": {
+                    "column_id": {
+                        "type": "integer",
+                        "description": "a column of the issue's board (GET /boards/{id} \u2192 columns)",
+                        "minimum": 1
+                    },
+                    "position": {
+                        "type": "integer",
+                        "description": "0-based place in the column (default 0 = the top)",
+                        "minimum": 0,
+                        "maximum": 100000
+                    },
+                    "with_subtasks": {
+                        "type": "boolean",
+                        "description": "moving into a done column: complete the open subtasks (all levels) too"
+                    }
+                },
+                "required": [
+                    "column_id"
+                ],
+                "title": "MoveIssueRequest"
             },
             "MyDayResource": {
                 "type": "object",

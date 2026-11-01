@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AppApi\AuthController;
+use App\Http\Controllers\AppApi\BoardController;
 use App\Http\Controllers\AppApi\BookmarkController;
 use App\Http\Controllers\AppApi\CalendarController;
 use App\Http\Controllers\AppApi\CaptureController;
@@ -192,6 +193,14 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::get('work-logs/{log}', [WorkLogController::class, 'show'])->whereNumber('log')->name('work-logs.show');
         Route::patch('work-logs/{log}', [WorkLogController::class, 'update'])->middleware('throttle:120,1,app.work-logs.update')->name('work-logs.update');
         Route::delete('work-logs/{log}', [WorkLogController::class, 'destroy'])->name('work-logs.destroy');
+
+        // ── Boards: read + move cards (BoardCards, WorkCompletion: shared with the web) ─────────────
+        // boards and issues by id; ids on writes are checked in the controller (no route constraint).
+        // Columns, swimlanes, board settings: web only.
+        Route::get('projects/{project}/boards', [BoardController::class, 'index'])->whereNumber('project')->name('boards.index');
+        Route::get('boards/{board}', [BoardController::class, 'show'])->whereNumber('board')->name('boards.show');
+        Route::get('boards/{board}/items', [BoardController::class, 'items'])->whereNumber('board')->name('boards.items.index');
+        Route::post('items/{item}/move', [BoardController::class, 'move'])->name('items.move');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');
