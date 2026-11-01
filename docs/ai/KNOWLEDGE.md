@@ -817,7 +817,7 @@ Plan: [`tasks/feat-document-review.md`](./tasks/feat-document-review.md).
 - **`ReviewGate` publishing rule:** with `pages.review_required`, publish / publish changes run in a
   transaction that locks the page row, re-reads it, applies the pending editor changes, and refuse unless
   an approved, open review has the current draft hash. Requests / decisions / cancels lock the same row.
-  Side doors are closed too: MCP `update-page`, restoring a version, `PageController::update` name / icon
+  Side doors are closed too: MCP `update-page` (saves into the draft), restoring a version, `PageController::update` name / icon
   (go to the draft), `saveExcalidraw` on non-whiteboards. Any new path that changes a published
   review-required page must go through the gate.
 
@@ -2045,9 +2045,9 @@ Never migrate devdb just to export the spec.
   request row is stored, so a corrected retry with the same `request_id` still runs.
 
 ### App API phase 07: docs, whiteboards, plans, releases, files (v1.49.0, BRAI-411 … BRAI-416)
-- **App doc edits follow the web editor, not the MCP.** MCP `update-page` writes `content` of a published page directly (discarding
-  its draft, no revision check); the App API saves into the draft (`PageWrites::saveDraft`, published only by `POST …/publish`) and
-  needs `revision` with `markdown`. Live editors bump `edit_revision` with every save, so an app holding an old revision gets 409 —
+- **App doc edits follow the web editor** (and since `fix/mcp-update-page-safe` so does the MCP): the App API saves into the draft
+  (`PageWrites::saveDraft`, published only by `POST …/publish`) and needs `revision` with `markdown`. Live editors bump
+  `edit_revision` with every save, so an app holding an old revision gets 409 —
   intended: the app never overwrites live typing. The write resets the live epoch (`Page::saved` → `PageCollab::reset`): open browsers
   reload on the app's text, as after the web's single-user save. The web's autosave revision check now runs on the locked row too.
 - **`{page}` is an explicitly bound route parameter** (slug / uuid lookup in `AppServiceProvider`): App API routes use `{uuid}` for
@@ -2093,3 +2093,25 @@ Never migrate devdb just to export the spec.
   portals are readable by every project member; clients' addresses only for project admins.
 - **Billing stays web only:** team time in the apps is the Insights `team` tab (hours); the billing time overview (amounts) is not
   exposed.
+
+### MCP `update-page` writes through `PageWrites` (v1.49.0, `fix/mcp-update-page-safe`)
+- **Before:** a Markdown body on a published page was written straight into `content` (`discardDraft` + `update`): an
+  unpublished draft was thrown away, live (Yjs) editors were ignored, no revision check. Now every body write goes through
+  `PageWrites`: never published → `saveDraft`; published without a draft, nobody editing, no "review required" →
+  `publishChanges` (version "Edited via MCP", watchers notified, like the web's "publish changes"); otherwise → `saveDraft`
+  into the draft (`result: saved_as_draft` + `note`: publish in the app). Replacing an existing draft needs `expected_revision`
+  (the agent must have read `draft_markdown` from `get-page`), else refused; `append` adds to the draft.
+- **Optional `expected_revision`** (`get-page` → `edit_revision`): stale → tool error with the current revision, nothing
+  changed (also no move). Without it the tool passes the revision it just read as the base, so a save landing between
+  read and write gives `STALE` → re-read, at most 3 tries — it never overwrites an unseen save.
+- **"Someone is editing" has no exact signal.** `PageCollabState` only says a live document existed (its state stays after
+  everyone leaves). `PageCollab::editingNow` = a `pages.presence` heartbeat with `editing: true` (browsers, every 20 s;
+  45 s window, `PageCollab::PRESENCE_TTL_SECONDS` / `presenceKey`, shared with `PageController::presence`) or a realtime
+  state store (2–10 s after typing) in the last 45 s. Native App API clients send no heartbeat, so only their typing counts.
+  Best effort: the revision check is the guarantee. The requesting user's own edit-mode tab counts too.
+- **Never-published pages save directly even with live editors** (as the web / App API): their open browsers reload on the
+  agent's text. Pass `expected_revision` to avoid overwriting their last seconds of typing.
+- **Title only** stays a rename in place (published: version recorded) but keeps the draft and sets its `draft_name` too,
+  else publishing the draft would bring the old title back; "review required" → the title waits in the draft (web rename).
+- `get-page` `markdown` is still the **published** text (readers and today's agents unchanged); editors also get
+  `draft_markdown` when there are unpublished changes. No MCP e2e exists — PHPUnit `tests/Feature/Mcp/UpdatePageToolTest.php`.

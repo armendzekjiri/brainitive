@@ -416,11 +416,11 @@ class PageController extends Controller
 
         $validated = $request->validate(['editing' => 'boolean', 'leave' => 'boolean']);
         $user = $request->user();
-        $key = "page-presence:{$page->id}";
+        $key = PageCollab::presenceKey($page);
         $now = now()->timestamp;
 
         $present = collect(Cache::get($key, []))
-            ->filter(fn (array $entry) => $now - $entry['seen'] < self::PRESENCE_TTL_SECONDS)
+            ->filter(fn (array $entry) => $now - $entry['seen'] < PageCollab::PRESENCE_TTL_SECONDS)
             ->except($user->id);
 
         if (! ($validated['leave'] ?? false)) {
@@ -433,7 +433,7 @@ class PageController extends Controller
             ]);
         }
 
-        Cache::put($key, $present->all(), self::PRESENCE_TTL_SECONDS * 2);
+        Cache::put($key, $present->all(), PageCollab::PRESENCE_TTL_SECONDS * 2);
 
         $canUpdate = $user->can('update', $page);
 
@@ -746,11 +746,6 @@ class PageController extends Controller
 
         return $newPage;
     }
-
-    /**
-     * Presence entries older than this are considered gone.
-     */
-    private const PRESENCE_TTL_SECONDS = 45;
 
     /**
      * Content arrives as a JSON string from the editor or as an array from API clients.

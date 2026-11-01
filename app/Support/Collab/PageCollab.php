@@ -5,6 +5,7 @@ namespace App\Support\Collab;
 use App\Models\Page;
 use App\Models\PageCollabState;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -211,6 +212,33 @@ final class PageCollab
             'bootstrap_claimed_at' => null,
             'updated_at' => now(),
         ]);
+    }
+
+    /** Presence heartbeats (`pages.presence`, every 20 s from the browser) older than this are gone. */
+    public const PRESENCE_TTL_SECONDS = 45;
+
+    /** Cache key of the page's "who's here" list (PageController::presence). */
+    public static function presenceKey(Page $page): string
+    {
+        return "page-presence:{$page->id}";
+    }
+
+    /**
+     * Someone is editing the doc right now: a browser in edit mode sent a presence heartbeat, or the
+     * realtime server stored the live document (it does 2–10 s after typing) within the presence window.
+     * Best effort — native clients send no heartbeat, so only their typing counts; writers from outside
+     * (MCP) still rely on the edit_revision check for safety.
+     */
+    public static function editingNow(Page $page): bool
+    {
+        $now = now()->timestamp;
+        $editing = collect(Cache::get(self::presenceKey($page), []))
+            ->contains(fn (array $entry) => ($entry['editing'] ?? false) && $now - $entry['seen'] < self::PRESENCE_TTL_SECONDS);
+
+        return $editing || PageCollabState::where('page_id', $page->id)
+            ->whereNotNull('state_bytes')
+            ->where('updated_at', '>=', now()->subSeconds(self::PRESENCE_TTL_SECONDS))
+            ->exists();
     }
 
     /** Current epoch for the presence heartbeat; null when the page never had a live session. */

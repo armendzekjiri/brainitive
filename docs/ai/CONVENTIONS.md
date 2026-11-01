@@ -361,7 +361,9 @@ Pages work like Confluence. Keep these rules when touching pages:
 - **Never write `content` of a published page directly from an editing flow.** Go through
   `Page::saveDraft()` (fills `draft_*` on published pages, `content` on unpublished ones),
   then `publishChanges()` to make it live. Anything that changes the live version of a
-  published page must record a version (`recordVersion()`), like the MCP `update-page` tool.
+  published page must record a version (`recordVersion()`). Writes from outside the editor (App API, MCP
+  `create-page` / `update-page`) go through `App\Support\Pages\PageWrites` (revision check on the locked row,
+  `publishChanges` for "publish changes") — never `update(['content' => …])` on a page.
 - **Every page listing uses `->visibleTo($user)`** — tree, sidebar (`HandleInertiaRequests`),
   project page, dashboards, search, MCP. Unpublished pages are author + admin only.
 - **Authorize with `PagePolicy`** (`view` / `update` / `delete`, `create` with

@@ -139,6 +139,12 @@ Card comments: list_item_comments reads a card's discussion; add_item_comment po
 an update as the signed-in user without touching the description. Write tools that take
 a request_id are safe to retry: reuse the same request_id only for the same write.
 
+Pages: get_page returns edit_revision — pass it as expected_revision to update_page.
+On a revision conflict nothing changes: read the page again before trying anything else.
+update_page publishes a published page's new text only when nobody has unpublished
+changes or is editing it; otherwise it lands in the draft (result saved_as_draft) and
+the user publishes it in the app — tell them so.
+
 Writing: page bodies are Markdown (converted automatically). Every create/update
 tool returns a `location` object (workspace, project, breadcrumb, url) — always
 tell the user WHERE the content was created and share the url. You can only see
