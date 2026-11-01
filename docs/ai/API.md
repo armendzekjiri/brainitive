@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -481,6 +481,32 @@ page_description, position, created_at, updated_at}`.
 - A public group of another workspace is only reachable through its `share_url` (the web's public page), not the API.
 - Collaborators (invite / roles), image icons and reordering: web only for now.
 
+### Time tracking
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/me/timer` | app + verified | Tray: running time → `{data: {running, timer: {id, started_at, elapsed_seconds, elapsed_minutes, issue: {id, work_id, key, title, url, workspace}\|null}\|null, activities, activity_required, default_activity_id}}` | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
+| `POST /api/v1/me/timer/start` | app + verified | `{id: "issue:<id>"}` → 201 timer state. The web's timer (one per user): another one running → 409 `conflict`; no edit right on the issue → 403; not visible → 404; `task:<id>` → 422 (list tasks have no work log) | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
+| `POST /api/v1/me/timer/stop` | app + verified | `{timer_id, time? (default: elapsed), note?, activity_id?, spent_on?}` → `{data: {result: logged\|already_stopped\|no_access, work_log\|null}}`. Logs once (a retry → `already_stopped`); activity missing where required → 422, the timer keeps running | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
+| `POST /api/v1/me/timer/discard` | app + verified | `{timer_id}` → stop without logging → timer state | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
+| `GET /api/v1/work-logs?workspace=&from=&to=` | app + verified | The user's own work logs, newest day first, cursor-paginated, `updated_since`; `workspace` (slug) not theirs → 404 | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
+| `POST /api/v1/work-logs` | app + verified, 120/min | `{project_id, issue_id?, spent_on (Y-m-d), time ("1h 30m", "45m", "90"), activity_id?, note?, billable? (workspace admins), request_id?}` → 201 `{data: work log}` — the web timesheet's rules (422 `project_id` / `issue_id` / `activity_id` / `spent_on`) | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
+| `GET /api/v1/work-logs/{id}` · `PATCH` · `DELETE` | app + verified | One own entry / change the sent fields (the rest is kept; the whole form is checked as on the web) / delete → 204. Billed (`locked`) → 422 `entry`; someone else's entry → 404 | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
+| `GET /api/v1/me/timesheet?workspace={slug}&week=Y-m-d` | app + verified | My timesheet: `{data: {workspace, week: {start, end, previous, next, current, number, today}, total_minutes, days: [{date, minutes}] ×7, entries: [work log], projects: [{id, name, key}], activities, activity_required, default_activity_id}}`. Not a member → 404 | Full | BRAI-241 | ready (v1.49.0, BRAI-400) |
+
+Work log: `{id, spent_on, minutes, duration, note, billable, source: manual|timer|legacy, locked, project: {id, name, key}|null,
+issue: {id, work_id, key, title, url}|null, activity: {id, name, color, billable, archived}|null, workspace: {slug, name},
+created_at, updated_at}`. Activity option: `{id, name, color, pricing_type: hourly|fixed, pricing_label, billable}`.
+- **Never a rate or an amount** (the web's member-facing rule). Rates, clients, VAT, billing reports and invoices are
+  web only (BRAI-242, BRAI-244, BRAI-245); workspace admins change other people's entries on the web's time overview.
+- Same code as the web: `App\Support\Billing\WorkTimers` (start / stop / discard, shared with `WorkTimerController`)
+  and `App\Support\Billing\TimeEntries` (week, rules, create / update / delete + the issues' history, shared with
+  `TimesheetController`); `TimeLog` / `TimeLogActivities` for who may log where and the activities.
+- The timer is the web's: started in the app, the web's top-bar pill shows it, and the other way round. Send the
+  `timer_id` of `GET /me/timer` when stopping, so a stale device never logs onto a newer timer.
+- An issue's live key / title / url only while the user can still open it; otherwise the snapshot from when it was
+  logged and `url: null`. `source: legacy` (logged before the timesheet existed): only date, activity and note change.
+- Picking an issue for a log: `GET /search?type=issues&project[]=` or `GET /me/work`; projects from `GET /me/timesheet`.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -639,4 +665,24 @@ Built in: BRAI-398 (desktop) · Mobile scope: Full (files / images on a capture:
 - GET|POST /api/v1/bookmarks/{id}/items — links, to-dos, notes, files (multipart) · PATCH|DELETE /api/v1/bookmarks/{id}/items/{item}
 Scope: app · OpenAPI: docs/api/openapi.json#/Snippets, #/Bookmarks · Registry: docs/ai/API.md#snippets, #bookmarks
 Built in: BRAI-399 (desktop) · Mobile scope: Full (collaborators, image icons, reordering: web only)
+```
+
+**BRAI-241** (timer, log work, personal timesheets)
+```
+## API (ready)
+- GET /api/v1/me/timer — the running timer (issue, elapsed) + the activities for the stop dialog
+- POST /api/v1/me/timer/start {id: "issue:<id>"} (409 when one runs) · POST /api/v1/me/timer/stop {timer_id, time?, activity_id?, note?, spent_on?} · POST /api/v1/me/timer/discard {timer_id}
+- GET /api/v1/work-logs?workspace=&from=&to= — own work logs, newest first, cursor-paginated
+- POST /api/v1/work-logs {project_id, issue_id?, spent_on, time, activity_id?, note?} · GET|PATCH|DELETE /api/v1/work-logs/{id} (billed = locked, read-only)
+- GET /api/v1/me/timesheet?workspace={slug}&week=Y-m-d — the week: entries, minutes per day, loggable projects, activities
+Scope: app · OpenAPI: docs/api/openapi.json#/Time tracking · Registry: docs/ai/API.md#time-tracking
+Built in: BRAI-400 (desktop) · Mobile scope: Full for own time (rates, clients, VAT, invoices: web only)
+```
+
+**BRAI-242** (billable activities, rates, client mapping) · **BRAI-244** (clients, VAT, invoice configuration) · **BRAI-245** (billing reports, invoices)
+```
+## API: web only — open in browser
+Rates, clients, VAT, billing reports and invoices stay on the web (workspace admins; money is never sent to the apps).
+The apps log time with the member-facing activity list (GET /api/v1/me/timer, GET /api/v1/me/timesheet → activities).
+Registry: docs/ai/API.md#time-tracking · Decided in: BRAI-400
 ```
