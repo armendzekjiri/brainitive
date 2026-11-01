@@ -89,6 +89,12 @@
         },
         {
             "name": "Whiteboards"
+        },
+        {
+            "name": "Plans"
+        },
+        {
+            "name": "Releases"
         }
     ],
     "security": [
@@ -9880,6 +9886,254 @@
                     }
                 }
             }
+        },
+        "/projects/{project}/plans": {
+            "get": {
+                "operationId": "app.v1.plans.index",
+                "summary": "A project's Gantt plans in the web's order, cursor-paginated",
+                "tags": [
+                    "Plans"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `PlanResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PlanCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/plans/{plan}": {
+            "get": {
+                "operationId": "app.v1.plans.show",
+                "description": "A row's `issue` is the board issue it is linked to (its dates follow the bar), named only when the user can\nopen it. Editing: web only (`can.update` says whether to offer \"Open in browser\").",
+                "summary": "One plan: rows in outline order with their bars, the dependencies between bars, linked issues",
+                "tags": [
+                    "Plans"
+                ],
+                "parameters": [
+                    {
+                        "name": "plan",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`PlanDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/PlanDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/projects/{project}/releases": {
+            "get": {
+                "operationId": "app.v1.releases.index",
+                "summary": "A project's releases in the web's order: unreleased (by release date), released, archived. Not paginated",
+                "tags": [
+                    "Releases"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "comma-separated: unreleased, released, archived (default: all)",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^(unreleased|released|archived)(,(unreleased|released|archived))*$"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `ReleaseResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/ReleaseResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/releases/{release}": {
+            "get": {
+                "operationId": "app.v1.releases.show",
+                "summary": "One release: description, notes (Markdown + sanitized HTML; the working copy and the published one), its issues\n(up to 500, by key) with their state, the public page link",
+                "tags": [
+                    "Releases"
+                ],
+                "parameters": [
+                    {
+                        "name": "release",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`ReleaseDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/ReleaseDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -15152,6 +15406,335 @@
                 ],
                 "title": "PinsResource"
             },
+            "PlanBarResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "start": {
+                        "type": "string",
+                        "description": "Y-m-d"
+                    },
+                    "end": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "enum": [
+                            "task",
+                            "milestone"
+                        ]
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "#RRGGBB"
+                    },
+                    "label": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "progress": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "0\u2013100; null for milestones"
+                    }
+                },
+                "required": [
+                    "id",
+                    "start",
+                    "end",
+                    "type",
+                    "color",
+                    "label",
+                    "progress"
+                ],
+                "title": "PlanBarResource"
+            },
+            "PlanCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/PlanResource"
+                },
+                "title": "PlanCollection"
+            },
+            "PlanDependencyResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "from": {
+                        "type": "string",
+                        "description": "bar ids"
+                    },
+                    "to": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "from",
+                    "to"
+                ],
+                "title": "PlanDependencyResource"
+            },
+            "PlanDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "project_id": {
+                        "type": "integer"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "rows_count": {
+                        "type": "integer"
+                    },
+                    "start": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the first bar's start and the last bar's end (Y-m-d); null without bars"
+                    },
+                    "end": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "revision": {
+                        "type": "integer",
+                        "description": "bumped by every save of the plan"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "rows": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PlanRowResource"
+                        }
+                    },
+                    "dependencies": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PlanDependencyResource"
+                        }
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "update": {
+                                "type": "boolean",
+                                "description": "editing the plan: web only"
+                            }
+                        },
+                        "required": [
+                            "update"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "project_id",
+                    "slug",
+                    "name",
+                    "description",
+                    "rows_count",
+                    "start",
+                    "end",
+                    "revision",
+                    "url",
+                    "created_at",
+                    "updated_at",
+                    "rows",
+                    "dependencies",
+                    "can"
+                ],
+                "title": "PlanDetailResource"
+            },
+            "PlanResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "project_id": {
+                        "type": "integer"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "rows_count": {
+                        "type": "integer"
+                    },
+                    "start": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the first bar's start and the last bar's end (Y-m-d); null without bars"
+                    },
+                    "end": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "revision": {
+                        "type": "integer",
+                        "description": "bumped by every save of the plan"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "project_id",
+                    "slug",
+                    "name",
+                    "description",
+                    "rows_count",
+                    "start",
+                    "end",
+                    "revision",
+                    "url",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "PlanResource"
+            },
+            "PlanRowResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "level": {
+                        "type": "integer"
+                    },
+                    "who": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the \"Who\" column (free text)"
+                    },
+                    "status": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "notes": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "collapsed": {
+                        "type": "boolean"
+                    },
+                    "issue": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "key": {
+                                "type": "string"
+                            },
+                            "title": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "key",
+                            "title"
+                        ]
+                    },
+                    "bars": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PlanBarResource"
+                        }
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "level",
+                    "who",
+                    "status",
+                    "notes",
+                    "collapsed",
+                    "issue",
+                    "bars"
+                ],
+                "title": "PlanRowResource"
+            },
             "PriorityResource": {
                 "type": "object",
                 "properties": {
@@ -15837,6 +16420,252 @@
                 ],
                 "title": "RefreshTokenRequest"
             },
+            "ReleaseDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "project_id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "unreleased",
+                            "released",
+                            "archived"
+                        ]
+                    },
+                    "start_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "release_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "released_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "overdue": {
+                        "type": "boolean",
+                        "description": "unreleased and past its release date"
+                    },
+                    "published": {
+                        "type": "boolean",
+                        "description": "its notes are on the public release page"
+                    },
+                    "progress": {
+                        "type": "object",
+                        "properties": {
+                            "total": {
+                                "type": "integer"
+                            },
+                            "done": {
+                                "type": "integer"
+                            },
+                            "in_progress": {
+                                "type": "integer"
+                            },
+                            "todo": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "total",
+                            "done",
+                            "in_progress",
+                            "todo"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "notes_markdown": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the notes as edited (Markdown + sanitized HTML); null when there are none"
+                    },
+                    "notes_html": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "published_notes_markdown": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "what the public release page shows (null until published)"
+                    },
+                    "notes_changed": {
+                        "type": "boolean",
+                        "description": "the notes changed since they were published"
+                    },
+                    "public_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ReleaseItemResource"
+                        }
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "manage": {
+                                "type": "boolean",
+                                "description": "planning, shipping, notes, publishing: web only"
+                            }
+                        },
+                        "required": [
+                            "manage"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "project_id",
+                    "name",
+                    "status",
+                    "start_date",
+                    "release_date",
+                    "released_at",
+                    "overdue",
+                    "published",
+                    "progress",
+                    "url",
+                    "created_at",
+                    "updated_at",
+                    "description",
+                    "notes_markdown",
+                    "notes_html",
+                    "published_notes_markdown",
+                    "notes_changed",
+                    "public_url",
+                    "items",
+                    "can"
+                ],
+                "title": "ReleaseDetailResource"
+            },
+            "ReleaseItemResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "key": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "state": {
+                        "type": "string",
+                        "enum": [
+                            "todo",
+                            "in_progress",
+                            "done"
+                        ]
+                    },
+                    "status": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the column name"
+                    },
+                    "type": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "icon": {
+                                "type": "string"
+                            },
+                            "color": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "icon",
+                            "color"
+                        ]
+                    },
+                    "assignee": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/PersonResource"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "is_subtask": {
+                        "type": "boolean"
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "key",
+                    "title",
+                    "state",
+                    "status",
+                    "type",
+                    "assignee",
+                    "is_subtask",
+                    "url"
+                ],
+                "title": "ReleaseItemResource"
+            },
             "ReleaseOptionResource": {
                 "type": "object",
                 "properties": {
@@ -15864,6 +16693,108 @@
                     "release_date"
                 ],
                 "title": "ReleaseOptionResource"
+            },
+            "ReleaseResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "project_id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "unreleased",
+                            "released",
+                            "archived"
+                        ]
+                    },
+                    "start_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "release_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "released_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "overdue": {
+                        "type": "boolean",
+                        "description": "unreleased and past its release date"
+                    },
+                    "published": {
+                        "type": "boolean",
+                        "description": "its notes are on the public release page"
+                    },
+                    "progress": {
+                        "type": "object",
+                        "properties": {
+                            "total": {
+                                "type": "integer"
+                            },
+                            "done": {
+                                "type": "integer"
+                            },
+                            "in_progress": {
+                                "type": "integer"
+                            },
+                            "todo": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "total",
+                            "done",
+                            "in_progress",
+                            "todo"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "project_id",
+                    "name",
+                    "status",
+                    "start_date",
+                    "release_date",
+                    "released_at",
+                    "overdue",
+                    "published",
+                    "progress",
+                    "url",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "ReleaseResource"
             },
             "ReorderTasksRequest": {
                 "type": "object",

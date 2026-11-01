@@ -6,7 +6,9 @@ use App\Models\Board;
 use App\Models\Bookmark;
 use App\Models\Item;
 use App\Models\Page;
+use App\Models\Plan;
 use App\Models\Project;
+use App\Models\Release;
 use App\Models\Snippet;
 use App\Models\SnippetCollection;
 use App\Models\Sprint;
@@ -123,6 +125,26 @@ trait ResolvesVisible
         abort_unless($page instanceof Page && $page->project?->workspace !== null && $request->user()->can('view', $page), 404);
 
         return $page;
+    }
+
+    /** A Gantt plan of a project the user can open (PlanPolicy::view). */
+    protected function visiblePlan(Request $request, int|string $id): Plan
+    {
+        abort_unless(self::isId($id), 404);
+        $plan = Plan::with('project.workspace')->find((int) $id);
+        abort_unless($plan instanceof Plan && $plan->project?->workspace !== null && $request->user()->can('view', $plan), 404);
+
+        return $plan;
+    }
+
+    /** A release (fix version) of a project the user can open (ReleasePolicy::view). */
+    protected function visibleRelease(Request $request, int|string $id): Release
+    {
+        abort_unless(self::isId($id), 404);
+        $release = Release::with('project.workspace')->find((int) $id);
+        abort_unless($release instanceof Release && $release->project?->workspace !== null && $request->user()->can('view', $release), 404);
+
+        return $release;
     }
 
     private static function isId(int|string $id): bool

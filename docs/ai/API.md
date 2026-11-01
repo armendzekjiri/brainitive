@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -718,6 +718,28 @@ suffix, outdated, resolved, resolved_at, resolved_by_name, comments: [{uuid, aut
   exact picture. While people draw live, the scene is saved every few seconds — poll with the `ETag`.
 - Drawing, templates, sticky notes → issues, issue cards, live cursors: web / the desktop app's webview only (BRAI-207, 208, 210).
 
+### Plans
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/projects/{id}/plans` | app + verified | A project's Gantt plans in the web's order (`position`), cursor-paginated, `updated_since`: `{id, project_id, slug, name, description, rows_count, start, end, revision, url, created_at, updated_at}` | Read-only | BRAI-212 | ready (v1.49.0, BRAI-415) |
+| `GET /api/v1/plans/{id}` | app + verified | One plan + `rows: [{id, name, level, who, status, notes, collapsed, issue: {id, key, title}\|null, bars: [{id, start, end, type: task\|milestone, color, label, progress}]}]`, `dependencies: [{id, from, to}]` (bar ids, finish → start), `can.update` | Read-only | BRAI-212, BRAI-213 | ready (v1.49.0, BRAI-415) |
+
+- Same reader as the MCP's `get_plan` (`Support\Plans\PlanReader`, extracted from it): rows in outline order (`level` = indent
+  under the row above), dates `Y-m-d`; a row's linked issue is named only when the user can open it (`issue: null` otherwise, even
+  if the row is linked). `PlanPolicy`: everybody who can open the project reads plans.
+- Editing rows / bars / dependencies, creating issues from rows, sharing, versions: web only (`can.update` → "Open in browser").
+  The linked issue's own dates: `GET /items/{id}`.
+
+### Releases
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/projects/{id}/releases?status=unreleased,released,archived` | app + verified | A project's releases (fix versions) in the web's order (unreleased by release date, released, archived), not paginated: `{id, project_id, name, status, start_date, release_date, released_at, overdue, published, progress: {total, done, in_progress, todo}, url, created_at, updated_at}` | Read-only | BRAI-214 | ready (v1.49.0, BRAI-415) |
+| `GET /api/v1/releases/{id}` | app + verified | One release + `description`, `notes_markdown`, `notes_html`, `published_notes_markdown`, `notes_changed`, `public_url`, `items: [{id, key, title, state: todo\|in_progress\|done, status, type, assignee, is_subtask, url}]` (≤ 500, by key), `can.manage` | Read-only | BRAI-214 | ready (v1.49.0, BRAI-415) |
+
+- What the web's releases pages show members (`ReleasePolicy`: everybody who can open the project). Clients of the client portal
+  are not project members and have no app sign-in into a project; they only ever see published notes on the public page
+  (`public_url`). Planning, shipping, writing / generating / publishing notes: web only (`can.manage`).
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -1082,4 +1104,31 @@ Built in: BRAI-414 (desktop) · Mobile scope: View only (autosave, duplicate, ex
 Drawing, templates, live cursors and turning sticky notes into issues run in the web's whiteboard editor (the desktop app's webview).
 The apps show the scene read-only: GET /api/v1/whiteboards/{uuid}.
 Registry: docs/ai/API.md#whiteboards · Decided in: BRAI-414
+```
+
+**BRAI-212** (Gantt plans, rows, timelines and milestones)
+```
+## API (ready) — read only
+- GET /api/v1/projects/{id}/plans — a project's plans (rows count, first / last date), cursor-paginated
+- GET /api/v1/plans/{id} — rows in outline order (level, who, status, notes) with their bars (task / milestone, dates, colour, progress)
+Scope: app · OpenAPI: docs/api/openapi.json#/Plans · Registry: docs/ai/API.md#plans
+Built in: BRAI-415 (desktop) · Mobile scope: Read-only (editing plans: web only)
+```
+
+**BRAI-213** (Gantt dependencies, issue links and synchronization)
+```
+## API (ready) — read only
+- GET /api/v1/plans/{id} → dependencies [{from, to}] (bar ids, finish → start) and each row's linked issue {id, key, title} (only issues the user can open)
+- GET /api/v1/items/{id} — the linked issue (its dates follow the bar)
+Scope: app · OpenAPI: docs/api/openapi.json#/Plans · Registry: docs/ai/API.md#plans
+Built in: BRAI-415 (desktop) · Mobile scope: Read-only (linking rows, creating issues from rows: web only)
+```
+
+**BRAI-214** (release management and release notes)
+```
+## API (ready) — read only
+- GET /api/v1/projects/{id}/releases?status= — releases in the web's order with progress (done / in progress / to do)
+- GET /api/v1/releases/{id} — description, notes (Markdown + html; working copy and published), issues with state, public page link
+Scope: app · OpenAPI: docs/api/openapi.json#/Releases · Registry: docs/ai/API.md#releases
+Built in: BRAI-415 (desktop) · Mobile scope: Read-only (planning, shipping, notes, publishing: web only)
 ```
