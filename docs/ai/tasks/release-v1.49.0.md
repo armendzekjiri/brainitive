@@ -212,3 +212,66 @@ content routes need a verified address (as the web); `POST /workspaces` moved to
 docs (`GET /projects/{id}` has the tree); search pages are numbered (`next_cursor` = page). The
 `## API (ready)` texts for BRAI-179, 180, 181, 182, 183, 184 (+219), 185 (+256) and 262 are in
 `docs/ai/API.md` → "Mobile card texts", for the lead to paste onto the Mobile app cards.
+
+## Phase 04a — TV priority (device code, My Work, calendar read, today)
+
+Desktop-app board cards BRAI-438, BRAI-396, BRAI-418 (read part only) plus the optional `GET /me/today`
+from BRAI-396's comment. Driven by the Brainitive TV app (`brainitive-tv/`, own folder): a wallboard
+that signs in without a browser and refreshes every few minutes. Same branch flow as phase 03
+(`feat/app-api-<name>` from `release/v1.49.0`, merged back `--no-ff`), same definition of done.
+
+### BRAI-438 TV device-code sign-in (`feat/app-api-device-code`)
+- RFC 8628 for the new client `tv` (platform `android_tv`): `POST /auth/device` `{client, device: {name,
+  platform, app_version, os_version?}}` → `{device_code, user_code, verification_uri,
+  verification_uri_complete, expires_in, interval}` (unwrapped, as the OAuth token responses);
+  `POST /auth/device/token` `{device_code}` → the TokenResource of `/auth/exchange`, or 400
+  `authorization_pending` / `slow_down` / `expired_token` / `access_denied` / `invalid_grant`.
+- `App\Support\AppApi\AppDeviceCodes` (cache, like `AppAuthCodes`): device code = 64 random chars, only
+  its sha256 is a cache key; user code = 8 letters of `BCDFGHJKLMNPQRSTVWXZ` (no vowels, no look-alikes),
+  shown `XXXX-XXXX`, 10 minutes, single use. Approve / deny / poll under a cache lock; the poll enforces
+  `interval` (too early → `slow_down`, interval + 5 s, RFC 8628 §3.5).
+- Web page `/app/device` (`auth` + `verified`, Inertia `AppAuth/Device`, the consent look of
+  `AppAuth/Authorize`): enter the code, or open with `?code=` (the QR = `verification_uri_complete`);
+  either way it shows the code, device name, client and platform with Approve / Deny. Only the POST
+  (a click) decides; GET never approves. Code entry throttled per user and per IP + a failure counter.
+- Shared: the device creation + `max_devices` of `/auth/exchange` → `AppDeviceSignIn::create()`;
+  clients' platforms move to `config/app-api.php` (`clients.*.platforms`, `clients.*.grant`). `tv` has no
+  redirect, so `/app/authorize` refuses it; desktop / mobile can't use the device grant.
+- Tests: happy path, each error, code used twice, expired, denied, a decided code can't be decided again
+  by another user, `max_devices`, tv tokens → 401 on /mcp and /api/cli; e2e for the confirm page.
+
+### BRAI-396 My Work and My Day (`feat/app-api-my-work`)
+- `GET /me/work?due=overdue|today|upcoming&updated_since=&cursor=&limit=`: the user's open assigned
+  issues and list tasks (`ext/v1/my-work`'s query, extracted to `App\Support\MyWork\AssignedWork` and
+  used by both), soonest due first, cursor-paginated over both tables; "today" is the user's local date.
+  Entry: `{id: "issue:12"|"task:5", type, key, title, project, status, priority, due_date, due_time,
+  done, url, updated_at}`.
+- `PATCH /me/work/{id}` `{done: bool}`: the web's complete logic — issues move to the board's first done
+  column (or back to the first open one) with watcher notifications, list tasks toggle their status
+  (a recurring one rolls on). Extract `BoardController::moveItem`'s move + notify and
+  `TaskListController::updateItem`'s recurrence handling → `App\Support\Work\WorkCompletion`.
+- My Day: `GET /me/day`, `POST /me/day/items {id}`, `DELETE /me/day/items/{id}` (`MyDayPlan`, the
+  user's local today); done / undone through `PATCH /me/work/{id}`.
+- Tests: visibility (other project's work never listed, 404 on PATCH / POST), due filters, cursor,
+  updated_since, done/undone both kinds, My Day add/remove/idempotent, Passport 401; web My Work / board
+  move / task list tests for the refactor.
+
+### BRAI-418 calendar, read part only (`feat/app-api-calendar`)
+- `GET /calendar/events?from=&to=` (Y-m-d, inclusive, ≤ 62 days, default today + 7): connected
+  calendars + the user's Brainitive dated issues / tasks (+ bookings), one shape: `{id, type, title,
+  start, end, all_day, location, conference_url, conference_provider, color, calendar, project, url,
+  external_url, done, read_only}`. `GET /calendar/connections` (status only, never secrets).
+- Extract the event building of `CalendarController@index` → `App\Support\Calendar\CalendarEvents`
+  (web and API share it; the web page keeps its props).
+- **Later (phase 08, unchanged):** `POST|PATCH|DELETE` events, meetings, the ICS feed link. Connecting
+  providers stays web only.
+- Tests: own connections only, failing provider → `errors` not 500, dated items of visible projects
+  only, range validation, Passport 401; web calendar tests for the refactor.
+
+### `GET /me/today` (`feat/app-api-today`)
+- One call for the TV wallboard: My Work `overdue` + `today` (≤ 100) and today's events (user's local
+  day), `ETag` + `If-None-Match` → 304. Fixed number of queries (no N+1).
+
+### Web fix (`fix/web-projects-index`)
+- `GET /workspaces/{slug}/projects` rendered the missing `Projects/Index` page → redirect to the
+  workspace home (`workspaces.show`); the unused query goes. Feature test.
