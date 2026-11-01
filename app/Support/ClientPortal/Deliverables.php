@@ -254,4 +254,64 @@ final class Deliverables
             ->filter(fn (User $user) => $user->hasProjectAccess($project))
             ->values();
     }
+
+    /**
+     * A deliverable as the team's client portal page lists it (shared with the App API, BRAI-422): kind, version,
+     * status (in review / approved / changes requested / superseded / withdrawn), counts.
+     *
+     * @return array{id: int, uuid: string, kind: string, title: string, version: int, status: string, decision: string, published_at: string|null, published_by: string|null, decisions_count: int|null, comments_count: int|null, last_decision_at: string|null}
+     */
+    public static function summary(ClientDeliverable $d): array
+    {
+        $last = $d->relationLoaded('decisions') ? $d->decisions->last() : null;
+
+        return [
+            'id' => $d->id,
+            'uuid' => $d->uuid,
+            'kind' => $d->kind,
+            'title' => $d->title,
+            'version' => $d->version,
+            'status' => $d->displayStatus(),
+            'decision' => $d->status,
+            'published_at' => $d->published_at?->toIso8601String(),
+            'published_by' => $d->publisher?->name,
+            'decisions_count' => $d->decisions_count ?? ($d->relationLoaded('decisions') ? $d->decisions->count() : null),
+            'comments_count' => $d->comments_count ?? ($d->relationLoaded('comments') ? $d->comments->count() : null),
+            'last_decision_at' => $last?->created_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * One deliverable for the team (the web's deliverable page, the App API): summary + message, the snapshot,
+     * the client link, decisions (clients' addresses only with $canManage: project admins) and the comments
+     * (internal notes included: the team sees them). Expects publisher, decisions and comments loaded.
+     *
+     * @return array<string, mixed>
+     */
+    public static function detail(ClientPortal $portal, ClientDeliverable $item, bool $canManage): array
+    {
+        return self::summary($item) + [
+            'message' => $item->message,
+            'html' => $item->kind === 'page' ? ($item->content['html'] ?? '') : null,
+            'plan' => $item->kind === 'plan' ? ($item->content['plan'] ?? null) : null,
+            'client_url' => $item->withdrawn_at === null ? route('client-portal.deliverable', [$portal->slug, $item->uuid]) : null,
+            'decisions' => $item->decisions->map(fn (ClientDeliverableDecision $d) => [
+                'id' => $d->id,
+                'name' => $d->identity_name,
+                'email' => $canManage ? $d->identity_email : null,
+                'decision' => $d->decision,
+                'note' => $d->note,
+                'version' => $d->version,
+                'created_at' => $d->created_at?->toIso8601String(),
+            ])->values(),
+            'comments' => $item->comments->map(fn (ClientDeliverableComment $c) => [
+                'id' => $c->id,
+                'author' => $c->author_name,
+                'from_team' => $c->isFromTeam(),
+                'visibility' => $c->visibility,
+                'body' => $c->body,
+                'created_at' => $c->created_at?->toIso8601String(),
+            ])->values(),
+        ];
+    }
 }
