@@ -112,6 +112,23 @@ final class AppTokens
         ])->save();
     }
 
+    /**
+     * Sign out one of the user's own active devices (remote sign-out, connected apps). False when it
+     * isn't theirs / is gone. The calling device signing itself out is a normal sign-out.
+     */
+    public static function signOutDevice(User $user, int $deviceId, ?Request $request = null): bool
+    {
+        $target = $user->appDevices()->active()->whereKey($deviceId)->first();
+        if (! $target instanceof AppDevice) {
+            return false;
+        }
+
+        $current = $request !== null && (self::currentDevice($request)?->is($target) ?? false);
+        self::revoke($target, $current ? 'sign_out' : 'user');
+
+        return true;
+    }
+
     /** Sign out every app install of a user (suspension, password change, "sign out everywhere"). */
     public static function revokeAllFor(User $user, string $reason): int
     {

@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -259,6 +259,25 @@ the web renders (`actor_name`, `item_title`, `url` …, different per type — s
 channel, so the web bell follows at once. `push` in the preferences is browser push today and the
 apps' push once it ships (APNs / FCM via the device's `push_token`).
 
+### Connected apps
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/me/connected-apps` | app + verified | Settings → Connected apps: every app with access to the account — signed-in desktop / mobile installs first (most recently used), then Passport clients (MCP connectors, CLI, browser extension), not paginated | View + revoke | BRAI-185, BRAI-256 | ready (v1.49.0, BRAI-394) |
+| `DELETE /api/v1/me/connected-apps/{id}` | app + verified | Revoke at once → 204: `device:<id>` signs that install out (the calling one = sign out), `oauth:<client uuid>` revokes all of this account's tokens of that client (as Profile → Connected apps). Not the user's / malformed → 404 | View + revoke | BRAI-185, BRAI-256 | ready (v1.49.0, BRAI-394) |
+| `GET /api/v1/me/data-export` | app + verified | "Download my data": `{data: {latest, exports: [≤ 5], available_in}}` (seconds until a new request is allowed) | Request export | BRAI-262 | ready (v1.49.0, BRAI-394) |
+| `POST /api/v1/me/data-export` | app + verified, `throttle:5,1` | Request the ZIP (prepared in the background; notification + email when ready) → 202 with the same shape. Already being prepared / within the hour → 422 `export` | Request export | BRAI-262 | ready (v1.49.0, BRAI-394) |
+
+Connected app: `{id, kind: desktop|mobile|mcp|cli|extension|oauth, name, platform, app_version,
+scopes, current, connected_at, last_used_at, expires_at}` — never a token, hash, IP or push token.
+Passport tokens are grouped per client (one row each, as on the web): the CLI and tokens from
+`php artisan mcp:get-token` share the personal access client and show as `cli`.
+
+Export: `{id (uuid), status: queued|running|ready|failed|expired, file_size, counts, error,
+created_at, finished_at, expires_at, download_url, download_path}`. The ZIP link is signed, works
+for 24 h and **only in the owner's web session**: open `download_url` in the system browser (the user
+is signed in there after the app's sign-in), or in the webview via `POST /auth/web-session` and
+`{url}?to=<urlencoded download_path>`. Account deletion: web only.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -320,4 +339,22 @@ Built in: BRAI-392 (desktop) · Mobile scope: Full
 - GET|PUT /api/v1/me/notification-preferences — per category: in_app / push / email (partial update)
 Scope: app · OpenAPI: docs/api/openapi.json#/Notifications · Registry: docs/ai/API.md#notifications
 Built in: BRAI-393 (desktop) · Mobile scope: Full
+```
+
+**BRAI-185** (connected apps) — also **BRAI-256**
+```
+## API (ready)
+- GET /api/v1/me/connected-apps — devices (desktop / mobile) and MCP / CLI / extension clients
+- DELETE /api/v1/me/connected-apps/{id} — revoke (device:<id> or oauth:<client uuid>) → 204
+Scope: app · OpenAPI: docs/api/openapi.json#/Connected apps · Registry: docs/ai/API.md#connected-apps
+Built in: BRAI-394 (desktop) · Mobile scope: View + revoke
+```
+
+**BRAI-262** (data export)
+```
+## API (ready)
+- POST /api/v1/me/data-export — request "Download my data" (one per hour; 202)
+- GET /api/v1/me/data-export — status of the latest exports + download link (opens in the web session)
+Scope: app · OpenAPI: docs/api/openapi.json#/Connected apps · Registry: docs/ai/API.md#connected-apps
+Built in: BRAI-394 (desktop) · Mobile scope: Request export (account deletion web only)
 ```

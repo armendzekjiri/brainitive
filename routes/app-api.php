@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AppApi\AuthController;
+use App\Http\Controllers\AppApi\ConnectedAppController;
 use App\Http\Controllers\AppApi\DeviceController;
 use App\Http\Controllers\AppApi\InstanceController;
 use App\Http\Controllers\AppApi\InvitationController;
@@ -99,6 +100,14 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::post('notifications/{id}/archive', [NotificationController::class, 'archive'])->name('notifications.archive');
         Route::get('me/notification-preferences', [NotificationController::class, 'preferences'])->name('notifications.preferences');
         Route::put('me/notification-preferences', [NotificationController::class, 'updatePreferences'])->name('notifications.preferences.update');
+
+        // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
+        Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');
+        // {id} = device:<id> | oauth:<client uuid>, checked in the controller (a route constraint would
+        // turn a malformed id into a 405 through web.php's GET fallback route)
+        Route::delete('me/connected-apps/{id}', [ConnectedAppController::class, 'destroy'])->name('connected-apps.destroy');
+        Route::get('me/data-export', [ConnectedAppController::class, 'export'])->name('data-export.show');
+        Route::post('me/data-export', [ConnectedAppController::class, 'requestExport'])->middleware('throttle:5,1,app.data-export')->name('data-export.store');
 
     });
 
