@@ -6,11 +6,14 @@ use App\Models\Page;
 use App\Models\User;
 use App\Notifications\Concerns\RespectsPreferences;
 use App\Notifications\Concerns\SendsWebPush;
+use App\Notifications\Contracts\DigestibleMail;
+use App\Support\Notifications\DigestEntry;
+use App\Support\Notifications\MailDigest;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class PageUpdatedNotification extends Notification
+class PageUpdatedNotification extends Notification implements DigestibleMail
 {
     use Queueable, RespectsPreferences, SendsWebPush;
 
@@ -67,5 +70,27 @@ class PageUpdatedNotification extends Notification
             ->headline("Page updated: {$name}")
             ->line("{$this->actor->name} updated the page {$name}.")
             ->action('Open page', $this->toDatabase($notifiable)['page_url']);
+    }
+
+    /** The line in the notification email digest (BRAI-429). */
+    public function digestEntry(object $notifiable): ?DigestEntry
+    {
+        $workspace = MailDigest::workspaceOf($this->page);
+        if (! $workspace) {
+            return null;
+        }
+        $name = NewLeadNotification::plain((string) $this->page->name);
+
+        return new DigestEntry(
+            type: 'page_updated',
+            workspace: $workspace,
+            subject: $this->page,
+            title: "{$this->actor->name} updated a page",
+            url: $this->toDatabase($notifiable)['page_url'],
+            mailSubject: "Page updated: {$name}",
+            subjectTitle: $name,
+            context: $this->page->project?->name,
+            action: 'Open page',
+        );
     }
 }

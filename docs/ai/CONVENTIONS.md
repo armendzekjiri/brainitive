@@ -175,6 +175,10 @@ database driver before using raw engine-specific SQL such as constraint changes 
 - **Push is sent only through `WebPushChannel` / `PushTester`** (both use `App\Support\Push\WebPushClient`);
   never build a `Minishlink\WebPush\WebPush` elsewhere (v1.44.0, BRAI-154).
 - **Mail is branded** — see "Email" below.
+- **Activity emails are batched (BRAI-429).** A new member notification type that is "normal activity"
+  (not account / guest / time-critical) goes into `MailDigest::TYPES` and its class implements
+  `DigestibleMail` (`CatalogNotification`: override `digestSubject()` with the model whose `view` policy
+  guards it). Never send mail around `channelsFor()`, or it skips the digest and the preferences.
 - **Time-based notifications** (reminders, digests) compute dates and times in the recipient's
   `User::localTimezone()`, never the app's UTC, and dedup through `sent_item_reminders` with a
   key that contains the absolute time (or the local date for once-a-day messages). Personal

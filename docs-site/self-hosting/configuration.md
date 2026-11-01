@@ -115,6 +115,7 @@ See [Email](./email) for setup and testing.
 | `MAIL_EHLO_DOMAIN` | host of `APP_URL` | Name the server uses to greet the SMTP server |
 | `MAIL_URL` | – | Alternative: the whole SMTP connection as one URL |
 | `MAIL_SENDMAIL_PATH` | `/usr/sbin/sendmail -bs -i` | Used with `MAIL_MAILER=sendmail` |
+| `NOTIFICATION_EMAIL_DIGEST_SECONDS` | `60` | Activity emails (assignments, mentions, comments, status changes, page updates, sprints) wait this many seconds from the first one and go out as one email per person and workspace. `0` sends every email on its own, at once. The bell and push are never delayed. Needs the queue worker; with `QUEUE_CONNECTION=sync` emails are always sent at once |
 
 ### Email to helpdesk
 

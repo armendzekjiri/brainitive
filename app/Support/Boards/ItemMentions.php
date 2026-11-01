@@ -49,7 +49,8 @@ class ItemMentions
                     contextType: 'issue',
                     contextTitle: $item->key.' - '.$item->title,
                     contextUrl: $itemUrl,
-                    actor: $actor
+                    actor: $actor,
+                    subject: $item,
                 ));
             }
         }

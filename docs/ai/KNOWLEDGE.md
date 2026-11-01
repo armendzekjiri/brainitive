@@ -1120,6 +1120,26 @@ also wait for read / archive actions in flight (a page older than the action is 
 - **Email logos** (`public/images/email/logo.png`, `logo-dark.png`) must be RGBA PNGs: the first 256-colour
   versions had no tRNS chunk and transparent pixels rendered black. Keep explicit width / height (220 px).
 
+### Notification email digest: window, claim, what never batches (BRAI-429, 2026-11-01)
+- **Fixed window per user + workspace:** the first activity email opens it (`due_at = now + interval`, whole
+  seconds) and queues one delayed `SendNotificationDigest`; later emails join while `due_at` is in the
+  future, anything after opens the next window (even if the old job hasn't run yet). Never extended.
+- **Claiming:** `UPDATE … SET claim_token WHERE claim_token IS NULL AND due_at <= now` with a token made in
+  the job's constructor — a retry finds what it claimed before, another job can't take it. A cache lock per
+  user + workspace serialises senders. Rows are deleted after the mail; a crash in between can resend
+  (at-least-once). `failed()` releases the claim, so the lines go out with the next digest; rows older
+  than 7 days are pruned. A job that runs early (nothing due) releases itself until the window ends.
+- **Sync queue = off:** a "delayed" sync job runs at once, before the window ends, so `MailDigest::enabled()`
+  is false there (e2e, dev.brainitive.app, `QUEUE_CONNECTION=sync` self-hosters, plain PHPUnit). Tests that
+  exercise it set `queue.default=database` + `Queue::fake()` and call the job's `handle()` after `travel()`.
+- **Only `MailDigest::TYPES` batch, and only for classes implementing `DigestibleMail`.** Account / guest /
+  billing / helpdesk / SLA / leads / bookings / reviews / reminders / workspace notices stay immediate. A
+  notification that can't build a line (no subject / workspace, e.g. a `MentionNotification` without
+  `subject`) is mailed at once by the channel — never dropped.
+- **Send-time checks:** user exists, not suspended, still in the workspace, email still on for the type's
+  category, the subject still exists **in that workspace** and `view` passes (`MailDigest::SUBJECTS` is the
+  allow-list of classes loaded from `subject_type`). The bell is never deduped or delayed.
+
 ### Legal & privacy: one config, customer pages, no third-party loads (v1.44.0, BRAI-156)
 - **Cloud vs self-hosted:** `config/legal.php` is read only through `LegalInfo`. Cloud = `LEGAL_CLOUD` or an
   APP_URL host in `LegalInfo::CLOUD_HOSTS`; the operator's own facts are `CLOUD_DEFAULTS` — never config

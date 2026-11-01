@@ -6,6 +6,7 @@ use App\Models\Comment;
 use App\Models\Item;
 use App\Models\User;
 use App\Notifications\Concerns\DescribesItem;
+use Illuminate\Database\Eloquent\Model;
 
 /** Someone commented on an issue you watch, are assigned to or reported (category: comments). */
 class ItemCommentedNotification extends CatalogNotification
@@ -21,6 +22,16 @@ class ItemCommentedNotification extends CatalogNotification
     public function catalogType(): string
     {
         return 'item_commented';
+    }
+
+    protected function digestSubject(): ?Model
+    {
+        return $this->item;
+    }
+
+    protected function digestSubjectTitle(): ?string
+    {
+        return (string) $this->item->title;
     }
 
     protected function message(object $notifiable): array

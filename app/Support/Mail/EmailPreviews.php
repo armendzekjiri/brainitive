@@ -62,6 +62,7 @@ use App\Notifications\LeadAssignedNotification;
 use App\Notifications\LeadConfirmationNotification;
 use App\Notifications\MentionNotification;
 use App\Notifications\NewLeadNotification;
+use App\Notifications\NotificationDigestNotification;
 use App\Notifications\PageUpdatedNotification;
 use App\Notifications\PortalLoginLinkNotification;
 use App\Notifications\ProjectExportReadyNotification;
@@ -150,6 +151,7 @@ final class EmailPreviews
             'item-reminder' => $member('Issue reminder', fn () => new ItemReminderNotification('WEB-42', 'Fix the login redirect', 'starts in 15 minutes', '/calendar')),
             'mention' => $member('Mention', fn () => new MentionNotification('item', 'Fix the login redirect', url('/'), $s->sam())),
             'page-updated' => $member('Page updated', fn () => new PageUpdatedNotification($s->page(), $s->sam())),
+            'notification-digest' => $member('Notification digest (several updates)', fn () => $s->notificationDigest()),
             'task-digest' => $member('Daily task digest', fn () => new TaskDigestNotification(2, 1, ['Send the October invoice', 'Book the venue', 'Review the onboarding copy'], url('/my-work'))),
             'new-lead' => $member('New lead', fn () => new NewLeadNotification($s->lead())),
             'booking-created' => $member('New booking', fn () => new BookingCreatedNotification($s->booking())),
@@ -409,6 +411,23 @@ final class EmailPreviews
         $list = $this->make(TaskList::class, ['id' => 0, 'name' => 'Launch checklist', 'slug' => 'launch-checklist'], ['project' => $this->project()]);
 
         return $this->make(TaskListItem::class, ['id' => 0, 'title' => 'Book the venue'], ['taskList' => $list]);
+    }
+
+    /** BRAI-429: three activity emails of one minute in one workspace, as one email. */
+    private function notificationDigest(): NotificationDigestNotification
+    {
+        $at = now()->subSeconds(50);
+        $line = fn (string $type, string $label, string $title, ?string $key, string $subject, ?string $body, int $seconds) => [
+            'type' => $type, 'label' => $label, 'title' => $title, 'subject_key' => $key, 'subject_title' => $subject,
+            'context' => 'Website relaunch · Main board', 'body' => $body, 'url' => url('/'), 'mail_subject' => $title,
+            'action' => 'Open issue', 'at' => $at->copy()->addSeconds($seconds),
+        ];
+
+        return new NotificationDigestNotification($this->workspace(), [
+            $line('item_assigned', 'Assigned', 'Sam Rivera assigned you to WEB-42', 'WEB-42', 'Fix the login redirect', null, 0),
+            $line('item_assigned', 'Assigned', 'Sam Rivera assigned you to WEB-43', 'WEB-43', 'Add a password strength meter', null, 12),
+            $line('item_commented', 'Comment', 'Sam Rivera commented on WEB-42', 'WEB-42', 'Fix the login redirect', 'I can reproduce it on Safari 18 — the redirect drops the query string.', 31),
+        ]);
     }
 
     private function billingMail(): BillingReportMail
