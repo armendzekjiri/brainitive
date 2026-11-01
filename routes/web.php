@@ -66,7 +66,7 @@ use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceLegalController;
 use App\Http\Controllers\WorkTimerController;
 use App\Http\Middleware\ReadOnlySession;
-use App\Support\Auth\MicrosoftLogin;
+use App\Support\Auth\SignInMethods;
 use App\Support\Legal\LegalInfo;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
@@ -79,9 +79,9 @@ Route::get('/', function () {
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
-        'canLoginWithGoogle' => (bool) config('services.google.client_id'),
-        'canLoginWithGitHub' => (bool) config('services.github.client_id'),
-        'canLoginWithMicrosoft' => MicrosoftLogin::available(),
+        'canLoginWithGoogle' => SignInMethods::google(),
+        'canLoginWithGitHub' => SignInMethods::github(),
+        'canLoginWithMicrosoft' => SignInMethods::microsoft(),
     ])->withViewData(['meta' => [
         // link previews of the homepage (Open Graph / X), see resources/views/partials/social-meta.blade.php
         'title' => 'Brainitive – Workspaces, Boards & Wiki',
