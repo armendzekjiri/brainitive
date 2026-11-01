@@ -3,6 +3,7 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\InteractsWithBrainitive;
+use App\Support\Mcp\ContentLinkFormatter;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\Mcp\ResourceLocator;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -13,7 +14,7 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('Read a single Kanban card in full: title, description (as Markdown), due date/time, column, assignee, type, priority and status. Identify it by board slug + item_id (from get_board).')]
+#[Description('Read a single Kanban card in full: title, description (as Markdown), due date/time, column, assignee, type, priority, status, and its links (related content, referenced by, linked issues). Identify it by board slug + item_id (from get_board).')]
 class GetBoardItemTool extends Tool
 {
     use InteractsWithBrainitive;
@@ -46,6 +47,8 @@ class GetBoardItemTool extends Tool
             return Response::error('No item found with that id on this board.');
         }
 
+        $links = ContentLinkFormatter::references($project->workspace, $project, $user, $item);
+
         return Response::structured([
             'id' => $item->id,
             'key' => $item->key ?? '',
@@ -60,6 +63,9 @@ class GetBoardItemTool extends Tool
             'type' => $item->itemType?->name ?? '',
             'priority' => $item->priority?->name ?? '',
             'completed' => $item->completed_at !== null,
+            'related_content' => $links['related'],
+            'referenced_by' => $links['referenced_by'],
+            'linked_issues' => ContentLinkFormatter::issueLinks($item, $user),
             'location' => ResourceLocator::locate($item),
         ]);
     }
@@ -83,6 +89,9 @@ class GetBoardItemTool extends Tool
             'type' => $schema->string(),
             'priority' => $schema->string(),
             'completed' => $schema->boolean(),
+            'related_content' => ContentLinkFormatter::referenceSchema($schema)->description('Related content: docs, whiteboards, tickets and plans this card links to (list_content_links has the details).'),
+            'referenced_by' => ContentLinkFormatter::referenceSchema($schema)->description('Referenced by: content that links to this card, incl. smart links, plan rows and whiteboard cards.'),
+            'linked_issues' => ContentLinkFormatter::issueLinkSchema($schema)->description('Linked issues (blocks, is blocked by, relates to…), read from this card\'s side.'),
             'location' => ResourceLocator::outputSchema($schema),
         ];
     }

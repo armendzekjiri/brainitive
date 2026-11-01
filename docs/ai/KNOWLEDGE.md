@@ -1783,7 +1783,7 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 - **Why Go, why MCP.** The ask was a binary people install with one `curl | sh` and use without any
   runtime, on macOS, Linux and Windows. Go gives a cgo-free static binary per target from one
   `go build` matrix (~8 MB). Instead of growing the old `/api/cli` REST surface (8 endpoints, password
-  login that can't work for Google / GitHub / Microsoft accounts), the CLI calls the MCP tools: the 71
+  login that can't work for Google / GitHub / Microsoft accounts), the CLI calls the MCP tools: the 71 (76 since BRAI-432)
   tools *are* the API, and `brainitive tool <name>` reaches a new tool the moment it is registered.
   Trade-off: rich tables need the tool's output shape, so the friendly commands are typed wrappers.
 - **Tool names on the wire are the class names in kebab case** (`create-board-item-tool`), not the
@@ -1821,6 +1821,26 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   then `createToken('x', ['mcp:use', 'capture'])`), `php artisan serve --port 8099`, and run the binary
   with `BRAINITIVE_TOKEN` / `BRAINITIVE_SERVER`. `php artisan tinker <file>` drops into the REPL and
   hangs in a non-interactive shell — use `--execute="include '...';"`.
+
+### MCP links: related content vs linked issues (BRAI-432, GitHub #132)
+- **Two different things in the UI, two tool pairs.** "Related content" / "Referenced by" are
+  `content_references` (issue, doc / whiteboard, ticket, plan — one project; issue → issue refused);
+  "Linked issues" are `item_links` with a type. `link_related_content` for item ↔ item answers "use
+  link_issues". Task-list tasks can't be linked (not in the UI either).
+- **Visibility differs on purpose.** Related content the user can't see is left out entirely (as
+  `ContentReferences::forEndpoint` does for the UI — a private draft never shows, not even as a count).
+  A linked issue the user can't open (an old cross-project link; the picker only offers the project's
+  issues, MCP only links inside the project) is listed as `restricted: true`, `id: 0`, no key / title /
+  url. The issue view itself still renders such links with their title (`showItem` / `itemDetails` load
+  `incomingLinks.sourceItem` unchecked) — a separate fix if wanted.
+- **"A blocks B" = "B is_blocked_by A".** `ItemLinks::find` matches the inverse row from the other issue,
+  so `link_issues` is a no-op for it and the issue view now refuses it as "This link already exists."
+  (before, both rows could be added). `unlink_issues` with a type removes either representation.
+- **Doc uuids are a Postgres `uuid` column:** `where('uuid', 'BRAI-12')` is a query error, not "no rows".
+  `InteractsWithContentLinks` checks `Str::isUuid()` before looking a page up by uuid.
+- **Endpoints from `ContentReferences::resolve()` carry a slim board / helpdesk** (`id, slug, project_id`):
+  `ResourceLocator::locate()` on them has no board name for the breadcrumb. Use
+  `ContentLinkFormatter::locate()`, which reloads those relations.
 
 ### CLI Cloud OAuth origin
 The Cloud CLI defaults to `https://www.brainitive.app`, matching the OAuth metadata. Keep strict same-origin checks for all servers; the non-www Cloud alias can be normalized explicitly, while existing signed-in configurations stay untouched until sign-in.
