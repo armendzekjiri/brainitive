@@ -1970,3 +1970,29 @@ Never migrate devdb just to export the spec.
 - **`GET /workspaces/{slug}/projects` (web) redirects to the workspace home** (fixed in v1.49.0 phase
   04a): it used to render a `Projects/Index` page that never existed. The workspace home lists the
   projects; there is no separate projects page.
+
+### App API phase 04a: device code, My Work, calendar (v1.49.0, BRAI-438 / 396 / 418)
+- **TV sign-in = RFC 8628 device code, not a WebView.** An embedded WebView can read the password, so
+  the TV client (`tv`, platform `android_tv`) has no redirect and `/app/authorize` refuses it. Codes live
+  in the cache (`AppDeviceCodes`): device code = 64 chars, only its sha256 is a key; user code = 8
+  letters of `BCDFGHJKLMNPQRSTVWXZ` (`XXXX-XXXX`), single use. Approve / deny / poll run under
+  `Cache::lock`, so two clicks or two polls never both win; a poll that can't get the lock counts as
+  `slow_down`. The poll's interval check uses `now()` (not `microtime`), so `travel()` works in tests, and
+  allows 1 s of jitter. The QR link (`verification_uri_complete`) only fills in the code: approval is
+  always the POST from the Approve button. 10 wrong codes per user in 15 min → 429 page.
+- **Inertia pages may answer 4xx.** `/app/device` renders the "wrong code" page with 422 and the
+  lock-out with 429 on an Inertia XHR; the client swaps the page as for a 200 (e2e covers it).
+- **Cursor pages over a UNION.** `/me/work` merges issues and tasks in SQL (`AssignedWork::combined`:
+  `kind`, `id`, `sort_due` = `COALESCE(due_date, '9999-12-31')`, ordered by those three) and cursor-
+  paginates the `fromSub`. The page's rows are then replaced by models — and the models must keep
+  `kind` / `sort_due` as attributes, because `next_cursor` is built from the **last item of the
+  collection**; without them the next request fails with "Illegal operator and value combination".
+  A bound string literal in a Postgres UNION select has no type: write constants into the SQL.
+- **Local days vs calendar dates.** `CalendarEvents` (shared with the web page) works on calendar dates
+  in the app zone. `AgendaEvent::forDays` asks one day more on each side and then cuts by the user's
+  local days, so an event at 23:30 in Auckland is neither lost nor doubled. Repeating list tasks are
+  projected backwards too (as on the web calendar), so their ids carry the date (`task:<id>:<Y-m-d>`).
+- **Scramble and nullable fields.** A field copied straight out of an array (`$event['location']`)
+  comes out as `string` or `{}`: cast through a small `?string` helper, build nested objects inline,
+  and wrap lists of arrays in a Resource (`CalendarErrorResource`).
+

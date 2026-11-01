@@ -173,6 +173,12 @@ Full conventions and the endpoint registry: [`API.md`](./API.md); recipe:
 - Every endpoint: `#[Group('<API.md module>', weight: n)]` on the controller, tests (incl. Passport
   token → 401, cross-workspace 404, 422), `composer openapi` (commits `docs/api/openapi.json`; the
   drift test fails otherwise), a row in `API.md`, and the `## API (ready)` section on its Mobile app card.
+- Sign-in per client (`config/app-api.php` → `clients.*.grant`): desktop / mobile use PKCE
+  (`/app/authorize`), the TV uses the device code (`/auth/device` + `/app/device`). A new client gets a
+  grant and its platforms there, never a branch in a controller.
+- Work (issues + list tasks) is addressed as `issue:<id>` / `task:<id>` (`WorkRef`) everywhere in the
+  App API, and listed with one resource (`WorkItemResource`). An endpoint a wallboard polls answers an
+  `ETag` and 304 on `If-None-Match` (`TodayController`), and runs a fixed number of queries (test it).
 - The spec's `info.version` is the API version (`1.0.0`), not the app release; breaking changes → `/api/v2`.
 - Web ↔ desktop: call native features only through `resources/js/lib/desktop.ts` (feature-detected,
   no-op in a browser); never import `@tauri-apps/api` into the web app.

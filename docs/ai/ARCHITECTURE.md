@@ -424,7 +424,8 @@ Plan [`tasks/feat-legal-compliance.md`](./tasks/feat-legal-compliance.md); human
 
 ### App API v1 — desktop + mobile apps (v1.49.0, BRAI-380)
 JSON API of the first-party **Brainitive Desktop** (Tauri, own repo `armendzekjiri/brainitive-desktop`,
-checked out at `desktop/`, gitignored) and later **Brainitive Mobile** (Expo). Separate from MCP / CLI /
+checked out at `desktop/`, gitignored), **Brainitive TV** (own folder `brainitive-tv/`, signs in with a
+device code) and later **Brainitive Mobile** (Expo). Separate from MCP / CLI /
 extension: own tokens, guard, throttles; only Support services and policies are shared.
 **Registry of every endpoint + conventions: [`API.md`](./API.md); recipe:
 [skills/add-app-api-endpoint.md](./skills/add-app-api-endpoint.md).**
@@ -448,7 +449,8 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   `APP_API_MIN_DESKTOP_VERSION` / `APP_API_MIN_MOBILE_VERSION`), `config/auth.php` guard `app`,
   `config/scramble.php` (documents only `api/v1`; API version `1.0.0`).
 - **Endpoints:** `app/Http/Controllers/AppApi/*` (Instance, Auth, Me + MeAvatar, Device, Invitation,
-  Workspace, Project, Member, Navigation, Search, Notification, ConnectedApp — one `#[Group]` tag per
+  Workspace, Project, Member, Navigation, Search, Notification, ConnectedApp, DeviceAuth, MyWork, Today,
+  Calendar — one `#[Group]` tag per
   `API.md` module), Form Requests in `app/Http/Requests/AppApi/`, Resources in
   `app/Http/Resources/AppApi/`. The tables in `API.md` are the list.
 - **Lists + visibility (phase 03):** `Requests\AppApi\ListRequest` (`cursor` / `limit` /
@@ -460,6 +462,18 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   palette recents) + `PinnedContent`, `SidebarPreferences`, `SearchService` (`SearchQuery::$workspaceIds`),
   `Support\Notifications\NotificationInbox` + `NotificationCatalog::preferenceRules/updatePreferences`,
   `Support\Profile\ConnectedApps` + `DataExports`, `AppTokens::signOutDevice()`.
+- **Shared with the web (phase 04a):** `Support\MyWork\AssignedWork` (the "assigned to me" query of
+  `ext/v1/my-work` + the union list of `/me/work`) + `WorkRef` (`issue:<id>` / `task:<id>`),
+  `Support\MyDay\MyDayPlan::add/remove/carryOver` (`MyDayController`, offline sync),
+  `Support\Work\WorkCompletion` (done / reopen, issue moves + watcher notifications, repeating tasks;
+  `BoardController@moveItem`, `TaskListController@updateItem`, offline list tasks),
+  `Support\Calendar\CalendarEvents` (the web calendar's events, from `CalendarController@index`) +
+  `AgendaEvent` (the API's event shape, cut to the user's local days).
+- **TV device-code sign-in (BRAI-438):** `Support\AppApi\AppDeviceCodes` (RFC 8628 codes in the cache),
+  `AppDeviceSignIn` (device row + `max_devices` + first pair; also used by `/auth/exchange`), `AppClients`
+  (`config/app-api.php` → `clients.*.grant` / `platforms`); `Controllers\AppApi\DeviceAuthController`;
+  the confirm page `/app/device` = `AppDeviceApprovalController` + `Pages/AppAuth/Device.tsx`
+  (`routes/app-auth.php`).
 - **Spec:** `docs/api/openapi.json` (committed; `composer openapi` regenerates it through
   `tests/Feature/AppApi/OpenApiSpecTest.php`, which is also the CI drift check). UI `/docs/api` +
   `/docs/api.json`: local env or instance admins.
