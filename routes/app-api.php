@@ -15,6 +15,7 @@ use App\Http\Controllers\AppApi\NavigationController;
 use App\Http\Controllers\AppApi\NotificationController;
 use App\Http\Controllers\AppApi\ProjectController;
 use App\Http\Controllers\AppApi\SearchController;
+use App\Http\Controllers\AppApi\TaskListController;
 use App\Http\Controllers\AppApi\TodayController;
 use App\Http\Controllers\AppApi\WorkspaceController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
@@ -124,6 +125,17 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         // ── Calendar, read part (CalendarEvents: the web calendar's sources) ─────────────────────
         Route::get('calendar/events', [CalendarController::class, 'events'])->name('calendar.events');
         Route::get('calendar/connections', [CalendarController::class, 'connections'])->name('calendar.connections');
+
+        // ── Task lists + to-dos (TaskLists, WorkCompletion: shared with the web, CLI and MCP) ──────
+        // lists and tasks by id; ids on writes are checked in the controller (no route constraint)
+        Route::get('projects/{project}/task-lists', [TaskListController::class, 'index'])->whereNumber('project')->name('task-lists.index');
+        Route::post('projects/{project}/task-lists', [TaskListController::class, 'store'])->name('task-lists.store');
+        Route::get('task-lists/{list}', [TaskListController::class, 'show'])->whereNumber('list')->name('task-lists.show');
+        Route::get('task-lists/{list}/items', [TaskListController::class, 'items'])->whereNumber('list')->name('task-lists.items.index');
+        Route::post('task-lists/{list}/items', [TaskListController::class, 'storeItem'])->name('task-lists.items.store');
+        Route::post('task-lists/{list}/items/reorder', [TaskListController::class, 'reorder'])->name('task-lists.items.reorder');
+        Route::patch('task-lists/{list}/items/{item}', [TaskListController::class, 'updateItem'])->name('task-lists.items.update');
+        Route::delete('task-lists/{list}/items/{item}', [TaskListController::class, 'destroyItem'])->name('task-lists.items.destroy');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');

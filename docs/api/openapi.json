@@ -59,6 +59,9 @@
         },
         {
             "name": "Calendar"
+        },
+        {
+            "name": "Task lists"
         }
     ],
     "security": [
@@ -3025,6 +3028,586 @@
                     }
                 }
             }
+        },
+        "/projects/{project}/task-lists": {
+            "get": {
+                "operationId": "app.v1.task-lists.index",
+                "summary": "The task lists of a project, in the web's order",
+                "tags": [
+                    "Task lists"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `TaskListResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TaskListCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.task-lists.store",
+                "description": "Project admins / editors and workspace admins (403 otherwise). With `request_id` a retry answers\n200 with the list the first call created.",
+                "summary": "Create a task list at the end of the project (the user watches it)",
+                "tags": [
+                    "Task lists"
+                ],
+                "parameters": [
+                    {
+                        "name": "project",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreTaskListRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`TaskListDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TaskListDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`TaskListDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TaskListDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/task-lists/{list}": {
+            "get": {
+                "operationId": "app.v1.task-lists.show",
+                "summary": "One task list: counts, what the user may do, whether they watch it",
+                "tags": [
+                    "Task lists"
+                ],
+                "parameters": [
+                    {
+                        "name": "list",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`TaskListDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TaskListDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/task-lists/{list}/items": {
+            "get": {
+                "operationId": "app.v1.task-lists.items.index",
+                "description": "`status` = todo | done | all (default). For a refresh pass `updated_since`; deleted tasks don't\ncome back, so reload the whole list now and then.",
+                "summary": "The tasks of a list, in the list's order",
+                "tags": [
+                    "Task lists"
+                ],
+                "parameters": [
+                    {
+                        "name": "list",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "description": "todo | done | all (default)",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "todo",
+                                "done",
+                                "all"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `TaskResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TaskCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.task-lists.items.store",
+                "description": "`notes` is Markdown. Needs the right to change tasks (403). With `request_id` a retry answers 200\nwith the task the first call created.",
+                "summary": "Add a task at the end of the list",
+                "tags": [
+                    "Task lists"
+                ],
+                "parameters": [
+                    {
+                        "name": "list",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreTaskRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`TaskResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TaskResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`TaskResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TaskResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/task-lists/{list}/items/reorder": {
+            "post": {
+                "operationId": "app.v1.task-lists.items.reorder",
+                "description": "Send every task id of the list, top to bottom. Needs the right to change tasks (403).",
+                "summary": "Put the tasks in a new order; answers the list",
+                "tags": [
+                    "Task lists"
+                ],
+                "parameters": [
+                    {
+                        "name": "list",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ReorderTasksRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`TaskListDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TaskListDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/task-lists/{list}/items/{item}": {
+            "patch": {
+                "operationId": "app.v1.task-lists.items.update",
+                "description": "`status: done` completes it \u2014 a repeating task with a due date stays open and moves to its next\ndate instead, as on the web. Needs the right to change tasks (403).",
+                "summary": "Change a task; only the sent fields change",
+                "tags": [
+                    "Task lists"
+                ],
+                "parameters": [
+                    {
+                        "name": "list",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateTaskRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`TaskResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TaskResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "app.v1.task-lists.items.destroy",
+                "description": "Needs the right to change tasks (403).",
+                "summary": "Delete a task",
+                "tags": [
+                    "Task lists"
+                ],
+                "parameters": [
+                    {
+                        "name": "list",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "item",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -5157,6 +5740,26 @@
                 ],
                 "title": "RefreshTokenRequest"
             },
+            "ReorderTasksRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/task-lists/{id}/items/reorder`: task ids in their new order.",
+                "properties": {
+                    "ids": {
+                        "type": "array",
+                        "description": "every task id of the list, top to bottom (positions become 1, 2, 3 \u2026; ids of other lists are ignored)",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "minItems": 1,
+                        "maxItems": 1000,
+                        "uniqueItems": true
+                    }
+                },
+                "required": [
+                    "ids"
+                ],
+                "title": "ReorderTasksRequest"
+            },
             "SearchPlaceResource": {
                 "type": "object",
                 "properties": {
@@ -5466,6 +6069,131 @@
                 ],
                 "title": "StoreProjectRequest"
             },
+            "StoreTaskListRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/projects/{id}/task-lists` (BRAI-397): the web form's fields. Authorized before\nvalidation: a project the user can't open is a 404, one they may only read a 403\n(TaskListPolicy::create: project admins / editors and workspace admins).",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 1000
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "a uuid: a retry with the same one answers 200 with the list the first call created"
+                    }
+                },
+                "required": [
+                    "name"
+                ],
+                "title": "StoreTaskListRequest"
+            },
+            "StoreTaskRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/task-lists/{id}/items`: the web's task fields (TaskLists::taskRules), with the\nnotes as Markdown instead of the editor's document.",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 500
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "todo",
+                            "done"
+                        ]
+                    },
+                    "assignee_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "Only people in this workspace who can open the project can be assigned."
+                    },
+                    "due_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "due_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "start_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "start_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "recurrence": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "daily",
+                            "weekly",
+                            "monthly",
+                            "yearly",
+                            null
+                        ]
+                    },
+                    "reminder_minutes": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "enum": [
+                            "0",
+                            "10",
+                            "60",
+                            "1440",
+                            null
+                        ]
+                    },
+                    "notes": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Markdown; stored as the web editor's HTML",
+                        "maxLength": 10000
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "a uuid: a retry with the same one answers 200 with the task the first call created"
+                    }
+                },
+                "required": [
+                    "title"
+                ],
+                "title": "StoreTaskRequest"
+            },
             "StoreWorkspaceRequest": {
                 "type": "object",
                 "description": "A new workspace: the web form (WorkspaceController::store) and the apps' first run\n(POST /api/v1/workspaces). Names are unique per owner among their live workspaces.",
@@ -5486,6 +6214,392 @@
                     "name"
                 ],
                 "title": "StoreWorkspaceRequest"
+            },
+            "TaskCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/TaskResource"
+                },
+                "title": "TaskCollection"
+            },
+            "TaskListCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/TaskListResource"
+                },
+                "title": "TaskListCollection"
+            },
+            "TaskListDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "counts": {
+                        "type": "object",
+                        "description": "open and completed tasks",
+                        "properties": {
+                            "todo": {
+                                "type": "integer"
+                            },
+                            "done": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "todo",
+                            "done"
+                        ]
+                    },
+                    "project": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "key": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "key"
+                        ]
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "update": {
+                                "type": "boolean",
+                                "description": "rename / describe (web only for now)"
+                            },
+                            "delete": {
+                                "type": "boolean"
+                            },
+                            "manage_items": {
+                                "type": "boolean",
+                                "description": "add, edit, complete, reorder and delete tasks"
+                            }
+                        },
+                        "required": [
+                            "update",
+                            "delete",
+                            "manage_items"
+                        ]
+                    },
+                    "watching": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "slug",
+                    "name",
+                    "description",
+                    "position",
+                    "counts",
+                    "project",
+                    "workspace",
+                    "url",
+                    "created_at",
+                    "updated_at",
+                    "can",
+                    "watching"
+                ],
+                "title": "TaskListDetailResource"
+            },
+            "TaskListResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "counts": {
+                        "type": "object",
+                        "description": "open and completed tasks",
+                        "properties": {
+                            "todo": {
+                                "type": "integer"
+                            },
+                            "done": {
+                                "type": "integer"
+                            }
+                        },
+                        "required": [
+                            "todo",
+                            "done"
+                        ]
+                    },
+                    "project": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "key": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "key"
+                        ]
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "slug",
+                    "name",
+                    "description",
+                    "position",
+                    "counts",
+                    "project",
+                    "workspace",
+                    "url",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "TaskListResource"
+            },
+            "TaskResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "work_id": {
+                        "type": "string",
+                        "description": "task:<id> \u2014 for PATCH /me/work/{id} and My Day"
+                    },
+                    "list_id": {
+                        "type": "integer"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "todo | done"
+                    },
+                    "done": {
+                        "type": "boolean"
+                    },
+                    "notes": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "assignee": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "avatar_url": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "avatar_url"
+                        ]
+                    },
+                    "due_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Y-m-d / H:i"
+                    },
+                    "due_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "start_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "start_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "recurrence": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "daily | weekly | monthly | yearly | null: completing it moves the due date on"
+                    },
+                    "reminder_minutes": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "minutes before the due time (0, 10, 60, 1440) or null"
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "work_id",
+                    "list_id",
+                    "title",
+                    "status",
+                    "done",
+                    "notes",
+                    "assignee",
+                    "due_date",
+                    "due_time",
+                    "start_date",
+                    "start_time",
+                    "recurrence",
+                    "reminder_minutes",
+                    "position",
+                    "url",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "TaskResource"
             },
             "TodayResource": {
                 "type": "object",
@@ -5746,6 +6860,91 @@
                     "pins"
                 ],
                 "title": "UpdatePinsRequest"
+            },
+            "UpdateTaskRequest": {
+                "type": "object",
+                "description": "`PATCH /api/v1/task-lists/{id}/items/{item}`: only the sent fields change (`null` clears one).\n`status: done` on a repeating task with a due date moves it to its next date and keeps it open.",
+                "properties": {
+                    "title": {
+                        "type": "string",
+                        "maxLength": 500
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "todo",
+                            "done"
+                        ]
+                    },
+                    "assignee_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "Only people in this workspace who can open the project can be assigned."
+                    },
+                    "due_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "due_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "start_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time"
+                    },
+                    "start_time": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "recurrence": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "daily",
+                            "weekly",
+                            "monthly",
+                            "yearly",
+                            null
+                        ]
+                    },
+                    "reminder_minutes": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "enum": [
+                            "0",
+                            "10",
+                            "60",
+                            "1440",
+                            null
+                        ]
+                    },
+                    "notes": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "Markdown; stored as the web editor's HTML; null clears it",
+                        "maxLength": 10000
+                    }
+                },
+                "title": "UpdateTaskRequest"
             },
             "WebSessionResource": {
                 "type": "object",

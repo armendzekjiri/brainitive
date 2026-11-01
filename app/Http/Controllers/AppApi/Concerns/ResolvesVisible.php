@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\AppApi\Concerns;
 
 use App\Models\Project;
+use App\Models\TaskList;
 use App\Models\Workspace;
 use Illuminate\Http\Request;
 
@@ -20,11 +21,28 @@ trait ResolvesVisible
         return $workspace;
     }
 
-    protected function visibleProject(Request $request, int $id): Project
+    /** `$id` from a route without a constraint (writes): anything but digits is a 404. */
+    protected function visibleProject(Request $request, int|string $id): Project
     {
-        $project = Project::with('workspace')->find($id);
+        abort_unless(self::isId($id), 404);
+        $project = Project::with('workspace')->find((int) $id);
         abort_unless($project instanceof Project && $project->workspace !== null && $request->user()->can('view', $project), 404);
 
         return $project;
+    }
+
+    /** A task list of a project the user can open (TaskListPolicy::view). */
+    protected function visibleTaskList(Request $request, int|string $id): TaskList
+    {
+        abort_unless(self::isId($id), 404);
+        $list = TaskList::with('project.workspace')->find((int) $id);
+        abort_unless($list instanceof TaskList && $list->project?->workspace !== null && $request->user()->can('view', $list), 404);
+
+        return $list;
+    }
+
+    private static function isId(int|string $id): bool
+    {
+        return is_int($id) ? $id > 0 : (bool) preg_match('/^[1-9][0-9]{0,17}$/', $id);
     }
 }
