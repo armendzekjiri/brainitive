@@ -5,6 +5,7 @@ namespace App\Http\Controllers\AppApi;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AppApi\CalendarEventsRequest;
 use App\Http\Resources\AppApi\CalendarConnectionResource;
+use App\Http\Resources\AppApi\CalendarErrorResource;
 use App\Http\Resources\AppApi\CalendarEventResource;
 use App\Support\Calendar\AgendaEvent;
 use App\Support\Calendar\CalendarEvents;
@@ -45,10 +46,7 @@ class CalendarController extends Controller
             // the zone of `from` / `to` (the user's effective time zone)
             'timezone' => $user->localTimezone(),
             // calendars that failed this time: [{connection_id, message}]
-            'errors' => array_map(fn (array $error) => [
-                'connection_id' => (int) $error['connection_id'],
-                'message' => (string) $error['message'],
-            ], $agenda['errors']),
+            'errors' => CalendarErrorResource::collection($agenda['errors']),
         ]);
     }
 

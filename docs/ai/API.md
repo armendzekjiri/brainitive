@@ -336,6 +336,7 @@ is signed in there after the app's sign-in), or in the webview via `POST /auth/w
 | `PATCH /api/v1/me/my-day/items/{id}` | app + verified | `{done: bool}`, as `PATCH /me/work/{id}` → the updated My Day | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
 | `DELETE /api/v1/me/my-day/items/{id}` | app + verified | Take it off today's plan (the work is untouched) → 200 the updated My Day (a part of the plan, not a resource) | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
 | `POST /api/v1/me/my-day/carry-over` | app + verified | "Bring over": unfinished work of the last 30 days' plans onto today → the updated My Day | Full | BRAI-215 | ready (v1.49.0, BRAI-396) |
+| `GET /api/v1/me/today` | app + verified | TV wallboard / tray "Today", one call every few minutes: `{data: {date, timezone, work: [work item] (open, overdue + due today, ≤ 100), my_day: [work item], events: [event] (today's connected-calendar events + bookings), errors}}`. `ETag` on every answer; send it as `If-None-Match` → **304** without a body when nothing changed | Full | BRAI-215, BRAI-222 | ready (v1.49.0, BRAI-396) |
 
 Work item (one resource for My Work, My Day and `/me/today`): `{id: "issue:<id>"|"task:<id>", type:
 issue|task, key, title, done, status, priority: {id, name, color}|null, due_date (Y-m-d), due_time (H:i),
@@ -351,6 +352,9 @@ updated_at}`.
 - My Day = the web's My Day (BRAI-74, `MyDayPlan`): one plan per local day; unfinished work of earlier
   days is **not** moved by itself — `carry_over_count` says how many "Bring over" would add, as the web's
   button. Work the user can no longer open is left out. Reordering: web only for now.
+- `GET /me/today` runs a fixed number of queries whatever the amount of work (no per-row lookups; a
+  test counts them) plus one live call per connected calendar. Its `events` are only calendar events and
+  bookings (dated work is in `work`); same event shape as `GET /calendar/events`.
 
 ### Calendar
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
@@ -458,6 +462,7 @@ Built in: BRAI-394 (desktop) · Mobile scope: View + revoke
 - PATCH /api/v1/me/work/{id} — {done: true|false}: complete / reopen (issue:<id> or task:<id>), as the web's circle
 - GET /api/v1/me/my-day — today's plan in the user's order + carry_over_count
 - POST /api/v1/me/my-day/items {id} · PATCH /api/v1/me/my-day/items/{id} {done} · DELETE /api/v1/me/my-day/items/{id} · POST /api/v1/me/my-day/carry-over — answer the updated My Day
+- GET /api/v1/me/today — work due today / overdue + My Day + today's events in one call (ETag → 304), for a "Today" screen / widget
 Scope: app · OpenAPI: docs/api/openapi.json#/My Work · Registry: docs/ai/API.md#my-work
 Built in: BRAI-396 (desktop) · Mobile scope: Full (reordering My Day: web only for now)
 ```
