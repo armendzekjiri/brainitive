@@ -71,6 +71,9 @@
         },
         {
             "name": "Bookmarks"
+        },
+        {
+            "name": "Time tracking"
         }
     ],
     "security": [
@@ -5488,6 +5491,597 @@
                     }
                 }
             }
+        },
+        "/me/timer": {
+            "get": {
+                "operationId": "app.v1.timer.show",
+                "summary": "The user's running timer (or none) and what the stop dialog needs",
+                "tags": [
+                    "Time tracking"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`TimerStateResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TimerStateResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/timer/start": {
+            "post": {
+                "operationId": "app.v1.timer.start",
+                "description": "Needs the right to edit the issue (= log work on it, 403). Only one timer runs per user: another\none running \u2192 409 (stop it first). List tasks can't be timed (422).",
+                "summary": "Start the timer on an issue",
+                "tags": [
+                    "Time tracking"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StartTimerRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`TimerStateResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TimerStateResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "An error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Human-readable, safe to show."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "description": "Machine-readable: switch on this, not on the message.",
+                                            "enum": [
+                                                "conflict"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/timer/stop": {
+            "post": {
+                "operationId": "app.v1.timer.stop",
+                "description": "`time` defaults to the elapsed minutes, `spent_on` to the user's today. Answers what happened:\n`logged` (+ the work log), `already_stopped` (a retry, or stopped elsewhere: nothing logged) or\n`no_access` (the issue can't be logged on any more: stopped, nothing logged). A missing activity\nwhere one is required \u2192 422 and the timer keeps running.",
+                "summary": "Stop the timer and log the time",
+                "tags": [
+                    "Time tracking"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StopTimerRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`TimerStopResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TimerStopResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/timer/discard": {
+            "post": {
+                "operationId": "app.v1.timer.discard",
+                "summary": "Stop the timer without logging anything. Answers the timer state (not running)",
+                "tags": [
+                    "Time tracking"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DiscardTimerRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`TimerStateResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TimerStateResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/me/timesheet": {
+            "get": {
+                "operationId": "app.v1.timesheet.show",
+                "description": "The entries, minutes per day, the projects the user can log on and the activities (never a rate).\n`week` = any day of the week, default the user's current one.",
+                "summary": "My timesheet: one workspace, one week (Monday\u2013Sunday) of the user's own time",
+                "tags": [
+                    "Time tracking"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "query",
+                        "required": true,
+                        "description": "the workspace slug (a timesheet is per workspace, as on the web)",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 255
+                        }
+                    },
+                    {
+                        "name": "week",
+                        "in": "query",
+                        "description": "any day of the week (Y-m-d); default: the user's current week",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`TimesheetResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TimesheetResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/work-logs": {
+            "get": {
+                "operationId": "app.v1.work-logs.index",
+                "description": "`workspace` (slug) narrows to one workspace (default: every workspace the user is a member of);\n`from` / `to` (Y-m-d) to days.",
+                "summary": "The user's own work logs, newest day first",
+                "tags": [
+                    "Time tracking"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "workspace",
+                        "in": "query",
+                        "description": "a workspace slug (default: every workspace the user is a member of)",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 255
+                        }
+                    },
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "description": "Y-m-d, inclusive",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `WorkLogResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WorkLogCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "app.v1.work-logs.store",
+                "description": "The web timesheet's form: a project the user can log on (422 `project_id`), an issue of it they may\nedit (422 `issue_id`), an activity while the workspace has any (422 `activity_id`). With `request_id`\na retry answers 200 with the work log the first call created.",
+                "summary": "Log time on an issue (`issue_id`) or on a project",
+                "tags": [
+                    "Time tracking"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StoreWorkLogRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "`WorkLogResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WorkLogResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "200": {
+                        "description": "`WorkLogResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WorkLogResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/work-logs/{log}": {
+            "get": {
+                "operationId": "app.v1.work-logs.show",
+                "summary": "One of the user's work logs",
+                "tags": [
+                    "Time tracking"
+                ],
+                "parameters": [
+                    {
+                        "name": "log",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`WorkLogResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WorkLogResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "app.v1.work-logs.update",
+                "description": "The rest is taken from the entry and the whole form is checked as on the web. Billed (`locked`)\n\u2192 422 `entry`; time logged before the timesheet existed (`source: legacy`): only date, activity and\nnote change.",
+                "summary": "Change a work log (only the sent fields)",
+                "tags": [
+                    "Time tracking"
+                ],
+                "parameters": [
+                    {
+                        "name": "log",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateWorkLogRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`WorkLogResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WorkLogResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "app.v1.work-logs.destroy",
+                "description": "Billed (`locked`) or logged before the timesheet existed \u2192 422 `entry`.",
+                "summary": "Delete a work log; its minutes come off the issue's total",
+                "tags": [
+                    "Time tracking"
+                ],
+                "parameters": [
+                    {
+                        "name": "log",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -6804,6 +7398,20 @@
                     "device_code"
                 ],
                 "title": "DeviceTokenRequest"
+            },
+            "DiscardTimerRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/me/timer/discard`: stop without logging.",
+                "properties": {
+                    "timer_id": {
+                        "type": "integer",
+                        "description": "GET /me/timer \u2192 timer.id"
+                    }
+                },
+                "required": [
+                    "timer_id"
+                ],
+                "title": "DiscardTimerRequest"
             },
             "ExchangeCodeRequest": {
                 "type": "object",
@@ -8914,6 +9522,63 @@
                 ],
                 "title": "StartDeviceAuthRequest"
             },
+            "StartTimerRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/me/timer/start`: the issue to time.",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "issue:<id> (as in My Work); list tasks have no work log and can't be timed",
+                        "maxLength": 40
+                    }
+                },
+                "required": [
+                    "id"
+                ],
+                "title": "StartTimerRequest"
+            },
+            "StopTimerRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/me/timer/stop`: the reviewed time, as the web's stop dialog.",
+                "properties": {
+                    "timer_id": {
+                        "type": "integer",
+                        "description": "the timer the user reviewed (GET /me/timer \u2192 timer.id): a stale device never logs onto a newer timer"
+                    },
+                    "time": {
+                        "type": "string",
+                        "description": "45m, 1h 30m, 2h, 1d or plain minutes (\"90\"); default: the elapsed minutes",
+                        "maxLength": 50
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    },
+                    "activity_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "required while the workspace has activities (GET /me/timer \u2192 activity_required)"
+                    },
+                    "spent_on": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date",
+                        "description": "Y-m-d, default: the user's today"
+                    }
+                },
+                "required": [
+                    "timer_id",
+                    "time"
+                ],
+                "title": "StopTimerRequest"
+            },
             "StoreBookmarkGroupRequest": {
                 "type": "object",
                 "description": "`POST /api/v1/workspaces/{slug}/bookmarks` (BRAI-399): the web's fields, the icon as an emoji. Outside\nthe workspace \u2192 404 before validation; members who aren't editors / admins \u2192 403 (BookmarkPolicy::create).",
@@ -9388,6 +10053,71 @@
                 ],
                 "title": "StoreTaskRequest"
             },
+            "StoreWorkLogRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/work-logs`: log time on an issue or a project.",
+                "properties": {
+                    "project_id": {
+                        "type": "integer",
+                        "description": "a project you can log time on (GET /me/timesheet \u2192 projects)",
+                        "enum": [
+                            ""
+                        ]
+                    },
+                    "issue_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "an issue of that project you may edit; null = on the project only"
+                    },
+                    "spent_on": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "Y-m-d, not in the future"
+                    },
+                    "time": {
+                        "type": "string",
+                        "description": "45m, 1h 30m, 2h, 1d or plain minutes (\"90\"); max. 1w",
+                        "maxLength": 50
+                    },
+                    "activity_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "required while the workspace has activities (GET /me/timesheet \u2192 activity_required)"
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    },
+                    "billable": {
+                        "type": [
+                            "boolean",
+                            "null"
+                        ],
+                        "description": "workspace admins only; everybody else gets the activity's default"
+                    },
+                    "request_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "description": "a uuid: a retry with the same one answers 200 with the work log the first call created"
+                    }
+                },
+                "required": [
+                    "project_id",
+                    "spent_on",
+                    "time"
+                ],
+                "title": "StoreWorkLogRequest"
+            },
             "StoreWorkspaceRequest": {
                 "type": "object",
                 "description": "A new workspace: the web form (WorkspaceController::store) and the apps' first run\n(POST /api/v1/workspaces). Names are unique per owner among their live workspaces.",
@@ -9794,6 +10524,306 @@
                     "updated_at"
                 ],
                 "title": "TaskResource"
+            },
+            "TimeActivityResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "color": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "pricing_type": {
+                        "type": "string",
+                        "description": "hourly | fixed"
+                    },
+                    "pricing_label": {
+                        "type": "string",
+                        "description": "Per hour | Fixed price"
+                    },
+                    "billable": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "color",
+                    "pricing_type",
+                    "pricing_label",
+                    "billable"
+                ],
+                "title": "TimeActivityResource"
+            },
+            "TimerStateResource": {
+                "type": "object",
+                "properties": {
+                    "running": {
+                        "type": "boolean"
+                    },
+                    "timer": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer",
+                                "description": "send it back as timer_id to stop / discard"
+                            },
+                            "started_at": {
+                                "type": "string"
+                            },
+                            "elapsed_seconds": {
+                                "type": "integer"
+                            },
+                            "elapsed_minutes": {
+                                "type": "integer",
+                                "description": "what the stop dialog suggests (at least 1)"
+                            },
+                            "issue": {
+                                "type": [
+                                    "object",
+                                    "null"
+                                ],
+                                "properties": {
+                                    "id": {
+                                        "type": "integer"
+                                    },
+                                    "work_id": {
+                                        "type": "string"
+                                    },
+                                    "key": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    },
+                                    "title": {
+                                        "type": "string"
+                                    },
+                                    "url": {
+                                        "type": "string"
+                                    },
+                                    "workspace": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "work_id",
+                                    "key",
+                                    "title",
+                                    "url",
+                                    "workspace"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "started_at",
+                            "elapsed_seconds",
+                            "elapsed_minutes",
+                            "issue"
+                        ]
+                    },
+                    "activities": {
+                        "type": "array",
+                        "description": "the timer's workspace: pick one when stopping (empty when not running)",
+                        "items": {
+                            "$ref": "#/components/schemas/TimeActivityResource"
+                        }
+                    },
+                    "activity_required": {
+                        "type": "boolean"
+                    },
+                    "default_activity_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "running",
+                    "timer",
+                    "activities",
+                    "activity_required",
+                    "default_activity_id"
+                ],
+                "title": "TimerStateResource"
+            },
+            "TimerStopResource": {
+                "type": "object",
+                "properties": {
+                    "result": {
+                        "type": "string",
+                        "description": "logged | already_stopped | no_access"
+                    },
+                    "work_log": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/WorkLogResource"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "result",
+                    "work_log"
+                ],
+                "title": "TimerStopResource"
+            },
+            "TimesheetDayResource": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string"
+                    },
+                    "minutes": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "date",
+                    "minutes"
+                ],
+                "title": "TimesheetDayResource"
+            },
+            "TimesheetProjectResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "key": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "key"
+                ],
+                "title": "TimesheetProjectResource"
+            },
+            "TimesheetResource": {
+                "type": "object",
+                "properties": {
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "week": {
+                        "type": "object",
+                        "properties": {
+                            "start": {
+                                "type": "string",
+                                "description": "Monday and Sunday (Y-m-d)"
+                            },
+                            "end": {
+                                "type": "string"
+                            },
+                            "previous": {
+                                "type": "string",
+                                "description": "Mondays of the weeks before / after / of today"
+                            },
+                            "next": {
+                                "type": "string"
+                            },
+                            "current": {
+                                "type": "string"
+                            },
+                            "number": {
+                                "type": "integer",
+                                "description": "ISO week number"
+                            },
+                            "today": {
+                                "type": "string",
+                                "description": "the user's today"
+                            }
+                        },
+                        "required": [
+                            "start",
+                            "end",
+                            "previous",
+                            "next",
+                            "current",
+                            "number",
+                            "today"
+                        ]
+                    },
+                    "total_minutes": {
+                        "type": "integer"
+                    },
+                    "days": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TimesheetDayResource"
+                        }
+                    },
+                    "entries": {
+                        "$ref": "#/components/schemas/WorkLogCollection"
+                    },
+                    "projects": {
+                        "type": "array",
+                        "description": "where the user may log time (POST /work-logs \u2192 project_id)",
+                        "items": {
+                            "$ref": "#/components/schemas/TimesheetProjectResource"
+                        }
+                    },
+                    "activities": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/TimeActivityResource"
+                        }
+                    },
+                    "activity_required": {
+                        "type": "boolean"
+                    },
+                    "default_activity_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "workspace",
+                    "week",
+                    "total_minutes",
+                    "days",
+                    "entries",
+                    "projects",
+                    "activities",
+                    "activity_required",
+                    "default_activity_id"
+                ],
+                "title": "TimesheetResource"
             },
             "TodayResource": {
                 "type": "object",
@@ -10328,6 +11358,52 @@
                 },
                 "title": "UpdateTaskRequest"
             },
+            "UpdateWorkLogRequest": {
+                "type": "object",
+                "description": "`PATCH /api/v1/work-logs/{id}`: only the sent fields change \u2014 the rest is taken from the entry and the\nwhole form is validated as on the web. Only the user's own entries (404 otherwise).",
+                "properties": {
+                    "project_id": {
+                        "type": "integer",
+                        "enum": [
+                            ""
+                        ]
+                    },
+                    "issue_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "spent_on": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "time": {
+                        "type": "string",
+                        "maxLength": 50
+                    },
+                    "activity_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 255
+                    },
+                    "billable": {
+                        "type": [
+                            "boolean",
+                            "null"
+                        ]
+                    }
+                },
+                "title": "UpdateWorkLogRequest"
+            },
             "WebSessionResource": {
                 "type": "object",
                 "properties": {
@@ -10550,6 +11626,193 @@
                     "updated_at"
                 ],
                 "title": "WorkItemResource"
+            },
+            "WorkLogCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/WorkLogResource"
+                },
+                "title": "WorkLogCollection"
+            },
+            "WorkLogResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "spent_on": {
+                        "type": "string",
+                        "description": "Y-m-d, the day the work was done"
+                    },
+                    "minutes": {
+                        "type": "integer"
+                    },
+                    "duration": {
+                        "type": "string",
+                        "description": "1h 30m"
+                    },
+                    "note": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "billable": {
+                        "type": "boolean"
+                    },
+                    "source": {
+                        "type": "string",
+                        "description": "manual | timer | legacy (logged before the timesheet existed: only date, activity and note change)"
+                    },
+                    "locked": {
+                        "type": "boolean",
+                        "description": "billed on a finalized report: no edits, no deletes"
+                    },
+                    "project": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "key": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "key"
+                        ]
+                    },
+                    "issue": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "work_id": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "key": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "title": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "url": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "work_id",
+                            "key",
+                            "title",
+                            "url"
+                        ]
+                    },
+                    "activity": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "color": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "billable": {
+                                "type": "boolean"
+                            },
+                            "archived": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "color",
+                            "billable",
+                            "archived"
+                        ]
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "spent_on",
+                    "minutes",
+                    "duration",
+                    "note",
+                    "billable",
+                    "source",
+                    "locked",
+                    "project",
+                    "issue",
+                    "activity",
+                    "workspace",
+                    "created_at",
+                    "updated_at"
+                ],
+                "title": "WorkLogResource"
             },
             "WorkspaceCollection": {
                 "type": "array",

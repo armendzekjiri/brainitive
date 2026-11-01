@@ -19,7 +19,9 @@ use App\Http\Controllers\AppApi\ProjectController;
 use App\Http\Controllers\AppApi\SearchController;
 use App\Http\Controllers\AppApi\SnippetController;
 use App\Http\Controllers\AppApi\TaskListController;
+use App\Http\Controllers\AppApi\TimerController;
 use App\Http\Controllers\AppApi\TodayController;
+use App\Http\Controllers\AppApi\WorkLogController;
 use App\Http\Controllers\AppApi\WorkspaceController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use Illuminate\Support\Facades\Route;
@@ -177,6 +179,19 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::post('bookmarks/{group}/items', [BookmarkController::class, 'storeItem'])->name('bookmarks.items.store');
         Route::patch('bookmarks/{group}/items/{item}', [BookmarkController::class, 'updateItem'])->name('bookmarks.items.update');
         Route::delete('bookmarks/{group}/items/{item}', [BookmarkController::class, 'destroyItem'])->name('bookmarks.items.destroy');
+
+        // ── Time tracking: the focus timer, own work logs, my timesheet (WorkTimers, TimeEntries:
+        // shared with the web). Rates, clients, VAT, invoices: web only.
+        Route::get('me/timer', [TimerController::class, 'show'])->name('timer.show');
+        Route::post('me/timer/start', [TimerController::class, 'start'])->name('timer.start');
+        Route::post('me/timer/stop', [TimerController::class, 'stop'])->name('timer.stop');
+        Route::post('me/timer/discard', [TimerController::class, 'discard'])->name('timer.discard');
+        Route::get('me/timesheet', [WorkLogController::class, 'timesheet'])->name('timesheet.show');
+        Route::get('work-logs', [WorkLogController::class, 'index'])->name('work-logs.index');
+        Route::post('work-logs', [WorkLogController::class, 'store'])->middleware('throttle:120,1,app.work-logs.store')->name('work-logs.store');
+        Route::get('work-logs/{log}', [WorkLogController::class, 'show'])->whereNumber('log')->name('work-logs.show');
+        Route::patch('work-logs/{log}', [WorkLogController::class, 'update'])->middleware('throttle:120,1,app.work-logs.update')->name('work-logs.update');
+        Route::delete('work-logs/{log}', [WorkLogController::class, 'destroy'])->name('work-logs.destroy');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');
