@@ -571,6 +571,15 @@ export interface PagePresenceUser {
     editing: boolean;
 }
 
+/** A newer Brainitive release than the running one, not yet dismissed by this instance admin (BRAI-433). */
+export interface UpdateNotice {
+    current: string;
+    latest: string;
+    release_url: string | null;
+    published_at: string | null;
+    upgrade_docs_url: string;
+}
+
 export type PageProps<
     T extends Record<string, unknown> = Record<string, unknown>,
 > = T & {
@@ -593,6 +602,8 @@ export type PageProps<
     githubRepo?: { url: string; stars: number | null };
     /** Running focus timer (BRAI-74), null when none. */
     activeTimer?: ActiveTimer | null;
+    /** "New version available" (BRAI-433, UpdateCheck::noticeFor): instance admins of self-hosted installs only. */
+    updateNotice?: UpdateNotice | null;
     // Shared layout data
     workspaces?: Workspace[];
     currentWorkspace?: Workspace & {

@@ -14,6 +14,7 @@ import { GlobalStickyNotes } from '@/components/GlobalStickyNotes';
 import { PushPrompt } from '@/components/PushPrompt';
 import { UpgradeDialog } from '@/components/entitlements/UpgradeDialog';
 import { UsageWarningBanner } from '@/components/entitlements/UsageWarningBanner';
+import { UpdateNoticeBanner } from '@/components/admin/UpdateNoticeBanner';
 import { SidebarResizer, getInitialSidebarWidth } from '@/components/SidebarResizer';
 import { HelpModal } from '@/components/HelpModal';
 import { NotificationsDropdown } from '@/components/NotificationsDropdown';
@@ -2078,6 +2079,7 @@ export default function AppLayout({ children, title }: Props) {
                 <SidebarInset className="flex h-dvh flex-col overflow-hidden">
                     <TopBar onCreateClick={() => openCreateTaskModal()} onSearchClick={onOpenSearch} onOpenHelp={() => setHelpModalOpen(true)} />
                     <UsageWarningBanner />
+                    <UpdateNoticeBanner />
                     <main className="flex-1 overflow-auto bg-muted/30">
                         {children}
                     </main>

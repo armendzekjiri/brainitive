@@ -17,6 +17,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Update check (BRAI-433)
+    |--------------------------------------------------------------------------
+    |
+    | A daily scheduled check for a newer Brainitive release on GitHub, shown to
+    | instance admins only (App\Support\Updates\UpdateCheck). Empty = on for
+    | self-hosted installs, off on Brainitive Cloud (LegalInfo::isCloud());
+    | true / false force it. The running version comes from App\Support\AppVersion.
+    |
+    */
+
+    'update_check' => env('BRAINITIVE_UPDATE_CHECK'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |

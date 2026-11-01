@@ -39,10 +39,13 @@ use App\Mcp\Tools\GetProjectConfigTool;
 use App\Mcp\Tools\GetProjectTool;
 use App\Mcp\Tools\GetSprintTool;
 use App\Mcp\Tools\GetTaskListTool;
+use App\Mcp\Tools\LinkIssuesTool;
+use App\Mcp\Tools\LinkRelatedContentTool;
 use App\Mcp\Tools\ListBoardsTool;
 use App\Mcp\Tools\ListBookmarksTool;
 use App\Mcp\Tools\ListCalendarConnectionsTool;
 use App\Mcp\Tools\ListCalendarEventsTool;
+use App\Mcp\Tools\ListContentLinksTool;
 use App\Mcp\Tools\ListGoogleTasksTool;
 use App\Mcp\Tools\ListItemCommentsTool;
 use App\Mcp\Tools\ListPagesTool;
@@ -58,6 +61,8 @@ use App\Mcp\Tools\MoveItemsToSprintTool;
 use App\Mcp\Tools\ReorderBoardColumnsTool;
 use App\Mcp\Tools\SearchTool;
 use App\Mcp\Tools\StartSprintTool;
+use App\Mcp\Tools\UnlinkIssuesTool;
+use App\Mcp\Tools\UnlinkRelatedContentTool;
 use App\Mcp\Tools\UpdateBoardColumnTool;
 use App\Mcp\Tools\UpdateBoardItemTool;
 use App\Mcp\Tools\UpdateBoardTool;
@@ -121,6 +126,14 @@ Setting up or migrating a project (e.g. from a Jira / Trello export the user giv
 5. Finish with get_project_config and the board url for the user.
 Column changes: create_board_column, update_board_column, reorder_board_columns,
 delete_board_column (empty columns only).
+
+Links between content: list_content_links reads what an issue, doc/whiteboard, ticket or
+plan links to ("Related content"), what links to it ("Referenced by", incl. automatic links
+from smart links, plan rows and whiteboard cards) and an issue's "Linked issues";
+get_board_item and get_page include them too. link_related_content / unlink_related_content
+connect content of one project (e.g. a meeting issue and the doc with its notes);
+link_issues / unlink_issues handle blocks / is_blocked_by / relates_to / duplicates / clones
+between issues. Adding an existing link changes nothing.
 
 Card comments: list_item_comments reads a card's discussion; add_item_comment posts
 an update as the signed-in user without touching the description. Write tools that take
@@ -214,6 +227,12 @@ class BrainitiveServer extends Server
         ListPlansTool::class,
         GetPlanTool::class,
         UpdatePlanTool::class,
+        // Links between content (BRAI-432): related content, referenced by, linked issues
+        ListContentLinksTool::class,
+        LinkRelatedContentTool::class,
+        UnlinkRelatedContentTool::class,
+        LinkIssuesTool::class,
+        UnlinkIssuesTool::class,
         // Snippets
         ListSnippetsTool::class,
         CreateSnippetCollectionTool::class,

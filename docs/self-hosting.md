@@ -93,6 +93,22 @@ Building from source instead: `git pull && docker compose up -d --build`.
 Migrations run automatically when the `app` container starts. Check **Help → Changelog**
 for what changed.
 
+### Knowing when there is a new version
+
+Once a day the scheduler asks GitHub's public API for the latest Brainitive release — an anonymous
+request, nothing about your instance is sent — and instance admins see it: **Instance admin →
+Overview** shows the running version, the latest release, its date and links to the release notes and
+the [upgrade guide](https://docs.brainitive.app/self-hosting/upgrading), and a small strip at the top
+of the app says "Brainitive vX available" (dismissed per version; a newer release shows it again).
+Regular users never see it, and nothing is downloaded or installed — upgrading stays the commands
+above.
+
+- Check now: `docker compose exec app php artisan brainitive:check-update` (prints the result).
+- Turn it off: `BRAINITIVE_UPDATE_CHECK=false` in `.env`. Empty (the default) means on for self-hosted
+  installs and off on Brainitive Cloud.
+- Offline or rate-limited servers just keep the last result; the check never slows down a page.
+- The running version is the newest entry of the in-app changelog (**Help → Changelog**).
+
 ## Search
 
 Search ("Find anything": the search page, ⌘K and the MCP `search` tool) is built in: it runs on
