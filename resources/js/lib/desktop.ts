@@ -8,7 +8,7 @@
  * Contract with the shell (keep in sync with the desktop repo):
  * - IPC via `window.__TAURI_INTERNALS__.invoke(cmd, args)`, these commands only:
  *   `brainitive_notify {title, body, url?}`, `brainitive_set_badge {count}`,
- *   `brainitive_open_external {url}`.
+ *   `brainitive_open_external {url}`, `brainitive_sign_out {}` (after the web sign-out).
  * - The shell appends ` BrainitiveDesktop/<version>` to the user agent.
  * - The server shares `desktopMinVersion` (Inertia prop, config app-api.min_versions.desktop).
  */
@@ -97,6 +97,15 @@ export const desktop = {
         const ok = await call('brainitive_set_badge', { count: value });
         if (ok) lastBadge = value;
         return ok;
+    },
+
+    /**
+     * After the web "Sign out": sign the desktop app out too (revokes its device, clears the keychain,
+     * shows the shell's sign-in screen) — otherwise its stored token would sign the window straight
+     * back in. No-op in a browser.
+     */
+    signOut(): Promise<boolean> {
+        return call('brainitive_sign_out', {});
     },
 
     /** Open a link in the system browser (desktop) or a new tab (browser). http(s) and mailto only. */

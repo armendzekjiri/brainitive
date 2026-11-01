@@ -1,4 +1,5 @@
 import { Link, router, usePage, useForm } from '@inertiajs/react';
+import { desktop } from '@/lib/desktop';
 import axios from 'axios';
 import { Toaster } from 'sonner';
 import React, { PropsWithChildren, useState, useRef, FormEvent, useEffect, useCallback, createContext, useContext } from 'react';
@@ -1703,7 +1704,7 @@ function AppSidebar({
                             <ThemeMenu />
                             <DropdownMenuSeparator />
                             <DropdownMenuItem asChild className="cursor-pointer text-destructive focus:text-destructive">
-                                <Link href={route('logout')} method="post" as="button" className="flex items-center gap-3 p-2 w-full">
+                                <Link href={route('logout')} method="post" as="button" onSuccess={() => void desktop.signOut()} className="flex items-center gap-3 p-2 w-full">
                                     <LogOut className="size-4" />
                                     <span className="text-sm">Sign out</span>
                                 </Link>
