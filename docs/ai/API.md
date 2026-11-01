@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270, Bookings 280. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270, Bookings 280, Helpdesk 290. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -807,6 +807,33 @@ unchecked_calendars: [name], card: {id, key, url}|null}`.
 - Web only: creating / editing booking pages and meeting types (availability, buffers, rules, questions, calendars, consent,
   "also create a card"), templates, embedding (`url` opens the settings).
 
+### Helpdesk
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/projects/{id}/helpdesks` | app + verified | A project's helpdesks in the web's order: `{id, project_id, slug, name, description, columns: [{id, name, color, is_done}], open_count, url, can: {manage_tickets}}`, not paginated. Can't open the project → 404 | Full | BRAI-231 | ready (v1.49.0, BRAI-420) |
+| `GET /api/v1/helpdesks/{id}` | app + verified | One helpdesk + `priorities: [{id, name, color}]` (for `priority_id`) | Full | BRAI-231 | ready (v1.49.0, BRAI-420) |
+| `GET /api/v1/helpdesks/{id}/tickets?status=open\|done\|all&column=&assignee=me\|unassigned\|<id>&priority=&sla=` | app + verified | The ticket inbox, newest first, cursor-paginated, `updated_since`. `sla` = the web's SLA filter: `breached`, `at_risk`, `on_track`, `paused`, `met`, `none` | Full | BRAI-231, BRAI-233 | ready (v1.49.0, BRAI-420) |
+| `GET /api/v1/tickets/{id}` | app + verified | One ticket: `description_markdown` / `_html`, `fields` (custom field values), `attachments`, `replies` (oldest first, ≤ 500: `{id, from: contact\|agent, author, internal, body_markdown, body_html, email_status, attachments, created_at}`), `watching`, `can.update` | Full | BRAI-231, BRAI-232 | ready (v1.49.0, BRAI-420) |
+| `PATCH /api/v1/tickets/{id}` | app + verified | `{column_id?, position?, resolution_message?, notify_contact?, assignee_id?, priority_id?, subject?, updated_at?}` → the ticket. Into a done column = resolve (message saved as a reply, `notify_contact` emails the customer); a stale `updated_at` → 409; viewers → 403 | Full | BRAI-231 | ready (v1.49.0, BRAI-420) |
+| `POST /api/v1/tickets/{id}/replies` | app + verified, 60/min | `{body (Markdown), internal?, request_id?}`: a reply (emailed to the customer, threaded through the helpdesk mailbox when connected) or an internal note → 201 `{data: reply}` (200 on a replay); viewers → 403 | Full | BRAI-232 | ready (v1.49.0, BRAI-420) |
+
+Ticket (list): `{id, key, helpdesk_id, subject, status: {column_id, name, is_done}, priority: {id, name, color}|null, assignee:
+{id, name, avatar_url}|null, contact: {name, email}|null, sla: {state: none|breached|respond|resolve|paused|met, due_at,
+at_risk, breached_since, breached_targets: [first_response|resolution]}, created_at, updated_at, completed_at, url}`.
+- **The agent side only.** What the web's helpdesk shows a project member (`HelpdeskPolicy::view` / `TicketPolicy`): every
+  member reads tickets, internal notes and the customer's name + address; project editors / admins (and workspace admins) reply
+  and change them (`can.update`, else 403). Never the ticket's request metadata (IP, browser), the contact's portal token or the
+  forwarding address. The customer side — widget, support page, portal, public replies — is public and **never in the App
+  API**.
+- Shared with the web's `TicketController`: `Support\Helpdesks\TicketActions` (reply / internal note: customer email or the
+  mailbox's threaded reply, watcher notifications, `ticket.replied` webhooks; move: watchers, resolution reply, "resolved"
+  email, `ticket.resolved`; assignee notification). SLA state: `Support\Helpdesks\Sla\SlaStatus` (the PHP twin of
+  `resources/js/lib/sla.ts`; `of()` per ticket, `filter()` in SQL — keep the three in sync).
+- Reply bodies are Markdown without @mentions (the thread is the customer's email; a mention comes out as plain "@Name").
+  Files: put `POST /uploads` links / images into the Markdown; separate ticket attachments from the app: later.
+- Web only: creating / deleting tickets and helpdesks, columns, custom fields, SLA rules and business hours, templates, the
+  widget, the support page, the mailbox / forwarding setup, resending a failed email, watching.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -1271,4 +1298,43 @@ Built in: BRAI-419 (desktop) · Mobile scope: View + cancel (rescheduling is the
 Availability, time zones, buffers, notice, daily limits, holidays and busy calendars are set per meeting type in the web's booking page builder.
 The apps show the result: bookings (GET /api/v1/bookings) and the pages' share links (GET /api/v1/booking-pages → url opens the settings).
 Registry: docs/ai/API.md#bookings · Decided in: BRAI-419
+```
+
+**BRAI-231** (helpdesk ticket inbox, comments and customer details)
+```
+## API (ready)
+- GET /api/v1/projects/{id}/helpdesks · GET /api/v1/helpdesks/{id} — helpdesks with statuses (columns), open counts, priorities
+- GET /api/v1/helpdesks/{id}/tickets?status=open|done|all&assignee=me|unassigned|<id>&priority=&sla= — the inbox, newest first, cursor-paginated
+- GET /api/v1/tickets/{id} — the thread (customer, agents, internal notes), customer name + email, custom fields, files, SLA
+- PATCH /api/v1/tickets/{id} {column_id, assignee_id, priority_id, subject, resolution_message?, notify_contact?, updated_at?} — status / assign / resolve
+Scope: app · OpenAPI: docs/api/openapi.json#/Helpdesk · Registry: docs/ai/API.md#helpdesk
+Built in: BRAI-420 (desktop) · Mobile scope: Full for agents (creating / deleting tickets, attachments upload: web for now)
+```
+
+**BRAI-232** (email-to-ticket and threaded replies)
+```
+## API (ready)
+- POST /api/v1/tickets/{id}/replies {body (Markdown), internal?, request_id?} — reply to the customer (emailed, threaded through the helpdesk's mailbox when connected) or an internal note
+- GET /api/v1/tickets/{id} → replies[].email_status (queued / sent / failed) and the customer's earlier messages
+- Mailbox (IMAP) and forwarding setup, resending failed emails: web only
+Scope: app · OpenAPI: docs/api/openapi.json#/Helpdesk · Registry: docs/ai/API.md#helpdesk
+Built in: BRAI-420 (desktop) · Mobile scope: Reply composer + history (email setup: web only)
+```
+
+**BRAI-233** (helpdesk SLA rules, alerts and reports)
+```
+## API (ready) — SLA state
+- GET /api/v1/helpdesks/{id}/tickets?sla=breached|at_risk|on_track|paused|met|none — the web's SLA filter
+- Every ticket: sla {state: respond|resolve|breached|paused|met|none, due_at, at_risk, breached_since, breached_targets}
+- Breach alerts arrive as notifications (GET /api/v1/notifications); SLA rules, business hours and reports: web only
+Scope: app · OpenAPI: docs/api/openapi.json#/Helpdesk · Registry: docs/ai/API.md#helpdesk
+Built in: BRAI-420 (desktop) · Mobile scope: Badges + filter (rules and reports: web only)
+```
+
+**BRAI-234** (helpdesk templates, widget and customer portal management)
+```
+## API: web only — open in browser
+Helpdesk templates, the website widget, the public support page, the customer portal and their share controls are set up on the web (helpdesk settings).
+The apps work the tickets (GET /api/v1/helpdesks/{id}/tickets, GET|PATCH /api/v1/tickets/{id}, POST /api/v1/tickets/{id}/replies); the helpdesk's url opens its settings.
+Registry: docs/ai/API.md#helpdesk · Decided in: BRAI-420
 ```

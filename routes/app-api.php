@@ -12,6 +12,7 @@ use App\Http\Controllers\AppApi\ConnectedAppController;
 use App\Http\Controllers\AppApi\DeviceAuthController;
 use App\Http\Controllers\AppApi\DeviceController;
 use App\Http\Controllers\AppApi\DocReviewController;
+use App\Http\Controllers\AppApi\HelpdeskController;
 use App\Http\Controllers\AppApi\InstanceController;
 use App\Http\Controllers\AppApi\InvitationController;
 use App\Http\Controllers\AppApi\IssueActivityController;
@@ -169,6 +170,14 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::get('bookings', [BookingController::class, 'index'])->name('bookings.index');
         Route::get('bookings/{booking}', [BookingController::class, 'show'])->name('bookings.show');
         Route::post('bookings/{booking}/cancel', [BookingController::class, 'cancel'])->middleware('throttle:30,1,app.bookings.cancel')->name('bookings.cancel');
+
+        // ── Helpdesk, agent side (TicketActions, TicketPolicy); the customer widget / portal: public routes ─
+        Route::get('projects/{project}/helpdesks', [HelpdeskController::class, 'index'])->name('helpdesks.index');
+        Route::get('helpdesks/{helpdesk}', [HelpdeskController::class, 'show'])->name('helpdesks.show');
+        Route::get('helpdesks/{helpdesk}/tickets', [HelpdeskController::class, 'tickets'])->name('helpdesks.tickets');
+        Route::get('tickets/{ticket}', [HelpdeskController::class, 'ticket'])->name('tickets.show');
+        Route::patch('tickets/{ticket}', [HelpdeskController::class, 'update'])->name('tickets.update');
+        Route::post('tickets/{ticket}/replies', [HelpdeskController::class, 'reply'])->middleware('throttle:60,1,app.tickets.replies')->name('tickets.replies.store');
 
         // ── Task lists + to-dos (TaskLists, WorkCompletion: shared with the web, CLI and MCP) ──────
         // lists and tasks by id; ids on writes are checked in the controller (no route constraint)

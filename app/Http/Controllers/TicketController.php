@@ -15,14 +15,12 @@ use App\Models\Workspace;
 use App\Notifications\TicketAssignedNotification;
 use App\Notifications\TicketCreatedNotification;
 use App\Notifications\TicketReplyNotification;
-use App\Notifications\TicketResolvedNotification;
-use App\Notifications\TicketStatusChangedNotification;
 use App\Rules\NotExecutableUpload;
 use App\Rules\ProjectMember;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Helpdesks\HelpdeskForm;
-use App\Support\Helpdesks\Mail\TicketMailer;
+use App\Support\Helpdesks\TicketActions;
 use App\Support\Legal\PublicOperator;
 use App\Support\Uploads;
 use Illuminate\Http\Request;
@@ -236,36 +234,7 @@ class TicketController extends Controller
             'notify_contact' => 'nullable|boolean',
         ]);
 
-        $wasDone = (bool) $ticket->column?->is_done_column;
-        $oldColumn = $ticket->column;
-        $newColumn = HelpdeskColumn::findOrFail($validated['column_id']);
-
-        $ticket->moveToColumn($newColumn, $validated['position']);
-
-        // BRAI-103: watchers (except whoever moved it) hear about a status change
-        if ($oldColumn?->id !== $newColumn->id) {
-            foreach ($ticket->watchers()->where('users.id', '!=', $request->user()->id)->get() as $watcher) {
-                $watcher->notify(new TicketStatusChangedNotification($ticket, $request->user(), $oldColumn?->name, $newColumn->name));
-            }
-        }
-
-        if ($newColumn->is_done_column && ! $wasDone) {
-            $message = trim((string) ($validated['resolution_message'] ?? ''));
-            if ($message !== '') {
-                $ticket->replies()->create([
-                    'user_id' => $request->user()->id,
-                    'body' => collect(preg_split('/\n{2,}/', $message))
-                        ->map(fn (string $p) => '<p>'.nl2br(e(trim($p))).'</p>')
-                        ->implode(''),
-                    'is_internal_note' => false,
-                ]);
-            }
-            if ($request->boolean('notify_contact') && $ticket->contact) {
-                $ticket->contact->notify(new TicketResolvedNotification($ticket, $message ?: null));
-            }
-
-            DomainEvents::emit($workspace, 'ticket.resolved', fn () => ['ticket' => EventPayloads::ticket($ticket), 'resolution' => $message !== '' ? $message : null]); // webhooks (BRAI-104)
-        }
+        TicketActions::move($ticket, HelpdeskColumn::findOrFail($validated['column_id']), $validated['position'], $request->user(), $validated['resolution_message'] ?? null, $request->boolean('notify_contact'));
 
         return back();
     }
@@ -284,22 +253,7 @@ class TicketController extends Controller
             'assigned_to' => ['nullable', Rule::exists('workspace_user', 'user_id')->where('workspace_id', $workspace->id)],
         ]);
 
-        $oldAssigneeId = $ticket->assigned_to;
-
-        $ticket->update($validated);
-
-        // Notify new assignee if changed
-        $newAssigneeId = $ticket->assigned_to;
-        if (
-            $newAssigneeId
-            && $newAssigneeId !== $oldAssigneeId
-            && $newAssigneeId !== $request->user()->id
-        ) {
-            $assignee = User::find($newAssigneeId);
-            if ($assignee) {
-                $assignee->notify(new TicketAssignedNotification($ticket, $request->user()));
-            }
-        }
+        TicketActions::update($ticket, $request->user(), $validated);
 
         return back()->with('success', 'Ticket updated successfully.');
     }
@@ -328,25 +282,7 @@ class TicketController extends Controller
             'is_internal_note' => 'boolean',
         ]);
 
-        $reply = $ticket->replies()->create([
-            'user_id' => $request->user()->id,
-            'body' => $validated['body'],
-            'is_internal_note' => $validated['is_internal_note'] ?? false,
-        ]);
-
-        // Notify contact if reply is not internal. A helpdesk with a connected mailbox emails the
-        // reply itself, threaded (BRAI-79) — then the notification would be a second mail.
-        if (! $reply->is_internal_note && $ticket->contact && ! TicketMailer::queueReply($ticket, $reply)) {
-            $ticket->contact->notify(new TicketReplyNotification($ticket, $reply, $request->user()));
-        }
-
-        // Notify other agents watching the ticket
-        $watchers = $ticket->watchers()->where('user_id', '!=', $request->user()->id)->get();
-        foreach ($watchers as $watcher) {
-            $watcher->notify(new TicketReplyNotification($ticket, $reply, $request->user()));
-        }
-
-        DomainEvents::emit($workspace, 'ticket.replied', fn () => EventPayloads::ticketReply($ticket, $reply)); // webhooks (BRAI-104)
+        TicketActions::reply($ticket, $request->user(), $validated['body'], (bool) ($validated['is_internal_note'] ?? false));
 
         return back()->with('success', 'Reply added successfully.');
     }

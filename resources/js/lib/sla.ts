@@ -4,7 +4,8 @@ import type { Ticket } from '@/types';
 /**
  * Helpdesk SLA status of a ticket (BRAI-125), from the dates TicketSla (PHP) stores. "Breached" is also
  * worked out here from the due dates, so the badge is right before the checker has run (dev has no
- * scheduler). Keep the rules in sync with App\Support\Helpdesks\Sla\TicketSla.
+ * scheduler). Keep the rules in sync with App\Support\Helpdesks\Sla\TicketSla and SlaStatus (its PHP twin
+ * for the App API).
  */
 export type SlaTargetName = 'first_response' | 'resolution';
 
