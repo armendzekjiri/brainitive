@@ -6,6 +6,7 @@ use App\Http\Controllers\AppApi\InstanceController;
 use App\Http\Controllers\AppApi\InvitationController;
 use App\Http\Controllers\AppApi\MeAvatarController;
 use App\Http\Controllers\AppApi\MeController;
+use App\Http\Controllers\AppApi\ProjectController;
 use App\Http\Controllers\AppApi\WorkspaceController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use Illuminate\Support\Facades\Route;
@@ -59,8 +60,21 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         ->where('token', '[A-Za-z0-9]{1,128}')->middleware('verified')->name('invitations.accept');
     Route::post('workspaces', [WorkspaceController::class, 'store'])->middleware('verified')->name('workspaces.store');
 
-    // ── Workspaces ────────────────────────────────────────────────────────────────────────────
-    Route::get('workspaces', [WorkspaceController::class, 'index'])->name('workspaces.index');
-    Route::get('workspaces/{workspace:slug}', [WorkspaceController::class, 'show'])->name('workspaces.show');
+    // Workspace content needs a verified address, as the whole web app does (403 otherwise; on
+    // instances without verification every address counts as verified). /me stays open so the
+    // apps can show "verify your email".
+    Route::middleware('verified')->group(function () {
+
+        // ── Workspaces ────────────────────────────────────────────────────────────────────────────
+        Route::get('workspaces', [WorkspaceController::class, 'index'])->name('workspaces.index');
+        Route::get('workspaces/{workspace:slug}', [WorkspaceController::class, 'show'])->name('workspaces.show');
+
+        // ── Projects (addressed by id: slugs are unique per workspace only) ─────────────────────────
+        Route::get('workspaces/{workspace:slug}/projects', [ProjectController::class, 'index'])->name('projects.index');
+        Route::post('workspaces/{workspace:slug}/projects', [ProjectController::class, 'store'])->name('projects.store');
+        Route::get('workspaces/{workspace:slug}/project-templates', [ProjectController::class, 'templates'])->name('projects.templates');
+        Route::get('projects/{project}', [ProjectController::class, 'show'])->whereNumber('project')->name('projects.show');
+
+    });
 
 });
