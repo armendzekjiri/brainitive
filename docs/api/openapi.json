@@ -98,6 +98,9 @@
         },
         {
             "name": "Files"
+        },
+        {
+            "name": "Bookings"
         }
     ],
     "security": [
@@ -10880,6 +10883,252 @@
                     }
                 }
             }
+        },
+        "/booking-pages": {
+            "get": {
+                "operationId": "app.v1.booking-pages.index",
+                "summary": "The user's booking pages by title, with their meeting types' share links and upcoming counts. Not paginated",
+                "tags": [
+                    "Bookings"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Array of `BookingPageResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/BookingPageResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/bookings": {
+            "get": {
+                "operationId": "app.v1.bookings.index",
+                "description": "`upcoming` (default): confirmed and not over, soonest first; `past`: confirmed and over, latest first;\n`cancelled`: latest first. Cursor-paginated, `updated_since`.",
+                "summary": "The bookings of the user's booking pages",
+                "tags": [
+                    "Bookings"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "upcoming",
+                                "past",
+                                "cancelled"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 64
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `BookingResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BookingCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/bookings/{booking}": {
+            "get": {
+                "operationId": "app.v1.bookings.show",
+                "summary": "One booking of the user's booking pages",
+                "tags": [
+                    "Bookings"
+                ],
+                "parameters": [
+                    {
+                        "name": "booking",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`BookingResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BookingResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/bookings/{booking}/cancel": {
+            "post": {
+                "operationId": "app.v1.bookings.cancel",
+                "description": "The calendar event is removed, the card (if any) gets a comment and the guest an email with the reason.\nCancelling a booking that is already cancelled changes nothing (200 with it). Rescheduling is the\nguest's (their manage link); the host cancels and the guest books again.",
+                "summary": "Cancel a booking as its host",
+                "tags": [
+                    "Bookings"
+                ],
+                "parameters": [
+                    {
+                        "name": "booking",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CancelBookingRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`BookingResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/BookingResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -11474,6 +11723,226 @@
                     "dropped"
                 ],
                 "title": "BoardViewResource"
+            },
+            "BookingCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/BookingResource"
+                },
+                "title": "BookingCollection"
+            },
+            "BookingPageResource": {
+                "type": "object",
+                "properties": {
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "false: the public page says it isn't taking bookings"
+                    },
+                    "public_url": {
+                        "type": "string",
+                        "description": "the public page to share"
+                    },
+                    "timezone": {
+                        "type": "string"
+                    },
+                    "workspace": {
+                        "type": "object",
+                        "properties": {
+                            "slug": {
+                                "type": "string"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "slug",
+                            "name"
+                        ]
+                    },
+                    "types_count": {
+                        "type": "integer"
+                    },
+                    "upcoming_count": {
+                        "type": "integer",
+                        "description": "confirmed bookings from now on"
+                    },
+                    "types": {
+                        "type": "array",
+                        "description": "the meeting types in the page's order, with their share link",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "duration_minutes": {
+                                    "type": "integer"
+                                },
+                                "enabled": {
+                                    "type": "boolean"
+                                },
+                                "public_url": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name",
+                                "duration_minutes",
+                                "enabled",
+                                "public_url"
+                            ]
+                        }
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "the page's settings on the web"
+                    }
+                },
+                "required": [
+                    "uuid",
+                    "title",
+                    "enabled",
+                    "public_url",
+                    "timezone",
+                    "workspace",
+                    "types_count",
+                    "upcoming_count",
+                    "types",
+                    "url"
+                ],
+                "title": "BookingPageResource"
+            },
+            "BookingResource": {
+                "type": "object",
+                "properties": {
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "the meeting type's name"
+                    },
+                    "page": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "the booking page",
+                        "properties": {
+                            "uuid": {
+                                "type": "string"
+                            },
+                            "title": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "uuid",
+                            "title"
+                        ]
+                    },
+                    "starts_at": {
+                        "type": "string"
+                    },
+                    "ends_at": {
+                        "type": "string"
+                    },
+                    "guest_name": {
+                        "type": "string"
+                    },
+                    "guest_email": {
+                        "type": "string"
+                    },
+                    "guest_timezone": {
+                        "type": "string"
+                    },
+                    "answers": {
+                        "type": "array",
+                        "description": "the booking questions' answers: [{question, answer}]",
+                        "items": {}
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "confirmed | cancelled"
+                    },
+                    "cancelled_by": {
+                        "type": "string",
+                        "description": "host | guest"
+                    },
+                    "cancel_reason": {
+                        "type": "string"
+                    },
+                    "cancelled_at": {
+                        "type": "string"
+                    },
+                    "conference_url": {
+                        "type": "string",
+                        "description": "the video call link of the booking, when its type has one"
+                    },
+                    "in_calendar": {
+                        "type": "boolean",
+                        "description": "an event was created in the host's calendar"
+                    },
+                    "unchecked_calendars": {
+                        "type": "array",
+                        "description": "calendars that couldn't be checked for conflicts when it was booked: look for an overlap",
+                        "items": {}
+                    },
+                    "card": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "the issue the booking created (\"also create a card\"), {id, key, url}",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "key": {
+                                "type": "string"
+                            },
+                            "url": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "key",
+                            "url"
+                        ]
+                    }
+                },
+                "required": [
+                    "uuid",
+                    "type",
+                    "page",
+                    "starts_at",
+                    "ends_at",
+                    "guest_name",
+                    "guest_email",
+                    "guest_timezone",
+                    "answers",
+                    "status",
+                    "cancelled_by",
+                    "cancel_reason",
+                    "cancelled_at",
+                    "conference_url",
+                    "in_calendar",
+                    "unchecked_calendars",
+                    "card"
+                ],
+                "title": "BookingResource"
             },
             "BookmarkGroupCollection": {
                 "type": "array",
@@ -12410,6 +12879,21 @@
                     "fetch_count"
                 ],
                 "title": "CalendarFeedResource"
+            },
+            "CancelBookingRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/bookings/{uuid}/cancel`: the host cancels; the guest gets an email with the reason.",
+                "properties": {
+                    "reason": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "shown to the guest in the cancellation email and on the card",
+                        "maxLength": 1000
+                    }
+                },
+                "title": "CancelBookingRequest"
             },
             "CaptureCollection": {
                 "type": "array",

@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270, Bookings 280. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -786,6 +786,27 @@ suffix, outdated, resolved, resolved_at, resolved_by_name, comments: [{uuid, aut
   public storage address (no token, as on the web), so there is no `GET /files/{id}`, no signed URL and no server-side thumbnail.
   Files on captures / tickets: not in the web either (later).
 
+### Bookings
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/booking-pages` | app + verified | The user's booking pages by title (read): `{uuid, title, enabled, public_url, timezone, workspace: {slug, name}, types_count, upcoming_count, types: [{id, name, duration_minutes, enabled, public_url}], url}`, not paginated — share a type's link | Read + share | BRAI-226 | ready (v1.49.0, BRAI-419) |
+| `GET /api/v1/bookings?status=upcoming\|past\|cancelled&page=<uuid>` | app + verified | The bookings guests made on the user's pages: upcoming (default, soonest first), past / cancelled (latest first); cursor-paginated, `updated_since`. Another user's `page` → 404 | Full | BRAI-228 | ready (v1.49.0, BRAI-419) |
+| `GET /api/v1/bookings/{uuid}` | app + verified | One booking. Not of the user's pages → 404 | Full | BRAI-228 | ready (v1.49.0, BRAI-419) |
+| `POST /api/v1/bookings/{uuid}/cancel` | app + verified, 30/min | The host cancels `{reason?}` (≤ 1000): calendar event removed, card commented, the guest emailed → `{data: booking}`; already cancelled → 200, nothing changes | Full | BRAI-228 | ready (v1.49.0, BRAI-419) |
+
+Booking: `{uuid, type, page: {uuid, title}, starts_at, ends_at, guest_name, guest_email, guest_timezone, answers: [{question,
+answer}], status: confirmed|cancelled, cancelled_by: host|guest|null, cancel_reason, cancelled_at, conference_url, in_calendar,
+unchecked_calendars: [name], card: {id, key, url}|null}`.
+- What the web's booking page "Bookings" tab shows its host (`Support\Booking\BookingRows`, shared with `BookingPageController`):
+  booking pages are **personal** (`BookingPagePolicy`: the owner, while still in the page's workspace). The guest's details are
+  the host's to see; nobody else gets bookings (another user's booking → 404). Booked times also show in `GET /calendar/events`
+  (`type: booking`).
+- **Rescheduling is the guest's** (their manage link, a public page): the web has no host reschedule, so neither has the API
+  (cancel with a reason; the guest books again). The public booking page, slots and the guest's links are public routes: never in
+  the App API.
+- Web only: creating / editing booking pages and meeting types (availability, buffers, rules, questions, calendars, consent,
+  "also create a card"), templates, embedding (`url` opens the settings).
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -1223,4 +1244,31 @@ Built in: BRAI-415 (desktop) · Mobile scope: Read-only (planning, shipping, not
 - Downloads: every file's url is its public address (no token); no thumbnails — use the image itself
 Scope: app · OpenAPI: docs/api/openapi.json#/Files · Registry: docs/ai/API.md#files
 Built in: BRAI-416 (desktop) · Mobile scope: Full (resumable uploads, files on captures / tickets: later)
+```
+
+**BRAI-226** (booking pages, templates and event types)
+```
+## API (ready) — read + share
+- GET /api/v1/booking-pages — the user's booking pages with their meeting types' public links (share sheet) and upcoming counts
+- Creating / editing pages, meeting types, guest questions, templates and embeds: web only (url opens the page's settings)
+Scope: app · OpenAPI: docs/api/openapi.json#/Bookings · Registry: docs/ai/API.md#bookings
+Built in: BRAI-419 (desktop) · Mobile scope: Read + share links (the builder: web only)
+```
+
+**BRAI-228** (guest booking confirmation, cancellation and rescheduling)
+```
+## API (ready)
+- GET /api/v1/bookings?status=upcoming|past|cancelled&page= — the bookings on the user's pages: guest, answers, call link, card; cursor-paginated
+- GET /api/v1/bookings/{uuid} · POST /api/v1/bookings/{uuid}/cancel {reason?} — the host cancels; the guest is emailed, the calendar event removed
+- Booked times also come in GET /api/v1/calendar/events (type: booking)
+Scope: app · OpenAPI: docs/api/openapi.json#/Bookings · Registry: docs/ai/API.md#bookings
+Built in: BRAI-419 (desktop) · Mobile scope: View + cancel (rescheduling is the guest's own link; the public booking page: web)
+```
+
+**BRAI-227** (availability, time zones, buffers and booking rules)
+```
+## API: web only — open in browser
+Availability, time zones, buffers, notice, daily limits, holidays and busy calendars are set per meeting type in the web's booking page builder.
+The apps show the result: bookings (GET /api/v1/bookings) and the pages' share links (GET /api/v1/booking-pages → url opens the settings).
+Registry: docs/ai/API.md#bookings · Decided in: BRAI-419
 ```

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AppApi\AuthController;
 use App\Http\Controllers\AppApi\BoardController;
+use App\Http\Controllers\AppApi\BookingController;
 use App\Http\Controllers\AppApi\BookmarkController;
 use App\Http\Controllers\AppApi\CalendarController;
 use App\Http\Controllers\AppApi\CalendarEventController;
@@ -162,6 +163,12 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::put('me/calendar-feed', [CalendarFeedController::class, 'update'])->middleware('throttle:20,1,app.calendar-feed.update')->name('calendar-feed.update');
         Route::post('me/calendar-feed/reset', [CalendarFeedController::class, 'reset'])->middleware('throttle:10,1,app.calendar-feed.reset')->name('calendar-feed.reset');
         Route::delete('me/calendar-feed', [CalendarFeedController::class, 'destroy'])->name('calendar-feed.destroy');
+
+        // ── Bookings, host side (BookingRows, BookingService); the public page + guest links: web only ─
+        Route::get('booking-pages', [BookingController::class, 'pages'])->name('booking-pages.index');
+        Route::get('bookings', [BookingController::class, 'index'])->name('bookings.index');
+        Route::get('bookings/{booking}', [BookingController::class, 'show'])->name('bookings.show');
+        Route::post('bookings/{booking}/cancel', [BookingController::class, 'cancel'])->middleware('throttle:30,1,app.bookings.cancel')->name('bookings.cancel');
 
         // ── Task lists + to-dos (TaskLists, WorkCompletion: shared with the web, CLI and MCP) ──────
         // lists and tasks by id; ids on writes are checked in the controller (no route constraint)
