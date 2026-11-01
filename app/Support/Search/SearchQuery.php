@@ -19,6 +19,7 @@ final class SearchQuery
      * @param  list<string>  $keys  issue / ticket keys typed exactly (upper case), ranked first
      * @param  list<string>  $types  SearchTypes; empty = every type
      * @param  list<int>  $projectIds  empty = every project
+     * @param  list<int>  $workspaceIds  empty = every workspace (App API `?workspace=`, BRAI-392)
      */
     public function __construct(
         public readonly string $text,
@@ -36,6 +37,7 @@ final class SearchQuery
         public readonly bool $withCounts = true,
         // titles and keys only (the browser extension's capture token may search titles only)
         public readonly bool $titlesOnly = false,
+        public readonly array $workspaceIds = [],
     ) {}
 
     /** Something to find: at least one word that isn't excluded. */

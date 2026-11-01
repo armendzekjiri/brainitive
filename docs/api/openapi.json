@@ -44,6 +44,9 @@
         },
         {
             "name": "Navigation"
+        },
+        {
+            "name": "Search"
         }
     ],
     "security": [
@@ -1526,6 +1529,207 @@
                                     },
                                     "required": [
                                         "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/search": {
+            "get": {
+                "operationId": "app.v1.search",
+                "description": "Without filters the first page also lists matching places (workspaces, projects, boards,\nplans, snippet and bookmark collections) by name, as the web's command palette does.",
+                "summary": "Search everything the user can open: issues, docs, comments, tickets, tasks, plans, snippets,\nbookmarks, their captures and files \u2014 ranked, typo tolerant",
+                "tags": [
+                    "Search"
+                ],
+                "parameters": [
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "required": true,
+                        "description": "words to find: \"exact phrase\", -excluded, an issue key like WEB-12 ranks that issue first",
+                        "schema": {
+                            "type": "string",
+                            "maxLength": 300
+                        }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "description": "one group: issues, docs, comments, tickets, tasks, plans, snippets, bookmarks, captures, files",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "issues",
+                                "docs",
+                                "comments",
+                                "tickets",
+                                "tasks",
+                                "plans",
+                                "snippets",
+                                "bookmarks",
+                                "captures",
+                                "files",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "workspace",
+                        "in": "query",
+                        "description": "a workspace slug: only that workspace's content",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 255
+                        }
+                    },
+                    {
+                        "name": "project[]",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "integer",
+                                "minimum": 1
+                            }
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "open",
+                                "done",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "assignee",
+                        "in": "query",
+                        "description": "\"me\" or a user id",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "pattern": "^(me|[1-9][0-9]{0,18})$"
+                        }
+                    },
+                    {
+                        "name": "updated",
+                        "in": "query",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "enum": [
+                                "7d",
+                                "30d",
+                                "90d",
+                                "365d",
+                                null
+                            ]
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 50
+                        }
+                    },
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "pattern": "^([1-9][0-9]?|100)$"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SearchResultResource"
+                                            }
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "description": "the next page's number as a string; null on the last page (at most 100 pages)"
+                                        },
+                                        "total": {
+                                            "type": "integer"
+                                        },
+                                        "counts": {
+                                            "type": "object",
+                                            "description": "matches per group (issues, docs, comments, tickets, tasks, plans, snippets, bookmarks, captures, files)",
+                                            "additionalProperties": {
+                                                "type": "integer"
+                                            }
+                                        },
+                                        "fuzzy": {
+                                            "type": "boolean",
+                                            "description": "true when nothing matched exactly and these are typo-tolerant matches"
+                                        },
+                                        "places": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/components/schemas/SearchPlaceResource"
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor",
+                                        "total",
+                                        "counts",
+                                        "fuzzy",
+                                        "places"
                                     ]
                                 }
                             }
@@ -3040,6 +3244,171 @@
                     "refresh_token"
                 ],
                 "title": "RefreshTokenRequest"
+            },
+            "SearchPlaceResource": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "description": "workspace | project | board | plan | snippet (a snippet collection) | bookmark (a bookmark collection)"
+                    },
+                    "id": {
+                        "type": "integer"
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "subtitle": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "workspace": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the workspace's name"
+                    }
+                },
+                "required": [
+                    "type",
+                    "id",
+                    "title",
+                    "subtitle",
+                    "url",
+                    "workspace"
+                ],
+                "title": "SearchPlaceResource"
+            },
+            "SearchResultResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "description": "\"<type>:<id>\", unique in a result list"
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "item | comment | page | ticket | plan | task | snippet | bookmark | capture | attachment | ticket_attachment"
+                    },
+                    "group": {
+                        "type": "string",
+                        "description": "the filter group (type=\u2026): issues, docs, comments, tickets, tasks, plans, snippets, bookmarks, captures, files"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "\"Issue\", \"Doc\", \"Comment\" \u2026"
+                    },
+                    "source_id": {
+                        "type": "integer"
+                    },
+                    "container_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "the issue / ticket of a comment or file"
+                    },
+                    "key": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "title": {
+                        "type": "string"
+                    },
+                    "snippet": {
+                        "type": "string"
+                    },
+                    "snippet_html": {
+                        "type": "string"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "external_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "a bookmark's own link"
+                    },
+                    "context": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "where it lives, e.g. \"Website \u00b7 Main Board\""
+                    },
+                    "project": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name"
+                        ]
+                    },
+                    "workspace": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the workspace's name"
+                    },
+                    "status": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "open | done, for issues, tickets, tasks, captures"
+                    },
+                    "is_draft": {
+                        "type": "boolean"
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "type",
+                    "group",
+                    "label",
+                    "source_id",
+                    "container_id",
+                    "key",
+                    "title",
+                    "snippet",
+                    "snippet_html",
+                    "url",
+                    "external_url",
+                    "context",
+                    "project",
+                    "workspace",
+                    "status",
+                    "is_draft",
+                    "updated_at"
+                ],
+                "title": "SearchResultResource"
             },
             "StoreInvitationRequest": {
                 "type": "object",

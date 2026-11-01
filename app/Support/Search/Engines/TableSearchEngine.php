@@ -70,6 +70,11 @@ abstract class TableSearchEngine implements SearchEngine
                     ->whereNull('e.project_id')
                     ->where('e.owner_id', $viewer->userId)))
             ->when($query->projectIds !== [], fn (Builder $q) => $q->whereIn('e.project_id', $query->projectIds))
+            // project content by the project's current workspace (an entry's own workspace_id isn't
+            // rewritten when a project moves); workspace-level content (snippets, bookmarks) by its own
+            ->when($query->workspaceIds !== [], fn (Builder $q) => $q->where(fn (Builder $in) => $in
+                ->whereIn('e.project_id', DB::table('projects')->whereIn('workspace_id', $query->workspaceIds)->select('id'))
+                ->orWhere(fn (Builder $own) => $own->whereNull('e.project_id')->whereIn('e.workspace_id', $query->workspaceIds))))
             ->when($query->status !== null, fn (Builder $q) => $q->where('e.status', $query->status))
             ->when($query->assigneeId !== null, fn (Builder $q) => $q->where('e.assignee_id', $query->assigneeId))
             ->when($query->updatedFrom !== null, fn (Builder $q) => $q->where('e.source_updated_at', '>=', $query->updatedFrom))
