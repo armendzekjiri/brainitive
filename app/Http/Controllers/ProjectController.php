@@ -259,10 +259,18 @@ class ProjectController extends Controller
         $moveTargets = ProjectTransfer::canManage($request->user(), $workspace)
             ? ProjectTransfer::targets($request->user(), $project)->map->only(['id', 'name', 'slug'])->values()
             : [];
-        $disabledTypes = $project->disabledItemTypeIds();
+        // "active" = enabled for this project (default types are switched off in the project's
+        // settings). map(), not each(): each() stops at the first callback returning false, which
+        // left every later switched-off type looking "on" (BRAI-430 / GitHub #133).
         $projectItemTypes = ItemType::forProjectSettings($project)->orderBy('id')->get(['id', 'project_id', 'name', 'slug', 'icon', 'color', 'description', 'is_default', 'is_active'])
-            // Default types: "active" means active for this project.
-            ->each(fn (ItemType $type) => $type->project_id === null && $type->is_active = $type->is_active && ! in_array($type->id, $disabledTypes, true));
+            ->map(function (ItemType $type) use ($project) {
+                // a default type switched off on its shared row (older versions did that instance-wide):
+                // a project can't switch it back on
+                $type->setAttribute('instance_off', $type->project_id === null && ! $type->is_active);
+                $type->is_active = $type->isEnabledFor($project);
+
+                return $type;
+            })->values();
 
         return Inertia::render('Projects/Edit', [
             'workspace' => $workspace,
@@ -514,6 +522,20 @@ class ProjectController extends Controller
     }
 
     /**
+     * The types a new issue of the project can get (switched-off ones left out), for the global
+     * create dialog: it picks the project on the client.
+     */
+    public function itemTypesJson(Request $request, Workspace $workspace, Project $project): JsonResponse
+    {
+        $this->authorize('view', $project);
+
+        $types = ItemType::forProject($project)->orderByRaw('project_id is not null')->orderBy('id')
+            ->get(['id', 'project_id', 'name', 'slug', 'icon', 'color', 'is_default']);
+
+        return response()->json($types);
+    }
+
+    /**
      * Store a new label for the project.
      */
     public function storeLabel(Request $request, Workspace $workspace, Project $project)
@@ -620,13 +642,10 @@ class ProjectController extends Controller
 
         // Default types are shared by every workspace on the instance: a project can only
         // switch one off or on for itself, never rename or restyle it for everyone.
-        if ($isGlobal) {
+        // The on/off button sends only is_active (both kinds of type); cards keep a switched-off type.
+        if ($isGlobal || ! $request->has('name')) {
             $validated = $request->validate(['is_active' => 'required|boolean']);
-            $disabled = collect($project->disabledItemTypeIds())->reject(fn (int $id) => $id === $itemType->id);
-            if (! $validated['is_active']) {
-                $disabled->push($itemType->id);
-            }
-            $project->update(['settings' => array_merge($project->settings ?? [], ['disabled_item_types' => $disabled->values()->all()])]);
+            $itemType->setEnabledFor($project, (bool) $validated['is_active']);
 
             return back()->with('success', $validated['is_active'] ? 'Item type enabled for this project.' : 'Item type disabled for this project.');
         }
@@ -644,7 +663,10 @@ class ProjectController extends Controller
             $validated['slug'] = Str::slug($validated['name']);
         }
 
-        unset($validated['is_active']);
+        // a project's own type: is_active is "enabled for this project"
+        if (! isset($validated['is_active'])) {
+            unset($validated['is_active']);
+        }
 
         $itemType->update($validated);
 

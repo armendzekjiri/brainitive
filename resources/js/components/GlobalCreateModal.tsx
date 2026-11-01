@@ -89,7 +89,9 @@ export function GlobalCreateModal({
     preSelectedColumnId,
     defaultType = 'task',
 }: Props) {
-    const { currentWorkspace, itemTypes = [], priorities = [] } = usePage<PageProps>().props;
+    const { currentWorkspace, priorities = [] } = usePage<PageProps>().props;
+    // The selected project's enabled types (switched-off ones aren't offered), loaded like its labels
+    const [itemTypes, setItemTypes] = useState<ItemType[]>([]);
     const [activeType, setActiveType] = useState<CreateType>(defaultType);
     const [selectedProjectId, setSelectedProjectId] = useState<string>(preSelectedProjectId?.toString() ?? '');
     const [selectedBoardId, setSelectedBoardId] = useState<string>(preSelectedBoardId?.toString() ?? '');
@@ -145,7 +147,7 @@ export function GlobalCreateModal({
 
     useEffect(() => {
         if (!selectedProjectId || !currentWorkspace) {
-            setBoards([]); setSelectedBoardId(''); setProjectLabels([]); setProjectUsers([]);
+            setBoards([]); setSelectedBoardId(''); setProjectLabels([]); setProjectUsers([]); setItemTypes([]);
             return;
         }
         const project = currentWorkspace.projects?.find((p) => p.id.toString() === selectedProjectId);
@@ -156,6 +158,13 @@ export function GlobalCreateModal({
             axios.get(route('projects.labels.index', [currentWorkspace.slug, project.slug]))
                 .then((res) => setProjectLabels(res.data))
                 .catch(() => setProjectLabels([]));
+            axios.get<ItemType[]>(route('projects.item-types.index', [currentWorkspace.slug, project.slug]))
+                .then((res) => {
+                    setItemTypes(res.data);
+                    // a type picked for another project may not exist (or be switched off) here
+                    setTaskData('item_type_id', '');
+                })
+                .catch(() => setItemTypes([]));
             axios.get(route('workspaces.users.index', [currentWorkspace.slug]))
                 .then((res) => setProjectUsers(res.data))
                 .catch(() => setProjectUsers([]));

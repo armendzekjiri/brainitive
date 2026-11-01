@@ -388,6 +388,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::put('labels/{label}', [ProjectController::class, 'updateLabel'])->name('projects.labels.update');
             Route::delete('labels/{label}', [ProjectController::class, 'destroyLabel'])->name('projects.labels.destroy');
             // Item types (project-level configuration)
+            Route::get('item-types', [ProjectController::class, 'itemTypesJson'])->name('projects.item-types.index');
             Route::post('item-types', [ProjectController::class, 'storeItemType'])->name('projects.item-types.store');
             Route::post('item-types/upload-icon', [ProjectController::class, 'uploadItemTypeIcon'])->name('projects.item-types.upload-icon');
             Route::put('item-types/{itemType}', [ProjectController::class, 'updateItemType'])->name('projects.item-types.update');

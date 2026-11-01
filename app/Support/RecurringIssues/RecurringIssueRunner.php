@@ -117,7 +117,7 @@ class RecurringIssueRunner
 
         $typeId = $template->item_type_id && ItemType::forProject($project)->whereKey($template->item_type_id)->exists()
             ? $template->item_type_id
-            : ItemType::where('is_default', true)->value('id');
+            : ItemType::defaultIdFor($project); // the template's type was switched off (or none chosen)
         $priorityId = $template->priority_id && ItemPriority::forProject($project)->whereKey($template->priority_id)->exists()
             ? $template->priority_id
             : ItemPriority::where('is_default', true)->value('id');

@@ -123,10 +123,9 @@ class BoardController extends Controller
             },
         ]);
 
+        // Only the types enabled for the project: cards with a switched-off type still show it
+        // (item_type is loaded with each card).
         $itemTypes = ItemType::forProject($project)->orderBy('id')->get();
-        if ($itemTypes->isEmpty()) {
-            $itemTypes = ItemType::orderBy('id')->get();
-        }
         $priorities = ItemPriority::forProject($project)->orderBy('order')->get();
         $projectUsers = $project->workspace->users()->get(['users.id', 'name', 'email', 'avatar']);
         $projectLabels = $project->labels()->orderBy('name')->get();
@@ -402,7 +401,7 @@ class BoardController extends Controller
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'column_id' => ['required', Rule::exists('board_columns', 'id')->where('board_id', $board->id)],
-            'item_type_id' => 'nullable|exists:item_types,id',
+            'item_type_id' => ['nullable', 'integer', Rule::in(ItemType::selectableIdsFor($project))],
             'priority_id' => 'nullable|exists:item_priorities,id',
             'assigned_to' => ['nullable', 'integer', new ProjectMember($project)],
             'due_date' => 'nullable|date',
@@ -434,7 +433,7 @@ class BoardController extends Controller
             ],
         ]);
 
-        $itemTypeId = $validated['item_type_id'] ?? ItemType::where('is_default', true)->first()?->id;
+        $itemTypeId = $validated['item_type_id'] ?? ItemType::defaultIdFor($project);
         if ($subtaskTypeId && (int) $itemTypeId === (int) $subtaskTypeId && empty($validated['parent_id'])) {
             return back()->withErrors(['parent_id' => 'Subtasks must have a parent task.']);
         }
@@ -773,7 +772,8 @@ class BoardController extends Controller
         $validated = $request->validate([
             'title' => 'sometimes|required|string|max:255',
             'description' => 'nullable|string',
-            'item_type_id' => 'nullable|exists:item_types,id',
+            // enabled types; a card may keep the switched-off type it already has
+            'item_type_id' => ['nullable', 'integer', Rule::in(ItemType::selectableIdsFor($project, $item->item_type_id))],
             'priority_id' => 'nullable|exists:item_priorities,id',
             'assigned_to' => ['nullable', 'integer', new ProjectMember($project)],
             'start_date' => 'nullable|date',

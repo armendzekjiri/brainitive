@@ -121,6 +121,7 @@ import { LabelChip, PriorityIndicator, TypeBadge, AssigneeAvatar, priorityMeta, 
 import CompleteSubtasksDialog from '@/components/item/CompleteSubtasksDialog';
 import DuplicateItemDialog from '@/components/item/DuplicateItemDialog';
 import { itemTree } from '@/lib/itemTree';
+import { defaultItemTypeId } from '@/lib/itemTypes';
 import { useItemDetail, ItemDetailMain, ItemDetailSidebar, ItemFilePreviewDialog, type ProjectItemLite } from '@/components/item/ItemDetail';
 import { BoardHeader } from '@/components/board/BoardHeader';
 import { LiveAvatars } from '@/components/live/LiveAvatars';
@@ -469,7 +470,7 @@ function CreateItemDialog({
     const { data, setData, post, processing, reset } = useForm({
         title: '',
         column_id: column.id,
-        item_type_id: itemTypes.find((t) => t.slug === 'task')?.id?.toString() || '',
+        item_type_id: defaultItemTypeId(itemTypes), // the project's default (it may have switched Task off)
         parent_id: '' as string | number,
     });
 

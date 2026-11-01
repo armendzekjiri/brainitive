@@ -5,7 +5,6 @@ namespace App\Http\Middleware;
 use App\Models\Board;
 use App\Models\Capture;
 use App\Models\ItemPriority;
-use App\Models\ItemType;
 use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
@@ -257,7 +256,6 @@ class HandleInertiaRequests extends Middleware
             'entitlements' => fn () => EntitlementsPayload::for($currentWorkspace),
             'currentProjectId' => $currentProjectId,
             'currentBoardId' => $currentBoardId,
-            'itemTypes' => fn () => $user ? ItemType::orderBy('id')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
             'priorities' => fn () => $user ? ItemPriority::orderBy('order')->get(['id', 'name', 'slug', 'color', 'icon']) : [],
             'planTemplates' => fn () => $user ? PlanTemplates::all() : [],
             'currentPageUuid' => $request->routeIs('pages.show') && $request->route('page')

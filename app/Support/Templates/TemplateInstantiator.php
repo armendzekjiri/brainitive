@@ -221,7 +221,7 @@ class TemplateInstantiator
         $boards = Board::with(['columns' => fn ($q) => $q->orderBy('position')])->whereIn('id', $this->ids['board'])->get()->keyBy('id');
         $doneColumns = $boards->flatMap(fn (Board $b) => $b->columns)->where('is_done_column', true)->pluck('id')->flip();
         $subtaskTypeIds = ItemType::forProject($this->project)->where('slug', 'subtask')->pluck('id')->flip();
-        $defaultType = ItemType::forProject($this->project)->where('is_default', true)->value('id');
+        $defaultType = ItemType::defaultIdFor($this->project);
         $defaultPriority = ItemPriority::forProject($this->project)->where('is_default', true)->value('id');
         $positions = [];
         $backlog = [];

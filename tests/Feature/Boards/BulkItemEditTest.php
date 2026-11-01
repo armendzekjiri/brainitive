@@ -299,15 +299,16 @@ class BulkItemEditTest extends TestCase
             ->assertInertia(fn (AssertableInertia $page) => $page->where('canDeleteAnyItem', false)->where('canEditItems', false));
     }
 
-    public function test_a_project_without_own_or_enabled_types_offers_all_types_like_the_board(): void
+    public function test_a_project_with_every_type_switched_off_offers_none_like_the_board(): void
     {
+        // Until BRAI-430 "no enabled types" fell back to every type of the instance.
         $bug = ItemType::create(['name' => 'Bug', 'slug' => 'bug-fallback', 'is_active' => true]);
         $this->project->update(['settings' => ['disabled_item_types' => ItemType::whereNull('project_id')->pluck('id')->all()]]);
         $this->assertSame(0, ItemType::forProject($this->project->fresh())->count());
         $item = $this->item();
 
-        $this->bulk([$item], ['item_type_id' => $bug->id])->assertSessionHasNoErrors();
-        $this->assertSame($bug->id, $item->fresh()->item_type_id);
+        $this->bulk([$item], ['item_type_id' => $bug->id])->assertSessionHasErrors('changes.item_type_id');
+        $this->assertNotSame($bug->id, $item->fresh()->item_type_id);
     }
 
     public function test_queries_grow_by_a_small_constant_per_issue(): void
