@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -705,6 +705,19 @@ suffix, outdated, resolved, resolved_at, resolved_by_name, comments: [{uuid, aut
   published (`POST /pages/{uuid}/publish`) or the draft changes (`stale`). Comment bodies are plain text.
 - Web only: requesting / cancelling reviews, "review required", restoring versions, adding / removing related content.
 
+### Whiteboards
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/whiteboards/{uuid}` | app + verified | The scene, read-only: page fields + `revision`, `scene: {elements (deleted ones left out), app_state (viewBackgroundColor, grid, scroll, zoom), files (embedded images)}`, `preview_image_url`, `can.update`. `ETag` → 304 on `If-None-Match`. Not a whiteboard / not visible → 404 | View only | BRAI-206, BRAI-209 | ready (v1.49.0, BRAI-414) |
+
+- Whiteboards are pages (`kind: whiteboard` in `GET /projects/{id}/pages`; same `PagePolicy`: an unpublished one is its author's and
+  the admins'); create / rename / move / publish them through Docs (`POST /projects/{id}/pages {kind: whiteboard}`), history through
+  `GET /pages/{uuid}/versions`.
+- **No server-side image export:** the server never renders Excalidraw. `preview_image_url` is the PNG of the last "Save & exit" on
+  the web (null when none; it can be older than the scene). Apps render `scene.elements` themselves (Excalidraw in a webview) for an
+  exact picture. While people draw live, the scene is saved every few seconds — poll with the `ETag`.
+- Drawing, templates, sticky notes → issues, issue cards, live cursors: web / the desktop app's webview only (BRAI-207, 208, 210).
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -1043,4 +1056,30 @@ Built in: BRAI-413 (desktop) · Mobile scope: Read + reply + approve (requesting
 - Issues: GET /api/v1/items/{id}/links (linked issues, BRAI-190)
 Scope: app · OpenAPI: docs/api/openapi.json#/Docs · Registry: docs/ai/API.md#docs
 Built in: BRAI-413 (desktop) · Mobile scope: Read (linking content: web only)
+```
+
+**BRAI-206** (mobile whiteboard canvas, pan / zoom)
+```
+## API (ready) — view only
+- GET /api/v1/projects/{id}/pages — whiteboards are kind: whiteboard in the page tree
+- GET /api/v1/whiteboards/{uuid} — the Excalidraw scene (elements, canvas settings, images) to render read-only; ETag → 304
+Scope: app · OpenAPI: docs/api/openapi.json#/Whiteboards · Registry: docs/ai/API.md#whiteboards
+Built in: BRAI-414 (desktop) · Mobile scope: View only (drawing: web / desktop)
+```
+
+**BRAI-209** (autosave, history, duplicate and export whiteboards)
+```
+## API (ready) — read part
+- GET /api/v1/pages/{uuid}/versions — the whiteboard's history (publishes + 30-minute checkpoints)
+- GET /api/v1/whiteboards/{uuid} → preview_image_url — the PNG of the last "Save & exit" (no server-side export; render the scene for an exact image)
+Scope: app · OpenAPI: docs/api/openapi.json#/Whiteboards · Registry: docs/ai/API.md#whiteboards
+Built in: BRAI-414 (desktop) · Mobile scope: View only (autosave, duplicate, export: web / desktop)
+```
+
+**BRAI-207** (shapes, text, stickies, images, templates) · **BRAI-208** (realtime collaboration with named cursors) · **BRAI-210** (sticky notes → issues, live cards)
+```
+## API: web only — open in browser
+Drawing, templates, live cursors and turning sticky notes into issues run in the web's whiteboard editor (the desktop app's webview).
+The apps show the scene read-only: GET /api/v1/whiteboards/{uuid}.
+Registry: docs/ai/API.md#whiteboards · Decided in: BRAI-414
 ```

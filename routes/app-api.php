@@ -30,6 +30,7 @@ use App\Http\Controllers\AppApi\SprintController;
 use App\Http\Controllers\AppApi\TaskListController;
 use App\Http\Controllers\AppApi\TimerController;
 use App\Http\Controllers\AppApi\TodayController;
+use App\Http\Controllers\AppApi\WhiteboardController;
 use App\Http\Controllers\AppApi\WorkLogController;
 use App\Http\Controllers\AppApi\WorkspaceController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
@@ -274,6 +275,9 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::post('pages/{uuid}/collab-token', [PageCollabController::class, 'token'])->middleware('throttle:60,1,app.pages.collab.token')->name('pages.collab.token');
         Route::post('pages/{uuid}/collab/bootstrap', [PageCollabController::class, 'bootstrap'])->middleware('throttle:30,1,app.pages.collab.bootstrap')->name('pages.collab.bootstrap');
         Route::put('pages/{uuid}/collab/draft', [PageCollabController::class, 'save'])->middleware('throttle:180,1,app.pages.collab.save')->name('pages.collab.save');
+
+        // ── Whiteboards: the scene, read-only (drawing, templates, stickies → issues: web / desktop webview) ──
+        Route::get('whiteboards/{uuid}', [WhiteboardController::class, 'show'])->whereUuid('uuid')->name('whiteboards.show');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');

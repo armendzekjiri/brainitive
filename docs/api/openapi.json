@@ -86,6 +86,9 @@
         },
         {
             "name": "Docs"
+        },
+        {
+            "name": "Whiteboards"
         }
     ],
     "security": [
@@ -9825,6 +9828,58 @@
                     }
                 }
             }
+        },
+        "/whiteboards/{uuid}": {
+            "get": {
+                "operationId": "app.v1.whiteboards.show",
+                "description": "Render `scene.elements` with Excalidraw (or as a picture: `preview_image_url`, the last \"Save & exit\" \u2014\nit can be older than the scene). Answers an `ETag`; send it back as `If-None-Match` to get 304 while nothing\nchanged (live drawing saves every few seconds). The tree and other pages: `GET /projects/{id}/pages`\n(`kind: whiteboard`). Its history: `GET /pages/{uuid}/versions`.",
+                "summary": "A whiteboard's scene (Excalidraw elements, canvas settings, images) to show it read-only",
+                "tags": [
+                    "Whiteboards"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`WhiteboardResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WhiteboardResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "304": {
+                        "description": ""
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -19113,6 +19168,145 @@
                     "url"
                 ],
                 "title": "WebSessionResource"
+            },
+            "WhiteboardResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "uuid": {
+                        "type": "string"
+                    },
+                    "project_id": {
+                        "type": "integer"
+                    },
+                    "parent_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "parent_uuid": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "doc",
+                            "whiteboard",
+                            "folder"
+                        ]
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "has_image_icon": {
+                        "type": "boolean"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "draft",
+                            "published",
+                            "archived"
+                        ]
+                    },
+                    "position": {
+                        "type": "integer"
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "revision": {
+                        "type": "integer"
+                    },
+                    "scene": {
+                        "type": "object",
+                        "properties": {
+                            "elements": {
+                                "type": "array",
+                                "description": "Excalidraw elements (type, x, y, width, height, text, \u2026) as the editor saved them",
+                                "items": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                }
+                            },
+                            "app_state": {
+                                "type": "object",
+                                "description": "canvas settings: viewBackgroundColor, gridSize, scrollX / scrollY, zoom",
+                                "additionalProperties": {}
+                            },
+                            "files": {
+                                "type": "object",
+                                "description": "images on the board by file id: {mimeType, dataURL, \u2026}",
+                                "additionalProperties": {}
+                            }
+                        },
+                        "required": [
+                            "elements",
+                            "app_state",
+                            "files"
+                        ]
+                    },
+                    "preview_image_url": {
+                        "description": "PNG of the last \"Save & exit\" on the web; null when there is none"
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "update": {
+                                "type": "boolean",
+                                "description": "drawing: the web / desktop webview"
+                            }
+                        },
+                        "required": [
+                            "update"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "uuid",
+                    "project_id",
+                    "parent_id",
+                    "parent_uuid",
+                    "kind",
+                    "name",
+                    "icon",
+                    "has_image_icon",
+                    "status",
+                    "position",
+                    "url",
+                    "created_at",
+                    "updated_at",
+                    "revision",
+                    "scene",
+                    "preview_image_url",
+                    "can"
+                ],
+                "title": "WhiteboardResource"
             },
             "WorkDoneRequest": {
                 "type": "object",
