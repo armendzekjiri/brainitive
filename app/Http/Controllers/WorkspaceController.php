@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreWorkspaceRequest;
 use App\Models\ActivityLog;
 use App\Models\Board;
 use App\Models\Comment;
@@ -53,32 +54,12 @@ class WorkspaceController extends Controller
     /**
      * Store a newly created workspace.
      */
-    public function store(Request $request)
+    public function store(StoreWorkspaceRequest $request)
     {
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('workspaces', 'name')
-                    ->where(fn ($q) => $q
-                        ->where('owner_id', $request->user()->id)
-                        ->whereNull('deleted_at')),
-            ],
-            'description' => 'nullable|string|max:1000',
-        ]);
+        $validated = $request->validated();
 
-        // Cloud plans: a new workspace starts free, and one person may own only so many free ones
-        app(LimitGate::class)->ensureCanCreateWorkspace($request->user());
-
-        $workspace = Workspace::create([
-            'name' => $validated['name'],
-            'description' => $validated['description'] ?? null,
-            'owner_id' => $request->user()->id,
-        ]);
-
-        // Add the creator as an admin
-        $workspace->addUser($request->user(), 'admin');
+        // plan limit (free workspaces per owner), the creator becomes its admin — shared with the App API
+        $workspace = Workspace::createOwnedBy($request->user(), $validated['name'], $validated['description'] ?? null);
 
         return redirect()->route('workspaces.show', $workspace)
             ->with('success', 'Workspace created successfully.');

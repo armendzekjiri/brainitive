@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Http\Resources\AppApi\DeviceResource;
 use App\Models\InstanceSettings;
 use App\Notifications\NotificationCatalog;
 use App\Support\Admin\UserDeletion;
@@ -29,6 +30,8 @@ class ProfileController extends Controller
             'status' => session('status'),
             'connectedApps' => $this->connectedApps($request),
             'notificationCategories' => NotificationCatalog::forUser($request->user()),
+            // signed-in desktop / mobile installs (App API v1, BRAI-385), same fields as GET /api/v1/devices
+            'appDevices' => DeviceResource::collection($request->user()->appDevices()->active()->recentFirst()->get())->resolve($request),
         ]);
     }
 

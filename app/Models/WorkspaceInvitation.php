@@ -94,6 +94,30 @@ class WorkspaceInvitation extends Model
         $this->update(['accepted_at' => now()]);
     }
 
+    /** Only the invited address may accept (case-insensitive). */
+    public function emailMatches(User $user): bool
+    {
+        return strtolower($user->email) === strtolower($this->email);
+    }
+
+    /**
+     * Accept for the user (web, App API, sign-up): blocked only when the workspace is over its
+     * member limit (the open invitation is already counted). Someone who is already a member
+     * (added directly meanwhile) just closes the invitation. Callers check expiry and email.
+     *
+     * @throws LimitReached
+     */
+    public function acceptBy(User $user): void
+    {
+        app(LimitGate::class)->ensureCanAddMembers($this->workspace, 0);
+
+        $this->markAsAccepted();
+        if (! $this->workspace->hasUser($user)) {
+            $this->workspace->addUser($user, $this->role, $this->inviter ?? null);
+            WorkspaceNotifications::invitationAccepted($this, $user);
+        }
+    }
+
     /**
      * Scope to get only valid invitations.
      */
@@ -139,16 +163,9 @@ class WorkspaceInvitation extends Model
             // A workspace over its member limit (Cloud plans) keeps the invitation open: the link in
             // the email still works once the workspace is upgraded. Registration itself never fails.
             try {
-                app(LimitGate::class)->ensureCanAddMembers($invitation->workspace, 0);
+                $invitation->acceptBy($user);
             } catch (LimitReached) {
                 continue;
-            }
-
-            $invitation->markAsAccepted();
-            // already a member (added directly meanwhile): the invitation is simply done
-            if (! $invitation->workspace->users()->where('users.id', $user->id)->exists()) {
-                $invitation->workspace->addUser($user, $invitation->role, $invitation->inviter ?? null);
-                WorkspaceNotifications::invitationAccepted($invitation, $user);
             }
         }
     }

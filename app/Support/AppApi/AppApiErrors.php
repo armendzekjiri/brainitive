@@ -20,6 +20,7 @@ final class AppApiErrors
     public const CODES = [
         400 => 'bad_request',
         401 => 'unauthenticated',
+        402 => 'limit_reached',
         403 => 'forbidden',
         404 => 'not_found',
         405 => 'method_not_allowed',
@@ -75,6 +76,29 @@ final class AppApiErrors
         }
 
         return response()->json($body, $status);
+    }
+
+    /**
+     * A plan limit (App\Support\Entitlements\LimitReached::payload) in this shape: 402
+     * `limit_reached` plus `limit` {kind, limit, usage, plan, workspace, billing_url}; billing_url is
+     * null for people who can't upgrade the workspace (the message then says to ask an admin).
+     *
+     * @param  array{kind: string, limit: int, usage: int, plan: string, workspace: ?string, billingUrl: ?string, message: string}  $payload
+     */
+    public static function limitReached(array $payload): JsonResponse
+    {
+        return response()->json([
+            'message' => $payload['message'],
+            'code' => self::CODES[402],
+            'limit' => [
+                'kind' => $payload['kind'],
+                'limit' => $payload['limit'],
+                'usage' => $payload['usage'],
+                'plan' => $payload['plan'],
+                'workspace' => $payload['workspace'],
+                'billing_url' => $payload['billingUrl'],
+            ],
+        ], 402);
     }
 
     private static function defaultMessage(int $status): string

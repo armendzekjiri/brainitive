@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin;
 use App\Http\Controllers\AiController;
+use App\Http\Controllers\AppDeviceController;
 use App\Http\Controllers\BoardBulkItemController;
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BoardViewController;
@@ -677,6 +678,12 @@ Route::middleware('auth')->group(function () {
     Route::patch('/sidebar/preferences', [SidebarPreferencesController::class, 'update'])->name('sidebar.preferences');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::delete('/profile/connected-apps/{clientId}', [ProfileController::class, 'disconnectApp'])->name('profile.connected-apps.destroy');
+    // Desktop & mobile app installs (App API v1, BRAI-385): sign one out; own devices only (404 otherwise)
+    Route::delete('/profile/app-devices/{device}', [AppDeviceController::class, 'destroy'])->whereNumber('device')->name('profile.app-devices.destroy');
+    if (app()->environment('e2e')) {
+        // e2e only: a signed-in app device + token for the session user (the sign-in exchange's stand-in)
+        Route::post('/profile/app-devices/e2e-create', [AppDeviceController::class, 'e2eCreate'])->name('profile.app-devices.e2e-create');
+    }
     // "Download my data" (GDPR Art. 15 + 20, BRAI-156): queued ZIP, signed 24 h link for its owner only
     Route::get('/data-exports', [DataExportController::class, 'index'])->middleware(ReadOnlySession::class)->name('profile.data-export.index');
     Route::post('/data-exports', [DataExportController::class, 'store'])->middleware('throttle:5,1,profile.data-export.store')->name('profile.data-export.store');

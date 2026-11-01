@@ -47,6 +47,12 @@ class AppDevice extends Model
         $query->whereNull('revoked_at');
     }
 
+    /** Most recently used first (never used: by sign-in time) — the order of the device lists. */
+    public function scopeRecentFirst(Builder $query): void
+    {
+        $query->orderByRaw('COALESCE(last_used_at, created_at) DESC')->orderByDesc('id');
+    }
+
     public function isRevoked(): bool
     {
         return $this->revoked_at !== null;

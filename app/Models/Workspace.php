@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\Entitlements\LimitGate;
+use App\Support\Entitlements\LimitReached;
 use App\Support\Entitlements\WorkspaceMembershipChanged;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -233,6 +235,26 @@ class Workspace extends Model
     {
         $this->users()->detach($user->id);
         WorkspaceMembershipChanged::dispatch($this);
+    }
+
+    /**
+     * A new workspace owned by the user, who becomes its admin (web form, App API first run).
+     * Cloud plans: it starts free, and one person may own only so many free ones.
+     *
+     * @throws LimitReached
+     */
+    public static function createOwnedBy(User $owner, string $name, ?string $description = null): self
+    {
+        app(LimitGate::class)->ensureCanCreateWorkspace($owner);
+
+        $workspace = self::create([
+            'name' => $name,
+            'description' => $description,
+            'owner_id' => $owner->id,
+        ]);
+        $workspace->addUser($owner, 'admin');
+
+        return $workspace;
     }
 
     /**
