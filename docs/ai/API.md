@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section). A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -27,7 +27,7 @@ logic underneath (Support services, policies) is shared.
 | Responses | Wrapped: `{data: {...}}` (API Resources' default); lists `{data: [...], next_cursor}`. **DELETE → 204** No Content when it removes a resource; removing a *part* of one (e.g. `DELETE /me/avatar`) answers 200 with the updated parent instead. Only unwrapped exception: the OAuth token responses of `POST /auth/exchange` and `POST /auth/refresh` are unwrapped (`{token_type, access_token, expires_in, refresh_token, refresh_expires_in, device}`). Resources list their fields explicitly, never a model's `toArray()`. |
 | Errors | `{"message": "…", "code": "…", "errors"?: {field: [..]}}` — 400 `bad_request` / `invalid_grant`, 401 `unauthenticated`, 402 `limit_reached` (+ `limit` object, see Invitations), 403 `forbidden`, 404 `not_found`, 405 `method_not_allowed`, 409 `conflict`, 410 `gone`, 422 `validation_failed`, 429 `rate_limited`, 500 `server_error`. 404 instead of 403 when the user must not learn that something exists. Documented once for all endpoints (`App\Support\AppApi\OpenApi`); a 402 needs `@throws LimitReached` on the controller method. |
 | Dates | ISO-8601 UTC (`2026-11-01T09:16:04Z`). |
-| Lists | Cursor pagination `?cursor=&limit=` (default 50, max 100) → `{data: [...], next_cursor}`; `updated_since` for sync. |
+| Lists | Cursor pagination `?cursor=&limit=` (default 50, max 100) → `{data: [...], next_cursor}`; `updated_since` for sync. Server side: `ListRequest` (rules + `limit()` / `cursor()` / `updatedSince()`) and a `CursorCollection` subclass per list. An unknown / stale cursor starts again at the first page. |
 | Writes | `Idempotency-Key` header accepted; updates carry `revision` / `updated_at` → 409 on conflict. |
 | Limits | `throttle:app-api` 240/min per token + 600/min per IP; `throttle:app-auth` 20/min per IP on exchange / refresh. |
 | CORS | None. Native clients only; browsers can't call it cross-origin. |
@@ -141,8 +141,40 @@ otherwise). e2e seeds a device with `POST /profile/app-devices/e2e-create` (APP_
 |---|---|---|---|---|---|
 | `GET /api/v1/invitations/{token}` | app | Deep-linked invite (`/invite/{token}`) opened in the app → `{data: {email, role, expires_at, expired, accepted, email_matches, already_member, can_accept, workspace: {name, slug}, inviter: {name}}}`; `slug` only for members. Unknown token → 404. | Full | BRAI-175 | ready |
 | `POST /api/v1/invitations/{token}/accept` | app + verified email | Join → `{data: {id, slug, name, role}}`. Same rules as the web: 404 unknown, 410 `gone` expired, 403 other email / unverified, 402 `limit_reached` (workspace over its member limit); a member accepting just closes it; already accepted → 200 if still a member, else 409. | Full | BRAI-175 | ready |
-| `POST /api/v1/workspaces` | app + verified email | First run "create a workspace": `{name, description?}` (name unique per owner, ≤ 255; description ≤ 1000) → 201 `{data: {id, slug, name, role: "admin"}}`; 402 `limit_reached` (free workspaces per owner). | Full | BRAI-175 | ready |
+
+First run "create a workspace" is `POST /api/v1/workspaces` (see Workspaces).
 
 Plan limits under `/api/v1`: 402 `{message, code: "limit_reached", limit: {kind, limit, usage, plan,
 workspace, billing_url}}` (`billing_url` null for people who can't upgrade; the message then says to
 ask an admin) — `AppApiErrors::limitReached`, called from `LimitReached::render`.
+
+### Workspaces
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/workspaces` | app | Workspace switcher (tray / menu): the user's workspaces by name, cursor-paginated, `updated_since` | Read + create | BRAI-179 | ready (v1.49.0, BRAI-388) |
+| `GET /api/v1/workspaces/{slug}` | app | One workspace: role, permissions, time zone, counts, plan limits + usage. Not a member / unknown → 404 | Read + create | BRAI-179 | ready (v1.49.0, BRAI-388) |
+| `POST /api/v1/workspaces` | app + verified email | First run "create a workspace": `{name, description?}` (name unique per owner, ≤ 255; description ≤ 1000) → 201 `{data: workspace}` with `role: "admin"`; 402 `limit_reached` (free workspaces per owner). | Read + create | BRAI-175, BRAI-179 | ready (v1.49.0, BRAI-386) |
+
+List item / POST / accept-invitation shape (`WorkspaceResource`): `{id, slug, name, role, is_owner,
+logo_url, url, created_at, updated_at}`; `role` is `admin | editor | member | viewer`, `url` the web
+page. `GET /workspaces/{slug}` adds `{description, timezone, language, counts: {projects, members},
+can: {update, invite_members, create_projects}, limits_enforced, limits: {…as GET /me}, usage:
+{members, projects, content_bytes, file_bytes, measured_at}, billing_url}`.
+- `counts.projects` = the projects this user can open (workspace admins: all); `usage.projects` =
+  all projects (what the plan counts); `usage.members` counts open invitations too.
+- Settings, logo, member roles and removals, billing, deleting: web only (`can.update` says whether to
+  show an "Open settings" link).
+
+## Mobile card texts (`## API (ready)`)
+
+The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
+
+**BRAI-179** (workspaces)
+```
+## API (ready)
+- GET /api/v1/workspaces — the user's workspaces (switcher), cursor-paginated, updated_since
+- GET /api/v1/workspaces/{slug} — one workspace: role, permissions, counts, plan limits + usage
+- POST /api/v1/workspaces — create a workspace (402 at the free-workspace limit)
+Scope: app · OpenAPI: docs/api/openapi.json#/Workspaces · Registry: docs/ai/API.md#workspaces
+Built in: BRAI-388 (desktop) · Mobile scope: Read + create (settings web only)
+```

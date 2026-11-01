@@ -32,6 +32,9 @@
         },
         {
             "name": "Invitations"
+        },
+        {
+            "name": "Workspaces"
         }
     ],
     "security": [
@@ -716,7 +719,7 @@
                 "operationId": "app.v1.workspaces.store",
                 "summary": "Create a workspace owned by the user (first run)",
                 "tags": [
-                    "Invitations"
+                    "Workspaces"
                 ],
                 "requestBody": {
                     "required": true,
@@ -758,6 +761,130 @@
                     },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            },
+            "get": {
+                "operationId": "app.v1.workspaces.index",
+                "summary": "The user's workspaces by name (workspace switcher)",
+                "tags": [
+                    "Workspaces"
+                ],
+                "parameters": [
+                    {
+                        "name": "cursor",
+                        "in": "query",
+                        "description": "next_cursor of the previous page",
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "maxLength": 1024
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "updated_since",
+                        "in": "query",
+                        "description": "ISO-8601: only what changed since then",
+                        "schema": {
+                            "type": "string",
+                            "format": "date-time"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated set of `WorkspaceResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WorkspaceCollection"
+                                        },
+                                        "next_cursor": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "data",
+                                        "next_cursor"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspace}": {
+            "get": {
+                "operationId": "app.v1.workspaces.show",
+                "summary": "One workspace: the user's role and permissions, counts, plan limits and usage",
+                "tags": [
+                    "Workspaces"
+                ],
+                "parameters": [
+                    {
+                        "name": "workspace",
+                        "in": "path",
+                        "required": true,
+                        "description": "The workspace slug",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`WorkspaceDetailResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/WorkspaceDetailResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/ModelNotFoundException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
                     },
                     "429": {
                         "$ref": "#/components/responses/RateLimited"
@@ -1469,6 +1596,243 @@
                 ],
                 "title": "WebSessionResource"
             },
+            "WorkspaceCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/WorkspaceResource"
+                },
+                "title": "WorkspaceCollection"
+            },
+            "WorkspaceDetailResource": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "slug": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "role": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "from the membership row when the list loaded it (no query per workspace)"
+                    },
+                    "is_owner": {
+                        "type": "boolean"
+                    },
+                    "logo_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "timezone": {
+                        "type": "string"
+                    },
+                    "language": {
+                        "type": "string"
+                    },
+                    "counts": {
+                        "type": "object",
+                        "properties": {
+                            "projects": {
+                                "type": "integer",
+                                "description": "the projects this user can open (workspace admins: all), as on the web",
+                                "minimum": 0
+                            },
+                            "members": {
+                                "type": "integer",
+                                "minimum": 0
+                            }
+                        },
+                        "required": [
+                            "projects",
+                            "members"
+                        ]
+                    },
+                    "can": {
+                        "type": "object",
+                        "properties": {
+                            "update": {
+                                "type": "boolean"
+                            },
+                            "invite_members": {
+                                "type": "boolean"
+                            },
+                            "create_projects": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "update",
+                            "invite_members",
+                            "create_projects"
+                        ]
+                    },
+                    "limits_enforced": {
+                        "type": "boolean"
+                    },
+                    "limits": {
+                        "type": "object",
+                        "properties": {
+                            "plan_name": {
+                                "type": "string"
+                            },
+                            "free": {
+                                "type": "boolean"
+                            },
+                            "unlimited": {
+                                "type": "boolean"
+                            },
+                            "members": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "projects": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "content_bytes": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "file_bytes": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "versions": {
+                                "type": "object",
+                                "properties": {
+                                    "keep_latest": {
+                                        "type": "integer"
+                                    },
+                                    "keep_days": {
+                                        "type": [
+                                            "integer",
+                                            "null"
+                                        ]
+                                    }
+                                },
+                                "required": [
+                                    "keep_latest",
+                                    "keep_days"
+                                ]
+                            },
+                            "grace_until": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "plan_name",
+                            "free",
+                            "unlimited",
+                            "members",
+                            "projects",
+                            "content_bytes",
+                            "file_bytes",
+                            "versions",
+                            "grace_until"
+                        ]
+                    },
+                    "usage": {
+                        "type": "object",
+                        "properties": {
+                            "members": {
+                                "type": "integer",
+                                "description": "members + open invitations, as the member limit counts them"
+                            },
+                            "projects": {
+                                "type": "integer",
+                                "minimum": 0
+                            },
+                            "content_bytes": {
+                                "type": "integer"
+                            },
+                            "file_bytes": {
+                                "type": "integer"
+                            },
+                            "measured_at": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "members",
+                            "projects",
+                            "content_bytes",
+                            "file_bytes",
+                            "measured_at"
+                        ]
+                    },
+                    "billing_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "\"Plan & billing\" on the web; null on self-hosted installs"
+                    }
+                },
+                "required": [
+                    "id",
+                    "slug",
+                    "name",
+                    "role",
+                    "is_owner",
+                    "logo_url",
+                    "url",
+                    "created_at",
+                    "updated_at",
+                    "description",
+                    "timezone",
+                    "language",
+                    "counts",
+                    "can",
+                    "limits_enforced",
+                    "limits",
+                    "usage",
+                    "billing_url"
+                ],
+                "title": "WorkspaceDetailResource"
+            },
             "WorkspaceResource": {
                 "type": "object",
                 "properties": {
@@ -1482,14 +1846,47 @@
                         "type": "string"
                     },
                     "role": {
-                        "type": "null"
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "from the membership row when the list loaded it (no query per workspace)"
+                    },
+                    "is_owner": {
+                        "type": "boolean"
+                    },
+                    "logo_url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "updated_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 },
                 "required": [
                     "id",
                     "slug",
                     "name",
-                    "role"
+                    "role",
+                    "is_owner",
+                    "logo_url",
+                    "url",
+                    "created_at",
+                    "updated_at"
                 ],
                 "title": "WorkspaceResource"
             }

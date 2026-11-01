@@ -59,4 +59,8 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         ->where('token', '[A-Za-z0-9]{1,128}')->middleware('verified')->name('invitations.accept');
     Route::post('workspaces', [WorkspaceController::class, 'store'])->middleware('verified')->name('workspaces.store');
 
+    // ── Workspaces ────────────────────────────────────────────────────────────────────────────
+    Route::get('workspaces', [WorkspaceController::class, 'index'])->name('workspaces.index');
+    Route::get('workspaces/{workspace:slug}', [WorkspaceController::class, 'show'])->name('workspaces.show');
+
 });

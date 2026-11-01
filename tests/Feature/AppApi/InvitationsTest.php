@@ -100,7 +100,7 @@ class InvitationsTest extends TestCase
 
         $this->postJson("/api/v1/invitations/{$invitation->token}/accept", [], $this->appHeaders($this->appToken($user)))
             ->assertOk()
-            ->assertExactJson(['data' => ['id' => $this->workspace->id, 'slug' => $this->workspace->slug, 'name' => 'Acme', 'role' => 'editor']]);
+            ->assertJson(['data' => ['id' => $this->workspace->id, 'slug' => $this->workspace->slug, 'name' => 'Acme', 'role' => 'editor', 'is_owner' => false]]);
 
         $this->assertTrue($this->workspace->hasUser($user));
         $this->assertNotNull($invitation->fresh()->accepted_at);

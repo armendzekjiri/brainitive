@@ -119,3 +119,86 @@ homepage (only what's user-facing: the devices list).
 
 ## Open questions
 - Remote repo `armendzekjiri/brainitive-desktop`: create + push only after the user's go.
+
+## Phase 03 — workspaces, projects, members, navigation, search, notifications, connected apps
+
+Desktop-app board cards BRAI-388 … BRAI-394 (server side, App API v1). One ticket branch each,
+`feat/app-api-<name>` from `release/v1.49.0`, merged back with `--no-ff`. Every endpoint follows
+`docs/ai/API.md` + `skills/add-app-api-endpoint.md`; the `## API (ready)` texts for the Mobile app
+cards are kept in API.md (the cards are updated by the lead).
+
+**Shared pieces (first ticket):** `App\Support\AppApi\CursorPage` (`?cursor=&limit=` → `{data,
+next_cursor}`, default 50, max 100, Laravel cursor pagination on a unique order) and
+`AppApi\Concerns\ResolvesVisible` (workspace by slug / project by id through the user's
+memberships → 404 for anything the user can't open, then the web policy).
+
+**Decisions:** projects are addressed by numeric **id** (`/projects/{id}`): slugs are unique only per
+workspace and change on rename; responses carry slug + web `url` too. Role changes, removals and
+settings stay web only.
+
+### BRAI-388 workspaces (`feat/app-api-workspaces`)
+- `GET /workspaces` (the user's workspaces, cursor-paginated, `updated_since`) and
+  `GET /workspaces/{slug}` (role, is_owner, timezone, counts, plan limits + usage, `can` flags).
+- Reuse: `WorkspacePolicy::view/update/createProjects`, `Entitlements::limits/billingUrl` +
+  `EntitlementsPayload` usage (as `MeResource`), `WorkspaceResource` grows a full variant.
+- Tests: list/show, non-member → 404, Passport → 401, pagination, limits.
+
+### BRAI-389 projects (`feat/app-api-projects`)
+- `GET /workspaces/{slug}/projects` (admins all, others their projects — `ProjectController@index`
+  rule), `GET /projects/{id}` (home: boards, docs tree (visible pages), task lists, plans, helpdesks,
+  lead forms, recently updated), `GET /workspaces/{slug}/project-templates` (`TemplateRuns::catalog`),
+  `POST /workspaces/{slug}/projects` (name, key, description, template?, start_date, include, request_id).
+- Extract: the inline create of `ProjectController@store` → `App\Support\Projects\ProjectCreator`
+  (validation rules + limits + template run + default board) used by web and API.
+- Reuse: `ProjectPolicy::view`, `WorkspacePolicy::createProjects`, `Page::visibleTo`, `RecentContent`,
+  `LimitGate` (402).
+- Tests: visibility (non-member project → 404), create blank + from template, 422, 402, Passport 401;
+  web `ProjectTemplatesTest` + project create tests.
+
+### BRAI-390 members (`feat/app-api-members`)
+- `GET /workspaces/{slug}/members`, `GET /projects/{id}/members` (`?q=` name filter, cursor),
+  `POST /workspaces/{slug}/invitations` `{email, role}` → existing user added, else invitation mailed.
+- Extract: `WorkspaceController@inviteMember` → `App\Support\Workspaces\WorkspaceInvites::invite()`.
+- Reuse: `WorkspacePolicy::update` (admins invite, as the web), `LimitGate::ensureCanAddMembers` (402).
+- Tests: lists, non-admin invite → 403, non-member → 404, already member → 422, limit → 402;
+  web `LimitChecksTest` invite cases.
+
+### BRAI-391 navigation (`feat/app-api-navigation`)
+- `GET /me/navigation?workspace=<slug>&recent[]=<type>:<id>` → the sidebar of that workspace
+  (visible nav entries, accessible projects with groups / pins / content), the app's recent
+  destinations resolved, `PUT /me/pins` `{project_id, pins: [{type, id}]}`.
+- Reuse: `SidebarPreferences` (normalize / apply / visiblePins); extract the resolver of
+  `CommandPaletteController@recent` → `App\Support\Navigation\RecentDestinations` (the web keeps
+  recents in the browser, the apps keep theirs locally — the server only resolves them).
+- Tests: hidden nav, pins visible-only, other user's project → 404, recent drops forbidden entries.
+
+### BRAI-392 search (`feat/app-api-search`)
+- `GET /search?q=&type=&workspace=&project[]=&status=&assignee=&limit=&cursor=` — `SearchService`
+  (same ranking + visibility as the web, MCP `search` and `ext/v1/search`), plus `places` on the
+  first page. Cursor = the page number.
+- Extend the shared service (no fork): `SearchQuery::$workspaceIds` + `queryFrom(['workspace' => …])`.
+- Tests: visibility (other workspace's content never found), workspace filter, type filter,
+  paging, Passport 401; web `Tests\Feature\Search`.
+
+### BRAI-393 notifications (`feat/app-api-notifications`)
+- `GET /notifications?filter=all|unread|mentions|assigned&archived=`, `GET /notifications/unread-count`,
+  `POST /notifications/{id}/read`, `POST /notifications/read-all`, `POST /notifications/{id}/archive`,
+  `GET|PUT /me/notification-preferences`.
+- Extract: `NotificationController` query / apply / feed → `App\Support\Notifications\NotificationInbox`,
+  preferences update → `NotificationCatalog::update()`; web controller becomes thin.
+- Tests: own rows only (other user's id → 404), filters, cursor, read-all, archive marks read,
+  preferences partial update + 422; web `NotificationInboxTest`, `NotificationPreferencesTest`.
+
+### BRAI-394 connected apps + data export (`feat/app-api-connected-apps`)
+- `GET /me/connected-apps` (Passport clients — MCP connectors, CLI, extension — grouped per client,
+  plus desktop / mobile devices), `DELETE /me/connected-apps/{oauth:<client>|device:<id>}` → 204;
+  `POST /me/data-export` (202), `GET /me/data-export` (status + download link that opens in the web session).
+- Extract: `ProfileController::connectedApps/disconnectApp` → `App\Support\Profile\ConnectedApps`;
+  `DataExportController::store/state` → `App\Support\Profile\DataExports`.
+- Tests: list both kinds, revoke each kind, other user's → 404, export cooldown → 422; web
+  `ProfileTest` connected apps, `DataExportTest`.
+
+### e2e
+`e2e/tests/app-api-workspaces.spec.ts` (one journey through the API with a seeded app token:
+workspaces → projects → create project → it appears on the web; pin via API → pin in the web sidebar;
+notification read via API → web bell). Uses `POST /profile/app-devices/e2e-create` for the token.
