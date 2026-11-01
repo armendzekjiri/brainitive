@@ -8948,6 +8948,268 @@
                     }
                 }
             }
+        },
+        "/pages/{uuid}/collab-token": {
+            "post": {
+                "operationId": "app.v1.pages.collab.token",
+                "description": "Connect to `url` with `token` and open `document` (Yjs over WebSocket). `edit: false` = watch only. The\ntoken lasts about two minutes: ask again for every (re)connect. `live` on `GET /pages/{uuid}` says\nbeforehand whether this is offered (403 when not: live editing switched off on the server, a whiteboard\nor folder, an archived doc, or a reader of a published doc). After a 409 on bootstrap / save the\ndocument was replaced (e.g. a text change from outside): ask for a new token.",
+                "summary": "A short-lived token to join a doc's live document",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`CollabSessionResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CollabSessionResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "An error\n\nAccess denied",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "description": "Human-readable, safe to show."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "description": "Machine-readable: switch on this, not on the message.",
+                                            "enum": [
+                                                "forbidden"
+                                            ]
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/pages/{uuid}/collab/bootstrap": {
+            "post": {
+                "operationId": "app.v1.pages.collab.bootstrap",
+                "description": "Call it when the synced document is empty: `granted` \u2192 load `html` (+ `name`, `icon`) into it and save\nonce with `baseline: true`; `wait` \u2192 another client loads it. 409 `conflict` (+ `epoch`): the document\nwas replaced \u2014 reconnect with a new token. Editors only (403).",
+                "summary": "Claim the first load of an empty live document",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CollabBootstrapRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`CollabBootstrapResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CollabBootstrapResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "This document was replaced. Connect again with a new token."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "const": "conflict"
+                                        },
+                                        "epoch": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code",
+                                        "epoch"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/pages/{uuid}/collab/draft": {
+            "put": {
+                "operationId": "app.v1.pages.collab.save",
+                "description": "What a browser sends every few seconds while it leads the document: the text as the editor's HTML, the\ntitle, the icon and the Yjs state vector it was made from. An older or concurrent snapshot is `covered`\n(nothing written). On a published doc this is its unpublished changes. 409 `conflict` (+ `epoch`): the\ndocument was replaced \u2014 reconnect. Editors only (403).",
+                "summary": "Save the live document's HTML as the draft",
+                "tags": [
+                    "Docs"
+                ],
+                "parameters": [
+                    {
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CollabSaveRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`CollabSaveResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/CollabSaveResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "const": "This document was replaced. Connect again with a new token."
+                                        },
+                                        "code": {
+                                            "type": "string",
+                                            "const": "conflict"
+                                        },
+                                        "epoch": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "required": [
+                                        "message",
+                                        "code",
+                                        "epoch"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "$ref": "#/components/responses/AuthorizationException"
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -10555,6 +10817,200 @@
                     "target"
                 ],
                 "title": "CaptureResource"
+            },
+            "CollabBootstrapRequest": {
+                "type": "object",
+                "description": "`POST /pages/{uuid}/collab/bootstrap`: an editor's client synced an empty live document.",
+                "properties": {
+                    "epoch": {
+                        "type": "integer",
+                        "description": "the epoch of the session the client is connected to",
+                        "minimum": 0
+                    },
+                    "claim": {
+                        "type": "string",
+                        "description": "a random id of this client's attempt (16\u201364 of A-Z a-z 0-9 _ -), the same on retries",
+                        "pattern": "^[A-Za-z0-9_-]{16,64}$"
+                    }
+                },
+                "required": [
+                    "epoch",
+                    "claim"
+                ],
+                "title": "CollabBootstrapRequest"
+            },
+            "CollabBootstrapResource": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "granted",
+                            "wait"
+                        ]
+                    },
+                    "html": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "status",
+                    "html",
+                    "name",
+                    "icon"
+                ],
+                "title": "CollabBootstrapResource"
+            },
+            "CollabSaveRequest": {
+                "type": "object",
+                "description": "`PUT /pages/{uuid}/collab/draft`: the HTML of the live document, saved as the draft (as a browser does).",
+                "properties": {
+                    "epoch": {
+                        "type": "integer",
+                        "minimum": 0
+                    },
+                    "html": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the live document's text in the editor's HTML",
+                        "maxLength": 10000000
+                    },
+                    "name": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "icon": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 2000000
+                    },
+                    "vector": {
+                        "type": "array",
+                        "description": "the Yjs state vector of the document this HTML was made from ({client id: clock})",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "baseline": {
+                        "type": "boolean",
+                        "description": "true once, from the client that loaded the draft into an empty document: records the vector, writes nothing"
+                    }
+                },
+                "required": [
+                    "epoch",
+                    "html",
+                    "name",
+                    "vector"
+                ],
+                "title": "CollabSaveRequest"
+            },
+            "CollabSaveResource": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "saved",
+                            "unchanged",
+                            "covered",
+                            "baseline"
+                        ]
+                    },
+                    "revision": {
+                        "type": "integer"
+                    },
+                    "has_unpublished_changes": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "status",
+                    "revision",
+                    "has_unpublished_changes"
+                ],
+                "title": "CollabSaveResource"
+            },
+            "CollabSessionResource": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "the realtime server (wss:\u2026/collab)"
+                    },
+                    "document": {
+                        "type": "string",
+                        "description": "the Y document to open (`page.<uuid>.<epoch>`)"
+                    },
+                    "epoch": {
+                        "type": "integer"
+                    },
+                    "token": {
+                        "type": "string",
+                        "description": "the connection token for the realtime server (never sent anywhere else)"
+                    },
+                    "expires_at": {
+                        "type": "integer",
+                        "description": "unix seconds"
+                    },
+                    "edit": {
+                        "type": "boolean"
+                    },
+                    "html_vector": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "description": "the state vector of the last saved HTML ({client id: clock}); null before the first save",
+                        "additionalProperties": {
+                            "type": "integer"
+                        }
+                    },
+                    "user": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name"
+                        ]
+                    }
+                },
+                "required": [
+                    "url",
+                    "document",
+                    "epoch",
+                    "token",
+                    "expires_at",
+                    "edit",
+                    "html_vector",
+                    "user"
+                ],
+                "title": "CollabSessionResource"
             },
             "CommentCollection": {
                 "type": "array",
@@ -13167,6 +13623,18 @@
                     "watching": {
                         "type": "boolean"
                     },
+                    "live": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "live co-editing offered to this user: edit, view (watch a never-published doc), or null (`POST /pages/{uuid}/collab-token`)",
+                        "enum": [
+                            "edit",
+                            "view",
+                            null
+                        ]
+                    },
                     "can": {
                         "type": "object",
                         "properties": {
@@ -13220,6 +13688,7 @@
                     "creator",
                     "last_edited_by",
                     "watching",
+                    "live",
                     "can"
                 ],
                 "title": "PageDetailResource"

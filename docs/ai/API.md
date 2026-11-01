@@ -649,6 +649,9 @@ set when a sprint starts / completes.
 | `PATCH /api/v1/pages/{uuid}` | app + verified, 120/min | `{name?, icon?, markdown?, revision}` → `{data: page}`; `revision` is required with `markdown` and → 409 `conflict` when the page was saved since. A published doc's changes become unpublished changes. Whiteboards / folders: `name`, `icon`. 403 without `can.update` | Read + light edit | BRAI-199 | ready (v1.49.0, BRAI-411) |
 | `POST /api/v1/pages/{uuid}/publish` | app + verified | `{message?, notify? (default true), revision?}` → `{data: page}`: publish a draft, or make a published doc's changes live as a new version (watchers notified). Nothing to publish → 200 unchanged; "review required" without an approved review → 422 `review`; folders → 422 | Read + light edit | BRAI-198 | ready (v1.49.0, BRAI-411) |
 | `POST /api/v1/pages/{uuid}/move` | app + verified | `{parent_uuid (null = top level), before_uuid?, after_uuid?}` → `{data: page}`; into itself / its subpages → 422 `parent_uuid` | Read + light edit | BRAI-198 | ready (v1.49.0, BRAI-411) |
+| `POST /api/v1/pages/{uuid}/collab-token` | app + verified, 60/min | Join a doc's live document (Yjs): `{data: {url, document, epoch, token, expires_at (unix s), edit, html_vector, user}}`. Ask for every (re)connect (~2 min). 403 when not offered (`live: null` on `GET /pages/{uuid}`: server without realtime, whiteboard / folder, archived, reader of a published doc) | Later (read-only fallback) | BRAI-200 | ready (v1.49.0, BRAI-412) |
+| `POST /api/v1/pages/{uuid}/collab/bootstrap` | app + verified, 30/min | `{epoch, claim}` → `{data: {status: granted\|wait, html, name, icon}}`: the one client that loads the draft into an empty document. 409 `conflict` + `epoch`: replaced, reconnect | Later | BRAI-200 | ready (v1.49.0, BRAI-412) |
+| `PUT /api/v1/pages/{uuid}/collab/draft` | app + verified, 180/min | `{epoch, html, name, icon?, vector, baseline?}` → `{data: {status: saved\|unchanged\|covered\|baseline, revision, has_unpublished_changes}}`: the live document's HTML as the draft (what a leading browser sends). 409 + `epoch`: replaced | Later | BRAI-200 | ready (v1.49.0, BRAI-412) |
 
 Page (tree): `{id, uuid, project_id, parent_id, parent_uuid, kind: doc|whiteboard|folder, name, icon (emoji|null), has_image_icon,
 status: draft|published|archived, position, url, created_at, updated_at}`. `GET /pages/{uuid}` adds `{icon_image (data: URL or
@@ -666,6 +669,12 @@ name, type}], creator, last_edited_by, watching, can: {update, delete, publish, 
   editor: it needs the `revision` the app read (live editors save every few seconds, so a stale one → 409; load and retry) and
   starts a new live document (`PageCollab::reset`), so open browsers reload on the app's text. On a published doc it only reaches
   the draft; readers see it after publish.
+- **Live co-editing from a native client (BRAI-412)** = the browser's three calls (`Support\Collab\PageCollab`, the web's
+  `PageCollabController`): a token for the realtime server (`COLLAB_URL`; access = `PageCollab::access`, the rule the server checks
+  through `internal/collab/access`: editors edit, readers of a never-published doc watch), the bootstrap claim, and the live draft
+  save. A client that edits must also save (the leading client sends its HTML every few seconds; `covered` = another one holds
+  more), or its edits stay in the Y state only. `GET /pages/{uuid}` → `live: edit|view|null` says what is offered. Whiteboards and
+  issue descriptions: no app token (web / desktop webview).
 - Icons from the app are emoji (`data:` / `http` / `/…` → 422); uploading image icons, duplicating, unpublishing, archiving,
   deleting, version restore, review requests: web only for now. Whiteboard scenes: Whiteboards.
 
@@ -966,4 +975,14 @@ Built in: BRAI-411 (desktop) · Mobile scope: Read + light edit (delete, duplica
 - PATCH /api/v1/pages/{uuid} {markdown, revision, name?, icon?} — replace the text; a stale revision → 409 (someone or a live editor saved since: reload)
 Scope: app · OpenAPI: docs/api/openapi.json#/Docs · Registry: docs/ai/API.md#docs
 Built in: BRAI-411 (desktop) · Mobile scope: Light edit in Markdown (the full block editor, tables, embeds: web / desktop webview; live co-editing: BRAI-200)
+```
+
+**BRAI-200** (live collaborative editing, cursors and presence)
+```
+## API (ready) — for a native live editor
+- GET /api/v1/pages/{uuid} → live: edit | view | null — whether live co-editing is offered to the user
+- POST /api/v1/pages/{uuid}/collab-token — realtime server url, document, short-lived token (ask for every reconnect), edit flag
+- POST /api/v1/pages/{uuid}/collab/bootstrap {epoch, claim} · PUT /api/v1/pages/{uuid}/collab/draft {epoch, html, name, icon, vector, baseline?} — the browser's bootstrap + live save; 409 + epoch = document replaced, reconnect
+Scope: app · OpenAPI: docs/api/openapi.json#/Docs · Registry: docs/ai/API.md#docs
+Built in: BRAI-412 (desktop) · Mobile scope: Later — v1 reads (GET /pages/{uuid}) and edits Markdown with the revision check (BRAI-199)
 ```
