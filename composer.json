@@ -63,6 +63,10 @@
             "@php artisan config:clear --ansi",
             "@php artisan test"
         ],
+        "openapi": [
+            "@putenv OPENAPI_WRITE=1",
+            "@php artisan test --filter=OpenApiSpecTest"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"

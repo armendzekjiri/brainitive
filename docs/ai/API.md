@@ -5,23 +5,33 @@ The JSON API of the first-party **desktop** (Tauri) and **mobile** (Expo) apps: 
 (`/mcp`, `/api/cli/*`, `/api/ext/v1/*`): own tokens, own guard, own throttles. Only the business
 logic underneath (Support services, policies) is shared.
 
-- Machine-readable spec: [`docs/api/openapi.json`](../api/openapi.json) (Scramble; regenerate with
-  `php artisan scramble:export --path=docs/api/openapi.json`, a test fails when it is stale).
+- Machine-readable spec: [`docs/api/openapi.json`](../api/openapi.json) (OpenAPI 3.1, Scramble,
+  committed so the mobile app can generate a typed client). Regenerate with **`composer openapi`**
+  (in a worktree: `TEST_DB_SUFFIX=<name> composer openapi`); `tests/Feature/AppApi/OpenApiSpecTest.php`
+  fails in CI when the file is stale. It runs in PHPUnit on purpose: Scramble reads column types from
+  the database, so only the migrated test database gives the same file everywhere. Live UI:
+  `/docs/api` (local env or instance admins only). Config: `config/scramble.php`,
+  `App\Providers\AppApiDocsServiceProvider`, `App\Support\AppApi\OpenApi\*`.
 - Recipe for a new endpoint: [`skills/add-app-api-endpoint.md`](./skills/add-app-api-endpoint.md).
-- Every endpoint also gets an `## API` section on its card on the **Mobile app** board, so the
-  mobile work only has to read the card.
+- Every endpoint also gets an `## API (ready)` section on its card on the **Mobile app** board, so
+  the mobile work only has to read the card (template below).
+- Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
+  Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
+  section). A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
 | | |
 |---|---|
 | Auth | `Authorization: Bearer bra_…` (access, 15 min). Refresh `brr_…` (60 days, single use). Tokens never in URLs. |
-| Errors | `{"message": "…", "code": "…", "errors"?: {field: [..]}}` — 401 `unauthenticated`, 403 `forbidden`, 404 `not_found`, 405 `method_not_allowed`, 409 `conflict`, 422 `validation_failed`, 429 `rate_limited`, 500 `server_error`. 404 instead of 403 when the user must not learn that something exists. |
+| Responses | Wrapped: `{data: {...}}` (API Resources' default); lists `{data: [...], next_cursor}`. **DELETE → 204** No Content. Only exception: the OAuth token responses of `POST /auth/exchange` and `POST /auth/refresh` are unwrapped (`{token_type, access_token, expires_in, refresh_token, refresh_expires_in, device}`). Resources list their fields explicitly, never a model's `toArray()`. |
+| Errors | `{"message": "…", "code": "…", "errors"?: {field: [..]}}` — 400 `bad_request` / `invalid_grant`, 401 `unauthenticated`, 402 `limit_reached` (+ `limit` object, see Invitations), 403 `forbidden`, 404 `not_found`, 405 `method_not_allowed`, 409 `conflict`, 410 `gone`, 422 `validation_failed`, 429 `rate_limited`, 500 `server_error`. 404 instead of 403 when the user must not learn that something exists. Documented once for all endpoints (`App\Support\AppApi\OpenApi`); a 402 needs `@throws LimitReached` on the controller method. |
 | Dates | ISO-8601 UTC (`2026-11-01T09:16:04Z`). |
 | Lists | Cursor pagination `?cursor=&limit=` (default 50, max 100) → `{data: [...], next_cursor}`; `updated_since` for sync. |
 | Writes | `Idempotency-Key` header accepted; updates carry `revision` / `updated_at` → 409 on conflict. |
 | Limits | `throttle:app-api` 240/min per token + 600/min per IP; `throttle:app-auth` 20/min per IP on exchange / refresh. |
 | CORS | None. Native clients only; browsers can't call it cross-origin. |
+| Versioning | `info.version` of the spec is the **API** version (`1.0.0`, `config/scramble.php`), not the app release. Additive changes (new endpoint, new optional field) stay in v1; removing / renaming a field or changing a meaning needs `/api/v2`. Apps learn the server's minimum app versions from `GET /instance`. |
 
 ## Native sign-in
 
@@ -47,6 +57,22 @@ Token response (exchange + refresh):
 ```
 
 Cancel on the consent page → `brainitive://auth/callback?error=access_denied&state=…`.
+
+## The `## API (ready)` section on a mobile card
+
+Each endpoint's card on the **Mobile app** board (`mobile-app`, project `brainitive`, workspace
+`ndizeal-everything`) gets this at the end of its description (BRAI-380):
+
+```
+## API (ready)
+- GET /api/v1/... — what it returns
+- POST /api/v1/... — what it does
+Scope: app · OpenAPI: docs/api/openapi.json#/<tag> · Registry: docs/ai/API.md#<module>
+Built in: BRAI-xxx (desktop) · Mobile scope: Full | Read + light edit | Read-only
+```
+
+A feature the apps only open in the browser / webview gets `## API: web only — open in browser`
+instead. BRAI-168 (Backend / mobile API inventory) links this registry.
 
 ## Endpoints
 

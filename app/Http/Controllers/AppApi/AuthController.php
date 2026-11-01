@@ -13,6 +13,7 @@ use App\Notifications\AppRefreshReuseNotification;
 use App\Support\AppApi\AppApiErrors;
 use App\Support\AppApi\AppAuthCodes;
 use App\Support\AppApi\AppTokens;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -24,6 +25,7 @@ use Throwable;
  * App API v1 — native sign-in and the token lifecycle (BRAI-383 / BRAI-428). The browser half
  * (/app/authorize, /app/session/{code}) is App\Http\Controllers\AppAuthController.
  */
+#[Group('Auth', weight: 20)]
 class AuthController extends Controller
 {
     /** Which platforms each first-party client runs on. */

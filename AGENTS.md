@@ -10,6 +10,8 @@
 > - [`docs/ai/skills/`](docs/ai/skills) — task recipes
 > - [`docs/ai/KNOWLEDGE.md`](docs/ai/KNOWLEDGE.md) — decisions & gotchas
 > - [`docs/ai/tasks/`](docs/ai/tasks) — one plan file per branch
+> - [`docs/ai/API.md`](docs/ai/API.md) — the desktop / mobile App API (`/api/v1`): registry +
+>   conventions; new endpoints follow [`docs/ai/skills/add-app-api-endpoint.md`](docs/ai/skills/add-app-api-endpoint.md)
 
 ## Cursor Cloud specific instructions
 

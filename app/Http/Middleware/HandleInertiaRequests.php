@@ -282,6 +282,9 @@ class HandleInertiaRequests extends Middleware
             'updateNotice' => fn () => UpdateCheck::enabled() && $instanceAdmin() ? UpdateCheck::noticeFor($user, true) : null,
             // Footer links to the legal pages (BRAI-156): imprint / DPA / sub-processors may be null (self-hosted)
             'legalLinks' => fn () => LegalInfo::links(),
+            // Oldest Brainitive Desktop this server works with (BRAI-352, lib/desktop.ts): the web app
+            // inside an older desktop shell asks the user to update it
+            'desktopMinVersion' => config('app-api.min_versions.desktop'),
             'workspaces' => $workspaces,
             'currentWorkspace' => $currentWorkspace,
             // workspace settings are admin-only: hide the link for everyone else (it would end in a 403)

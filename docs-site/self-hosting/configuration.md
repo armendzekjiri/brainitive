@@ -225,6 +225,15 @@ Normally created in **Instance admin → GitHub App**. These variables override 
 | `CALENDAR_MAX_RESPONSE_BYTES` | `5000000` | Largest calendar file or CalDAV response read |
 | `CALENDAR_ICS_REFRESH_MINUTES` | `15` | Minutes a subscribed calendar link is cached |
 
+## Desktop and mobile apps
+
+The Brainitive apps talk to your server's App API under `/api/v1`. See [Desktop and mobile apps](./desktop-and-mobile-apps).
+
+| Variable | Default | What it does |
+|---|---|---|
+| `APP_API_MIN_DESKTOP_VERSION` | `0.1.0` | Oldest desktop app version your server works with. Older apps ask the user to update |
+| `APP_API_MIN_MOBILE_VERSION` | `0.1.0` | The same for the mobile app |
+
 ## Legal pages
 
 A self-hosted installation never shows Brainitive Cloud's operator data. `/privacy`, `/terms` and `/cookies` show a short notice about your installation, and `/imprint` appears once you set your details. Empty values are hidden.

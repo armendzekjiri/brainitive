@@ -609,6 +609,8 @@ export type PageProps<
     activeTimer?: ActiveTimer | null;
     /** "New version available" (BRAI-433, UpdateCheck::noticeFor): instance admins of self-hosted installs only. */
     updateNotice?: UpdateNotice | null;
+    /** Oldest Brainitive Desktop version this server works with (config app-api.min_versions.desktop); see lib/desktop.ts. */
+    desktopMinVersion?: string;
     // Shared layout data
     workspaces?: Workspace[];
     currentWorkspace?: Workspace & {

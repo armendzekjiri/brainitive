@@ -422,6 +422,45 @@ Plan [`tasks/feat-legal-compliance.md`](./tasks/feat-legal-compliance.md); human
   task lists only) is gone since v1.47.0. Its server side, `CliController` (`routes/api.php`: password
   `/cli/login`, workspaces + task lists), is still there with no client; removal is a separate decision.
 
+### App API v1 — desktop + mobile apps (v1.49.0, BRAI-380)
+JSON API of the first-party **Brainitive Desktop** (Tauri, own repo `armendzekjiri/brainitive-desktop`,
+checked out at `desktop/`, gitignored) and later **Brainitive Mobile** (Expo). Separate from MCP / CLI /
+extension: own tokens, guard, throttles; only Support services and policies are shared.
+**Registry of every endpoint + conventions: [`API.md`](./API.md); recipe:
+[skills/add-app-api-endpoint.md](./skills/add-app-api-endpoint.md).**
+- **Routes:** `routes/app-api.php`, loaded in `bootstrap/app.php` (`then:`) under `/api/v1`, names
+  `app.v1.*`, middleware group `app-api` (`AppApiJson` → JSON always, `SubstituteBindings`,
+  `throttle:app-api`; no session / CSRF / CORS). Signed-in routes: `auth:app` +
+  `EnsureUserIsNotSuspended`. Browser half of sign-in (`/app/authorize`, `/app/session/{code}`):
+  `routes/app-auth.php` → `AppAuthController`.
+- **Model:** `AppDevice` (`app_devices`, `User::appDevices()`): one row per signed-in install, holding its
+  one token pair as sha256 hashes + expiries, `previous_refresh_hash` (reuse detection), `revoked_at` /
+  `revoked_reason` (the audit trail). No token / code tables.
+- **Support (`app/Support/AppApi/`):** `AppTokens` (issue / resolve / revoke / revokeAllFor, guard
+  resolver, `currentDevice($request)`), `AppAuthCodes` (single-use sign-in codes in the cache, PKCE
+  S256), `AppApiErrors` (the one error shape `{message, code, errors?}`, rendered for `api/v1/*` in
+  `bootstrap/app.php`; `limitReached()` for 402), `OpenApi/*` (Scramble extensions: the error shape and
+  429 / 402 responses in the spec).
+- **Providers:** `AppApiServiceProvider` (guard `app` = `Auth::viaRequest('app-token')`, rate limiters
+  `app-api` / `app-auth`), `AppApiDocsServiceProvider` (OpenAPI: Bearer scheme, `{instance}` server
+  variable, gate `viewApiDocs` = instance admins).
+- **Config:** `config/app-api.php` (TTLs, clients + redirects, `max_devices`, `min_versions` ←
+  `APP_API_MIN_DESKTOP_VERSION` / `APP_API_MIN_MOBILE_VERSION`), `config/auth.php` guard `app`,
+  `config/scramble.php` (documents only `api/v1`; API version `1.0.0`).
+- **Endpoints:** `app/Http/Controllers/AppApi/*` (Instance, Auth, Me + MeAvatar, Device, Invitation,
+  Workspace — one `#[Group]` tag per `API.md` module), Form Requests in `app/Http/Requests/AppApi/`,
+  Resources in `app/Http/Resources/AppApi/`. The tables in `API.md` are the list.
+- **Spec:** `docs/api/openapi.json` (committed; `composer openapi` regenerates it through
+  `tests/Feature/AppApi/OpenApiSpecTest.php`, which is also the CI drift check). UI `/docs/api` +
+  `/docs/api.json`: local env or instance admins.
+- **Web ↔ desktop bridge:** `resources/js/lib/desktop.ts` (`isDesktop()`, `desktop.notify / setBadge /
+  openExternal`, `isOutdatedDesktop(desktopMinVersion)`): Tauri IPC commands `brainitive_notify`,
+  `brainitive_set_badge`, `brainitive_open_external` via `window.__TAURI_INTERNALS__.invoke`, no-op in
+  a browser; the shell's user agent ends in ` BrainitiveDesktop/<version>`. Shared prop
+  `desktopMinVersion`. Used by `useUnreadCount` (bell → dock badge).
+- **Tests:** `tests/Feature/AppApi/*` (helper `Concerns\ActsAsAppClient`: `appToken()`, `appHeaders()`,
+  `passportToken()`). Public docs for self-hosters: `docs-site/self-hosting/desktop-and-mobile-apps.md`.
+
 ### Browser extension (Chrome, Edge, Firefox)
 - **Extension source:** `browser-extension/` (WXT + React + TS, own `package.json`, not part of
   the app build) — see its `README.md`. `entrypoints/` = popup, side panel, options, background
@@ -671,6 +710,7 @@ Code name "entitlements", never "plan" (`App\Models\Plan` is the Gantt plan).
 | A policy | `app/Policies/` **and register it** in `AppServiceProvider` |
 | An Inertia page | `resources/js/Pages/<Module>/` + type in `types/index.d.ts` — [add-inertia-page skill](./skills/add-inertia-page.md) |
 | An MCP tool | `app/Mcp/Tools/` + `BrainitiveServer::$tools` — [add-mcp-tool skill](./skills/add-mcp-tool.md) |
+| A desktop / mobile app endpoint | `routes/app-api.php` + `app/Http/Controllers/AppApi/` + Form Request + Resource + tests, then `composer openapi`, a row in [`API.md`](./API.md) and the mobile card — [add-app-api-endpoint skill](./skills/add-app-api-endpoint.md) |
 | A browser-extension capture | `Support/Captures/ContentCapture` (rules, policy, create — also used by the capture inbox) + `Extension/CaptureController` + `ext.*` route, then `browser-extension/lib/api.ts` + a form in `components/forms.tsx` |
 | A notification | `app/Notifications/` — new types extend `CatalogNotification` + a `NotificationCatalog::TYPES` entry; senders in `app/Support/Notifications/` — [add-notification skill](./skills/add-notification.md) |
 | A queued job | `app/Jobs/` |
