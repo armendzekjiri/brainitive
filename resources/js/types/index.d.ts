@@ -79,6 +79,8 @@ export interface Project {
     pages_count?: number;
     /** Lead generation forms (BRAI-93), in the sidebar next to the helpdesks */
     lead_forms?: LeadFormSummary[];
+    /** Sidebar only (BRAI-431): the user may reorder / move pages (PagePolicy create). */
+    can_edit_pages?: boolean;
     created_at: string;
     updated_at: string;
 }

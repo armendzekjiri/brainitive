@@ -13,12 +13,14 @@ use App\Support\Collab\WhiteboardCollab;
 use App\Support\Entitlements\LimitGate;
 use App\Support\PageReviews\ReviewGate;
 use App\Support\PageReviews\ReviewPresenter;
+use App\Support\Pages\PageMover;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class PageController extends Controller
@@ -369,11 +371,12 @@ class PageController extends Controller
             unset($validated['name'], $validated['icon']);
         }
 
-        // Prevent moving a folder into its own descendant
-        if (isset($validated['parent_id']) && $validated['parent_id'] !== $page->parent_id) {
-            $newParent = Page::find($validated['parent_id']);
-            if ($newParent && $this->isDescendantOf($newParent, $page)) {
-                return back()->withErrors(['parent_id' => 'Cannot move a folder into its own descendant.']);
+        // A new parent goes through the one move path (cycle check, positions, slug) — BRAI-431
+        if (array_key_exists('parent_id', $validated)) {
+            $parentId = $validated['parent_id'] === null ? null : (int) $validated['parent_id'];
+            unset($validated['parent_id']);
+            if ($parentId !== $page->parent_id) {
+                $page = PageMover::move($page, $this->moveDestination($request, $parentId));
             }
         }
 
@@ -617,6 +620,15 @@ class PageController extends Controller
             'pages.*.parent_id' => ['nullable', Rule::exists('pages', 'id')->where('project_id', $project->id)],
         ]);
 
+        // Same-parent reorders only: a new parent goes through pages.move (cycle check, slug) — BRAI-431
+        $current = Page::whereIn('id', collect($validated['pages'])->pluck('id'))->pluck('parent_id', 'id');
+        foreach ($validated['pages'] as $index => $pageData) {
+            $parentId = isset($pageData['parent_id']) ? (int) $pageData['parent_id'] : null;
+            if ($parentId !== $current[$pageData['id']]) {
+                throw ValidationException::withMessages(["pages.{$index}.parent_id" => 'Use "Move" to put a page into another folder.']);
+            }
+        }
+
         foreach ($validated['pages'] as $pageData) {
             Page::where('id', $pageData['id'])
                 ->where('project_id', $project->id)
@@ -627,6 +639,53 @@ class PageController extends Controller
         }
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * Move a page, whiteboard or folder: into a folder, to the top level, or before / after a
+     * sibling (BRAI-431). The sidebar drag & drop and the "Move…" dialog both use this.
+     */
+    public function move(Request $request, Workspace $workspace, Project $project, Page $page): JsonResponse
+    {
+        $this->authorize('update', $page);
+
+        $validated = $request->validate([
+            'parent_id' => ['present', 'nullable', 'integer', Rule::exists('pages', 'id')->where('project_id', $project->id)],
+            'before_id' => ['nullable', 'integer', Rule::exists('pages', 'id')->where('project_id', $project->id)],
+            'after_id' => ['nullable', 'integer', Rule::exists('pages', 'id')->where('project_id', $project->id)],
+        ]);
+
+        $parent = $this->moveDestination($request, $validated['parent_id'] === null ? null : (int) $validated['parent_id']);
+        $page = PageMover::move(
+            $page,
+            $parent,
+            isset($validated['before_id']) ? (int) $validated['before_id'] : null,
+            isset($validated['after_id']) ? (int) $validated['after_id'] : null,
+        );
+
+        return response()->json([
+            'id' => $page->id,
+            'parent_id' => $page->parent_id,
+            'position' => $page->position,
+            'path' => PageMover::path($project, $parent),
+        ]);
+    }
+
+    /**
+     * The parent a user may move something into: a page of this project they can see.
+     */
+    private function moveDestination(Request $request, ?int $parentId): ?Page
+    {
+        if ($parentId === null) {
+            return null;
+        }
+
+        $parent = Page::find($parentId);
+        if (! $parent || ! $request->user()->can('view', $parent)) {
+            throw ValidationException::withMessages(['parent_id' => 'That destination doesn\'t exist.']);
+        }
+
+        return $parent;
     }
 
     /**
@@ -671,22 +730,6 @@ class PageController extends Controller
         }
 
         return back();
-    }
-
-    /**
-     * Check if a page is a descendant of another page.
-     */
-    private function isDescendantOf(Page $potentialDescendant, Page $potentialAncestor): bool
-    {
-        $current = $potentialDescendant;
-        while ($current->parent_id) {
-            if ($current->parent_id === $potentialAncestor->id) {
-                return true;
-            }
-            $current = $current->parent;
-        }
-
-        return false;
     }
 
     /**

@@ -311,6 +311,9 @@ Pages work like Confluence. Keep these rules when touching pages:
   project page, dashboards, search, MCP. Unpublished pages are author + admin only.
 - **Authorize with `PagePolicy`** (`view` / `update` / `delete`, `create` with
   `[Page::class, $project]`). Don't hand-roll role checks.
+- **Change a page's parent only through `PageMover::move()`** (BRAI-431) — it checks cycles and the
+  project, renumbers positions and keeps the slug unique per parent. Authorize `update` on the page and
+  `view` on the new parent first. Never set `parent_id` with a query.
 - Autosave is JSON (`PUT pages.draft.save`) with `base_revision`; a mismatch returns `409` —
   the client must show it, never retry silently. Pass `force` only after the user chose
   "Keep mine".
