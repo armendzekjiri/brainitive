@@ -9,10 +9,10 @@ use App\Models\BookingType;
 use App\Models\CalendarConnection;
 use App\Models\Workspace;
 use App\Support\Booking\Availability;
+use App\Support\Booking\BookingRows;
 use App\Support\Booking\BookingRules;
 use App\Support\Booking\BookingService;
 use App\Support\Booking\BookingTemplates;
-use App\Support\Booking\BookingText;
 use App\Support\Booking\BusyTimes;
 use App\Support\Calendar\CalendarProviders;
 use App\Support\Meetings\MeetingCalendars;
@@ -39,23 +39,17 @@ class BookingPageController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
-        $pages = BookingPage::where('user_id', $user->id)
-            ->whereHas('workspace')
-            ->with('workspace:id,name,slug')
-            ->withCount(['types'])
-            ->orderBy('title')
-            ->get()
-            ->filter(fn (BookingPage $p) => Gate::allows('view', $p))
-            ->map(fn (BookingPage $p) => [
-                'uuid' => $p->uuid,
-                'title' => $p->title,
-                'enabled' => $p->enabled,
-                'public_url' => route('booking.public', $p->public_slug),
-                'workspace' => $p->workspace->name,
-                'types_count' => $p->types_count,
-                'upcoming_count' => Booking::confirmed()->where('user_id', $user->id)->where('starts_at', '>=', now())
-                    ->whereHas('type', fn ($q) => $q->where('booking_page_id', $p->id))->count(),
-            ])->values();
+        $all = BookingRows::pages($user);
+        $upcoming = BookingRows::upcomingCounts($user, $all->pluck('id')->all());
+        $pages = $all->map(fn (BookingPage $p) => [
+            'uuid' => $p->uuid,
+            'title' => $p->title,
+            'enabled' => $p->enabled,
+            'public_url' => route('booking.public', $p->public_slug),
+            'workspace' => $p->workspace->name,
+            'types_count' => $p->types_count,
+            'upcoming_count' => $upcoming[$p->id] ?? 0,
+        ])->values();
 
         return Inertia::render('Booking/Index', [
             'pages' => $pages,
@@ -304,38 +298,12 @@ class BookingPageController extends Controller
     /** @return list<array<string, mixed>> */
     private function bookings(BookingPage $page): array
     {
-        $bookings = Booking::whereHas('type', fn ($q) => $q->where('booking_page_id', $page->id))
-            ->with('type:id,name,booking_page_id', 'item:id,key,board_id', 'item.board:id,slug,project_id', 'item.board.project:id,slug,workspace_id', 'item.board.project.workspace:id,slug')
+        $bookings = BookingRows::query([$page->id])
             ->where('starts_at', '>=', now()->subDays(60))
             ->orderBy('starts_at')
             ->limit(300)
             ->get();
-        $connectionNames = CalendarConnection::whereIn('id', $bookings->pluck('unchecked_connection_ids')->flatten()->filter()->unique())
-            ->get()->mapWithKeys(fn ($c) => [$c->id => (string) ($c->external_calendar_name ?: $c->account_email)]);
 
-        return $bookings->map(function (Booking $b) use ($connectionNames) {
-            $board = $b->item?->board;
-
-            return [
-                'uuid' => $b->uuid,
-                'type' => $b->type?->name,
-                'starts_at' => $b->starts_at->toIso8601ZuluString(),
-                'ends_at' => $b->ends_at->toIso8601ZuluString(),
-                'guest_name' => $b->guest_name,
-                'guest_email' => $b->guest_email,
-                'guest_timezone' => $b->guest_timezone,
-                'answers' => BookingText::answers($b),
-                'status' => $b->status,
-                'cancelled_by' => $b->cancelled_by,
-                'cancel_reason' => $b->cancel_reason,
-                'conference_url' => $b->conference_url,
-                'in_calendar' => $b->external_event_id !== null,
-                'unchecked' => array_values(array_filter(array_map(fn ($id) => $connectionNames[$id] ?? null, (array) $b->unchecked_connection_ids))),
-                'card' => $b->item && $board?->project?->workspace ? [
-                    'key' => $b->item->key,
-                    'url' => route('boards.show', [$board->project->workspace->slug, $board->project->slug, $board->slug]).'#item-'.$b->item->id,
-                ] : null,
-            ];
-        })->all();
+        return BookingRows::rows($bookings);
     }
 }
