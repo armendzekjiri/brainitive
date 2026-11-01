@@ -450,7 +450,8 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   `config/scramble.php` (documents only `api/v1`; API version `1.0.0`).
 - **Endpoints:** `app/Http/Controllers/AppApi/*` (Instance, Auth, Me + MeAvatar, Device, Invitation,
   Workspace, Project, Member, Navigation, Search, Notification, ConnectedApp, DeviceAuth, MyWork, Today,
-  Calendar, TaskList, Capture, Snippet, Bookmark, Timer + WorkLog, Board, Issue + IssueActivity + IssueLink, Sprint —
+  Calendar, TaskList, Capture, Snippet, Bookmark, Timer + WorkLog, Board, Issue + IssueActivity + IssueLink, Sprint,
+  Page + PageCollab + DocReview + Link, Whiteboard, Plan, Release, Upload —
   one `#[Group]` tag per
   `API.md` module), Form Requests in `app/Http/Requests/AppApi/`, Resources in
   `app/Http/Resources/AppApi/`. The tables in `API.md` are the list.
@@ -485,6 +486,16 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   `Pages/Boards/Show.tsx` + `lib/customFields.ts` apply them) and `IssueMarkdown` (descriptions / comments as Markdown with
   `@[Name](user:<id>)` mentions). Reused as they were: `ItemComments`, `ItemLinks` + `ContentLinkFormatter::issueLinks`,
   `ItemFieldValues`, `BoardViewConfig::sanitize`, `SprintReport`, `ItemDevelopment`.
+- **Shared with the web (phase 07, docs / whiteboards / plans / releases / files):** `Support\Pages\PageWrites` (create, the editor's
+  draft save with the edit-revision check on the locked row, publish / publish changes through `ReviewGate` + watcher notifications;
+  web `PageController@store|saveDraft|publish|publishChanges`, MCP `create_page`), `Support\Plans\PlanReader` (rows, bars,
+  dependencies, visible linked issues; MCP `get_plan` / `list_plans`), `Support\Files\EditorUploads` (web `FileController`) +
+  `FileRoom` (the `file.room` storage check for App API uploads, attachments, bookmark files), `SmartLinks::refFromUrl` (a Brainitive
+  URL → smart link ref). Reused as they were: `PageCollab` (native live editing: token, bootstrap, live draft save), `PageMover`,
+  `PageReviews` + `ReviewPresenter` + `QuoteAnchor`, `ContentLinkFormatter::references`, `SmartLinks::resolve`, `IssueMarkdown`
+  (doc text too). `Controllers\AppApi\Concerns\ResolvesPageReviews`: reviews through a page of an accessible project +
+  `PageReviewPolicy` (reviewers see a draft's snapshot, not the draft). Pages are `/pages/{uuid}` with the route parameter `{uuid}`
+  (`{page}` has an explicit binding in `AppServiceProvider`).
 - **TV device-code sign-in (BRAI-438):** `Support\AppApi\AppDeviceCodes` (RFC 8628 codes in the cache),
   `AppDeviceSignIn` (device row + `max_devices` + first pair; also used by `/auth/exchange`), `AppClients`
   (`config/app-api.php` → `clients.*.grant` / `platforms`); `Controllers\AppApi\DeviceAuthController`;
