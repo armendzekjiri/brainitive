@@ -440,6 +440,9 @@ export interface ItemType {
     icon?: string | null;
     icon_display?: string | null;
     color?: string;
+    /** null = a default (instance-wide) type */
+    project_id?: number | null;
+    is_default?: boolean;
 }
 
 export interface ItemPriority {
@@ -620,7 +623,6 @@ export type PageProps<
     /** When on a board page, the current board id for GlobalCreateModal pre-selection */
     currentBoardId?: number | null;
     currentPageUuid?: string | null;
-    itemTypes?: ItemType[];
     priorities?: ItemPriority[];
     planTemplates?: { key: string; name: string; description: string }[];
     /** Unread notification count shared by HandleInertiaRequests middleware */

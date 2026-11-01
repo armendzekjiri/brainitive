@@ -1426,7 +1426,24 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   add the relation. The CLI API group is scoped (`{taskList}/items/{item}`).
 - **Default (global) item types are shared by every workspace.** Projects switch them off
   in `projects.settings.disabled_item_types` (`Project::disabledItemTypeIds()`, honoured by
-  `ItemType::forProject`). Projects never edit the global row.
+  `ItemType::forProject`). Projects never edit the global row. A project's own types are switched
+  off on their row (`is_active`); `forProject` leaves both out (since BRAI-430). Go through
+  `ItemType::setEnabledFor()` instead of writing either by hand.
+  - Switched-off types are only hidden from pickers and refused by validation. Cards that already
+    have one keep it and show it (`item.item_type` is loaded per card, not looked up in the list).
+    Edits accept it through `ItemType::selectableIdsFor($project, $item->item_type_id)`. The issue
+    panel lists it disabled, as "(turned off)", and the type swimlanes give it its own lane.
+  - A new issue without a type gets `ItemType::defaultIdFor($project)`, never
+    `ItemType::where('is_default', true)`: the project may have switched Task off. With every type
+    off it gets none (`item_type_id` is nullable). There is no "no enabled types → all types"
+    fallback any more.
+  - Default types switched off on the shared row (older versions did that instance-wide) show as
+    "Off instance-wide" without a toggle: a project can't switch them back on.
+- **`Collection::each()` stops at the first callback that returns `false`.** An arrow fn returns
+  its expression, so `->each(fn ($t) => $t->is_active = …)` ended the loop at the first switched-off
+  type. The project settings page then showed every later switched-off type as on, which made
+  turning off a second type look broken (BRAI-430 / GitHub #133). Use `map()`, or a closure with
+  a body, for side effects.
 - **Feature tests don't catch a missing Inertia page.** `withoutVite()` skips the manifest,
   so `Inertia::render('Tickets/Show')` passed tests while production returned 500 (the file
   never existed). For a new render, assert `assertInertia(fn ($p) => $p->component(...))` and

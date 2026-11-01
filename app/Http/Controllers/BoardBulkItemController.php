@@ -37,8 +37,8 @@ class BoardBulkItemController extends Controller
             'changes.column_id' => ['sometimes', 'required', 'integer', Rule::exists('board_columns', 'id')->where('board_id', $board->id)],
             'changes.assigned_to' => ['sometimes', 'nullable', 'integer', new ProjectMember($project)],
             'changes.priority_id' => ['sometimes', 'required', 'integer', Rule::in(ItemPriority::forProject($project)->pluck('id')->all())],
-            // the types the board offers: the project's, or all of them when it has none (BoardController::show)
-            'changes.item_type_id' => ['sometimes', 'required', 'integer', Rule::in(ItemType::forProject($project)->pluck('id')->all() ?: ItemType::pluck('id')->all())],
+            // the types the board offers: the ones enabled for the project (BoardController::show)
+            'changes.item_type_id' => ['sometimes', 'required', 'integer', Rule::in(ItemType::selectableIdsFor($project))],
             'changes.sprint_id' => ['sometimes', 'nullable', 'integer', Rule::exists('sprints', 'id')->where('board_id', $board->id)->whereIn('status', [Sprint::STATUS_PLANNED, Sprint::STATUS_ACTIVE])],
             'changes.due_date' => ['sometimes', 'nullable', 'date'],
             'changes.add_label_ids' => ['sometimes', 'array', 'max:50'],

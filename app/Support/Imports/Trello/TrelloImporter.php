@@ -225,7 +225,7 @@ class TrelloImporter implements Importer
 
         $labels = $this->labels($run, $project, $export, $cards, $progress);
 
-        $typeId = ItemType::forProject($project)->where('is_default', true)->value('id') ?? ItemType::query()->where('is_default', true)->value('id');
+        $typeId = ItemType::defaultIdFor($project);
         $subtaskTypeId = ItemType::forProject($project)->where('slug', 'subtask')->value('id') ?? $typeId;
         $priorityId = ItemPriority::forProject($project)->where('is_default', true)->value('id') ?? ItemPriority::query()->where('is_default', true)->value('id');
         $timezone = $user->localTimezone();

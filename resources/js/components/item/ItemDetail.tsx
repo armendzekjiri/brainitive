@@ -8,6 +8,7 @@ import ShareButton from '@/components/share/ShareButton';
 import SubjectMeetings from '@/components/meetings/SubjectMeetings';
 import { Video } from 'lucide-react';
 import { itemTree, MAX_ITEM_DEPTH } from '@/lib/itemTree';
+import { typeOptionsFor } from '@/lib/itemTypes';
 import { issueSnapshot, useOfflineSnapshot } from '@/lib/offline/snapshots';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -1604,7 +1605,9 @@ export function ItemDetailSidebar({ d, inSheet = false }: { d: ItemDetail; inShe
     const [detailsOpen, setDetailsOpen] = useState(true);
     if (!item) return null;
 
-    const isSubtaskType = itemTypes.some((t) => t.slug === 'subtask' && t.id.toString() === itemTypeId);
+    // A type the project switched off stays on the card (and in its picker) until changed
+    const typeOptions = typeOptionsFor(itemTypes, item.item_type);
+    const isSubtaskType = typeOptions.types.some((t) => t.slug === 'subtask' && t.id.toString() === itemTypeId);
     const currentColumn = columns.find((col) => col.id.toString() === columnId);
     const category = statusCategory(currentColumn, columns);
 
@@ -1690,9 +1693,12 @@ export function ItemDetailSidebar({ d, inSheet = false }: { d: ItemDetail; inShe
                             <SelectValue placeholder="None" />
                         </SelectTrigger>
                         <SelectContent>
-                            {itemTypes.map((type) => (
-                                <SelectItem key={type.id} value={type.id.toString()}>
-                                    <div className="flex items-center gap-2"><ItemTypeIcon type={type} />{type.name}</div>
+                            {typeOptions.types.map((type) => (
+                                <SelectItem key={type.id} value={type.id.toString()} disabled={type.id === typeOptions.offId}>
+                                    <div className="flex items-center gap-2">
+                                        <ItemTypeIcon type={type} />{type.name}
+                                        {type.id === typeOptions.offId && <span className="text-xs text-muted-foreground">(turned off)</span>}
+                                    </div>
                                 </SelectItem>
                             ))}
                         </SelectContent>

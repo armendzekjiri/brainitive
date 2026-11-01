@@ -85,7 +85,9 @@ class ItemType extends Model
     }
 
     /**
-     * Scope to get types available for a project: active global types + all project-specific types.
+     * Scope to the types a project's issues can be given: active global types the project didn't
+     * switch off + the project's own types that are switched on. Cards that already have a
+     * switched-off type keep it (and show it); only pickers and validation use this scope.
      */
     public function scopeForProject($query, Project $project)
     {
@@ -94,8 +96,61 @@ class ItemType extends Model
         return $query->where(function ($q) use ($project, $disabled) {
             $q->where(function ($q2) use ($disabled) {
                 $q2->whereNull('project_id')->where('is_active', true)->whereNotIn('id', $disabled);
-            })->orWhere('project_id', $project->id);
+            })->orWhere(function ($q2) use ($project) {
+                $q2->where('project_id', $project->id)->where('is_active', true);
+            });
         });
+    }
+
+    /** Whether new / edited issues of the project may get this type. */
+    public function isEnabledFor(Project $project): bool
+    {
+        return $this->project_id === null
+            ? $this->is_active && ! in_array($this->id, $project->disabledItemTypeIds(), true)
+            : $this->project_id === $project->id && $this->is_active;
+    }
+
+    /**
+     * Switch the type on or off for the project. A default (global) type is shared by every
+     * workspace, so it's switched off in the project's settings; a project's own type on its row.
+     */
+    public function setEnabledFor(Project $project, bool $enabled): void
+    {
+        if ($this->project_id !== null) {
+            $this->update(['is_active' => $enabled]);
+
+            return;
+        }
+
+        $disabled = collect($project->disabledItemTypeIds())->reject(fn (int $id) => $id === $this->id);
+        if (! $enabled) {
+            $disabled->push($this->id);
+        }
+        $project->update(['settings' => array_merge($project->settings ?? [], ['disabled_item_types' => $disabled->values()->all()])]);
+    }
+
+    /**
+     * The type a new issue of the project gets when none is chosen: the enabled default type, else
+     * the first enabled type that isn't Subtask (subtasks need a parent), else none.
+     */
+    public static function defaultIdFor(Project $project): ?int
+    {
+        $types = static::forProject($project)->orderByRaw('project_id is not null')->orderBy('id')->get(['id', 'slug', 'is_default']);
+
+        return ($types->firstWhere('is_default', true) ?? $types->first(fn (ItemType $t) => $t->slug !== 'subtask'))?->id;
+    }
+
+    /**
+     * Type ids an issue of the project may be given: the enabled types, plus `$keep` (an issue's
+     * current type, so editing other fields of a card with a switched-off type still works).
+     *
+     * @return list<int>
+     */
+    public static function selectableIdsFor(Project $project, ?int $keep = null): array
+    {
+        $ids = static::forProject($project)->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        return $keep !== null && ! in_array($keep, $ids, true) ? [...$ids, $keep] : $ids;
     }
 
     /**

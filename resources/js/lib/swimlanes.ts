@@ -144,8 +144,15 @@ export function buildLanes(
         };
     }
     if (mode === 'type') {
+        // Cards keep a type the project switched off: they get its lane (nothing can be dropped there)
+        const enabled = new Set(ctx.itemTypes.map((t) => t.id));
+        const off = unique(items.flatMap((i) => (i.item_type && !enabled.has(i.item_type.id) ? [i.item_type] : [])), (t) => t.id);
         return {
-            lanes: [...ctx.itemTypes.map((t) => ({ id: `t${t.id}`, name: t.name, color: t.color ?? null, assign: { field: 'item_type_id' as const, value: t.id } })), { id: 't0', name: 'No type', color: null }],
+            lanes: [
+                ...ctx.itemTypes.map((t) => ({ id: `t${t.id}`, name: t.name, color: t.color ?? null, assign: { field: 'item_type_id' as const, value: t.id } })),
+                ...off.map((t) => ({ id: `t${t.id}`, name: t.name, color: t.color ?? null })),
+                { id: 't0', name: 'No type', color: null },
+            ],
             laneOf: (item) => `t${item.item_type_id ?? 0}`,
         };
     }

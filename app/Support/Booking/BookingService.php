@@ -255,7 +255,7 @@ final class BookingService
             'description' => BookingText::cardHtml($booking),
             'project_id' => $board->project_id,
             'column_id' => $column->id,
-            'item_type_id' => ItemType::where('is_default', true)->first()?->id,
+            'item_type_id' => ItemType::defaultIdFor($board->project),
             'priority_id' => ItemPriority::where('is_default', true)->first()?->id,
             'key' => $board->project->getNextItemKey(),
             'assigned_to' => $page->user_id,
