@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AddCorsHeaders;
+use App\Http\Middleware\AppApiJson;
 use App\Http\Middleware\DeferAutomations;
 use App\Http\Middleware\EnsureFileRoom;
 use App\Http\Middleware\EnsureInstanceAdmin;
@@ -9,11 +10,14 @@ use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\FrameProtection;
 use App\Http\Middleware\GuardOAuthFlows;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Support\AppApi\AppApiErrors;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -23,6 +27,11 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        // App API v1 for the desktop / mobile apps (BRAI-380): own guard, own group, no session
+        then: function () {
+            Route::middleware('app-api')->prefix('api/v1')->name('app.v1.')
+                ->group(base_path('routes/app-api.php'));
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Self-hosting behind a reverse proxy: TRUSTED_PROXIES = the proxy's address(es) / CIDR ranges.
@@ -44,6 +53,13 @@ return Application::configure(basePath: dirname(__DIR__))
             AddLinkHeadersForPreloadedAssets::class,
         ]);
 
+        // App API v1 (routes/app-api.php): JSON only, throttled; no session, CSRF or CORS
+        $middleware->group('app-api', [
+            AppApiJson::class,
+            SubstituteBindings::class,
+            'throttle:app-api',
+        ]);
+
         $middleware->alias([
             'cors' => AddCorsHeaders::class,
             'file.room' => EnsureFileRoom::class, // v1.46.0 Cloud plans: uploads need file storage left
@@ -60,11 +76,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // App API v1: one error shape {message, code, errors?} for every api/v1/* failure
+        $exceptions->render(fn (Throwable $e, Request $request) => AppApiErrors::render($e, $request));
+
         // Friendly error pages (Pages/Error.tsx) instead of bare status screens; JSON stays JSON.
         $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
             $status = $response->getStatusCode();
 
-            if ($request->expectsJson() && ! $request->header('X-Inertia')) {
+            if (($request->expectsJson() && ! $request->header('X-Inertia')) || AppApiErrors::applies($request)) {
                 return $response;
             }
 

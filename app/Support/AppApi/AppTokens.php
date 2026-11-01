@@ -1,0 +1,134 @@
+<?php
+
+namespace App\Support\AppApi;
+
+use App\Models\AppDevice;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+
+/**
+ * Tokens of the App API v1 (desktop / mobile, BRAI-428). Opaque random strings, stored as sha256
+ * on the AppDevice row, one active pair per device:
+ *  - access `bra_…`, 15 min, sent as `Authorization: Bearer` to /api/v1;
+ *  - refresh `brr_…`, 60 days, single use: every refresh issues a new pair.
+ *
+ * Not Passport on purpose: Passport's TTLs are global (MCP / CLI keep 30 days) and it has no
+ * refresh-reuse detection or device binding. These tokens aren't JWTs, so Passport (`/mcp`,
+ * `/api/cli`, `/api/ext`) rejects them, and Passport tokens aren't in `app_devices`, so the `app`
+ * guard rejects those.
+ */
+final class AppTokens
+{
+    public const ACCESS_PREFIX = 'bra_';
+
+    public const REFRESH_PREFIX = 'brr_';
+
+    /** Request attribute holding the AppDevice of the bearer token. */
+    public const DEVICE_ATTRIBUTE = 'app_device';
+
+    /**
+     * Give the device a new pair (sign-in or refresh); the old pair stops working and its refresh
+     * hash is kept to recognise reuse. The plain tokens exist only in the returned array.
+     *
+     * @return array{token_type: string, access_token: string, expires_in: int, refresh_token: string, refresh_expires_in: int}
+     */
+    public static function issue(AppDevice $device): array
+    {
+        $access = self::ACCESS_PREFIX.Str::random(48);
+        $refresh = self::REFRESH_PREFIX.Str::random(48);
+        $accessTtl = (int) config('app-api.access_ttl');
+        $refreshTtl = (int) config('app-api.refresh_ttl');
+
+        $device->forceFill([
+            'previous_refresh_hash' => $device->refresh_token_hash,
+            'access_token_hash' => self::hash($access),
+            'access_expires_at' => now()->addSeconds($accessTtl),
+            'refresh_token_hash' => self::hash($refresh),
+            'refresh_expires_at' => now()->addSeconds($refreshTtl),
+        ])->save();
+
+        return [
+            'token_type' => 'Bearer',
+            'access_token' => $access,
+            'expires_in' => $accessTtl,
+            'refresh_token' => $refresh,
+            'refresh_expires_in' => $refreshTtl,
+        ];
+    }
+
+    /** The active, unexpired device an access token belongs to. */
+    public static function deviceForAccessToken(?string $token): ?AppDevice
+    {
+        if (! self::looksLike($token, self::ACCESS_PREFIX)) {
+            return null;
+        }
+
+        $device = AppDevice::query()
+            ->where('access_token_hash', self::hash($token))
+            ->whereNull('revoked_at')
+            ->with('user')
+            ->first();
+
+        return $device && $device->access_expires_at?->isFuture() ? $device : null;
+    }
+
+    /** Resolver of the `app` guard (AppServiceProvider): the bearer's user, its device on the request. */
+    public static function userFromRequest(Request $request): ?User
+    {
+        $device = self::deviceForAccessToken($request->bearerToken());
+        if (! $device) {
+            return null;
+        }
+
+        $request->attributes->set(self::DEVICE_ATTRIBUTE, $device);
+
+        // at most one write a minute per device
+        if (! $device->last_used_at || $device->last_used_at->lt(now()->subMinute())) {
+            $device->forceFill(['last_used_at' => now(), 'last_ip' => $request->ip()])->saveQuietly();
+        }
+
+        return $device->user;
+    }
+
+    /** The device of the current `app` token (set by the guard). */
+    public static function currentDevice(Request $request): ?AppDevice
+    {
+        $device = $request->attributes->get(self::DEVICE_ATTRIBUTE);
+
+        return $device instanceof AppDevice ? $device : null;
+    }
+
+    /** Sign the device out: both tokens stop working immediately. */
+    public static function revoke(AppDevice $device, string $reason): void
+    {
+        $device->forceFill([
+            'revoked_at' => now(),
+            'revoked_reason' => $reason,
+            'access_token_hash' => null,
+            'access_expires_at' => null,
+            'refresh_token_hash' => null,
+            'refresh_expires_at' => null,
+        ])->save();
+    }
+
+    /** Sign out every app install of a user (suspension, password change, "sign out everywhere"). */
+    public static function revokeAllFor(User $user, string $reason): int
+    {
+        $devices = $user->appDevices()->active()->get();
+        $devices->each(fn (AppDevice $device) => self::revoke($device, $reason));
+
+        return $devices->count();
+    }
+
+    public static function hash(string $token): string
+    {
+        return hash('sha256', $token);
+    }
+
+    /** @phpstan-assert-if-true string $token */
+    public static function looksLike(?string $token, string $prefix): bool
+    {
+        return is_string($token) && strlen($token) <= 128 && str_starts_with($token, $prefix);
+    }
+}

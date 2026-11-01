@@ -154,6 +154,14 @@ class User extends Authenticatable implements MustVerifyEmail, OAuthenticatable
     }
 
     /**
+     * Signed-in desktop / mobile app installs (App API v1).
+     */
+    public function appDevices(): HasMany
+    {
+        return $this->hasMany(AppDevice::class);
+    }
+
+    /**
      * Get the workspaces this user belongs to.
      */
     public function workspaces(): BelongsToMany
