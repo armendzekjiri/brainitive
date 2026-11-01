@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AppApi\AuthController;
 use App\Http\Controllers\AppApi\CalendarController;
+use App\Http\Controllers\AppApi\CaptureController;
 use App\Http\Controllers\AppApi\ConnectedAppController;
 use App\Http\Controllers\AppApi\DeviceAuthController;
 use App\Http\Controllers\AppApi\DeviceController;
@@ -136,6 +137,20 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::post('task-lists/{list}/items/reorder', [TaskListController::class, 'reorder'])->name('task-lists.items.reorder');
         Route::patch('task-lists/{list}/items/{item}', [TaskListController::class, 'updateItem'])->name('task-lists.items.update');
         Route::delete('task-lists/{list}/items/{item}', [TaskListController::class, 'destroyItem'])->name('task-lists.items.destroy');
+
+        // ── Captures: the private inbox (CaptureInbox, CaptureConversion: shared with the web, extension, MCP)
+        // {capture} = the uuid, checked in the controller (no route constraint on writes)
+        Route::get('captures', [CaptureController::class, 'index'])->name('captures.index');
+        Route::get('captures/counts', [CaptureController::class, 'counts'])->name('captures.counts');
+        Route::post('captures', [CaptureController::class, 'store'])->middleware('throttle:60,1,app.captures.store')->name('captures.store');
+        Route::get('captures/{capture}', [CaptureController::class, 'show'])->whereUuid('capture')->name('captures.show');
+        Route::patch('captures/{capture}', [CaptureController::class, 'update'])->name('captures.update');
+        Route::delete('captures/{capture}', [CaptureController::class, 'destroy'])->name('captures.destroy');
+        Route::post('captures/{capture}/archive', [CaptureController::class, 'archive'])->name('captures.archive');
+        Route::post('captures/{capture}/restore', [CaptureController::class, 'restore'])->name('captures.restore');
+        Route::get('captures/{capture}/preview', [CaptureController::class, 'preview'])->whereUuid('capture')->name('captures.preview');
+        Route::post('captures/{capture}/convert', [CaptureController::class, 'convert'])->middleware('throttle:60,1,app.captures.convert')->name('captures.convert');
+        Route::get('capture-destinations', [CaptureController::class, 'destinations'])->name('captures.destinations');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');
