@@ -2976,6 +2976,25 @@ export interface PushDevice {
     expired_at: string | null;
 }
 
+/**
+ * A signed-in desktop / mobile app install (App API v1, BRAI-385): Profile prop `appDevices`, same
+ * fields as `GET /api/v1/devices` (App\Http\Resources\AppApi\DeviceResource). Dates are ISO-8601 UTC.
+ */
+export interface AppDevice {
+    id: number;
+    client: 'desktop' | 'mobile';
+    platform: 'macos' | 'windows' | 'linux' | 'ios' | 'android';
+    name: string;
+    app_version: string | null;
+    os_version: string | null;
+    has_push_token: boolean;
+    /** The device of the calling app token; always false on the web. */
+    current: boolean;
+    last_used_at: string | null;
+    /** When it signed in. */
+    created_at: string | null;
+}
+
 /** POST push-subscriptions.test — what the push service answered. */
 export interface PushTestResult {
     status: 'delivered' | 'expired' | 'rejected' | 'network' | 'unconfigured' | 'invalid';

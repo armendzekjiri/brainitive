@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\AppApi\DeviceController;
+use App\Http\Controllers\AppApi\InvitationController;
+use App\Http\Controllers\AppApi\WorkspaceController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use Illuminate\Support\Facades\Route;
 
@@ -27,7 +30,16 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
     // ── Account ───────────────────────────────────────────────────────────────────────────────
 
     // ── Devices ───────────────────────────────────────────────────────────────────────────────
+    Route::get('devices', [DeviceController::class, 'index'])->name('devices.index');
+    Route::patch('devices/current', [DeviceController::class, 'updateCurrent'])->name('devices.current.update');
+    Route::delete('devices/{device}', [DeviceController::class, 'destroy'])->whereNumber('device')->name('devices.destroy');
 
     // ── Invitations & onboarding ──────────────────────────────────────────────────────────────
+    Route::get('invitations/{token}', [InvitationController::class, 'show'])
+        ->where('token', '[A-Za-z0-9]{1,128}')->name('invitations.show');
+    // joining / creating need a verified address, as on the web (403 otherwise)
+    Route::post('invitations/{token}/accept', [InvitationController::class, 'accept'])
+        ->where('token', '[A-Za-z0-9]{1,128}')->middleware('verified')->name('invitations.accept');
+    Route::post('workspaces', [WorkspaceController::class, 'store'])->middleware('verified')->name('workspaces.store');
 
 });
