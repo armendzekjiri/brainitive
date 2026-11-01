@@ -19,6 +19,7 @@ use App\Http\Controllers\AppApi\MemberController;
 use App\Http\Controllers\AppApi\MyWorkController;
 use App\Http\Controllers\AppApi\NavigationController;
 use App\Http\Controllers\AppApi\NotificationController;
+use App\Http\Controllers\AppApi\PageCollabController;
 use App\Http\Controllers\AppApi\PageController;
 use App\Http\Controllers\AppApi\ProjectController;
 use App\Http\Controllers\AppApi\SearchController;
@@ -256,6 +257,10 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         Route::patch('pages/{uuid}', [PageController::class, 'update'])->middleware('throttle:120,1,app.pages.update')->name('pages.update');
         Route::post('pages/{uuid}/publish', [PageController::class, 'publish'])->name('pages.publish');
         Route::post('pages/{uuid}/move', [PageController::class, 'move'])->name('pages.move');
+        // live co-editing for native clients: the browser's three calls (PageCollab), same throttles as the web
+        Route::post('pages/{uuid}/collab-token', [PageCollabController::class, 'token'])->middleware('throttle:60,1,app.pages.collab.token')->name('pages.collab.token');
+        Route::post('pages/{uuid}/collab/bootstrap', [PageCollabController::class, 'bootstrap'])->middleware('throttle:30,1,app.pages.collab.bootstrap')->name('pages.collab.bootstrap');
+        Route::put('pages/{uuid}/collab/draft', [PageCollabController::class, 'save'])->middleware('throttle:180,1,app.pages.collab.save')->name('pages.collab.save');
 
         // ── Connected apps + "Download my data" (account deletion: web only) ────────────────────
         Route::get('me/connected-apps', [ConnectedAppController::class, 'index'])->name('connected-apps.index');
