@@ -1294,6 +1294,17 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
   `display_errors = Off` and logs to stderr.
 - **There is no automatic first admin.** Instance admins are made with
   `php artisan make:instance-admin <email>` (also in the self-hosting guide).
+- **The app version is the newest `CHANGELOG` entry in `HelpModal.tsx` — for the backend too (BRAI-433).**
+  `App\Support\AppVersion` parses it at runtime (the file is in the Docker image and every checkout), so the
+  release workflow, the update check and project exports can't disagree. Don't add a `VERSION` file or an
+  `APP_VERSION` env; `config('app.version')` is only a runtime override for tests. Keep `version: 'vX.Y.Z'` as the
+  version key of the first entry (the release script needs it as well).
+- **Update check (BRAI-433): pages never call GitHub.** Only the daily `brainitive:check-update` does; pages read
+  `instance_settings.settings.update_check`. Off on Brainitive Cloud / dev by default (`LegalInfo::isCloud()`);
+  `BRAINITIVE_UPDATE_CHECK` forces it. PHPUnit forces it off (phpunit.xml); e2e forces it on (e2e runs as Cloud) but
+  the e2e server refuses to fetch — specs record a release with `brainitive:check-update --fake-latest=X.Y.Z`
+  (APP_ENV=e2e only) and `--clear` afterwards. In tests, `Http::fake` stubs stack (the first match wins) — fake once
+  with a closure when a test needs several answers.
 - **Cloud is free during early access; the prices are planned, not live.** There is no
   billing and no plan-limit enforcement in the code, and the homepage, Terms and Refund
   policy all say so. Don't add copy that implies payment is taken until billing ships. Building billing needs a new dependency (e.g. Cashier) and must

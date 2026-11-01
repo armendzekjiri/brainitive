@@ -124,3 +124,6 @@ Schedule::command('search:ensure')->everyFiveMinutes()->withoutOverlapping()->ru
 // the usage bars), then prune doc / plan versions past the plan's history. Both do nothing self-hosted.
 Schedule::command('usage:measure')->dailyAt('02:30')->withoutOverlapping();
 Schedule::command('versions:prune')->dailyAt('02:50')->withoutOverlapping();
+// BRAI-433: is a newer Brainitive release out? Instance admins see it in the admin console (and a dismissible
+// strip). Self-hosted only (BRAINITIVE_UPDATE_CHECK, off on Brainitive Cloud); pages only read the stored result.
+Schedule::command('brainitive:check-update')->dailyAt('05:05')->withoutOverlapping();

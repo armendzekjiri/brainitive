@@ -36,6 +36,8 @@
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
         <env name="GITHUB_STARS" value="false" force="true"/>
+        <!-- BRAI-433: never ask GitHub for releases from a developer .env; UpdateCheckTest turns it on -->
+        <env name="BRAINITIVE_UPDATE_CHECK" value="false" force="true"/>
         <!-- live channels (BRAI-151): never publish from a developer .env COLLAB_URL; tests/Feature/Live turns it on -->
         <env name="LIVE_ENABLED" value="false" force="true"/>
     </php>
