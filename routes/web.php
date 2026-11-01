@@ -67,7 +67,7 @@ use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceLegalController;
 use App\Http\Controllers\WorkTimerController;
 use App\Http\Middleware\ReadOnlySession;
-use App\Support\Auth\MicrosoftLogin;
+use App\Support\Auth\SignInMethods;
 use App\Support\Legal\LegalInfo;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
@@ -80,9 +80,9 @@ Route::get('/', function () {
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
-        'canLoginWithGoogle' => (bool) config('services.google.client_id'),
-        'canLoginWithGitHub' => (bool) config('services.github.client_id'),
-        'canLoginWithMicrosoft' => MicrosoftLogin::available(),
+        'canLoginWithGoogle' => SignInMethods::google(),
+        'canLoginWithGitHub' => SignInMethods::github(),
+        'canLoginWithMicrosoft' => SignInMethods::microsoft(),
     ])->withViewData(['meta' => [
         // link previews of the homepage (Open Graph / X), see resources/views/partials/social-meta.blade.php
         'title' => 'Brainitive – Workspaces, Boards & Wiki',
@@ -200,6 +200,9 @@ require __DIR__.'/calendar-feed.php';
 
 // Public booking pages (v1.45.0, BRAI-158): /book/{slug}, free slots, booking, the guest's manage link
 require __DIR__.'/booking.php';
+
+// Native sign-in for the desktop / mobile apps (v1.49.0, BRAI-355): consent page + webview session
+require __DIR__.'/app-auth.php';
 
 // Workspace invitation (guest can view; auth user with matching email can accept)
 Route::get('/invite/{token}', [InvitationController::class, 'show'])->name('invitations.show');

@@ -7,13 +7,12 @@ use App\Http\Resources\AppApi\DeviceResource;
 use App\Models\InstanceSettings;
 use App\Notifications\NotificationCatalog;
 use App\Support\Admin\UserDeletion;
-use App\Support\Uploads;
+use App\Support\Profile\Avatar;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -42,11 +41,7 @@ class ProfileController extends Controller
      */
     public function updatePreferences(Request $request)
     {
-        $validated = $request->validate([
-            // all_with_bc: browsers still report old names such as "Asia/Calcutta".
-            'timezone' => 'sometimes|required|string|timezone:all_with_bc',
-            'task_digest' => 'sometimes|boolean',
-        ]);
+        $validated = $request->validate(ProfileUpdateRequest::preferenceRules());
 
         $request->user()->update($validated);
 
@@ -69,13 +64,7 @@ class ProfileController extends Controller
         }
 
         if ($request->hasFile('avatar')) {
-            if ($user->avatar && Storage::disk('public')->exists($user->avatar)) {
-                Storage::disk('public')->delete($user->avatar);
-            }
-            $file = $request->file('avatar');
-            $ext = Uploads::imageExtension($file);
-            $path = $file->storeAs('profile-photos/'.$user->id, 'avatar.'.$ext, 'public');
-            $user->avatar = $path;
+            Avatar::replace($user, $request->file('avatar'));
         }
 
         $user->save();

@@ -553,6 +553,31 @@ the allowlist renaming only.
   can keep its password login locked (reset / social login still work). Real fix for IP spoofing is
   a correct `TRUSTED_PROXIES` (never `*` when the app port is reachable directly).
 
+### App API sign-in: own tokens, refresh reuse, serialize refreshes (v1.49.0, BRAI-428 / BRAI-355)
+- **Own opaque tokens, not Passport** (decided with the user 2026-11-01): Passport TTLs are global
+  (MCP / CLI keep 30 days) and it has no refresh-reuse detection or device binding. One table,
+  `app_devices`, holds each install and its one current pair (sha256 only); codes live in the cache
+  (`AppAuthCodes`, atomic `Cache::add` marker = single use). Isolation is structural: `bra_…` is not a
+  JWT (Passport rejects it), a Passport JWT is not in `app_devices` (`auth:app` rejects it).
+- **Refresh reuse:** every refresh replaces the pair and keeps the old refresh hash in
+  `previous_refresh_hash`. Seeing that hash again = a copy was stolen (or the client misbehaved) →
+  `AppTokens::revoke($device, 'refresh_reuse')`, `AppRefreshReuseNotification` (account mail) and
+  401 `invalid_grant`. The lookup runs under `lockForUpdate`, so of two parallel refreshes with the
+  same token the second sees the rotated row and counts as reuse. **Clients must serialize
+  refreshes** (one in flight, the others wait for its result) or they sign themselves out.
+- **Consent page is Inertia, not Blade:** a password login is an Inertia XHR that follows
+  `url.intended`; a Blade page would land in Inertia's error modal. The decision answers with
+  `Inertia::location()` (409 + `X-Inertia-Location`), so the browser itself navigates to
+  `brainitive://…` — a 302 to a custom scheme inside an XHR goes nowhere. Password, Google, GitHub and
+  Microsoft logins all return through `redirect()->intended()` (tests in `AppSignInTest`).
+- **Revocation:** suspension (`suspended`), password change and reset (`password_changed`) call
+  `AppTokens::revokeAllFor()` next to `SignOutEverywhere` (which handles sessions + Passport only).
+- **Webview session:** `/app/session/{code}` logs into `web` with remember-me (cookies survive app
+  restarts) and only follows a relative `?to=` (`/…`, not `//` or `/\`).
+- **Tests:** after an `auth:app` request the test client keeps the guard's user and the default
+  guard is `app` — call `Auth::forgetGuards()` before re-using a revoked token, and
+  `assertGuest('web')` / `assertAuthenticatedAs($u, 'web')`.
+
 ### Lead form logic lives twice
 Which steps / questions a visitor sees is evaluated in the browser (`lib/leadForms.ts`) *and*
 on submit (`LeadFormDefinition::visibleFields`) — hidden questions are never validated and
