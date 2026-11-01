@@ -9,6 +9,7 @@ use App\Http\Controllers\AppApi\MeController;
 use App\Http\Controllers\AppApi\MemberController;
 use App\Http\Controllers\AppApi\NavigationController;
 use App\Http\Controllers\AppApi\ProjectController;
+use App\Http\Controllers\AppApi\SearchController;
 use App\Http\Controllers\AppApi\WorkspaceController;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use Illuminate\Support\Facades\Route;
@@ -85,6 +86,9 @@ Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function
         // ── Navigation (the web sidebar; recent destinations live on the device) ─────────────────
         Route::get('me/navigation', [NavigationController::class, 'show'])->name('navigation.show');
         Route::put('me/pins', [NavigationController::class, 'updatePins'])->name('navigation.pins');
+
+        // ── Search (SearchService: the web's search, MCP and the extension share it) ─────────────
+        Route::get('search', SearchController::class)->name('search');
 
     });
 

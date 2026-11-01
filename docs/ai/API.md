@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -219,6 +219,27 @@ name, url}]}], recent: [{type, id, title, subtitle, url}]}}`.
 - Docs are not in the navigation (they can be many): a project's folder tree is `GET /projects/{id}`.
   Hiding top-level entries / groups: web only for now.
 
+### Search
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/search?q=&type=&workspace=&project[]=&status=&assignee=&updated=&limit=&cursor=` | app + verified | Global hotkey quick switcher: everything the user can open, ranked, typo tolerant — the same `SearchService` (ranking + visibility) as the web search page, the command palette, the MCP `search` tool and `ext/v1/search`. `workspace` not the user's → 404 | Full | BRAI-184, BRAI-219 | ready (v1.49.0, BRAI-392) |
+
+→ `{data: [{id: "type:id", type, group, label, source_id, container_id, key, title, snippet,
+snippet_html, url, external_url, context, project: {id, name}, workspace, status, is_draft,
+updated_at}], next_cursor, total, counts: {issues, docs, comments, tickets, tasks, plans, snippets,
+bookmarks, captures, files}, fuzzy, places: [{type, id, title, subtitle, url, workspace}]}`.
+- `q` required (≤ 300; `"phrase"`, `-word`, an issue key ranks first; one letter finds nothing).
+  `type` = a group key above; `workspace` = slug; `project[]` = ids; `status` = `open | done`;
+  `assignee` = `me` or a user id; `updated` = `7d | 30d | 90d | 365d`; `limit` 1–50 (default 20).
+- Pages are numbered: `next_cursor` is the next page number (`"2"`), up to 100 pages. `total` / `counts`
+  are for the whole query.
+- `places` (workspaces, projects, boards, plans, snippet / bookmark collections by name, as the
+  command palette) only on the first page of a search without filters; `[]` otherwise.
+- `snippet_html` contains only `<mark>` around matches (everything else escaped); `snippet` is plain.
+- The workspace filter matches project content by the project's current workspace (so it follows a
+  moved project) and snippets / bookmarks by their own; personal captures have no workspace and are
+  left out when filtering by one.
+
 ## Mobile card texts (`## API (ready)`)
 
 The lead pastes these onto the Mobile app cards (they are kept here, not edited on the board by agents).
@@ -261,4 +282,12 @@ Built in: BRAI-390 (desktop) · Mobile scope: Read + invite (roles and removals 
 - PUT /api/v1/me/pins — replace one project's pins (and "pinned only"); synced with the web sidebar
 Scope: app · OpenAPI: docs/api/openapi.json#/Navigation · Registry: docs/ai/API.md#navigation
 Built in: BRAI-391 (desktop) · Mobile scope: Full (recent list kept on the device)
+```
+
+**BRAI-184** (search) — also **BRAI-219**
+```
+## API (ready)
+- GET /api/v1/search?q=&type=&workspace=&project[]=&status=&assignee=&updated=&limit=&cursor= — global search (the web's ranking + visibility), page cursor, counts per group, places by name
+Scope: app · OpenAPI: docs/api/openapi.json#/Search · Registry: docs/ai/API.md#search
+Built in: BRAI-392 (desktop) · Mobile scope: Full
 ```
