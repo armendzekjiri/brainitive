@@ -80,7 +80,8 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }},enable=${{ steps.version.outputs.version != '' }}
             type=raw,value=latest,enable=${{ steps.version.outputs.version != '' }}
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
-            type=sha,format=short,enable=${{ github.ref == 'refs/heads/main' }}
+            # immutable: every build, also a release or a hand-pushed tag, is reachable by its commit
+            type=sha,format=short
 
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
