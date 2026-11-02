@@ -44,7 +44,7 @@ class GoogleCalendarService
             Log::warning('Google token refresh failed', [
                 'connection_id' => $connection->id,
                 'status' => $resp->status(),
-                'body' => $resp->json(),
+                'error' => self::errorSummary($resp),
             ]);
             $connection->update(['is_active' => false]);
 
@@ -174,7 +174,7 @@ class GoogleCalendarService
             Log::warning('Google event create failed', [
                 'connection_id' => $connection->id,
                 'status' => $resp->status(),
-                'body' => $resp->json(),
+                'error' => self::errorSummary($resp),
             ]);
 
             return null;
@@ -240,7 +240,7 @@ class GoogleCalendarService
                 'connection_id' => $connection->id,
                 'event_id' => $eventId,
                 'status' => $resp->status(),
-                'body' => $resp->json(),
+                'error' => self::errorSummary($resp),
             ]);
 
             return null;
@@ -302,6 +302,26 @@ class GoogleCalendarService
             ->delete(self::API_BASE."/calendars/{$calId}/events/".rawurlencode($eventId).'?sendUpdates=all');
 
         return $resp->successful() || $resp->status() === 410; // 410 = already gone
+    }
+
+    /**
+     * What a failed Google answer may put in the log: its reason codes only, never the body (Codex review, low:
+     * bodies can echo event / task content and account details). Allowlist: OAuth `error`, API `error.status`,
+     * `error.code` and the first `error.errors[].reason`, each a short token.
+     *
+     * @return array{error?: string, status?: string, code?: int, reason?: string}
+     */
+    public static function errorSummary(Response $resp): array
+    {
+        $token = fn (mixed $v) => is_string($v) && preg_match('/^[A-Za-z0-9_.\-]{1,64}$/', $v) ? $v : null;
+        $error = $resp->json('error');
+
+        return array_filter([
+            'error' => $token(is_string($error) ? $error : null), // OAuth token endpoint: {"error": "invalid_grant"}
+            'status' => $token($resp->json('error.status')),
+            'code' => is_int($resp->json('error.code')) ? $resp->json('error.code') : null,
+            'reason' => $token($resp->json('error.errors.0.reason')),
+        ], fn ($v) => $v !== null);
     }
 
     private function get(CalendarConnection $connection, string $path, array $query = []): Response

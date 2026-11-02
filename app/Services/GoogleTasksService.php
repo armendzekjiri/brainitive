@@ -99,7 +99,7 @@ class GoogleTasksService
             Log::warning('Google task create failed', [
                 'connection_id' => $connection->id,
                 'status' => $resp->status(),
-                'body' => $resp->json(),
+                'error' => GoogleCalendarService::errorSummary($resp),
             ]);
 
             return null;
@@ -153,7 +153,7 @@ class GoogleTasksService
                 'connection_id' => $connection->id,
                 'task_id' => $taskId,
                 'status' => $resp->status(),
-                'body' => $resp->json(),
+                'error' => GoogleCalendarService::errorSummary($resp),
             ]);
 
             return null;
