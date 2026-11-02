@@ -153,8 +153,11 @@ final class PortalAuth
         $request->session()->regenerateToken();
     }
 
-    /** A local portal path, or "/" (no hosts, no "//", no backslashes, no control characters). */
-    public static function safeReturnTo(?string $path): string
+    /**
+     * A local portal path, or "/" (no hosts, no "//", no backslashes, no control characters). Takes any request
+     * input: an array (`?return_to[]=…`) falls back to "/" instead of a TypeError (Codex web review Q).
+     */
+    public static function safeReturnTo(mixed $path): string
     {
         if (! is_string($path) || $path === '' || ! str_starts_with($path, '/') || str_starts_with($path, '//')
             || str_contains($path, '\\') || preg_match('/[\x00-\x1F\x7F]/', $path) || strlen($path) > 500) {
