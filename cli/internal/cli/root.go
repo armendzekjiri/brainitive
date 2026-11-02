@@ -32,6 +32,9 @@ type App struct {
 
 	client *mcp.Client
 	ext    *api.Client
+
+	// unsaved: a refreshed session is only in memory (its save failed); see sessionTokens.refresh.
+	unsaved bool
 }
 
 var errNotSignedIn = errors.New("not signed in. Run `brainitive login` (or set BRAINITIVE_TOKEN)")
@@ -191,12 +194,39 @@ func (s *sessionTokens) Token(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if auth.Expiring(sess) {
-		if err := auth.Refresh(ctx, sess); err != nil {
+		return s.refresh(ctx, sess)
+	}
+	if s.app.unsaved {
+		// An earlier refresh in this process couldn't be saved: no token until it is.
+		if err := s.save(); err != nil {
 			return "", err
 		}
-		_ = s.app.cfg.Save()
 	}
 	return sess.AccessToken, nil
+}
+
+// refresh rotates the session's tokens and saves them before the new access token is used.
+// Refresh tokens are single use: if the save fails, the file still holds the consumed one, so
+// carrying on would lose the session at the next run without saying why (Codex CLI/extension
+// review 11). The rotated pair stays in memory and the next call in this process retries the save.
+func (s *sessionTokens) refresh(ctx context.Context, sess *config.Session) (string, error) {
+	if err := auth.Refresh(ctx, sess); err != nil {
+		return "", err
+	}
+	s.app.unsaved = true
+	if err := s.save(); err != nil {
+		return "", err
+	}
+	return sess.AccessToken, nil
+}
+
+func (s *sessionTokens) save() error {
+	if err := s.app.cfg.Save(); err != nil {
+		path, _ := config.Path()
+		return fmt.Errorf("the session was refreshed but couldn't save it to %s (%v); the old refresh token is used up. Fix the file's location / permissions, then run `brainitive login` again", path, err)
+	}
+	s.app.unsaved = false
+	return nil
 }
 
 func (s *sessionTokens) Renew(ctx context.Context) (string, error) {
@@ -207,11 +237,7 @@ func (s *sessionTokens) Renew(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := auth.Refresh(ctx, sess); err != nil {
-		return "", err
-	}
-	_ = s.app.cfg.Save()
-	return sess.AccessToken, nil
+	return s.refresh(ctx, sess)
 }
 
 func (a *App) mcp() *mcp.Client {

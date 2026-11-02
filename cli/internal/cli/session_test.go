@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -141,6 +142,37 @@ func TestStoredSessionNeverGoesToAnotherServer(t *testing.T) {
 	}
 	if after.Session != nil {
 		t.Fatal("logout must forget the session")
+	}
+}
+
+// Codex CLI/extension review 11: a rotated refresh token that can't be saved is an error, not a
+// silently used in-memory token (the next run would hold a refresh token that is used up).
+func TestRefreshThatCannotBeSavedFails(t *testing.T) {
+	srv := newRecorder(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"access_token": "access-2", "refresh_token": "refresh-2", "expires_in": 3600})
+	})
+	blocker := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BRAINITIVE_CONFIG", filepath.Join(blocker, "config.json")) // its "directory" is a file
+	t.Setenv("BRAINITIVE_TOKEN", "")
+
+	for _, renew := range []bool{false, true} {
+		cfg := signedInTo(srv.srv.URL)
+		cfg.Session.ExpiresAt = 0 // expiring: Token refreshes
+		app := &App{cfg: cfg}
+		tokens := &sessionTokens{app: app, server: srv.srv.URL}
+		var token string
+		var err error
+		if renew {
+			token, err = tokens.Renew(context.Background())
+		} else {
+			token, err = tokens.Token(context.Background())
+		}
+		if err == nil || token != "" || !strings.Contains(err.Error(), "couldn't save") {
+			t.Fatalf("renew=%v: token %q, err %v; want a save error and no token", renew, token, err)
+		}
 	}
 }
 
