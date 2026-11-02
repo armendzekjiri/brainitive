@@ -117,7 +117,10 @@ test('Continue hands the app a code it exchanges for tokens, and the webview lin
     await expect(webviewPage).toHaveURL(/\/(dashboard|workspaces)$/);
     // never remembered (Codex review): the app opens a fresh session with its token once this one expires
     expect((await webview.cookies()).some((cookie) => cookie.name.startsWith('remember_web_'))).toBe(false);
-    // without its session cookie the webview is signed out (no remember-me brings it back)
+    // without its session cookie the webview is signed out (no remember-me brings it back). Leave the page
+    // first: a background request of the dashboard (live token, notifications) answering after the clear
+    // would set the same session cookie again.
+    await webviewPage.goto('about:blank');
     await webview.clearCookies({ name: /[-_]session$/ });
     await webviewPage.goto('/profile');
     await expect(webviewPage).toHaveURL(/\/login$/);
