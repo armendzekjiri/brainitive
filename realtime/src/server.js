@@ -2,7 +2,9 @@
 // Plan: docs/ai/tasks/feat-live-docs.md. Brainitive (Laravel) stays the source of truth:
 //  - every connection carries a short-lived token from Brainitive (one document, edit or view-only);
 //  - the Yjs state is loaded from / stored to Brainitive's internal API (debounced, retried);
-//  - every minute Brainitive re-checks who may still be connected.
+//  - every minute Brainitive re-checks who may still be connected;
+//  - a connection whose token carries an app device (`dev`, App API) is closed with 4410 once Brainitive
+//    revokes that device (pushed through revokeDevices(), or found by the re-check) — BRAI-377.
 import { Server } from '@hocuspocus/server';
 import * as Y from 'yjs';
 import { removeAwarenessStates } from 'y-protocols/awareness';
@@ -12,6 +14,8 @@ import { createLaravelClient } from './laravel.js';
 const FORBIDDEN = { code: 4403, reason: 'Forbidden' };
 const RESET = { code: 4409, reason: 'Document replaced' };
 const TOO_LARGE = { code: 4413, reason: 'Document too large' };
+/** the app device of the token was signed out: drop tokens, show sign-in (same code as live channels) */
+const DEVICE_REVOKED = { code: 4410, reason: 'Device signed out' };
 const COLOR = /^#[0-9a-f]{6}$/i;
 
 export function createCollabServer({
@@ -49,6 +53,9 @@ export function createCollabServer({
     const isGone = (error) => error?.status === 409 || error?.status === 404;
     // over Brainitive's size limit (or rejected): retrying can't help — stop, keep the browsers' copies
     const isRefused = (error) => error?.status === 413 || error?.status === 422;
+
+    /** app device id → when it was revoked (unix s): its still-valid tokens can't open a document */
+    const revokedDevices = new Map();
 
     /** request → socket, to close sockets that never authenticate or fail to */
     const sockets = new WeakMap();
@@ -114,10 +121,18 @@ export function createCollabServer({
             payload = inspected.payload;
             if (!payload) refuse(inspected.problem ?? 'invalid-token', inspected.problem === 'expired-token' ? 'token older than COLLAB_TOKEN_TTL' : 'is COLLAB_SECRET the same for the app and this server?');
             if (payload.doc !== documentName) refuse('wrong-document');
+            const device = payload.dev ?? null;
+            // a signed-out app device: 4410 (not 4401), so the app drops its tokens instead of retrying
+            const refuseDevice = () => {
+                warn(`[realtime] refused ${documentName.slice(0, 100)} for user ${payload.sub}: device-revoked (${device})`);
+                setImmediate(() => closeSocket(request, DEVICE_REVOKED.code, DEVICE_REVOKED.reason));
+                throw Object.assign(new Error('Not authorized: device-revoked'), { reason: 'device-revoked' });
+            };
+            if (device !== null && revokedDevices.has(device)) refuseDevice();
             // the token is only a few minutes old at most, but access can change in between: ask Brainitive
             let result;
             try {
-                result = await laravel.access(documentName, [payload.sub]);
+                result = await laravel.access(documentName, [payload.sub], device !== null ? [{ id: device, user_id: payload.sub }] : []);
             } catch (error) {
                 // this server can't reach the app's internal API (0: firewall / no hairpin NAT / DNS / TLS —
                 // see COLLAB_APP_URL + COLLAB_APP_HOST), or it refused (401 = secret differs, 404 = page /
@@ -128,6 +143,10 @@ export function createCollabServer({
                         : status === 0 ? 'check COLLAB_APP_URL / COLLAB_APP_HOST' : '';
                 refuse(status === 0 ? 'app-unreachable' : `app-error-${status}`, `${error?.message ?? error}${hint ? `; ${hint}` : ''}`);
             }
+            if (device !== null && Array.isArray(result?.revoked_devices) && result.revoked_devices.includes(device)) {
+                revokedDevices.set(device, Math.floor(Date.now() / 1000));
+                refuseDevice();
+            }
             if (!result?.current) refuse('document-replaced');
             const access = result.users?.[String(payload.sub)] ?? null;
             if (access === null) refuse('access-denied');
@@ -135,7 +154,7 @@ export function createCollabServer({
             // view-only: Hocuspocus drops this connection's document updates
             connectionConfig.readOnly = !edit;
             authenticated.add(request);
-            return { user: { id: payload.sub, name: payload.name }, edit };
+            return { user: { id: payload.sub, name: payload.name }, edit, device };
         },
 
         // Awareness is client data: everyone must announce themselves as who their token says,
@@ -194,15 +213,50 @@ export function createCollabServer({
         socket.once('close', () => clearTimeout(timer));
     });
 
-    /** Lost project access → disconnected; lost edit rights → read-only; replaced draft → all out. */
+    /** Close one connection of a revoked app device: the document, then its whole socket (4410). */
+    function closeRevoked(connection) {
+        connection.close(DEVICE_REVOKED);
+        const socket = connection.webSocket;
+        if (socket && socket.readyState === socket.OPEN) socket.close(DEVICE_REVOKED.code, DEVICE_REVOKED.reason);
+    }
+
+    /**
+     * Brainitive revoked these app devices (sign-out, password change, suspension …; the live publish endpoint
+     * passes them on): close their connections and refuse their remaining tokens. Returns how many connections closed.
+     */
+    function revokeDevices(ids) {
+        const at = Math.floor(Date.now() / 1000);
+        const gone = new Set(ids.filter((id) => Number.isInteger(id) && id > 0));
+        gone.forEach((id) => revokedDevices.set(id, at));
+        let closed = 0;
+        for (const [, document] of server.hocuspocus.documents) {
+            for (const connection of document.getConnections()) {
+                if (gone.has(connection.context?.device)) {
+                    closed++;
+                    closeRevoked(connection);
+                }
+            }
+        }
+        return closed;
+    }
+
+    /**
+     * Lost project access → disconnected; lost edit rights → read-only; replaced draft → all out; a revoked app
+     * device → its socket closed (4410).
+     */
     async function recheckAccess() {
+        // a token lives minutes at most: older revocations can't matter any more
+        const now = Math.floor(Date.now() / 1000);
+        revokedDevices.forEach((at, id) => { if (now - at > 3600) revokedDevices.delete(id); });
         for (const [documentName, document] of server.hocuspocus.documents) {
             const connections = document.getConnections();
             const userIds = [...new Set(connections.map((c) => c.context?.user?.id).filter(Number.isInteger))];
             if (userIds.length === 0) continue;
+            const devices = new Map();
+            connections.forEach((c) => { if (Number.isInteger(c.context?.device)) devices.set(c.context.device, c.context.user.id); });
             let result;
             try {
-                result = await laravel.access(documentName, userIds);
+                result = await laravel.access(documentName, userIds, [...devices].map(([id, user]) => ({ id, user_id: user })));
             } catch (error) {
                 if (isGone(error)) closeDocument(documentName, RESET);
                 else logger.error(`[realtime] access re-check of ${documentName} failed: ${error?.message ?? error}`);
@@ -212,7 +266,10 @@ export function createCollabServer({
                 closeDocument(documentName, RESET);
                 continue;
             }
+            const lost = new Set((Array.isArray(result.revoked_devices) ? result.revoked_devices : []).filter((id) => devices.has(id)));
+            if (lost.size > 0) revokeDevices([...lost]);
             for (const connection of connections) {
+                if (lost.has(connection.context?.device)) continue;
                 const access = result.users?.[String(connection.context?.user?.id)] ?? null;
                 if (access === null) connection.close(FORBIDDEN);
                 else connection.readOnly = access !== 'edit' || !connection.context.edit;
@@ -224,6 +281,7 @@ export function createCollabServer({
     return {
         server,
         recheckAccess,
+        revokeDevices,
         async listen() {
             // Not server.listen(): Hocuspocus 3.4 passes `address` where Node expects `host`, so it would
             // listen on every interface instead of COLLAB_HOST (127.0.0.1 behind nginx).

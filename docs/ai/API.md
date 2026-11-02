@@ -25,7 +25,7 @@ logic underneath (Support services, policies) is shared.
 |---|---|
 | Auth | `Authorization: Bearer bra_…` (access, 15 min). Refresh `brr_…` (60 days, single use). Tokens never in URLs. |
 | Responses | Wrapped: `{data: {...}}` (API Resources' default); lists `{data: [...], next_cursor}`. **DELETE → 204** No Content when it removes a resource; removing a *part* of one (e.g. `DELETE /me/avatar`) answers 200 with the updated parent instead. Only unwrapped exception: the OAuth token responses of `POST /auth/exchange` and `POST /auth/refresh` are unwrapped (`{token_type, access_token, expires_in, refresh_token, refresh_expires_in, device}`). Resources list their fields explicitly, never a model's `toArray()`. |
-| Errors | `{"message": "…", "code": "…", "errors"?: {field: [..]}}` — 400 `bad_request` / `invalid_grant`, 401 `unauthenticated`, 402 `limit_reached` (+ `limit` object, see Invitations), 403 `forbidden`, 404 `not_found`, 405 `method_not_allowed`, 409 `conflict`, 410 `gone`, 422 `validation_failed`, 429 `rate_limited`, 500 `server_error`. 404 instead of 403 when the user must not learn that something exists. Documented once for all endpoints (`App\Support\AppApi\OpenApi`); a 402 needs `@throws LimitReached` on the controller method. |
+| Errors | `{"message": "…", "code": "…", "errors"?: {field: [..]}}` — 400 `bad_request` / `invalid_grant`, 401 `unauthenticated`, 402 `limit_reached` (+ `limit` object, see Invitations), 403 `forbidden`, 403 `client_not_allowed` (this app may not call the endpoint at all: the TV's scope, see "TV: what it may call"), 404 `not_found`, 405 `method_not_allowed`, 409 `conflict`, 410 `gone`, 422 `validation_failed`, 429 `rate_limited`, 500 `server_error`. 404 instead of 403 when the user must not learn that something exists. Documented once for all endpoints (`App\Support\AppApi\OpenApi`); a 402 needs `@throws LimitReached` on the controller method. |
 | Polling | `GET /me/today`, `/me/my-day`, `/me/timer` and `/notifications/unread-count` answer an `ETag` (hash of the answer + the user): send it as `If-None-Match` → 304 without body. Shared `AnswersWithETag` trait; a new polled endpoint uses it. |
 | Dates | ISO-8601 UTC (`2026-11-01T09:16:04Z`). |
 | Lists | Cursor pagination `?cursor=&limit=` (default 50, max 100) → `{data: [...], next_cursor}`; `updated_since` for sync. Server side: `ListRequest` (rules + `limit()` / `cursor()` / `updatedSince()`) and a `CursorCollection` subclass per list. An unknown / stale cursor starts again at the first page. |
@@ -59,6 +59,15 @@ Token response (exchange + refresh):
 ```
 
 Cancel on the consent page → `brainitive://auth/callback?error=access_denied&state=…`.
+
+**Webview link `/app/session/{code}` (BRAI-377):** the code is spent on the first open (60 s, single use) and the
+sign-in it carries is bound to that browser session; the session is then bound to the device (revoking the device
+logs it out on its next request). It signs in **at once** only when the same user is already signed in, or when
+nobody is signed in and the user agent contains ` BrainitiveDesktop/` (the desktop webview). Otherwise a confirm
+page — "You're signed in as A. Continue as B?" or "Sign in as B on this browser?" — and only its **Continue**
+(`POST /app/session`, CSRF) signs in; Cancel keeps whoever was signed in. The confirmation stays valid 5 minutes.
+There is no mobile user-agent marker yet: a mobile webview gets the confirm page (define a marker first if it
+should be one step).
 
 ### TV: device-code sign-in (RFC 8628, BRAI-438)
 
@@ -103,6 +112,33 @@ or 400 `{message, code}` with `code`:
   limit); `/app/device` 15/min per user + 40/min per IP, and 10 wrong codes per user lock it for 15 min (429).
 - The token is issued once (the next poll → `invalid_grant`); `max_devices`, refresh rotation + reuse
   detection, logout and revocation work as for desktop / mobile. TV tokens get 401 on `/mcp`, `/api/cli`, `/api/ext`.
+- The confirm page also shows **where and when** the request started — the coarse network of the TV's
+  `POST /auth/device` (`203.0.113.x`; IPv6: the first three groups) and "Started N minutes ago" — and labels the
+  name "Name reported by the device" (the TV chooses it). Stored with the code in the cache, never the full address.
+
+#### TV: what it may call (BRAI-377)
+
+A device-code approval can be phished ("type this code on your phone"), so the TV gets a **read-mostly scope**,
+not the account: `config/app-api.php` → `clients.*.abilities` (route names without `app.v1.`; desktop and mobile
+`['*']`), enforced by `EnsureAppClientAbility` on every signed-in route (before route-model binding). Anything
+else → **403 `{message, code: "client_not_allowed"}`** — never retry it, hide the feature.
+
+| Allowed for `tv` | Route name |
+|---|---|
+| `GET /instance`, `POST /auth/refresh` (public anyway), `POST /auth/logout` | `instance`, `auth.refresh`, `auth.logout` |
+| `GET /me` | `me.show` |
+| `GET /me/today` | `today` |
+| `GET /me/work`, `PATCH /me/work/{id}` (`{done}` only) | `work.index`, `work.update` |
+| `GET /me/my-day`, `PATCH /me/my-day/items/{id}` (`{done}` only) | `my-day.show`, `my-day.items.update` |
+| `GET /calendar/events`, `GET /calendar/events/{event}`, `GET /calendar/connections` | `calendar.events`, `calendar.events.show`, `calendar.connections` |
+| `GET /notifications`, `GET /notifications/unread-count`, `POST /notifications/{id}/read` | `notifications.index`, `notifications.unread-count`, `notifications.read` |
+| `GET /realtime`, `POST /realtime/token` | `realtime.show`, `realtime.token` |
+
+Everything else is refused for the TV, notably: `POST /auth/web-session` (**never** for a device-code client),
+devices and connected apps (no signing other devices out), invitations / creating workspaces / inviting,
+`/me/data-export`, `/me/calendar-feed`, profile changes (`PATCH /me`, avatar, notification preferences),
+`/uploads`, every other read (workspaces, projects, boards, docs, search, sync …) and every other write.
+A new endpoint is closed to the TV until its route name is added to the list (`AppClientAbilitiesTest` pins it).
 
 ## The `## API (ready)` section on a mobile card
 
@@ -184,14 +220,15 @@ the server can't read its changelog (a stripped package).
 | `GET /app/authorize` (browser) | web session (`auth` + `verified`) | System browser: consent page "Sign in to Brainitive Desktop as …?" (`client`, `code_challenge` S256, `state`, `device_name?`). Invalid parameters → 400 error page, never a redirect to the app | Full (expo-auth-session) | BRAI-171 | ready |
 | `POST /app/authorize` (browser) | web session + CSRF | Continue → `<redirect>?code=…&state=…` (code: 60 s, single use, PKCE-bound); Cancel → `?error=access_denied&state=…` | Full | BRAI-171 | ready |
 | `POST /api/v1/auth/exchange` | public, `throttle:app-auth` | `{code, code_verifier, device: {name, platform, app_version, os_version?}}` → token response + `device` (unwrapped). Bad / used / expired code or verifier mismatch → 400 `invalid_grant`; platform not of the client → 422. Over `max_devices` → the least recently used device is signed out (`limit`) | Full | BRAI-171 | ready |
-| `POST /api/v1/auth/refresh` | public, `throttle:app-auth` | `{refresh_token}` → new pair (unwrapped); the old pair is dead. Invalid / expired → 401 `invalid_grant`. A refresh token used **again** → device revoked (`refresh_reuse`) + email → 401 `invalid_grant`. **Send one refresh at a time** | Full | BRAI-172 | ready |
+| `POST /api/v1/auth/refresh` | public, `throttle:app-auth` | `{refresh_token}` → new pair (unwrapped); the old pair is dead. Invalid / expired → 401 `invalid_grant`. A refresh token used **again** → the user is signed out everywhere (this device and their other apps `refresh_reuse`, browser sessions + remember-me, CLI / MCP tokens; BRAI-377) + email → 401 `invalid_grant`. **Send one refresh at a time** | Full | BRAI-172 | ready |
 | `POST /api/v1/auth/logout` | `auth:app` | Sign this device out → 204 | Full | BRAI-174 | ready |
-| `POST /api/v1/auth/web-session` | `auth:app` | → `{data: {url}}`: one-time (60 s) `/app/session/{code}` for the webview; append `?to=/path` (relative) to land elsewhere | Web only (desktop webview) | BRAI-177 | ready |
+| `POST /api/v1/auth/web-session` | `auth:app` (not `tv`: 403 `client_not_allowed`) | → `{data: {url}}`: one-time (60 s) `/app/session/{code}` for the webview; append `?to=/path` (relative) to land elsewhere. The webview must send its ` BrainitiveDesktop/<version>` user agent to get the one-step sign-in | Web only (desktop webview) | BRAI-177 | ready |
 | `POST /api/v1/auth/device` | public, 10/min per IP | TV: start a device-code sign-in `{client: "tv", device: {name, platform: "android_tv", app_version, os_version?}}` → `{device_code, user_code, verification_uri, verification_uri_complete, expires_in, interval}` (unwrapped). Not a device-code client / platform not the client's → 422 | none (TV only) | BRAI-438 | ready (v1.49.0) |
 | `POST /api/v1/auth/device/token` | public, 120/min per IP | TV: poll `{device_code}` → token response (unwrapped) once approved; else 400 `authorization_pending` / `slow_down` (+`interval`) / `access_denied` / `expired_token` / `invalid_grant` | none (TV only) | BRAI-438 | ready (v1.49.0) |
-| `GET /app/device` (browser) | web session (`auth` + `verified`) | Confirm page: enter the TV's code, or `?code=` from the QR → code, device name, client, platform + Approve / Deny. Never approves by itself | the page is used from phones | BRAI-438 | ready (v1.49.0) |
+| `GET /app/device` (browser) | web session (`auth` + `verified`) | Confirm page: enter the TV's code, or `?code=` from the QR → code, "Name reported by the device", client, platform, the coarse network (`203.0.113.x`) and "Started N minutes ago" + Approve / Deny. Never approves by itself | the page is used from phones | BRAI-438 | ready (v1.49.0) |
 | `POST /app/device` (browser) | web session + CSRF | `{user_code, decision: approve\|deny}` → done / denied page; a decided, expired or unknown code → 422 page; 10 wrong codes / 15 min → 429 | — | BRAI-438 | ready (v1.49.0) |
-| `GET /app/session/{code}` (browser) | the code | Webview: signs that user into the web guard with remember-me (cookies survive restarts), signs out another signed-in user first, → `?to=` or `/dashboard`. Used / expired code, revoked device or suspended user → login page | Web only | BRAI-177 | ready |
+| `GET /app/session/{code}` (browser) | the code | Webview: spends the code and signs that user into the web guard with remember-me (cookies survive restarts), bound to the device, → `?to=` or `/dashboard` — at once for the same user or the desktop webview (` BrainitiveDesktop/` UA) with nobody signed in; otherwise a confirm page (another user signed in: "Continue as B?", never a silent swap; a plain browser: "Sign in as B on this browser?"). Used / expired code, revoked device or suspended user → login page | Web only | BRAI-177, BRAI-377 | ready |
+| `POST /app/session` (browser) | web session + CSRF | The confirm page: `{decision: continue\|cancel}` → continue signs in (signing the other account out) → `?to=` of the link or `/dashboard`; cancel keeps the current user. No / expired (5 min) confirmation, revoked device → login page | Web only | BRAI-377 | ready (v1.49.0) |
 
 ### Account
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
@@ -720,7 +757,7 @@ set when a sprint starts / completes.
 | `PATCH /api/v1/pages/{uuid}` | app + verified, 120/min | `{name?, icon?, markdown?, revision}` → `{data: page}`; `revision` is required with `markdown` and → 409 `conflict` when the page was saved since. A published doc's changes become unpublished changes. Whiteboards / folders: `name`, `icon`. 403 without `can.update` | Read + light edit | BRAI-199 | ready (v1.49.0, BRAI-411) |
 | `POST /api/v1/pages/{uuid}/publish` | app + verified | `{message?, notify? (default true), revision?}` → `{data: page}`: publish a draft, or make a published doc's changes live as a new version (watchers notified). Nothing to publish → 200 unchanged; "review required" without an approved review → 422 `review`; folders → 422 | Read + light edit | BRAI-198 | ready (v1.49.0, BRAI-411) |
 | `POST /api/v1/pages/{uuid}/move` | app + verified | `{parent_uuid (null = top level), before_uuid?, after_uuid?}` → `{data: page}`; into itself / its subpages → 422 `parent_uuid` | Read + light edit | BRAI-198 | ready (v1.49.0, BRAI-411) |
-| `POST /api/v1/pages/{uuid}/collab-token` | app + verified, 60/min | Join a doc's live document (Yjs): `{data: {url, document, epoch, token, expires_at (unix s), edit, html_vector, user}}`. Ask for every (re)connect (~2 min). 403 when not offered (`live: null` on `GET /pages/{uuid}`: server without realtime, whiteboard / folder, archived, reader of a published doc) | Later (read-only fallback) | BRAI-200 | ready (v1.49.0, BRAI-412) |
+| `POST /api/v1/pages/{uuid}/collab-token` | app + verified, 60/min | Join a doc's live document (Yjs): `{data: {url, document, epoch, token, expires_at (unix s), edit, html_vector, user}}`. Ask for every (re)connect (~2 min). The token is bound to the device: once it is signed out the socket closes with **4410** (drop tokens, show sign-in — see Realtime). 403 when not offered (`live: null` on `GET /pages/{uuid}`: server without realtime, whiteboard / folder, archived, reader of a published doc) | Later (read-only fallback) | BRAI-200 | ready (v1.49.0, BRAI-412) |
 | `POST /api/v1/pages/{uuid}/collab/bootstrap` | app + verified, 30/min | `{epoch, claim}` → `{data: {status: granted\|wait, html, name, icon}}`: the one client that loads the draft into an empty document. 409 `conflict` + `epoch`: replaced, reconnect | Later | BRAI-200 | ready (v1.49.0, BRAI-412) |
 | `PUT /api/v1/pages/{uuid}/collab/draft` | app + verified, 180/min | `{epoch, html, name, icon?, vector, baseline?}` → `{data: {status: saved\|unchanged\|covered\|baseline, revision, has_unpublished_changes}}`: the live document's HTML as the draft (what a leading browser sends). 409 + `epoch`: replaced | Later | BRAI-200 | ready (v1.49.0, BRAI-412) |
 
@@ -1033,8 +1070,10 @@ tabs get (`LiveToken::grant`, shared with the web's `POST /live/token`). Access 
   4400 bad request, 4401 bad / expired token (or a token of another device on the same socket), 4403 access check failed,
   **4410 device signed out**, 4429 too many messages / sockets, 1001 server restart.
 - **4410 = this device was signed out** (sign-out, "revoke device" in Profile / another device, refresh-token reuse, password
-  change, suspension): live tokens of the App API carry the device, and the realtime server closes its sockets within seconds
-  (at most the minute re-check). Don't reconnect: drop the stored tokens and show sign-in, as when `POST /auth/refresh` answers
+  change, suspension, "sign out everywhere"): live tokens **and live co-editing tokens** (`POST /pages/{uuid}/collab-token`,
+  claim `dev`, BRAI-377) of the App API carry the device, and the realtime server closes its live-channel **and document**
+  sockets within seconds (at most the minute re-check); a document socket of a revoked device that tries to connect is
+  refused with 4410 (Hocuspocus reason `device-revoked`), not 4401. Don't reconnect: drop the stored tokens and show sign-in, as when `POST /auth/refresh` answers
   401 `invalid_grant`. Its remaining live tokens are refused with 4410 as well. The user's other devices and web tabs stay connected.
 - **Client → server signals:** `{type: "signal", channel, name, data}` (subscribed channels, ≤ 1 KB, ~4/s): today only `typing`
   on `item.{id}` — `{}` while typing (≤ every 2 s), `{stop: true}` on send / cancel; receivers expire it after 4.5 s.

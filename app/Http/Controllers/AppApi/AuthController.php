@@ -15,6 +15,7 @@ use App\Support\AppApi\AppAuthCodes;
 use App\Support\AppApi\AppClients;
 use App\Support\AppApi\AppDeviceSignIn;
 use App\Support\AppApi\AppTokens;
+use App\Support\SignOutEverywhere;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -66,8 +67,9 @@ class AuthController extends Controller
 
     /**
      * Rotate the token pair. The refresh token works once; presenting an already-used one again
-     * signs the whole device out (reuse = a stolen copy) and emails the user. Clients must send
-     * one refresh at a time: two parallel refreshes with the same token count as reuse.
+     * (reuse = a stolen copy) signs the user out everywhere — this device, their other apps, browsers,
+     * CLI / MCP — and emails them. Clients must send one refresh at a time: two parallel refreshes with
+     * the same token count as reuse.
      *
      * @unauthenticated
      */
@@ -108,6 +110,11 @@ class AuthController extends Controller
         }
 
         if ($result[0] === 'reuse') {
+            // a stolen copy is the likely reason: end every session too — browsers (and the remember-me
+            // token), CLI / MCP tokens and the user's other apps (BRAI-377)
+            if ($result[1]->user) {
+                SignOutEverywhere::run($result[1]->user, appReason: 'refresh_reuse');
+            }
             $this->warnAboutReuse($result[1]);
         }
 

@@ -30,8 +30,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('app.device.store');
 });
 
-// The app's webview: a one-time code (POST /api/v1/auth/web-session) → a remembered web session
+// The app's webview: a one-time code (POST /api/v1/auth/web-session) → a remembered web session.
+// Signed in as someone else, or a plain browser: a confirm page first, whose POST (CSRF) signs in (BRAI-377).
 Route::get('/app/session/{code}', [AppAuthController::class, 'session'])
     ->where('code', '[A-Za-z0-9]{1,128}')
     ->middleware('throttle:30,1,app.session')
     ->name('app.session');
+Route::post('/app/session', [AppAuthController::class, 'confirmSession'])
+    ->middleware('throttle:30,1,app.session.confirm')
+    ->name('app.session.confirm');

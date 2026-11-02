@@ -37,7 +37,7 @@ class DeviceAuthController extends Controller
     public function start(StartDeviceAuthRequest $request): DeviceAuthorizationResource
     {
         return new DeviceAuthorizationResource(
-            AppDeviceCodes::start($request->string('client')->toString(), $request->validated('device')),
+            AppDeviceCodes::start($request->string('client')->toString(), $request->validated('device'), $request->ip()),
         );
     }
 

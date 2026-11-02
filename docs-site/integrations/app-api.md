@@ -13,7 +13,7 @@ It is separate from the other ways to connect: [AI and MCP](./ai-and-mcp) for AI
 ## How apps sign in
 
 - **Desktop and mobile** open your browser at `/app/authorize`. You sign in as usual (password, Google, Microsoft or GitHub) and confirm the app. The app receives a one-time code and trades it for tokens.
-- **TV** has no usable browser. It shows a short code and a QR code; open `/app/device` on your phone or computer, enter the code and click **Approve**. The code works once, for 10 minutes.
+- **TV** has no usable browser. It shows a short code and a QR code; open `/app/device` on your phone or computer, enter the code and click **Approve**. The code works once, for 10 minutes. The page also shows where and when the request started: only approve a code from your own TV, just now. A TV can show your day, your work, your calendar and your notifications and mark work as done — it can't change your account, see your other devices or export data.
 
 No OAuth app or client secret has to be set up for any of this.
 
@@ -21,8 +21,9 @@ No OAuth app or client secret has to be set up for any of this.
 
 - Every sign-in creates a **device** with its own access token. A token is short-lived and is renewed in the background; it only works for the API, never for the web app.
 - A device is listed under **Profile → Notifications → Desktop & mobile apps** with its name, platform and last use.
-- **Revoke** signs one device out immediately: its token stops working and its live connection is closed. You can also sign out all devices.
-- Changing your password, or a suspended account, signs out every device.
+- **Revoke** signs one device out immediately: its token stops working, its live connections (updates and live doc editing) are closed, and the web session its window opened ends. You can also sign out all devices.
+- Changing your password, or a suspended account, signs out every device. So does an old sign-in token being used again (a sign that it was copied): then every browser and app is signed out, and you get an email.
+- A one-time app link opened in a normal browser, or where someone else is signed in, asks before it signs anyone in.
 
 ## Reference
 

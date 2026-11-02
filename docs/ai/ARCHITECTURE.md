@@ -246,7 +246,9 @@ Plan + normative contract [`tasks/feat-live-foundation.md`](./tasks/feat-live-fo
 - **Native clients (v1.49.0, BRAI-426):** `GET /api/v1/realtime` + `POST /api/v1/realtime/token` (App API) hand out the same token
   through `LiveToken::grant()` plus the device (`dev` claim; the web's tokens have none). A revoked device's sockets close with
   4410: pushed by `AppTokens::revoke` → `Live::deviceRevoked()` → `POST /internal/live/devices/revoked` (publish key, loopback), and
-  re-checked every minute (`users.*.devices` → `revoked_devices` in `internal.collab.live.access`). Every event: `API.md` →
+  re-checked every minute (`users.*.devices` → `revoked_devices` in `internal.collab.live.access`). Live co-editing too
+  (BRAI-377): App API collab tokens carry `dev`, `internal.collab.access` answers `revoked_devices` for `devices`, the push
+  reaches the collab server (`attachLive({onDevicesRevoked})` → `createCollabServer().revokeDevices`). Every event: `API.md` →
   Realtime (keep that catalog in sync when adding an event).
 - **Tests:** `tests/Feature/Live/{LiveChannelsTest,LivePublishTest}.php`, `realtime/test/live.test.js`, e2e `e2e/tests/live-channel.spec.ts`. Self-hosting: `docs/self-hosting.md` → "Live updates (bell, presence, typing)", `.env.example` (`LIVE_*`).
 
@@ -440,8 +442,11 @@ extension: own tokens, guard, throttles; only Support services and policies are 
 - **Routes:** `routes/app-api.php`, loaded in `bootstrap/app.php` (`then:`) under `/api/v1`, names
   `app.v1.*`, middleware group `app-api` (`AppApiJson` → JSON always, `SubstituteBindings`,
   `throttle:app-api`; no session / CSRF / CORS). Signed-in routes: `auth:app` +
-  `EnsureUserIsNotSuspended`. Browser half of sign-in (`/app/authorize`, `/app/session/{code}`):
-  `routes/app-auth.php` → `AppAuthController`.
+  `EnsureUserIsNotSuspended` + `EnsureAppClientAbility` (the client's `abilities`: the TV's read-mostly scope,
+  403 `client_not_allowed`, BRAI-377). Browser half of sign-in (`/app/authorize`, `/app/session/{code}` + its
+  confirm page `POST /app/session` → `Pages/AppAuth/Session.tsx`): `routes/app-auth.php` → `AppAuthController`.
+  Webview sessions are bound to their device: `Support\AppApi\AppWebSessions` + web middleware
+  `EndRevokedAppDeviceSessions` (logs the session out once the device is revoked).
 - **Model:** `AppDevice` (`app_devices`, `User::appDevices()`): one row per signed-in install, holding its
   one token pair as sha256 hashes + expiries, `previous_refresh_hash` (reuse detection), `revoked_at` /
   `revoked_reason` (the audit trail). No token / code tables.
@@ -453,7 +458,7 @@ extension: own tokens, guard, throttles; only Support services and policies are 
 - **Providers:** `AppApiServiceProvider` (guard `app` = `Auth::viaRequest('app-token')`, rate limiters
   `app-api` / `app-auth`), `AppApiDocsServiceProvider` (OpenAPI: Bearer scheme, `{instance}` server
   variable, gate `viewApiDocs` = instance admins).
-- **Config:** `config/app-api.php` (TTLs, clients + redirects, `max_devices`, `min_versions` ←
+- **Config:** `config/app-api.php` (TTLs, clients + redirects + `abilities`, `max_devices`, `min_versions` ←
   `APP_API_MIN_DESKTOP_VERSION` / `APP_API_MIN_MOBILE_VERSION`), `config/auth.php` guard `app`,
   `config/scramble.php` (documents only `api/v1`; API version `1.0.0`).
 - **Endpoints:** `app/Http/Controllers/AppApi/*` (Instance, Auth, Me + MeAvatar, Device, Invitation,

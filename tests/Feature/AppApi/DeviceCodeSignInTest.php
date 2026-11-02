@@ -110,6 +110,33 @@ class DeviceCodeSignInTest extends TestCase
         $this->assertDeviceError($this->poll($flow['device_code']), 'invalid_grant');
     }
 
+    public function test_the_confirm_page_shows_where_and_when_the_request_started(): void
+    {
+        $user = User::factory()->create();
+        $flow = $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.57'])->postJson('/api/v1/auth/device', [
+            'client' => 'tv',
+            'device' => ['name' => 'Totally your TV', 'platform' => 'android_tv', 'app_version' => '0.1.0'],
+        ])->assertOk()->json();
+        $this->travel(3)->minutes();
+
+        $page = $this->actingAs($user)->get($flow['verification_uri_complete'])->assertOk();
+        $page->assertInertia(fn (Assert $page) => $page->component('AppAuth/Device')
+            ->where('stage', 'confirm')
+            ->where('device.name', 'Totally your TV')
+            ->where('origin.ip', '203.0.113.x')
+            ->where('origin.minutes_ago', 3));
+        $this->assertStringNotContainsString('203.0.113.57', $page->getContent(), 'never the full address');
+    }
+
+    public function test_the_coarse_ip_never_shows_the_whole_address(): void
+    {
+        $this->assertSame('203.0.113.x', AppDeviceCodes::coarseIp('203.0.113.57'));
+        $this->assertSame('2001:db8:85a3:x', AppDeviceCodes::coarseIp('2001:0db8:85a3:0000:0000:8a2e:0370:7334'));
+        $this->assertSame('2001:db8:0:x', AppDeviceCodes::coarseIp('2001:db8::1'));
+        $this->assertNull(AppDeviceCodes::coarseIp(null));
+        $this->assertNull(AppDeviceCodes::coarseIp('not-an-ip'));
+    }
+
     public function test_a_typed_code_ignores_case_spaces_and_dashes(): void
     {
         $user = User::factory()->create();

@@ -46,6 +46,7 @@ use App\Http\Controllers\AppApi\UploadController;
 use App\Http\Controllers\AppApi\WhiteboardController;
 use App\Http\Controllers\AppApi\WorkLogController;
 use App\Http\Controllers\AppApi\WorkspaceController;
+use App\Http\Middleware\EnsureAppClientAbility;
 use App\Http\Middleware\EnsureUserIsNotSuspended;
 use Illuminate\Support\Facades\Route;
 
@@ -76,7 +77,8 @@ Route::middleware('throttle:app-auth')->group(function () {
 Route::post('auth/device', [DeviceAuthController::class, 'start'])->middleware('throttle:app-device-start')->name('auth.device');
 Route::post('auth/device/token', [DeviceAuthController::class, 'token'])->middleware('throttle:app-device-poll')->name('auth.device.token');
 
-Route::middleware(['auth:app', EnsureUserIsNotSuspended::class])->group(function () {
+// EnsureAppClientAbility: the client's `abilities` (config/app-api.php) — the TV's narrow scope (BRAI-377)
+Route::middleware(['auth:app', EnsureUserIsNotSuspended::class, EnsureAppClientAbility::class])->group(function () {
 
     // ── Auth: sign out, webview session ──────────────────────────────────────────────────────
 

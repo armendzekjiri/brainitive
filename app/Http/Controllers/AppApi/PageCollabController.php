@@ -10,6 +10,7 @@ use App\Http\Resources\AppApi\CollabBootstrapResource;
 use App\Http\Resources\AppApi\CollabSaveResource;
 use App\Http\Resources\AppApi\CollabSessionResource;
 use App\Models\Page;
+use App\Support\AppApi\AppTokens;
 use App\Support\Collab\CollabConfig;
 use App\Support\Collab\PageCollab;
 use App\Support\Collab\StateVector;
@@ -50,7 +51,8 @@ class PageCollabController extends Controller
         $access = $this->access($request, $page);
         abort_if($access === null, 403, 'Live editing is not available for this page.');
 
-        return new CollabSessionResource(PageCollab::session($page, $request->user(), $access));
+        // bound to this device: once it is signed out, the realtime server closes its sockets (4410)
+        return new CollabSessionResource(PageCollab::session($page, $request->user(), $access, AppTokens::currentDevice($request)?->id));
     }
 
     /**

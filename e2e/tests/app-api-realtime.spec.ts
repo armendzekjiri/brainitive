@@ -1,14 +1,15 @@
 import type { Page } from '@playwright/test';
-import { expect, test } from '../fixtures';
-import { REMOTE } from '../env';
-import { ok, seedAppToken } from '../helpers/app-api';
+import { expect, test, uid } from '../fixtures';
+import { LIVE, REMOTE, SEED } from '../env';
+import { appProjectId, ok, seedAppToken } from '../helpers/app-api';
 import { liveServerAvailable } from '../helpers/live';
 
 /*
  * App API v1 realtime (v1.49.0, BRAI-426), as the desktop app's native notifications use it: connection info and a
  * channel token from the App API (only channels the user may open — someone else's user channel is denied), a WebSocket
  * to the realtime server global-setup started, and a live event when the inbox changes through the API. Signing the
- * device out closes its socket with 4410 ("Device signed out", fix/live-revoked-devices).
+ * device out closes its socket with 4410 ("Device signed out", fix/live-revoked-devices) — and since BRAI-377 its live
+ * co-editing (document) sockets too.
  */
 
 type Message = { type: string; channel?: string; event?: string; payload?: Record<string, unknown>; code?: string };
@@ -64,5 +65,33 @@ test.describe('app api: realtime', () => {
         expect(await closed(page)).toBeNull();
         await page.request.post('/api/v1/auth/logout', { headers: auth });
         await expect.poll(() => closed(page), { timeout: 10_000 }).toEqual({ code: 4410, reason: 'Device signed out' });
+    });
+
+    test('signing the device out closes its live document socket too (4410)', async ({ page }) => {
+        const token = await seedAppToken(page);
+        const auth = { Authorization: `Bearer ${token}`, 'X-E2E-Collab': '1', 'X-E2E-Collab-Port': String(LIVE.port) };
+        const projectId = await appProjectId(page, auth, SEED.workspace, SEED.project);
+        const doc = (await ok(await page.request.post(`/api/v1/projects/${projectId}/pages`, { headers: auth, data: { name: uid('Revoked device doc'), markdown: 'Text' } }), 201)).data;
+        const session = (await ok(await page.request.post(`/api/v1/pages/${doc.uuid}/collab-token`, { headers: auth }))).data;
+
+        // a native editor's Hocuspocus connection: [doc name][Auth = 2][Token = 0][token] (lib0 var-length encoding)
+        await page.evaluate(([u, name, t]) => new Promise<void>((resolve, reject) => {
+            const w = window as unknown as { __docClosed: { code: number; reason: string } | null };
+            w.__docClosed = null;
+            const bytes: number[] = [];
+            const uint = (n: number) => { while (n > 127) { bytes.push((n & 127) | 128); n = Math.floor(n / 128); } bytes.push(n); };
+            const text = (value: string) => { const b = new TextEncoder().encode(value); uint(b.length); bytes.push(...b); };
+            const socket = new WebSocket(u);
+            socket.binaryType = 'arraybuffer';
+            socket.onopen = () => { text(name); uint(2); uint(0); text(t); socket.send(new Uint8Array(bytes)); };
+            socket.onmessage = () => resolve(); // authenticated: the server answers (Authenticated, sync step 1)
+            socket.onerror = () => reject(new Error('socket error'));
+            socket.onclose = (event) => { w.__docClosed = { code: event.code, reason: event.reason }; resolve(); };
+        }), [session.url, session.document, session.token] as const);
+        const docClosed = () => page.evaluate(() => (window as unknown as { __docClosed: { code: number; reason: string } | null }).__docClosed);
+        expect(await docClosed(), 'the realtime server accepted the device').toBeNull();
+
+        await page.request.post('/api/v1/auth/logout', { headers: auth });
+        await expect.poll(docClosed, { timeout: 10_000 }).toEqual({ code: 4410, reason: 'Device signed out' });
     });
 });

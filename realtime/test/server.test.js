@@ -14,7 +14,7 @@ const DOC = 'page.123e4567-e89b-42d3-a456-426614174000.0';
 const OTHER = 'page.123e4567-e89b-42d3-a456-426614174999.0';
 
 /** Brainitive's internal API, in memory. */
-const laravel = { states: new Map(), stale: new Set(), tooLarge: new Set(), access: { 1: 'edit', 2: 'edit', 3: 'view', 4: 'edit' }, calls: [], bearer: [] };
+const laravel = { states: new Map(), stale: new Set(), tooLarge: new Set(), access: { 1: 'edit', 2: 'edit', 3: 'view', 4: 'edit' }, calls: [], bearer: [], revokedDevices: new Set(), accessBodies: [] };
 let api;
 let collab;
 let url;
@@ -32,8 +32,13 @@ before(async () => {
         const name = decodeURIComponent(request.url.split('/documents/')[1] ?? '');
         const json = (status, data) => response.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(data));
         if (request.url.endsWith('/access')) {
-            const { document, user_ids: ids } = JSON.parse(body);
-            return json(200, { current: !laravel.stale.has(document), users: Object.fromEntries(ids.map((id) => [String(id), laravel.access[id] ?? null])) });
+            const { document, user_ids: ids, devices = [] } = JSON.parse(body);
+            laravel.accessBodies.push(JSON.parse(body));
+            return json(200, {
+                current: !laravel.stale.has(document),
+                users: Object.fromEntries(ids.map((id) => [String(id), laravel.access[id] ?? null])),
+                revoked_devices: devices.map(({ id }) => id).filter((id) => laravel.revokedDevices.has(id)),
+            });
         }
         if (laravel.stale.has(name)) return json(409, { message: 'Stale document.' });
         if (request.method === 'PUT' && laravel.tooLarge.has(name)) return json(413, { message: 'Document too large.' });
@@ -66,13 +71,15 @@ after(async () => {
     api.close();
 });
 
-const token = (doc, edit, sub = 1, exp = Math.floor(Date.now() / 1000) + 60) => signToken({ v: 1, sub, name: `User ${sub}`, doc, edit, exp }, keys.token);
+const token = (doc, edit, sub = 1, exp = Math.floor(Date.now() / 1000) + 60, extra = {}) => signToken({ v: 1, sub, name: `User ${sub}`, doc, edit, exp, ...extra }, keys.token);
+const deviceToken = (doc, sub, dev) => token(doc, true, sub, undefined, { dev });
 
 function connect(name, tokenValue) {
     const websocketProvider = new HocuspocusProviderWebsocket({ url, WebSocketPolyfill: WebSocket, maxAttempts: 1 });
     const provider = new HocuspocusProvider({ name, token: tokenValue, websocketProvider });
     provider.attach();
-    const events = { failed: null, synced: false, closed: [] };
+    const events = { failed: null, synced: false, closed: [], socketCodes: [] };
+    websocketProvider.on('close', ({ event }) => events.socketCodes.push(event?.code));
     provider.on('authenticationFailed', ({ reason }) => { events.failed = reason; });
     provider.on('synced', () => { events.synced = true; });
     // the server closes one document of a shared socket with a CLOSE message: code 1000 + reason
@@ -214,4 +221,69 @@ test('a stale document is not loaded', async () => {
     assert.equal(client.events.synced, false);
     client.close();
     laravel.stale.delete(OTHER);
+});
+
+// ── revoked app devices (BRAI-377) ────────────────────────────────────────────────────────────────
+
+test('collab tokens: `dev` must be a positive integer', async () => {
+    const { verifyToken } = await import('../src/token.js');
+    assert.equal(verifyToken(deviceToken(DOC, 1, 7), keys.token).dev, 7);
+    assert.equal(verifyToken(deviceToken(DOC, 1, '7'), keys.token), null);
+    assert.equal(verifyToken(deviceToken(DOC, 1, 0), keys.token), null);
+    assert.equal(verifyToken(token(DOC, true), keys.token).dev, undefined, 'web tokens have no device');
+});
+
+test('revoked device (re-check): its document socket closes with 4410; the web and other devices stay', async () => {
+    laravel.accessBodies = [];
+    const desktop = connect(DOC, deviceToken(DOC, 1, 201));
+    const phone = connect(DOC, deviceToken(DOC, 1, 202));
+    const web = connect(DOC, token(DOC, true, 2));
+    await until(() => desktop.events.synced && phone.events.synced && web.events.synced);
+    assert.deepEqual(laravel.accessBodies.find((b) => b.devices?.[0]?.id === 201).devices, [{ id: 201, user_id: 1 }], 'asked on connect');
+
+    await collab.recheckAccess();
+    assert.deepEqual(laravel.accessBodies.at(-1).devices.sort((a, b) => a.id - b.id), [{ id: 201, user_id: 1 }, { id: 202, user_id: 1 }]);
+    assert.equal(desktop.events.socketCodes.length, 0, 'nothing revoked yet');
+
+    laravel.revokedDevices.add(201);
+    await collab.recheckAccess();
+    await until(() => desktop.events.socketCodes.includes(4410));
+    await new Promise((r) => setTimeout(r, 150));
+    assert.equal(phone.events.socketCodes.length, 0);
+    assert.equal(web.events.socketCodes.length, 0);
+    assert.equal(phone.events.closed.length, 0);
+
+    // a still-valid token of the revoked device can't come back
+    const again = connect(DOC, deviceToken(DOC, 1, 201));
+    await until(() => again.events.failed !== null);
+    assert.equal(again.events.failed, 'device-revoked');
+    assert.equal(again.events.synced, false);
+    [desktop, phone, web, again].forEach((c) => c.close());
+    laravel.revokedDevices.clear();
+});
+
+test('revoked device (pushed): revokeDevices closes its connections at once and refuses its tokens', async () => {
+    const desktop = connect(DOC, deviceToken(DOC, 1, 211));
+    const other = connect(OTHER, deviceToken(OTHER, 2, 212));
+    await until(() => desktop.events.synced && other.events.synced);
+
+    assert.equal(collab.revokeDevices([211, 'x']), 1);
+    await until(() => desktop.events.socketCodes.includes(4410));
+    assert.equal(other.events.socketCodes.length, 0);
+
+    // known as revoked without asking Brainitive (which still thinks it's active here)
+    const again = connect(DOC, deviceToken(DOC, 1, 211));
+    await until(() => again.events.failed !== null);
+    assert.equal(again.events.failed, 'device-revoked');
+    [desktop, other, again].forEach((c) => c.close());
+});
+
+test('a device Brainitive answers as revoked on connect is refused with 4410', async () => {
+    laravel.revokedDevices.add(221);
+    const revoked = connect(DOC, deviceToken(DOC, 1, 221));
+    await until(() => revoked.events.failed !== null);
+    assert.equal(revoked.events.failed, 'device-revoked');
+    await until(() => revoked.events.socketCodes.includes(4410));
+    revoked.close();
+    laravel.revokedDevices.clear();
 });

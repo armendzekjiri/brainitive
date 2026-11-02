@@ -18,6 +18,8 @@ const laravel = { allowed: new Map(), calls: [], fail: false, revokedDevices: ne
 let api;
 let collab;
 let live;
+/** devices the publish endpoint passed on to the collab server (BRAI-377) */
+const pushedToCollab = [];
 let base;
 
 before(async () => {
@@ -43,6 +45,10 @@ before(async () => {
         accessIntervalMs: 3_600_000, // driven by hand below
         logger: { error() {}, debug() {} },
         limits: { authDeadlineMs: 300, presenceDelayMs: 10, signalBurst: 3, signalsPerSecond: 1, messageBurst: 30, messagesPerSecond: 5 },
+        onDevicesRevoked: (ids) => {
+            pushedToCollab.push(...ids);
+            return collab.revokeDevices(ids);
+        },
     });
     await collab.listen();
     base = `127.0.0.1:${collab.server.address.port}`;
@@ -436,4 +442,15 @@ test('a socket keeps its device: a token of another device (or the web) closes i
     web.send({ type: 'auth', token: token(23, ['item.23'], { dev: 121 }) });
     await until(() => web.closed);
     assert.equal(web.closed.code, 4401);
+});
+
+test('the device push reaches live co-editing too (onDevicesRevoked)', async () => {
+    pushedToCollab.length = 0;
+    const desktop = await joined(24, ['user.24'], { dev: 131 });
+    const response = await revokeDevices({ devices: [131, 132] });
+    assert.equal(response.status, 202);
+    assert.deepEqual(await response.json(), { closed: 1 }, 'live sockets + document connections (none open here)');
+    assert.deepEqual(pushedToCollab, [131, 132]);
+    await until(() => desktop.closed);
+    assert.equal(desktop.closed.code, 4410);
 });

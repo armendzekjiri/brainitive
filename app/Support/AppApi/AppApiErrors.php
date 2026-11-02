@@ -33,6 +33,14 @@ final class AppApiErrors
         503 => 'unavailable',
     ];
 
+    /**
+     * Codes that refine a status (sent instead of its default code):
+     *  - 400 / 401 `invalid_grant` (sign-in codes, refresh tokens), 400 RFC 8628 device-code errors;
+     *  - 403 `client_not_allowed`: the calling app may not use this endpoint at all (the TV's narrow
+     *    scope, `config/app-api.php` → `clients.*.abilities`) — not a permission of this record.
+     */
+    public const CLIENT_NOT_ALLOWED = 'client_not_allowed';
+
     public static function applies(Request $request): bool
     {
         return $request->is('api/v1', 'api/v1/*');

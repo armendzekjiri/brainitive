@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Support\AccountLoginThrottle;
-use App\Support\AppApi\AppTokens;
 use App\Support\SignOutEverywhere;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\RedirectResponse;
@@ -54,8 +53,7 @@ class NewPasswordController extends Controller
                     'remember_token' => Str::random(60),
                 ])->save();
 
-                SignOutEverywhere::run($user);
-                AppTokens::revokeAllFor($user, 'password_changed');
+                SignOutEverywhere::run($user, appReason: 'password_changed');
 
                 event(new PasswordReset($user));
             }

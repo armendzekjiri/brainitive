@@ -3,6 +3,8 @@
 use App\Http\Middleware\AddCorsHeaders;
 use App\Http\Middleware\AppApiJson;
 use App\Http\Middleware\DeferAutomations;
+use App\Http\Middleware\EndRevokedAppDeviceSessions;
+use App\Http\Middleware\EnsureAppClientAbility;
 use App\Http\Middleware\EnsureFileRoom;
 use App\Http\Middleware\EnsureInstanceAdmin;
 use App\Http\Middleware\EnsurePortalIdentity;
@@ -49,6 +51,7 @@ return Application::configure(basePath: dirname(__DIR__))
             GuardOAuthFlows::class, // the /oauth/authorize check needs the session (StartSession runs in this group)
             FrameProtection::class,
             EnsureUserIsNotSuspended::class,
+            EndRevokedAppDeviceSessions::class, // a webview's session ends with its app device (BRAI-377)
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
@@ -59,6 +62,10 @@ return Application::configure(basePath: dirname(__DIR__))
             SubstituteBindings::class,
             'throttle:app-api',
         ]);
+
+        // the App API client's abilities (BRAI-377) are checked before route-model binding: a TV probing
+        // an endpoint it may not use gets 403 `client_not_allowed`, never a 404 that says whether a record exists
+        $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: EnsureAppClientAbility::class);
 
         $middleware->alias([
             'cors' => AddCorsHeaders::class,

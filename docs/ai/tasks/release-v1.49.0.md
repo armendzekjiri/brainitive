@@ -721,6 +721,47 @@ Built as planned. New: `Support\Sync\SyncRecords`, `SyncTaskListResource`, `Task
 `work.done`, `mine` across workspaces + hidden / other users' lists, cap, additive lists incl. a self-changing `mine` set, a
 list change mid-run, v1 cursors end-of-run / mid-run / unreadable, inbox filter); e2e `app-api-sync` second test.
 
+## Security review fixes (BRAI-377) (`fix/app-api-security-review`)
+Findings of the App API security review; the design is the owner's (decided 2026-11-02).
+- **M1 — TV clients get a narrow scope.** `config/app-api.php` → `clients.*.abilities` (route names without `app.v1.`):
+  desktop / mobile `['*']`; `tv` = `me.show`, `today`, `work.index`, `work.update` (done), `my-day.show`,
+  `my-day.items.update` (done / undone), `calendar.events`, `calendar.connections`, `notifications.index`,
+  `notifications.unread-count`, `notifications.read`, `auth.logout`, `realtime.show`, `realtime.token` (+ the public
+  `instance`, `auth.refresh`). Middleware `EnsureAppClientAbility` on the `auth:app` group: anything else → 403
+  `client_not_allowed` (AppApiErrors shape, constant + CODES doc). `/auth/web-session` never for device-code clients.
+  `/app/device`: the coarse IP (`203.0.113.x`) and "started N min ago" (stored with the device code in the cache: no
+  migration), "Name reported by the device", copy that says what the TV may do.
+- **M2 — no login CSRF / silent account swap at `/app/session/{code}`.** GET consumes the code and binds the pending
+  sign-in to this browser session (5 min to confirm). Different user signed in → confirm page "You're signed in as A.
+  Continue as B?"; nobody signed in and no ` BrainitiveDesktop/` UA → "Sign in as B on this browser?"; desktop webview
+  with nobody signed in and the same user → one step as before. POST `/app/session` (CSRF) = Continue / Cancel. `?to=`
+  rules unchanged.
+- **M3 — revoking a device ends its web session.** `/app/session` stores `app_device_id` in the session; web middleware
+  `EndRevokedAppDeviceSessions` checks the device (one indexed query, cached 60 s per device; `AppTokens::revoke` forgets
+  the cache so the next request sees it) and logs the session out (remember token cycled). Refresh reuse also runs
+  `SignOutEverywhere` (theft signal).
+- **L1 — collab sockets of revoked devices.** `CollabToken` gets `dev` for App API callers (`PageCollab::session(…, $device)`);
+  `internal/collab/access` takes `devices` [{id, user_id}] → `revoked_devices` (shared with the live endpoint:
+  `AppTokens::revokedAmong`); the collab server sends them on connect and in the minute re-check and closes revoked
+  devices' sockets with 4410; the live push (`/internal/live/devices/revoked`) closes collab sockets too.
+- **L2 — `SignOutEverywhere` covers app devices:** `run($user, $keepSessionId, $appReason)` calls
+  `AppTokens::revokeAllFor`; the direct calls in password change / reset and suspension go.
+- Tests: `AppClientAbilitiesTest` (every blocked area + the allowed list for tv; desktop unaffected), `AppSignInTest`
+  (confirm pages, desktop UA, CSRF, `?to=`), `AppWebSessionRevocationTest`, `PageCollabTest` / collab access, realtime
+  `server.test.js` + `live.test.js`; e2e `app-sign-in`, `app-device-sign-in`, `app-api-realtime`, `app-devices`.
+
+### Security review fixes — result
+Built as planned, no migration (the device code's IP + created time live in its cache payload). New:
+`EnsureAppClientAbility` (priority before `SubstituteBindings`), `AppClients::allows`, `AppApiErrors::CLIENT_NOT_ALLOWED`,
+`AppDeviceCodes::coarseIp`, `AppWebSessions` + `EndRevokedAppDeviceSessions` (web group), `Pages/AppAuth/Session.tsx` +
+`POST /app/session` (`app.session.confirm`), `AppTokens::revokedAmong`, collab `dev` claim, `createCollabServer().revokeDevices`
++ `attachLive({onDevicesRevoked})`. `SignOutEverywhere::run($user, $keepSessionId, $appReason)` revokes the apps; the direct
+`revokeAllFor` calls in password change / reset and suspension are gone. Refresh reuse → `SignOutEverywhere` (all devices out).
+Tests: `AppClientAbilitiesTest` (6), `AppWebSessionRevocationTest` (5), `AppSignInTest` (+7, webview tests now send the desktop UA),
+`AppAuthTokensTest` (+reuse everywhere), `DeviceCodeSignInTest` (+2), `PageCollabTest` (+2), takeover asserts in
+`AuthOAuthHardeningTest` / `MicrosoftLoginTest`; realtime `server.test.js` (+4), `live.test.js` (+1); e2e `app-sign-in` (+2),
+`app-device-sign-in`, `app-api-realtime` (+1, document socket 4410), `app-devices` (+1). Deploy: restart the realtime service.
+
 ## Release materials (`docs/release-v1.49.0-materials`)
 In-app changelog entry v1.49.0 (`HelpModal.tsx`), homepage (`Welcome.tsx`: "Brainitive on your desktop" spotlight card +
 `#desktop` section with "Open API for apps", both marked beta / coming soon; `e2e/tests/homepage.spec.ts`), docs site
@@ -734,7 +775,8 @@ the desktop section is the owner's to do.
 Before: nothing to build specially; `desktop/` is its own repo and is not part of this deploy.
 1. **Migration:** `php artisan migrate` — additive, one new table `sync_tombstones` (`2026_11_08_100000_create_sync_tombstones_table`).
 2. **Realtime service:** restart after the deploy (`realtime/` changed): prod `127.0.0.1:6201`, dev `:6202`
-   (`sudo systemctl restart brainitive-realtime` of each instance). Until then old servers ignore the device claim (per-user behaviour, nothing breaks).
+   (`sudo systemctl restart brainitive-realtime` of each instance). Until then old servers ignore the device claim (per-user behaviour, nothing breaks);
+   since BRAI-377 the restart also makes revoked devices lose their live-doc (collab) sockets.
 3. **nginx:** check `/api/v1` (Authorization header unchanged, no basic-auth / IP allow-list on prod; dev's basic auth must not cover
    it if the apps are tested against dev), `/app/authorize`, `/app/device`, `/app/session/` and the websocket `/collab` are not blocked.
    The `brainitive.app` → `https://www` redirect is already fixed (verify it still answers 301, not a loop).

@@ -7,6 +7,7 @@ use App\Models\ItemCollabState;
 use App\Models\Page;
 use App\Models\PageCollabState;
 use App\Models\User;
+use App\Support\AppApi\AppTokens;
 use App\Support\Collab\CollabConfig;
 use App\Support\Collab\CollabDocument;
 use App\Support\Collab\ItemCollab;
@@ -71,16 +72,29 @@ class CollabInternalController extends Controller
         return $stored ? response()->noContent() : response()->json(['message' => 'Stale document.'], 409);
     }
 
-    /** Who of the connected users may still view / edit (checked every minute by the server). */
+    /**
+     * Who of the connected users may still view / edit (on connect and every minute by the server). `devices`
+     * (optional): the app devices of the connections whose token carries `dev` (App API), each with its user;
+     * the answer's `revoked_devices` names those revoked, gone or not that user's — the server closes their
+     * sockets with 4410 (BRAI-377, as LiveInternalController does for live channels).
+     */
     public function access(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'document' => 'required|string|max:100',
             'user_ids' => 'present|array|max:500',
             'user_ids.*' => 'integer|min:1',
+            'devices' => 'sometimes|array|max:500',
+            'devices.*.id' => 'required|integer|min:1',
+            'devices.*.user_id' => 'required|integer|min:1',
         ]);
+        $revoked = AppTokens::revokedAmong(array_column(
+            array_map(fn (array $device) => ['id' => (int) $device['id'], 'user_id' => (int) $device['user_id']], $validated['devices'] ?? []),
+            'user_id',
+            'id',
+        ));
         if ($item = $this->resolveItem($validated['document'])) {
-            return $this->itemAccess($item[0], $item[1], $validated['user_ids']);
+            return $this->itemAccess($item[0], $item[1], $validated['user_ids'], $revoked);
         }
         [$page, $epoch, $kind] = $this->resolve($validated['document']);
 
@@ -93,6 +107,7 @@ class CollabInternalController extends Controller
         return response()->json([
             'current' => (PageCollab::epoch($page) ?? 0) === $epoch,
             'users' => (object) $access,
+            'revoked_devices' => $revoked,
         ]);
     }
 
@@ -166,8 +181,9 @@ class CollabInternalController extends Controller
 
     /**
      * @param  array<int, int>  $userIds
+     * @param  list<int>  $revokedDevices
      */
-    private function itemAccess(Item $item, int $epoch, array $userIds): JsonResponse
+    private function itemAccess(Item $item, int $epoch, array $userIds, array $revokedDevices): JsonResponse
     {
         $ids = array_unique($userIds);
         $users = User::whereIn('id', $ids)->get()->keyBy('id');
@@ -179,6 +195,7 @@ class CollabInternalController extends Controller
         return response()->json([
             'current' => (ItemCollab::epoch($item) ?? 0) === $epoch,
             'users' => (object) $access,
+            'revoked_devices' => $revokedDevices,
         ]);
     }
 }
