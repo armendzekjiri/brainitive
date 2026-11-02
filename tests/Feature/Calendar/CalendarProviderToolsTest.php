@@ -150,6 +150,39 @@ class CalendarProviderToolsTest extends TestCase
         $this->assertSame([], FakeCalendarProvider::$calls);
     }
 
+    /** Codex review, finding 17: bounded reads (span, result count) and a write budget per user. */
+    public function test_list_events_caps_the_span_and_the_result_count(): void
+    {
+        BrainitiveServer::actingAs($this->user)->tool(ListCalendarEventsTool::class, ['from' => '2026-01-01', 'to' => '2026-12-31'])
+            ->assertHasErrors(['at most 62 days']);
+        BrainitiveServer::actingAs($this->user)->tool(ListCalendarEventsTool::class, ['from' => '2026-11-10', 'to' => '2026-11-01'])
+            ->assertHasErrors();
+        $this->assertSame([], array_column(FakeCalendarProvider::$calls, 0));
+
+        FakeCalendarProvider::$events = array_map(
+            fn (int $i) => NormalizedEvent::allDay('e'.$i, 'Event '.$i, '2026-11-04', '2026-11-05'),
+            range(1, 600),
+        );
+        BrainitiveServer::actingAs($this->user)->tool(ListCalendarEventsTool::class, ['from' => '2026-11-01', 'to' => '2026-11-30'])
+            ->assertOk()
+            ->assertStructuredContent(fn (AssertableJson $j) => $j->where('count', 500)->where('truncated', true)->has('events', 500)->etc());
+    }
+
+    public function test_write_tools_have_a_per_user_budget(): void
+    {
+        for ($i = 0; $i < 30; $i++) {
+            BrainitiveServer::actingAs($this->user)->tool(UpdateCalendarEventTool::class, ['connection_id' => $this->connection->id, 'event_id' => 'e1', 'title' => 'T'.$i])->assertOk();
+        }
+        BrainitiveServer::actingAs($this->user)->tool(DeleteCalendarEventTool::class, ['connection_id' => $this->connection->id, 'event_id' => 'e1'])
+            ->assertHasErrors(['Too many calendar changes']);
+        $this->assertCount(30, FakeCalendarProvider::$calls);
+
+        // someone else has their own budget
+        $other = User::factory()->create();
+        $theirs = CalendarConnection::factory()->provider('fake')->create(['user_id' => $other->id]);
+        BrainitiveServer::actingAs($other)->tool(DeleteCalendarEventTool::class, ['connection_id' => $theirs->id, 'event_id' => 'e1'])->assertOk();
+    }
+
     public function test_reminders_come_from_any_provider_once(): void
     {
         Notification::fake();

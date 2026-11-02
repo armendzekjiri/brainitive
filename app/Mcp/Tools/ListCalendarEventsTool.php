@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Http\Requests\AppApi\CalendarEventsRequest;
 use App\Mcp\Tools\Concerns\ResolvesCalendarConnections;
 use App\Support\Calendar\CalendarProviderException;
 use App\Support\Calendar\CalendarProviders;
@@ -15,10 +16,16 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('List calendar events in a date range across the user\'s connected calendars (Google Calendar or any other connected provider) — use this to see what is already on their schedule before planning. Defaults to the next 7 days if no dates are given. Dates are YYYY-MM-DD.')]
+#[Description('List calendar events in a date range across the user\'s connected calendars (Google Calendar or any other connected provider) — use this to see what is already on their schedule before planning. Defaults to the next 7 days if no dates are given; at most 62 days and 500 events per call. Dates are YYYY-MM-DD.')]
 class ListCalendarEventsTool extends Tool
 {
     use ResolvesCalendarConnections;
+
+    /** The longest range one call may ask for (as the App API's CalendarEventsRequest::MAX_DAYS). */
+    public const MAX_DAYS = CalendarEventsRequest::MAX_DAYS;
+
+    /** Events answered at most; the earliest first, `truncated` says there were more. */
+    public const MAX_EVENTS = 500;
 
     public function handle(Request $request): Response|ResponseFactory
     {
@@ -30,6 +37,15 @@ class ListCalendarEventsTool extends Tool
 
         $from = isset($validated['from']) ? Carbon::parse($validated['from']) : Carbon::today();
         $to = isset($validated['to']) ? Carbon::parse($validated['to']) : $from->copy()->addDays(7);
+        // bounded like the App API's GET /calendar/events (Codex review, finding 17): every connection is asked, and
+        // Outlook follows several pages each
+        $days = $from->diffInDays($to, false);
+        if ($days < 0) {
+            return Response::error('"to" must not be before "from".');
+        }
+        if ($days > self::MAX_DAYS) {
+            return Response::error('Ask for at most '.self::MAX_DAYS.' days at a time.');
+        }
 
         $connections = $this->connectionsFor($request->user(), 'calendar');
         if (isset($validated['connection_id'])) {
@@ -61,12 +77,15 @@ class ListCalendarEventsTool extends Tool
 
         // Sort by start so the week reads chronologically.
         usort($events, fn ($a, $b) => ($a['start'] ?? '') <=> ($b['start'] ?? ''));
+        $truncated = count($events) > self::MAX_EVENTS;
+        $events = array_slice($events, 0, self::MAX_EVENTS);
 
         return Response::structured([
             'from' => $from->toDateString(),
             'to' => $to->toDateString(),
             'events' => $events,
             'count' => count($events),
+            'truncated' => $truncated,
             'errors' => $errors,
         ]);
     }
@@ -81,6 +100,7 @@ class ListCalendarEventsTool extends Tool
             'to' => $schema->string(),
             'events' => $schema->array()->items(CalendarFormatter::eventSchema($schema)),
             'count' => $schema->integer(),
+            'truncated' => $schema->boolean()->description('True when more than '.self::MAX_EVENTS.' events matched: ask for a shorter range.'),
             'errors' => $schema->array()->items($schema->string())->description('Calendars that could not be loaded, with the reason.'),
         ];
     }

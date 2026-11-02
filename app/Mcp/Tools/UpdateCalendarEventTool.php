@@ -34,6 +34,10 @@ class UpdateCalendarEventTool extends Tool
             'timezone' => 'nullable|string|max:64',
         ]);
 
+        if ($limited = $this->calendarWriteLimited($request->user())) {
+            return $limited;
+        }
+
         try {
             $connection = $this->connectionForUser($request->user(), $validated['connection_id'], 'calendar');
         } catch (AuthorizationException $e) {

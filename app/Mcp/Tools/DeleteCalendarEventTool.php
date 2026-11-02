@@ -27,6 +27,10 @@ class DeleteCalendarEventTool extends Tool
             'scope' => 'sometimes|string|in:occurrence,series',
         ]);
 
+        if ($limited = $this->calendarWriteLimited($request->user())) {
+            return $limited;
+        }
+
         try {
             $connection = $this->connectionForUser($request->user(), $validated['connection_id'], 'calendar');
         } catch (AuthorizationException $e) {
