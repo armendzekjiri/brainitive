@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { forgetClient, getClient, getSession, setClient, setLastServer, setSession } from './storage';
+import { bumpGeneration, forgetClient, getClient, getGeneration, getSession, setClient, setLastServer, setSession } from './storage';
 import type { Session } from './types';
 
 /**
@@ -136,7 +136,10 @@ export async function signIn(server: string): Promise<Session> {
         redirectUri,
         ...sessionTokens(tokens, null),
     };
-    await setSession(session);
+    await exclusive(async () => {
+        await bumpGeneration(); // a refresh still running for the previous session must not land
+        await setSession(session);
+    });
     await setLastServer(server);
 
     return session;
@@ -144,8 +147,28 @@ export async function signIn(server: string): Promise<Session> {
 
 /** Forget the tokens and everything cached from the account. */
 export async function signOut(): Promise<void> {
-    await setSession(null);
-    await browser.storage.local.remove(['destinations', 'lastDestination']);
+    await exclusive(async () => {
+        await bumpGeneration();
+        await setSession(null);
+        await browser.storage.local.remove(['destinations', 'lastDestination']);
+    });
+}
+
+/*
+ * Session writes are serialized, and each sign-in / sign-out starts a new session
+ * "generation" (stored, so it survives the worker being restarted). A refresh remembers the
+ * generation it started in and only stores its result — or signs out after a failure — if
+ * that generation is still current. Without this, a refresh answered after a sign-out signed
+ * the user back in, and one answered after a new sign-in overwrote (or deleted) the new
+ * session (Codex CLI/extension review 3). All auth runs in the background, so an in-memory
+ * queue is enough to make check-and-write atomic.
+ */
+let queue: Promise<unknown> = Promise.resolve();
+
+function exclusive<T>(task: () => Promise<T>): Promise<T> {
+    const run = queue.then(task, task);
+    queue = run.catch(() => undefined);
+    return run;
 }
 
 let refreshing: Promise<Session> | null = null;
@@ -155,42 +178,59 @@ let refreshing: Promise<Session> | null = null;
  * use, so all contexts get their token from here (one refresh at a time).
  */
 export async function getAccessToken(force = false): Promise<{ token: string; server: string }> {
-    let session = await getSession();
+    let { session, generation } = await exclusive(async () => ({ session: await getSession(), generation: await getGeneration() }));
     if (!session) {
         throw new NotSignedInError();
     }
 
     if (force || session.expiresAt - 60_000 < Date.now()) {
-        refreshing ??= refresh(session).finally(() => (refreshing = null));
+        refreshing ??= refresh(session, generation).finally(() => (refreshing = null));
         session = await refreshing;
     }
 
     return { token: session.accessToken, server: session.server };
 }
 
-async function refresh(session: Session): Promise<Session> {
+/** Clears the session — but only the one this refresh belonged to. */
+async function expire(generation: number): Promise<never> {
+    await exclusive(async () => {
+        if ((await getGeneration()) === generation) await setSession(null);
+    });
+    throw new NotSignedInError('Your Brainitive session expired. Sign in again.');
+}
+
+async function refresh(session: Session, generation: number): Promise<Session> {
     if (!session.refreshToken || !sameOrigin(session.server, session.tokenEndpoint)) {
-        await setSession(null);
-        throw new NotSignedInError('Your Brainitive session expired. Sign in again.');
+        return expire(generation);
     }
 
+    let tokens: TokenResponse;
     try {
-        const tokens = await tokenRequest(session.tokenEndpoint, {
+        tokens = await tokenRequest(session.tokenEndpoint, {
             grant_type: 'refresh_token',
             client_id: session.clientId,
             refresh_token: session.refreshToken,
             scope: SCOPE,
         });
-        const next = { ...session, ...sessionTokens(tokens, session.refreshToken) };
-        await setSession(next);
-        return next;
     } catch (error) {
         if (error instanceof TypeError) {
             throw error; // offline — keep the session
         }
-        await setSession(null);
-        throw new NotSignedInError('Your Brainitive session expired. Sign in again.');
+        return expire(generation);
     }
+
+    return exclusive(async () => {
+        if ((await getGeneration()) !== generation) {
+            // Signed out or signed in again meanwhile: drop these tokens and hand out the
+            // current session (if any), never the old one's fresh token.
+            const current = await getSession();
+            if (!current) throw new NotSignedInError();
+            return current;
+        }
+        const next = { ...session, ...sessionTokens(tokens, session.refreshToken) };
+        await setSession(next);
+        return next;
+    });
 }
 
 async function discover(server: string): Promise<ServerMetadata> {

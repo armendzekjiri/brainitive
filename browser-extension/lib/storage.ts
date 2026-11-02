@@ -25,6 +25,16 @@ export async function setSession(session: Session | null): Promise<void> {
     }
 }
 
+/** Session generation: changes on every sign-in and sign-out (see `auth.ts`). */
+export async function getGeneration(): Promise<number> {
+    const { sessionGeneration } = await browser.storage.local.get('sessionGeneration');
+    return (sessionGeneration as number | undefined) ?? 0;
+}
+
+export async function bumpGeneration(): Promise<void> {
+    await browser.storage.local.set({ sessionGeneration: (await getGeneration()) + 1 });
+}
+
 export async function getClient(server: string): Promise<RegisteredClient | null> {
     const { clients } = await browser.storage.local.get('clients');
     return ((clients as Record<string, RegisteredClient> | undefined) ?? {})[server] ?? null;
