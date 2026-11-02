@@ -4,10 +4,12 @@ namespace Tests\Feature\Calendar;
 
 use App\Mcp\Servers\BrainitiveServer;
 use App\Mcp\Tools\CreateCalendarEventTool;
+use App\Mcp\Tools\CreateGoogleTaskTool;
 use App\Mcp\Tools\DeleteCalendarEventTool;
 use App\Mcp\Tools\ListCalendarConnectionsTool;
 use App\Mcp\Tools\ListCalendarEventsTool;
 use App\Mcp\Tools\UpdateCalendarEventTool;
+use App\Mcp\Tools\UpdateGoogleTaskTool;
 use App\Models\CalendarConnection;
 use App\Models\User;
 use App\Notifications\CalendarReminderNotification;
@@ -124,6 +126,26 @@ class CalendarProviderToolsTest extends TestCase
         // Someone else's calendar can't be reached.
         BrainitiveServer::actingAs(User::factory()->create())->tool(DeleteCalendarEventTool::class, ['connection_id' => $this->connection->id, 'event_id' => 'e1'])
             ->assertHasErrors(['No connected calendar found']);
+
+        $this->assertSame([], FakeCalendarProvider::$calls);
+    }
+
+    /** Codex review, finding 15: a calendar switched off ("turn single calendars on or off") is off for the AI too. */
+    public function test_write_tools_refuse_a_switched_off_calendar_by_explicit_id(): void
+    {
+        $this->connection->update(['is_active' => false]);
+        $tasks = CalendarConnection::factory()->tasks()->create(['user_id' => $this->user->id, 'is_active' => false]);
+
+        BrainitiveServer::actingAs($this->user)->tool(CreateCalendarEventTool::class, ['connection_id' => $this->connection->id, 'title' => 'X', 'date' => '2026-11-06'])
+            ->assertHasErrors(['No connected calendar found']);
+        BrainitiveServer::actingAs($this->user)->tool(UpdateCalendarEventTool::class, ['connection_id' => $this->connection->id, 'event_id' => 'e1', 'title' => 'Y'])
+            ->assertHasErrors(['No connected calendar found']);
+        BrainitiveServer::actingAs($this->user)->tool(DeleteCalendarEventTool::class, ['connection_id' => $this->connection->id, 'event_id' => 'e1'])
+            ->assertHasErrors(['No connected calendar found']);
+        BrainitiveServer::actingAs($this->user)->tool(UpdateGoogleTaskTool::class, ['connection_id' => $tasks->id, 'task_id' => 't1', 'title' => 'Y'])
+            ->assertHasErrors(['No connected Google Tasks list found']);
+        BrainitiveServer::actingAs($this->user)->tool(CreateGoogleTaskTool::class, ['connection_id' => $tasks->id, 'title' => 'Y'])
+            ->assertHasErrors(['No connected Google Tasks list found']);
 
         $this->assertSame([], FakeCalendarProvider::$calls);
     }

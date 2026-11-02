@@ -3022,7 +3022,7 @@
             },
             "post": {
                 "operationId": "app.v1.calendar.events.store",
-                "description": "Without `time` it's an all-day event (`end_date` inclusive); a timed one without `end_time` lasts 30\nminutes. `conference` adds a Google Meet / Teams call when the calendar offers it (422 `calendar`\notherwise); `attendees` are invited by the provider. Answers 201 with the event as the provider saved\nit, or 200 with the same event on a replayed `request_id`. A calendar that isn't the user's \u2192 422\n`connection_id`; a read-only one (ICS link) \u2192 422 `calendar`.",
+                "description": "Without `time` it's an all-day event (`end_date` inclusive); a timed one without `end_time` lasts 30\nminutes. `conference` adds a Google Meet / Teams call when the calendar offers it (422 `calendar`\notherwise); `attendees` are invited by the provider. Answers 201 with the event as the provider saved\nit, or 200 with the same event on a replayed `request_id`. A calendar that isn't the user's or that they\nswitched off \u2192 422 `connection_id`; a read-only one (ICS link) \u2192 422 `calendar`.",
                 "summary": "Create an event in one of the user's writable calendars",
                 "tags": [
                     "Calendar"

@@ -39,14 +39,14 @@ class CalendarEventController extends Controller
      * Without `time` it's an all-day event (`end_date` inclusive); a timed one without `end_time` lasts 30
      * minutes. `conference` adds a Google Meet / Teams call when the calendar offers it (422 `calendar`
      * otherwise); `attendees` are invited by the provider. Answers 201 with the event as the provider saved
-     * it, or 200 with the same event on a replayed `request_id`. A calendar that isn't the user's → 422
-     * `connection_id`; a read-only one (ICS link) → 422 `calendar`.
+     * it, or 200 with the same event on a replayed `request_id`. A calendar that isn't the user's or that they
+     * switched off → 422 `connection_id`; a read-only one (ICS link) → 422 `calendar`.
      */
     public function store(StoreCalendarEventRequest $request): JsonResponse
     {
         $user = $request->user();
         $validated = $request->validated();
-        $connection = CalendarConnection::query()->where('user_id', $user->id)->where('kind', 'calendar')->whereKey((int) $validated['connection_id'])->first();
+        $connection = CalendarConnection::query()->where('user_id', $user->id)->where('kind', 'calendar')->where('is_active', true)->whereKey((int) $validated['connection_id'])->first();
         if (! $connection || ! CalendarProviders::has($connection->provider)) {
             throw ValidationException::withMessages(['connection_id' => 'Pick one of your connected calendars.']);
         }
@@ -171,7 +171,8 @@ class CalendarEventController extends Controller
     }
 
     /**
-     * `event:<connection id>:<provider event id>` → the user's own calendar connection + the event id, else 404.
+     * `event:<connection id>:<provider event id>` → the user's own, switched-on calendar connection + the event id,
+     * else 404 (a calendar turned off is off for the apps too — Codex review).
      *
      * @return array{0: CalendarConnection, 1: string}
      */
@@ -179,7 +180,7 @@ class CalendarEventController extends Controller
     {
         abort_unless(preg_match('/^event:([1-9][0-9]{0,17}):(.{1,3000})$/s', $id, $m) === 1, 404);
         abort_if($m[2] === '.' || $m[2] === '..', 404);
-        $connection = CalendarConnection::query()->where('user_id', $user->id)->where('kind', 'calendar')->whereKey((int) $m[1])->first();
+        $connection = CalendarConnection::query()->where('user_id', $user->id)->where('kind', 'calendar')->where('is_active', true)->whereKey((int) $m[1])->first();
         abort_unless($connection instanceof CalendarConnection && CalendarProviders::has($connection->provider), 404);
 
         return [$connection, $m[2]];

@@ -31,7 +31,8 @@ trait ResolvesCalendarConnections
     }
 
     /**
-     * Resolve one connection the user owns, of the expected kind.
+     * Resolve one connection the user owns, of the expected kind, and switched on: a calendar the user turned off
+     * (or that was switched off because its access expired) is off for the AI too (Codex review, finding 15).
      *
      * @throws AuthorizationException
      */
@@ -40,6 +41,7 @@ trait ResolvesCalendarConnections
         $connection = CalendarConnection::query()
             ->where('user_id', $user->id)
             ->where('kind', $kind)
+            ->where('is_active', true)
             ->find($connectionId);
 
         if (! $connection) {
