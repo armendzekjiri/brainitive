@@ -54,10 +54,15 @@ final class SyncOutcome
         return new self(424, ['status' => 'waiting', 'message' => $message]);
     }
 
-    /** A stored outcome, answered again for a retried mutation. @param array<string, mixed> $body */
-    public static function replayed(int $status, array $body): self
+    /**
+     * A stored outcome, answered again for a retried mutation (with the stored entity type + id, so the
+     * App API can render the entity's current state).
+     *
+     * @param  array<string, mixed>  $body
+     */
+    public static function replayed(int $status, array $body, ?string $entityType = null, ?int $entityId = null): self
     {
-        return new self($status, $body);
+        return new self($status, $body, $entityType, $entityId);
     }
 
     public function isFinal(): bool

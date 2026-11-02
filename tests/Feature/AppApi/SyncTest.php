@@ -13,6 +13,7 @@ use App\Models\TaskListItem;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\MyDay\MyDayPlan;
+use App\Support\Sync\ChangeFeed;
 use App\Support\Sync\SyncCursor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -325,7 +326,7 @@ class SyncTest extends TestCase
         $this->assertTrue($this->syncRun('', $full['cursor'])['reset']);
 
         // a forged keyset position never breaks the query
-        $forged = new SyncCursor($this->editor->id, false, Carbon::now()->subMinute()->toImmutable(), ['work'], [], Carbon::now()->toImmutable(), 2, ["x'); drop table items; --", 'y']);
+        $forged = new SyncCursor($this->editor->id, false, Carbon::now()->subMinute()->toImmutable(), ['work'], [], startedAt: Carbon::now()->toImmutable(), phase: 2, key: ["x'); drop table items; --", 'y']);
         $this->changes('cursor='.$forged->encode())->assertOk();
     }
 
@@ -416,6 +417,10 @@ class SyncTest extends TestCase
         $this->assertSame(['status'], $result['applied']);
         $this->assertSame('Buy bread', $task->fresh()->title);
         $this->assertSame('done', $task->fresh()->status);
+        // the server state as the feed's task record (BRAI-441)
+        $this->assertSame('task', $result['record_type']);
+        $this->assertSame('Buy bread', $result['entity']['title']);
+        $this->assertSame('done', $result['entity']['status']);
     }
 
     public function test_policies_apply_to_every_change(): void
@@ -450,5 +455,302 @@ class SyncTest extends TestCase
         $this->assertSame('rate_limited', $result['status']);
         $this->assertSame(429, $result['http_status']);
         $this->assertSame(0, Capture::count());
+    }
+
+    // ── v2 (BRAI-441) ────────────────────────────────────────────────────────────────────────
+
+    private function v1Cursor(array $payload): string
+    {
+        return rtrim(strtr(base64_encode((string) json_encode($payload + ['v' => 1, 'u' => $this->editor->id])), '+/', '-_'), '=');
+    }
+
+    private function decoded(string $cursor): array
+    {
+        return json_decode((string) base64_decode(strtr($cursor, '-_', '+/')), true);
+    }
+
+    public function test_sync_results_carry_the_feeds_records(): void
+    {
+        $issue = $this->item(['title' => 'Fix login', 'assigned_to' => $this->editor->id]);
+        $task = $this->task(['title' => 'Buy milk', 'assignee_id' => $this->editor->id]);
+        $create = (string) Str::uuid();
+        $before = $this->syncRun("task_lists={$this->list->id}");
+        $this->later();
+        $update = ['request_id' => (string) Str::uuid(), 'type' => 'issue.update', 'target' => ['id' => $issue->id], 'base' => ['fields' => ['title' => 'Fix login']], 'data' => ['title' => 'Fix the login']];
+
+        $results = $this->sync([
+            ['request_id' => (string) Str::uuid(), 'type' => 'work.done', 'base' => ['fields' => ['done' => false]], 'data' => ['work_type' => 'board', 'work_id' => $issue->id, 'done' => true]],
+            ['request_id' => (string) Str::uuid(), 'type' => 'work.done', 'base' => ['fields' => ['done' => false]], 'data' => ['work_type' => 'list', 'work_id' => $task->id, 'done' => true]],
+            ['request_id' => (string) Str::uuid(), 'type' => 'list_task.reorder', 'data' => ['task_list_id' => $this->list->id, 'items' => [['id' => $task->id]]]],
+            ['request_id' => $create, 'type' => 'list_task.create', 'data' => ['task_list_id' => $this->list->id, 'title' => 'Draft']],
+            ['request_id' => (string) Str::uuid(), 'type' => 'capture.create', 'data' => ['text' => 'Offline idea']],
+            ['request_id' => (string) Str::uuid(), 'type' => 'my_day.add', 'data' => ['work_type' => 'board', 'work_id' => $issue->id]],
+            ['request_id' => (string) Str::uuid(), 'type' => 'issue.comment', 'target' => ['id' => $issue->id], 'data' => ['body' => 'Looks good']],
+            $update,
+        ])->assertOk()->json('data');
+
+        $this->assertSame(array_fill(0, 8, 'applied'), array_column($results, 'status'));
+        $this->assertSame(['work', 'work', 'task_list', 'task', 'capture', 'my_day', 'comment', 'work'], array_column($results, 'record_type'));
+        $this->assertSame("issue:{$issue->id}", $results[0]['entity']['id']);
+        $this->assertTrue($results[0]['entity']['done']);
+        $this->assertSame("task:{$task->id}", $results[1]['entity']['id']);
+        $this->assertTrue($results[1]['entity']['done']);
+        $this->assertSame(['update' => true, 'delete' => false, 'manage_items' => true], $results[2]['entity']['can']);
+        $this->assertSame('Draft', $results[3]['entity']['title']);
+        $this->assertSame('Offline idea', $results[4]['entity']['text']);
+        $this->assertSame(["issue:{$issue->id}"], array_column($results[5]['entity']['items'], 'id'));
+        $this->assertSame('Looks good', $results[6]['entity']['body']);
+        $this->assertSame('Fix the login', $results[7]['entity']['title']);
+
+        // exactly the feed's records
+        $this->later();
+        $run = $this->syncRun('', $before['cursor']);
+        $feed = fn (string $type, string $id) => collect($run['changes'])->first(fn (array $c) => $c['type'] === $type && $c['id'] === $id)['data'];
+        $created = TaskListItem::where('title', 'Draft')->sole();
+        $this->assertEquals($feed('work', "issue:{$issue->id}"), $results[7]['entity']);
+        $this->assertEquals($feed('task', (string) $created->id), $results[3]['entity']);
+        $this->assertEquals($feed('capture', $results[4]['entity']['id']), $results[4]['entity']);
+        $this->assertEquals($feed('task_list', (string) $this->list->id)['can'], $results[2]['entity']['can']);
+
+        // a replay renders the current state; gone → no entity
+        $again = $this->sync([$update])->json('data.0');
+        $this->assertTrue($again['replayed']);
+        $this->assertEquals($results[7]['entity'], $again['entity']);
+        $issue->delete();
+        $gone = $this->sync([$update])->json('data.0');
+        $this->assertSame(['applied', true, null, null], [$gone['status'], $gone['replayed'], $gone['record_type'], $gone['entity']]);
+    }
+
+    public function test_task_list_records_carry_what_the_user_may_do(): void
+    {
+        $viewerToken = $this->appToken($this->viewer);
+        $editor = $this->syncRun("task_lists={$this->list->id}");
+        $viewer = $this->syncRun("task_lists={$this->list->id}", null, $viewerToken);
+
+        $can = fn (array $run) => collect($run['changes'])->firstWhere('type', 'task_list')['data']['can'] ?? null;
+        $this->assertSame(['update' => true, 'delete' => false, 'manage_items' => true], $can($editor));
+        $this->assertSame(['update' => false, 'delete' => false, 'manage_items' => false], $can($viewer));
+
+        // a new role changes no list, but the next run sends the list again
+        $this->later();
+        $this->project->users()->updateExistingPivot($this->viewer->id, ['role' => 'editor']);
+        $delta = $this->syncRun('', $viewer['cursor'], $viewerToken);
+        $this->assertSame([(string) $this->list->id], $this->ids($delta['changes'], 'task_list'));
+        $this->assertTrue($can($delta)['manage_items']);
+
+        $this->later();
+        $this->assertSame([], $this->syncRun('', $delta['cursor'], $viewerToken)['changes'], 'sent once');
+    }
+
+    public function test_my_day_is_sent_again_after_work_done(): void
+    {
+        $issue = $this->item(['assigned_to' => $this->editor->id]);
+        MyDayPlan::add($this->editor, 'board', $issue->id);
+        $this->later();
+        $full = $this->syncRun('scopes=work,my_day');
+        $this->assertFalse(collect($full['changes'])->firstWhere('type', 'my_day')['data']['items'][0]['done']);
+
+        $this->later();
+        $this->sync([['request_id' => (string) Str::uuid(), 'type' => 'work.done', 'base' => ['fields' => ['done' => false]], 'data' => ['work_type' => 'board', 'work_id' => $issue->id, 'done' => true]]])
+            ->assertJsonPath('data.0.status', 'applied');
+
+        $delta = $this->syncRun('', $full['cursor']);
+        $day = collect($delta['changes'])->firstWhere('type', 'my_day');
+        $this->assertNotNull($day, 'a done change re-sends My Day');
+        $this->assertTrue($day['data']['items'][0]['done']);
+        $this->assertTrue(collect($delta['changes'])->firstWhere('id', "issue:{$issue->id}")['data']['done']);
+    }
+
+    public function test_mine_keeps_the_lists_the_user_works_in_across_workspaces(): void
+    {
+        // a second workspace the editor works in
+        $owner = User::factory()->create();
+        $workspace2 = Workspace::factory()->create(['owner_id' => $owner->id]);
+        $workspace2->addUser($owner, 'admin');
+        $workspace2->addUser($this->editor, 'member');
+        $project2 = Project::factory()->create(['workspace_id' => $workspace2->id, 'created_by' => $owner->id]);
+        $project2->users()->attach($this->editor->id, ['role' => 'editor']);
+        $list = fn (Project $project, ?User $by = null, array $attributes = []) => TaskList::factory()->create($attributes + ['project_id' => $project->id, 'created_by' => ($by ?? $owner)->id]);
+        $taskIn = fn (TaskList $list, array $attributes = []) => TaskListItem::factory()->create($attributes + ['task_list_id' => $list->id, 'created_by' => $this->viewer->id]);
+
+        // a project the editor can't open
+        $stranger = User::factory()->create();
+        $hiddenWorkspace = Workspace::factory()->create(['owner_id' => $stranger->id]);
+        $hiddenProject = Project::factory()->create(['workspace_id' => $hiddenWorkspace->id, 'created_by' => $stranger->id]);
+        $hidden = $list($hiddenProject, $stranger);
+        $taskIn($hidden, ['title' => 'Secret task', 'assignee_id' => $this->editor->id, 'created_by' => $stranger->id]);
+
+        $taskIn($this->list, ['assignee_id' => $this->editor->id]);                     // open task assigned to me
+        $pinned = $list($project2);                                                      // pinned in the sidebar
+        $recent = $list($this->project, $this->viewer);
+        $taskIn($recent, ['status' => 'done', 'created_by' => $this->editor->id]);      // a task I created, changed recently
+        $created = $list($project2, $this->editor);                                      // a list I created recently
+        $old = $list($this->project, $this->viewer, ['created_at' => now()->subDays(40)]);
+        $oldTask = $taskIn($old, ['status' => 'done', 'assignee_id' => $this->editor->id]);
+        TaskListItem::whereKey($oldTask->id)->update(['updated_at' => now()->subDays(40)]);
+        $theirs = $list($this->project, $this->viewer);
+        $taskIn($theirs, ['title' => 'Their task', 'assignee_id' => $this->viewer->id]);
+        $trashed = $list($this->project);
+        $taskIn($trashed, ['assignee_id' => $this->editor->id]);
+        $trashed->delete();
+        $this->editor->forceFill(['sidebar_preferences' => ['projects' => [
+            (string) $project2->id => ['pins' => [['type' => 'list', 'id' => $pinned->id]]],
+            (string) $hiddenProject->id => ['pins' => [['type' => 'list', 'id' => $hidden->id]]],
+        ]]])->save();
+
+        $run = $this->syncRun('scopes=task_lists&task_lists=mine');
+
+        $expected = [$this->list->id, $pinned->id, $recent->id, $created->id];
+        sort($expected);
+        $this->assertSame($expected, $this->changes('task_lists=mine')->json('task_lists'));
+        $this->assertEqualsCanonicalizing(array_map('strval', $expected), $this->ids($run['changes'], 'task_list'));
+        $json = json_encode($run['changes']);
+        $this->assertStringNotContainsString('Secret task', $json);
+        $this->assertStringNotContainsString('Their task', $json);
+
+        // ids and mine together
+        $this->assertContains($theirs->id, $this->changes("task_lists=mine,{$theirs->id}")->json('task_lists'));
+        // another user's mine is their own: lists they created recently, the task they created in errands
+        $this->assertSame(collect([$theirs->id, $recent->id, $this->list->id])->sort()->values()->all(), $this->changes('task_lists=mine', $this->appToken($this->viewer))->json('task_lists'));
+    }
+
+    public function test_mine_is_capped(): void
+    {
+        foreach (range(1, ChangeFeed::MAX_LISTS + 3) as $i) {
+            $list = TaskList::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->viewer->id]);
+            TaskListItem::factory()->create(['task_list_id' => $list->id, 'created_by' => $this->viewer->id, 'assignee_id' => $this->editor->id]);
+        }
+
+        $this->assertCount(ChangeFeed::MAX_LISTS, $this->changes('scopes=task_lists&task_lists=mine&limit=1')->json('task_lists'));
+    }
+
+    public function test_other_task_lists_are_additive(): void
+    {
+        $issue = $this->item(['assigned_to' => $this->editor->id]);
+        $this->task(['title' => 'In errands']);
+        $groceries = TaskList::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->viewer->id, 'name' => 'Groceries']);
+        $milk = TaskListItem::factory()->create(['task_list_id' => $groceries->id, 'created_by' => $this->viewer->id, 'title' => 'Milk']);
+        $this->later();
+        $full = $this->syncRun("task_lists={$this->list->id}");
+
+        // a list added: only it comes in full, the run is no full run
+        $this->later();
+        $added = $this->syncRun("task_lists={$this->list->id},{$groceries->id}", $full['cursor']);
+        $this->assertFalse($added['reset']);
+        $this->assertSame([(string) $groceries->id], $this->ids($added['changes'], 'task_list'));
+        $this->assertSame([(string) $milk->id], $this->ids($added['changes'], 'task'));
+        $this->assertSame([], $this->ids($added['changes'], 'work'), "the other scopes don't start over");
+        $this->assertSame([$this->list->id, $groceries->id], $this->changes('cursor='.urlencode($added['cursor']))->json('task_lists'));
+
+        // a list dropped: a delete
+        $this->later();
+        $dropped = $this->syncRun("task_lists={$groceries->id}", $added['cursor']);
+        $this->assertFalse($dropped['reset']);
+        $this->assertSame([(string) $this->list->id], $this->ids($dropped['changes'], 'task_list', 'delete'));
+        $this->assertSame([], $this->ids($dropped['changes'], 'task'));
+        $this->later();
+        $this->assertSame([], $this->syncRun('', $dropped['cursor'])['changes']);
+
+        // the mine set changes by itself: a new assigned task in another list → that list in full
+        $this->later();
+        $mine = $this->syncRun('task_lists=mine', $dropped['cursor']);
+        $this->assertFalse($mine['reset']);
+        $this->assertSame([(string) $groceries->id], $this->ids($mine['changes'], 'task_list', 'delete'), 'groceries is not mine');
+        $this->assertSame([(string) $this->list->id], $this->ids($mine['changes'], 'task_list'), 'errands is (I created it)');
+        $this->later();
+        $errand = TaskList::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->viewer->id]);
+        $chore = TaskListItem::factory()->create(['task_list_id' => $errand->id, 'created_by' => $this->viewer->id, 'assignee_id' => $this->editor->id]);
+        $old = TaskListItem::factory()->create(['task_list_id' => $errand->id, 'created_by' => $this->viewer->id]);
+        TaskListItem::whereKey($old->id)->update(['updated_at' => now()->subDays(3)]);
+        $this->later();
+        $next = $this->syncRun('', $mine['cursor']);
+        $this->assertSame([(string) $errand->id], $this->ids($next['changes'], 'task_list'));
+        $this->assertEqualsCanonicalizing([(string) $chore->id, (string) $old->id], $this->ids($next['changes'], 'task'), 'an older task of the new list too');
+        $this->assertContains("issue:{$issue->id}", $this->ids($full['changes'], 'work'));
+    }
+
+    public function test_lists_can_change_in_the_middle_of_a_run(): void
+    {
+        foreach (range(1, 3) as $i) {
+            $this->item(['assigned_to' => $this->editor->id]);
+        }
+        $groceries = TaskList::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->editor->id]);
+        $this->later();
+        $full = $this->syncRun("task_lists={$this->list->id}");
+        $this->later();
+        $this->item(['assigned_to' => $this->editor->id]);
+        $this->item(['assigned_to' => $this->editor->id]);
+
+        $first = $this->changes('limit=1&cursor='.urlencode($full['cursor']))->assertOk()->json();
+        $this->assertTrue($first['has_more']);
+        $rest = $this->syncRun("task_lists={$this->list->id},{$groceries->id}&limit=1", $first['next_cursor']);
+
+        $this->assertFalse($rest['reset']);
+        $this->assertSame([(string) $groceries->id], $this->ids($rest['changes'], 'task_list'));
+    }
+
+    public function test_v1_cursors_keep_working(): void
+    {
+        $since = Carbon::now()->subSeconds(10)->format('Y-m-d\TH:i:s\Z');
+        $scopes = ['captures', 'my_day', 'task_lists', 'work'];
+        $this->later();
+        $issue = $this->item(['title' => 'Changed', 'assigned_to' => $this->editor->id]);
+        $capture = Capture::factory()->create(['user_id' => $this->editor->id, 'archived_at' => now()]);
+
+        // the end of a v1 run
+        $run = $this->syncRun('', $this->v1Cursor(['r' => false, 's' => $since, 't' => null, 'sc' => $scopes, 'l' => [$this->list->id], 'p' => 0, 'k' => null, 'h' => null]));
+        $this->assertFalse($run['reset']);
+        $this->assertSame(["issue:{$issue->id}"], $this->ids($run['changes'], 'work'));
+        $this->assertSame([$capture->uuid], $this->ids($run['changes'], 'capture'), 'v1 cursors keep every capture');
+        $list = collect($run['changes'])->firstWhere('type', 'task_list');
+        $this->assertSame((string) $this->list->id, $list['id'], 'the kept lists come again, now with can');
+        $this->assertTrue($list['data']['can']['manage_items']);
+        $this->assertSame(2, $this->decoded($run['cursor'])['v']);
+
+        // in the middle of a v1 run (phase 2 = work issues)
+        $middle = $this->syncRun('', $this->v1Cursor(['r' => false, 's' => $since, 't' => Carbon::now()->format('Y-m-d\TH:i:s\Z'), 'sc' => $scopes, 'l' => [], 'p' => 2, 'k' => null, 'h' => null]));
+        $this->assertFalse($middle['reset']);
+        $this->assertSame(["issue:{$issue->id}"], $this->ids($middle['changes'], 'work'));
+        $this->assertSame([], $this->ids($middle['changes'], 'task_list'), 'its list phases had passed');
+
+        // what can't be read resets cleanly
+        $this->assertTrue($this->syncRun('', $this->v1Cursor(['r' => false, 's' => $since, 'sc' => $scopes, 'l' => [], 'p' => 99]))['reset']);
+        $this->assertTrue($this->syncRun('', $this->v1Cursor(['v' => 3, 's' => $since, 'sc' => $scopes, 'p' => 0]))['reset']);
+    }
+
+    public function test_the_inbox_filter_keeps_only_inbox_captures(): void
+    {
+        $keep = Capture::factory()->create(['user_id' => $this->editor->id]);
+        $archive = Capture::factory()->create(['user_id' => $this->editor->id]);
+        $process = Capture::factory()->create(['user_id' => $this->editor->id]);
+        $archived = Capture::factory()->create(['user_id' => $this->editor->id, 'archived_at' => now()]);
+        Capture::factory()->create(['user_id' => $this->viewer->id]);
+        $this->later();
+
+        $full = $this->syncRun('scopes=captures&captures=inbox');
+        $this->assertEqualsCanonicalizing([$keep->uuid, $archive->uuid, $process->uuid], $this->ids($full['changes'], 'capture'));
+
+        $this->later();
+        $this->postJson("/api/v1/captures/{$archive->uuid}/archive", [], $this->appHeaders($this->token))->assertOk();
+        $process->update(['processed_at' => now()]);
+        $new = Capture::factory()->create(['user_id' => $this->editor->id]);
+        $this->later();
+        $delta = $this->syncRun('', $full['cursor']);
+        $this->assertEqualsCanonicalizing([$archive->uuid, $process->uuid], $this->ids($delta['changes'], 'capture', 'delete'), 'left the inbox');
+        $this->assertSame([$new->uuid], $this->ids($delta['changes'], 'capture'));
+
+        // back in the inbox → an upsert again
+        $this->later();
+        $this->postJson("/api/v1/captures/{$archive->uuid}/restore", [], $this->appHeaders($this->token))->assertOk();
+        $this->later();
+        $this->assertSame([$archive->uuid], $this->ids($this->syncRun('', $delta['cursor'])['changes'], 'capture'));
+
+        // another filter → a full run; the default stays every capture
+        $all = $this->syncRun('captures=all', $delta['cursor']);
+        $this->assertTrue($all['reset']);
+        $this->assertContains($archived->uuid, $this->ids($all['changes'], 'capture'));
+        $this->assertContains($archived->uuid, $this->ids($this->syncRun('scopes=captures')['changes'], 'capture'));
+        $this->changes('captures=done')->assertUnprocessable()->assertJsonValidationErrors('captures');
+        $this->changes('task_lists=mine,abc')->assertUnprocessable()->assertJsonValidationErrors('task_lists');
     }
 }

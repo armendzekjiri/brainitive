@@ -937,29 +937,50 @@ utm: {utm_source, …}|null, referrer, consent_at, consent_text, assignee: {id, 
 ### Sync
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|
-| `GET /api/v1/sync/changes?cursor=&limit=&scopes=work,task_lists,my_day,captures&task_lists=1,2` | app + verified, 120/min | Offline copy: what changed since the cursor → `{data: [change], next_cursor, has_more, reset, project_ids}`. No cursor = a full run (`reset: true`) | Full | BRAI-263, BRAI-264 | ready (v1.49.0, BRAI-425) |
-| `POST /api/v1/sync` | app + verified, 60/min | The outbox after being offline: `{changes: [{request_id, type, target?, base?, data}]}` (≤ 50, in order) → 200 `{data: [result]}`, one per change, same order | Full | BRAI-263, BRAI-264 | ready (v1.49.0, BRAI-425) |
+| `GET /api/v1/sync/changes?cursor=&limit=&scopes=work,task_lists,my_day,captures&task_lists=mine,1,2&captures=all\|inbox` | app + verified, 120/min | Offline copy: what changed since the cursor → `{data: [change], next_cursor, has_more, reset, project_ids, task_lists}`. No cursor = a full run (`reset: true`) | Full | BRAI-263, BRAI-264 | ready (v1.49.0, BRAI-425; v2 BRAI-441) |
+| `POST /api/v1/sync` | app + verified, 60/min | The outbox after being offline: `{changes: [{request_id, type, target?, base?, data}]}` (≤ 50, in order) → 200 `{data: [result]}`, one per change, same order; `entity` = the feed's record (`record_type`) | Full | BRAI-263, BRAI-264 | ready (v1.49.0, BRAI-425; v2 BRAI-441) |
 
 Change: `{type: work|task_list|task|capture|my_day, id, op: upsert|delete, project_id, updated_at, data}`. `data` is the
 record exactly as its own endpoint returns it (`work` = a My Work item, `task_list` / `task` = Task lists, `capture` =
-Captures, `my_day` = My Day), `null` for a delete. `id`: `issue:12` / `task:5` (work), the id as text (task_list, task),
-the uuid (capture), the date (my_day).
-- **Runs.** Start without a cursor (optionally `scopes` — default all four — and `task_lists`: the ids of the lists kept
-  offline, ≤ 50): a **full run**, `reset: true`. Page with `next_cursor` while `has_more`; when `has_more` is false, drop
-  every cached record of the scope the run didn't send and **keep that `next_cursor`**. Call again with it later: a
-  **delta run** (`reset: false`) — upserts (add / replace) and deletes (drop). `next_cursor` is never null. New
-  `scopes` / `task_lists`, a cursor of another account, an unknown one or one older than 30 days → a full run again.
-  The same record may come twice (runs overlap by 10 s): apply by `updated_at`.
+Captures, `my_day` = My Day), `null` for a delete. `task_list` records also carry `can: {update, delete, manage_items}`
+(as `GET /task-lists/{id}`: hide "Add task" / editing offline when `manage_items` is false). `id`: `issue:12` / `task:5`
+(work), the id as text (task_list, task), the uuid (capture), the date (my_day).
+- **Runs.** Start without a cursor (optionally `scopes` — default all four —, `task_lists` and `captures`): a **full
+  run**, `reset: true`. Page with `next_cursor` while `has_more`; when `has_more` is false, drop every cached record of
+  the scope the run didn't send and **keep that `next_cursor`**. Call again with it later: a **delta run** (`reset:
+  false`) — upserts (add / replace) and deletes (drop). `next_cursor` is never null. New `scopes`, another `captures`
+  filter, a cursor of another account, an unknown one or one older than 30 days → a full run again. The same record may
+  come twice (runs overlap by 10 s): apply by `updated_at`.
+- **Kept task lists** (`task_lists`, ≤ 50): ids, `mine`, or both (`mine,12`). **`mine`** = the lists the user works in,
+  across all their workspaces: lists pinned in the sidebar, lists with open tasks assigned to them, lists where they
+  created or were assigned a task changed in the last 30 days, lists they created in the last 30 days — only lists they
+  can open, ids first, then in that order, at most 50. Resolved at the start of every run; the answer's `task_lists` says
+  which lists the run keeps. **Changes are additive:** other `task_lists` with a cursor (or a `mine` set that changed by
+  itself) give a delta run in which only the new lists come in full (the list + all its tasks) and dropped lists come as
+  `task_list` deletes (drop the list and its tasks); the other scopes go on from the cursor. A change in the middle of a
+  run restarts that run with the same `since`.
 - **Scopes.** `work` = the work assigned to the user in every project they can open (as `GET /me/work`; a full run sends
   the open work, delta runs also completed work with `done: true`), `task_lists` = the kept lists + all their tasks,
-  `my_day` = today's plan as one record (sent when it changed; a new local day changes it), `captures` = the private inbox
-  (all states).
+  `my_day` = today's plan as one record (sent when it changed — also when an item's `done` or `updated_at` changed, e.g.
+  after a `work.done`: the next run re-sends it; a new local day changes it), `captures` = the private inbox: `captures=all`
+  (default) every state, `captures=inbox` only captures neither processed nor archived — in a delta run a capture that
+  left the inbox comes as a `capture` delete, one restored to it as an upsert.
 - **Deletes** come for issues / tasks / lists that were deleted (also: their board / list deleted), work reassigned to
-  someone else, and captures deleted for good. **Lost access** is not a delete: drop every cached record whose
-  `project_id` is not in `project_ids` (the projects the user can open now). Nothing of other users or other projects
-  is ever in the feed (every query is the user's own or limited to `project_ids`).
+  someone else, lists no longer kept (or no longer visible), captures that left the inbox (filter `inbox`) and captures
+  deleted for good. **Lost access** is not a delete: drop every cached record whose `project_id` is not in `project_ids`
+  (the projects the user can open now). Nothing of other users or other projects is ever in the feed (every query is the
+  user's own or limited to `project_ids`).
+- **Permissions:** role changes don't touch a list, so the cursor remembers the kept lists' abilities: when they change,
+  the next run re-sends every kept list with the new `can`.
+- **Cursors** are opaque. v2 (BRAI-441) still reads v1 cursors (BRAI-425): they go on where they were; their next run
+  re-sends the kept lists once (now with `can`). A cursor that can't be read starts a full run (`reset: true`).
 
-Result of a change: `{request_id, type, status, http_status, replayed, entity_type, entity, conflicts, applied, message, errors}`.
+Result of a change: `{request_id, type, status, http_status, replayed, entity_type, record_type, entity, conflicts, applied, message, errors}`.
+`entity` (applied, conflict) is the server's current state as the **feed's record** of `record_type` — replace the cached
+record with it: `issue.*` and `work.done` → `work`, `list_task.create|update` → `task`, `list_task.reorder` → `task_list`
+(with `can`), `capture.create` → `capture`, `my_day.add|remove` → `my_day`, `issue.comment` → `comment` (as
+`GET /items/{id}/comments`). Replays render the current state too; something gone or no longer visible → `entity: null`.
+The web's `POST /offline/sync` keeps its own snapshots.
 
 | status | http_status | the device does |
 |---|---|---|
@@ -1705,21 +1726,23 @@ Registry: docs/ai/API.md#web-only-no-app-api-in-v1-brai-424 · Decided in: BRAI-
 **BRAI-263** (offline-first cache, local edits and sync queue)
 ```
 ## API (ready)
-- GET /api/v1/sync/changes?scopes=work,task_lists,my_day,captures&task_lists=1,2 — full run (reset: true) without a cursor, then delta runs with the kept next_cursor: upsert / delete per record (work, task_list, task, capture, my_day) + project_ids (drop other projects)
-- POST /api/v1/sync {changes: [{request_id, type, target?, base?, data}]} — the outbox in batches of ≤ 50, one result per change (applied / conflict / deleted / waiting / forbidden / invalid / rate_limited / error); request_id makes retries safe
+- GET /api/v1/sync/changes?scopes=work,task_lists,my_day,captures&task_lists=mine&captures=inbox — full run (reset: true) without a cursor, then delta runs with the kept next_cursor: upsert / delete per record (work, task_list, task, capture, my_day) + project_ids (drop other projects) + task_lists (the kept lists)
+- task_lists=mine = the lists the user works in (pinned, open assigned tasks, recently worked in; all workspaces, ≤ 50); other lists later are additive (new ones in full, dropped ones as deletes); task_list records carry can.manage_items (hide "Add task" for viewers)
+- captures=inbox keeps only the inbox (a capture that leaves it comes as a delete); My Day is re-sent after a done change
+- POST /api/v1/sync {changes: [{request_id, type, target?, base?, data}]} — the outbox in batches of ≤ 50, one result per change (applied / conflict / deleted / waiting / forbidden / invalid / rate_limited / error); request_id makes retries safe; entity = the feed's record of record_type (work / task / task_list / capture / my_day / comment): replace the cached copy
 Types: list_task.create|update|reorder, issue.update|comment|create, capture.create, my_day.add|remove, work.done — the web's offline mode (BRAI-82)
 Scope: app · OpenAPI: docs/api/openapi.json#/Sync · Registry: docs/ai/API.md#sync
-Built in: BRAI-425 (desktop) · Mobile scope: Full (My Day, My Work, kept task lists, captures)
+Built in: BRAI-425, BRAI-441 (desktop) · Mobile scope: Full (My Day, My Work, kept task lists = mine, inbox captures)
 ```
 
 **BRAI-264** (sync conflict resolution and recovery after interrupted updates)
 ```
 ## API (ready)
-- POST /api/v1/sync — updates carry base.fields (the values the device saw); a field changed by someone else meanwhile → status conflict (409) with conflicts {field: {base, mine, theirs}}, never overwritten; the other fields are applied (applied: [...])
+- POST /api/v1/sync — updates carry base.fields (the values the device saw); a field changed by someone else meanwhile → status conflict (409) with conflicts {field: {base, mine, theirs}}, never overwritten; the other fields are applied (applied: [...]); entity = the server's record in the feed's shape (record_type), so "theirs" replaces the cached copy directly
 - Retries: the same request_id answers the stored result (replayed: true), so an interrupted batch is simply sent again; waiting (424) / rate_limited / error → keep and resend, deleted / forbidden / invalid → drop and tell the user
-- GET /api/v1/sync/changes — a full run (reset: true) rebuilds a broken cache; a cursor older than 30 days starts one by itself
+- GET /api/v1/sync/changes — a full run (reset: true) rebuilds a broken cache; a cursor older than 30 days or one that can't be read starts one by itself (v1 cursors keep working)
 Scope: app · OpenAPI: docs/api/openapi.json#/Sync · Registry: docs/ai/API.md#sync
-Built in: BRAI-425 (desktop) · Mobile scope: Full (keep mine = a new change with the server value as base; keep theirs = drop it)
+Built in: BRAI-425, BRAI-441 (desktop) · Mobile scope: Full (keep mine = a new change with the server value as base; keep theirs = drop it)
 ```
 
 **BRAI-204** (offline document drafts and conflict resolution)

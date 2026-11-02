@@ -2,6 +2,7 @@
 
 namespace App\Support\Sync;
 
+use App\Http\Resources\AppApi\TaskListDetailResource;
 use App\Models\Board;
 use App\Models\Capture;
 use App\Models\Item;
@@ -13,6 +14,7 @@ use App\Support\Captures\CaptureConversion;
 use App\Support\MyDay\MyDayPlan;
 use App\Support\MyWork\AssignedWork;
 use App\Support\MyWork\WorkRef;
+use App\Support\Sidebar\SidebarPreferences;
 use App\Support\TaskLists\TaskLists;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -25,17 +27,22 @@ use Illuminate\Support\Collection;
  * the content a client keeps offline since its cursor — and what it must drop.
  *
  * - **Scopes:** `work` (issues + tasks assigned to the user: My Work, `AssignedWork`), `task_lists` (the
- *   lists the client keeps: their tasks + the lists), `my_day` (today's plan, `MyDayPlan`), `captures`
- *   (the private inbox). Every query is the user's own / limited to the projects they can open now
+ *   lists the client keeps — ids and / or `mine`, see mineLists() — with `can`, and their tasks),
+ *   `my_day` (today's plan, `MyDayPlan`), `captures` (the private inbox; all states or only the inbox).
+ *   Every query is the user's own / limited to the projects they can open now
  *   (`User::accessibleProjectIds`, the web's rule), so nobody else's data can show up.
  * - **Runs:** a run walks fixed phases (upserts first, then deletions) with keyset pagination inside each.
  *   The first run has no `since`: a full copy (`reset`), the client drops what it didn't get. Every later
  *   run sends what changed since the previous run started (10 s overlap: a change can come twice, never
  *   not at all). My Day is one record, sent when its hash changed.
- * - **Deletions:** soft deletes (`deleted_at` of issues, tasks, lists, and of the board / list they sit
- *   on) plus `sync_tombstones` (captures deleted for good, work reassigned to someone else). A cursor older
- *   than the tombstones' 30 days starts a full run. Lost access is not a row anywhere: the answer's
- *   `project_ids` lists what the user can open now.
+ * - **Task lists (v2, BRAI-441):** resolved at the start of every run; the diff against the last run's
+ *   lists gives `fresh` ones (a full pass inside the delta run) and `gone` ones (a `task_list` delete:
+ *   deleted, no longer visible, no longer asked for / no longer "mine"). A change of the abilities of the
+ *   kept lists (roles) re-sends every kept list.
+ * - **Deletions:** soft deletes (`deleted_at` of issues, tasks, and of the board / list they sit on), the
+ *   dropped lists, captures that left the inbox (filter `inbox`), plus `sync_tombstones` (captures
+ *   deleted for good, work reassigned to someone else). A cursor older than the tombstones' 30 days starts
+ *   a full run. Lost access is not a row anywhere: the answer's `project_ids` lists what the user can open now.
  */
 final class ChangeFeed
 {
@@ -55,7 +62,10 @@ final class ChangeFeed
     /** Seconds the next run reaches back before this run's start (late commits are never missed). */
     public const OVERLAP_SECONDS = 10;
 
-    /** phase => the scope it belongs to (null = work and captures) */
+    /** Lists of "mine": changes this recent count as working in a list. */
+    public const RECENT_DAYS = 30;
+
+    /** phase => the scope it belongs to (null = work and captures). Append only: v1 cursors stored the index. */
     private const PHASES = [
         'taskLists' => self::TASK_LISTS,
         'listTasks' => self::TASK_LISTS,
@@ -70,6 +80,9 @@ final class ChangeFeed
         'goneTombstones' => null,
     ];
 
+    /** @var list<string> */
+    public const PHASE_NAMES = ['taskLists', 'listTasks', 'workIssues', 'workTasks', 'captures', 'myDay', 'goneWorkIssues', 'goneWorkTasks', 'goneListTasks', 'goneTaskLists', 'goneTombstones'];
+
     private const TIMESTAMP = '/\A\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{1,6})?\z/';
 
     /** @var list<int> */
@@ -77,6 +90,9 @@ final class ChangeFeed
 
     /** @var list<int>|null */
     private ?array $visibleLists = null;
+
+    /** @var array<int, array{update: bool, delete: bool, manage_items: bool}>|null project id => abilities on its lists */
+    private ?array $abilities = null;
 
     private function __construct(private readonly User $user, private readonly SyncCursor $cursor)
     {
@@ -89,41 +105,51 @@ final class ChangeFeed
      * One page of the feed.
      *
      * @param  list<string>|null  $scopes  null = the cursor's (a different scope starts a full run)
-     * @param  list<int>|null  $lists  task lists to keep, null = the cursor's
-     * @return array{changes: list<SyncChange>, next_cursor: string, has_more: bool, reset: bool, project_ids: list<int>}
+     * @param  list<int>|null  $lists  task list ids to keep, null = the cursor's (a change is additive)
+     * @param  bool|null  $mine  also keep the lists the user works in, null = the cursor's
+     * @param  string|null  $captures  all | inbox, null = the cursor's (a change starts a full run)
+     * @return array{changes: list<SyncChange>, next_cursor: string, has_more: bool, reset: bool, project_ids: list<int>, task_lists: list<int>}
      */
-    public static function page(User $user, ?string $cursor, ?array $scopes, ?array $lists, int $limit): array
+    public static function page(User $user, ?string $cursor, ?array $scopes, ?array $lists, int $limit, ?bool $mine = null, ?string $captures = null): array
     {
-        return (new self($user, self::start($user, $cursor, $scopes, $lists)))->run(max(1, $limit));
+        return (new self($user, self::start($user, $cursor, $scopes, $lists, $mine, $captures)))->run(max(1, $limit));
     }
 
     /**
      * @param  list<string>|null  $scopes
      * @param  list<int>|null  $lists
      */
-    private static function start(User $user, ?string $cursor, ?array $scopes, ?array $lists): SyncCursor
+    private static function start(User $user, ?string $cursor, ?array $scopes, ?array $lists, ?bool $mine, ?string $captures): SyncCursor
     {
         $current = $cursor !== null ? SyncCursor::decode($cursor, $user->id) : null;
         if ($current !== null) {
-            $changed = ($scopes !== null && SyncCursor::sortedScopes($scopes) !== $current->scopes)
-                || ($lists !== null && SyncCursor::sortedLists($lists) !== $current->lists);
+            $rescoped = ($scopes !== null && SyncCursor::sortedScopes($scopes) !== $current->scopes)
+                || ($captures !== null && SyncCursor::captureFilter($captures) !== $current->captures);
             // tombstones of older changes are gone: only a full run is complete
             $expired = $current->since !== null && $current->since->lt(CarbonImmutable::now()->subDays(SyncTombstone::KEEP_DAYS));
-            if (! $changed && ! $expired) {
-                return $current;
+            if (! $rescoped && ! $expired) {
+                $relisted = ($lists !== null && SyncCursor::sortedLists($lists) !== $current->lists)
+                    || ($mine !== null && $mine !== $current->mine);
+
+                // other lists: only they get a full pass (or a delete), the other scopes go on
+                return $relisted ? $current->withLists($lists ?? $current->lists, $mine ?? $current->mine) : $current;
             }
             $scopes ??= $current->scopes;
             $lists ??= $current->lists;
+            $mine ??= $current->mine;
+            $captures ??= $current->captures;
         }
 
-        return SyncCursor::fresh($user->id, $scopes ?? self::SCOPES, $lists ?? []);
+        return SyncCursor::fresh($user->id, $scopes ?? self::SCOPES, $lists ?? [], $mine ?? false, $captures ?? SyncCursor::CAPTURES_ALL);
     }
 
-    /** @return array{changes: list<SyncChange>, next_cursor: string, has_more: bool, reset: bool, project_ids: list<int>} */
+    /** @return array{changes: list<SyncChange>, next_cursor: string, has_more: bool, reset: bool, project_ids: list<int>, task_lists: list<int>} */
     private function run(int $limit): array
     {
-        $this->cursor->startedAt ??= CarbonImmutable::now('UTC');
-        $phases = array_keys(self::PHASES);
+        if ($this->cursor->startedAt === null) {
+            $this->begin();
+        }
+        $phases = self::PHASE_NAMES;
         $changes = [];
 
         while (count($changes) < $limit && $this->cursor->phase < count($phases)) {
@@ -151,7 +177,121 @@ final class ChangeFeed
             'has_more' => ! $finished,
             'reset' => $this->cursor->reset,
             'project_ids' => $this->projectIds,
+            'task_lists' => $this->in(self::TASK_LISTS) ? $this->visibleLists() : [],
         ];
+    }
+
+    /**
+     * The start of a run: resolve the kept task lists, diff them against the last run's (new → a full
+     * pass, dropped → a delete) and note whether their abilities changed (→ every kept list again).
+     */
+    private function begin(): void
+    {
+        $cursor = $this->cursor;
+        $cursor->startedAt = CarbonImmutable::now('UTC');
+        $lists = $this->in(self::TASK_LISTS) ? $this->resolveLists() : [];
+
+        if ($cursor->since === null) {
+            [$cursor->fresh, $cursor->gone] = [[], []];
+        } else {
+            $old = $cursor->kept;
+            $cursor->fresh = SyncCursor::sortedLists(array_intersect([...$cursor->fresh, ...array_diff($lists, $old)], $lists));
+            $cursor->gone = SyncCursor::sortedLists(array_diff([...$cursor->gone, ...array_diff($old, $lists)], $lists), 200);
+        }
+        $cursor->kept = $lists;
+        $this->visibleLists = null;
+
+        $hash = hash('sha256', (string) json_encode($this->abilities()));
+        $cursor->allLists = $cursor->since !== null && $cursor->canHash !== $hash;
+        $cursor->canHash = $hash;
+    }
+
+    /**
+     * The lists this run keeps: the ids asked for, then (with `mine`) the ones the user works in — only
+     * lists the user can open (not deleted), at most MAX_LISTS.
+     *
+     * @return list<int>
+     */
+    private function resolveLists(): array
+    {
+        $wanted = [...$this->cursor->lists, ...($this->cursor->mine ? $this->mineLists() : [])];
+        if ($wanted === [] || $this->projectIds === []) {
+            return [];
+        }
+        $visible = array_flip(TaskList::query()->whereIn('id', array_unique($wanted))->whereIn('project_id', $this->projectIds)
+            ->pluck('id')->map(fn ($id) => (int) $id)->all());
+
+        return SyncCursor::sortedLists(array_slice(array_values(array_unique(array_filter($wanted, fn (int $id) => isset($visible[$id])))), 0, self::MAX_LISTS));
+    }
+
+    /**
+     * "Lists I work in" (`task_lists=mine`), most relevant first: lists pinned in the sidebar (every
+     * project), lists with open tasks assigned to the user, lists where the user created or was assigned
+     * a task that changed in the last RECENT_DAYS days, lists the user created in that time. Visibility is
+     * checked by resolveLists().
+     *
+     * @return list<int>
+     */
+    private function mineLists(): array
+    {
+        $ids = [];
+        $accessible = array_flip($this->projectIds);
+        foreach (SidebarPreferences::normalize($this->user->sidebar_preferences)['projects'] as $project => $prefs) {
+            if (! isset($accessible[(int) $project])) {
+                continue;
+            }
+            foreach ($prefs['pins'] as $pin) {
+                if ($pin['type'] === 'list') {
+                    $ids[] = $pin['id'];
+                }
+            }
+        }
+
+        $since = CarbonImmutable::now()->subDays(self::RECENT_DAYS);
+        $byLastChange = fn (Builder $tasks) => $tasks->reorder()
+            ->select('task_list_items.task_list_id')
+            ->groupBy('task_list_items.task_list_id')
+            ->orderByRaw('max(task_list_items.updated_at) desc')
+            ->orderBy('task_list_items.task_list_id')
+            ->limit(self::MAX_LISTS)
+            ->pluck('task_list_id')->map(fn ($id) => (int) $id)->all();
+
+        array_push($ids, ...$byLastChange(AssignedWork::tasks($this->user, $this->projectIds, AssignedWork::OPEN)));
+        array_push($ids, ...$byLastChange(TaskListItem::query()
+            ->where(fn (Builder $q) => $q->where('task_list_items.created_by', $this->user->id)->orWhere('task_list_items.assignee_id', $this->user->id))
+            ->where('task_list_items.updated_at', '>=', $since)
+            ->whereIn('task_list_items.task_list_id', TaskList::query()->whereIn('project_id', $this->projectIds)->select('id'))));
+        array_push($ids, ...TaskList::query()
+            ->whereIn('project_id', $this->projectIds)
+            ->where('created_by', $this->user->id)
+            ->where('created_at', '>=', $since)
+            ->orderByDesc('created_at')->orderBy('id')
+            ->limit(self::MAX_LISTS)
+            ->pluck('id')->map(fn ($id) => (int) $id)->all());
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * What the user may do in the kept lists, per project (TaskListPolicy only looks at the project):
+     * the task-list API's `can`.
+     *
+     * @return array<int, array{update: bool, delete: bool, manage_items: bool}>
+     */
+    private function abilities(): array
+    {
+        if ($this->abilities !== null) {
+            return $this->abilities;
+        }
+        $abilities = [];
+        TaskList::query()->with('project.workspace')->whereIn('id', $this->visibleLists())->orderBy('id')->get()
+            ->unique('project_id')
+            ->each(function (TaskList $list) use (&$abilities) {
+                $abilities[(int) $list->project_id] = TaskListDetailResource::abilities($this->user, $list);
+            });
+        ksort($abilities);
+
+        return $this->abilities = $abilities;
     }
 
     private function active(string $phase): bool
@@ -183,17 +323,21 @@ final class ChangeFeed
     /** @return array{0: list<SyncChange>, 1: bool, 2: list<int|string>|null} */
     private function taskLists(int $need): array
     {
-        $since = $this->cursor->since;
+        // a delta run: what changed, the fresh lists — or every kept list when the abilities changed
+        $since = $this->cursor->allLists ? null : $this->cursor->since;
+        $abilities = $this->abilities();
         $query = TaskLists::withCounts(TaskList::query()->with('project.workspace')->whereIn('task_lists.id', $this->visibleLists()))
             // a list's counts follow its tasks: send it again when one of them changed
             ->when($since, fn (Builder $q) => $q->where(fn (Builder $w) => $w
                 ->where('task_lists.updated_at', '>=', $since)
+                ->orWhereIn('task_lists.id', $this->cursor->fresh)
                 ->orWhereExists(fn (QueryBuilder $tasks) => $tasks->selectRaw('1')->from('task_list_items')
                     ->whereColumn('task_list_items.task_list_id', 'task_lists.id')
                     ->where(fn (QueryBuilder $c) => $c->where('task_list_items.updated_at', '>=', $since)->orWhere('task_list_items.deleted_at', '>=', $since)))));
 
         return $this->upserts($query, null, 'task_lists.id', $need, fn (TaskList $list) => new SyncChange(
             'task_list', (string) $list->id, SyncChange::UPSERT, (int) $list->project_id, $list->updated_at, $list,
+            $abilities[(int) $list->project_id] ?? TaskListDetailResource::abilities($this->user, $list),
         ));
     }
 
@@ -203,7 +347,10 @@ final class ChangeFeed
         $query = TaskListItem::query()
             ->with(['assignee', 'taskList.project.workspace'])
             ->whereIn('task_list_items.task_list_id', $this->visibleLists())
-            ->when($this->cursor->since, fn (Builder $q, $since) => $q->where('task_list_items.updated_at', '>=', $since));
+            // a fresh list (new in this delta run) sends all its tasks
+            ->when($this->cursor->since, fn (Builder $q, $since) => $q->where(fn (Builder $w) => $w
+                ->where('task_list_items.updated_at', '>=', $since)
+                ->orWhereIn('task_list_items.task_list_id', $this->cursor->fresh)));
 
         return $this->upserts($query, 'task_list_items.updated_at', 'task_list_items.id', $need, fn (TaskListItem $task) => new SyncChange(
             'task', (string) $task->id, SyncChange::UPSERT, (int) $task->taskList->project_id, $task->updated_at, $task,
@@ -237,18 +384,26 @@ final class ChangeFeed
         ));
     }
 
-    /** @return array{0: list<SyncChange>, 1: bool, 2: list<int|string>|null} */
+    /**
+     * The user's captures — with the filter `inbox` only the inbox: a full run sends the inbox, a delta run
+     * a delete for a capture that left it (processed, archived).
+     *
+     * @return array{0: list<SyncChange>, 1: bool, 2: list<int|string>|null}
+     */
     private function captures(int $need): array
     {
+        $inbox = $this->cursor->captures === SyncCursor::CAPTURES_INBOX;
         $query = Capture::query()
             ->where('captures.user_id', $this->user->id)
-            ->when($this->cursor->since, fn (Builder $q, $since) => $q->where('captures.updated_at', '>=', $since));
+            ->when($this->cursor->since, fn (Builder $q, $since) => $q->where('captures.updated_at', '>=', $since))
+            ->when($inbox && $this->cursor->since === null, fn (Builder $q) => $q->inState('inbox'));
 
         [$rows, $more, $key] = $this->fetch($query, 'captures.updated_at', 'captures.id', $need);
         $locations = CaptureConversion::locations($rows, $this->user);
-        $changes = $rows->map(fn (Capture $capture) => new SyncChange(
-            'capture', (string) $capture->uuid, SyncChange::UPSERT, null, $capture->updated_at, $capture, $locations[$capture->id] ?? null,
-        ))->all();
+        $changes = $rows->map(fn (Capture $capture) => $inbox && $capture->state() !== 'inbox'
+            ? new SyncChange('capture', (string) $capture->uuid, SyncChange::DELETE)
+            : new SyncChange('capture', (string) $capture->uuid, SyncChange::UPSERT, null, $capture->updated_at, $capture, $locations[$capture->id] ?? null),
+        )->all();
 
         return [$changes, $more, $key];
     }
@@ -327,16 +482,24 @@ final class ChangeFeed
         return $this->deletes($query, 'task_list_items.id', $need, fn (TaskListItem $task) => (string) $task->id, 'task');
     }
 
-    /** Kept lists that were deleted (in a project the user can still open). @return array{0: list<SyncChange>, 1: bool, 2: list<int|string>|null} */
+    /**
+     * Lists the client must drop: deleted, no longer visible, no longer asked for or no longer "mine"
+     * (begin() diffs them). Their tasks go with them.
+     *
+     * @return array{0: list<SyncChange>, 1: bool, 2: list<int>|null}
+     */
     private function goneTaskLists(int $need): array
     {
-        $query = TaskList::onlyTrashed()
-            ->select('task_lists.id')
-            ->whereIn('task_lists.id', $this->cursor->lists)
-            ->whereIn('task_lists.project_id', $this->projectIds)
-            ->where('task_lists.deleted_at', '>=', $this->cursor->since);
+        $after = is_array($this->cursor->key) && count($this->cursor->key) === 1 ? (int) $this->cursor->key[0] : 0;
+        $rest = array_values(array_filter($this->cursor->gone, fn (int $id) => $id > $after));
+        $batch = array_slice($rest, 0, $need);
+        $more = count($rest) > $need;
 
-        return $this->deletes($query, 'task_lists.id', $need, fn (TaskList $list) => (string) $list->id, 'task_list');
+        return [
+            array_map(fn (int $id) => new SyncChange('task_list', (string) $id, SyncChange::DELETE), $batch),
+            $more,
+            $more ? [(int) end($batch)] : null,
+        ];
     }
 
     /**
@@ -470,9 +633,10 @@ final class ChangeFeed
     /** @return list<int> the kept lists the user can open (not deleted) */
     private function visibleLists(): array
     {
-        return $this->visibleLists ??= $this->cursor->lists === [] ? [] : TaskList::query()
-            ->whereIn('id', $this->cursor->lists)
+        return $this->visibleLists ??= $this->cursor->kept === [] ? [] : TaskList::query()
+            ->whereIn('id', $this->cursor->kept)
             ->whereIn('project_id', $this->projectIds)
+            ->orderBy('id')
             ->pluck('id')->map(fn ($id) => (int) $id)->all();
     }
 }

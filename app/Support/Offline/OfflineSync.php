@@ -100,7 +100,7 @@ final class OfflineSync
             throw ValidationException::withMessages(['id' => 'This change id was already used for a different change.']);
         }
 
-        return SyncOutcome::replayed($existing->status, $existing->response + ['replayed' => true]);
+        return SyncOutcome::replayed($existing->status, $existing->response + ['replayed' => true], $existing->entity_type, $existing->entity_id === null ? null : (int) $existing->entity_id);
     }
 
     /** @param array<string, mixed> $mutation */

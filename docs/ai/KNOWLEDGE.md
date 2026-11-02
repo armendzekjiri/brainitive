@@ -2117,6 +2117,16 @@ Never migrate devdb just to export the spec.
   projects they can open, and the keyset values are validated (timestamp regex, ints) before use — a forged cursor can only
   skip or repeat the caller's own changes. A test feeds an injection string through it.
 - **Docs are not in the feed** (BRAI-204): offline doc edits use `PATCH /pages/{uuid}` with `revision` (409) or live co-editing.
+- **v2 (BRAI-441): task lists are a set with a diff, not part of the scope.** The cursor keeps the lists resolved at the start
+  of the last run (`kept`); every run start resolves them again (ids asked for + `mine`, visible only) and diffs: new lists get
+  a full pass inside the delta run (`orWhereIn(fresh)` in the list phases), dropped ones a `task_list` delete (phase
+  `goneTaskLists` now walks that `gone` set — a trashed or hidden list simply drops out of `kept`). So changing `task_lists`
+  never restarts the other scopes; scopes and the captures filter still do. The cursor stores the **phase name** (v1 stored
+  the index — `SyncCursor::V1_PHASES` maps it; append phases, never reorder). `can` on lists can go stale without any row
+  changing (roles), hence the abilities hash per project in the cursor → all kept lists re-sent when it changes.
+- **`POST /sync` entities are looked up again**, not converted from the web engine's snapshot: `OfflineSync::replay` now passes
+  the stored entity type + id, `SyncRecords::find` loads it with the feed's relations and visibility rules. The web's
+  `/offline/sync` body is unchanged.
 
 ### App API phase 09: realtime for native clients (v1.49.0, BRAI-426)
 - **There is no Reverb / `routes/channels.php` / Laravel broadcasting.** The card asked for `POST /api/v1/broadcasting/auth`

@@ -3,6 +3,7 @@
 namespace App\Http\Resources\AppApi;
 
 use App\Models\TaskList;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 /**
@@ -20,14 +21,24 @@ class TaskListDetailResource extends TaskListResource
 
         return [
             ...parent::toArray($request),
-            'can' => [
-                // rename / describe (web only for now)
-                'update' => $user->can('update', $this->resource),
-                'delete' => $user->can('delete', $this->resource),
-                // add, edit, complete, reorder and delete tasks
-                'manage_items' => $user->can('manageItems', $this->resource),
-            ],
+            'can' => self::abilities($user, $this->resource),
             'watching' => $this->resource->watchers()->whereKey($user->id)->exists(),
+        ];
+    }
+
+    /**
+     * What the user may do with the list (also the sync feed's `task_list` records, BRAI-441).
+     *
+     * @return array{update: bool, delete: bool, manage_items: bool}
+     */
+    public static function abilities(User $user, TaskList $list): array
+    {
+        return [
+            // rename / describe (web only for now)
+            'update' => $user->can('update', $list),
+            'delete' => $user->can('delete', $list),
+            // add, edit, complete, reorder and delete tasks
+            'manage_items' => $user->can('manageItems', $list),
         ];
     }
 }
