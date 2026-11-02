@@ -10,6 +10,7 @@ import * as Y from 'yjs';
 import { removeAwarenessStates } from 'y-protocols/awareness';
 import { DOCUMENT_NAME, deriveKeys, inspectToken } from './token.js';
 import { createLaravelClient } from './laravel.js';
+import { fields } from './log.js';
 
 const FORBIDDEN = { code: 4403, reason: 'Forbidden' };
 const RESET = { code: 4409, reason: 'Document replaced' };
@@ -112,7 +113,8 @@ export function createCollabServer({
             // shown in the "Live editing unavailable" notice) and in this server's log (journalctl)
             let payload = null;
             const refuse = (reason, detail = '') => {
-                warn(`[realtime] refused ${documentName.slice(0, 100)}${payload ? ` for user ${payload.sub}` : ''}: ${reason}${detail ? ` — ${detail}` : ''}`);
+                // Codex realtime review 6: the name is the client's — escaped, cut short, one structured line
+                warn(`[realtime] refused ${fields({ document: documentName, user: payload?.sub, reason, detail })}`);
                 setImmediate(() => closeSocket(request, 4401, `Unauthorized: ${reason}`));
                 throw Object.assign(new Error(`Not authorized: ${reason}`), { reason });
             };
@@ -124,7 +126,7 @@ export function createCollabServer({
             const device = payload.dev ?? null;
             // a signed-out app device: 4410 (not 4401), so the app drops its tokens instead of retrying
             const refuseDevice = () => {
-                warn(`[realtime] refused ${documentName.slice(0, 100)} for user ${payload.sub}: device-revoked (${device})`);
+                warn(`[realtime] refused ${fields({ document: documentName, user: payload.sub, reason: 'device-revoked', device })}`);
                 setImmediate(() => closeSocket(request, DEVICE_REVOKED.code, DEVICE_REVOKED.reason));
                 throw Object.assign(new Error('Not authorized: device-revoked'), { reason: 'device-revoked' });
             };
