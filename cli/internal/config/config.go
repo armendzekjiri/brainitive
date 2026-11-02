@@ -16,6 +16,9 @@ import (
 
 // Session is the OAuth session with one Brainitive server.
 type Session struct {
+	// Server is the origin that issued the tokens. They are only ever sent there; another server
+	// (--server, BRAINITIVE_SERVER) needs its own `brainitive login` (Codex CLI/extension review 1).
+	Server        string `json:"server,omitempty"`
 	ClientID      string `json:"client_id"`
 	RedirectURI   string `json:"redirect_uri"`
 	TokenEndpoint string `json:"token_endpoint"`
@@ -92,6 +95,10 @@ func Load() (*Config, error) {
 	}
 	if cfg.Server == "" || (cfg.Server == legacyCloudServer && cfg.Session == nil) {
 		cfg.Server = DefaultServer
+	}
+	if cfg.Session != nil && cfg.Session.Server == "" {
+		// Sessions saved before v1.49.0 carry no origin: they belong to the configured server.
+		cfg.Session.Server = cfg.Server
 	}
 	return cfg, nil
 }

@@ -112,6 +112,22 @@ func TestCheckServerRequiresHTTPSExceptLoopback(t *testing.T) {
 	}
 }
 
+// Codex CLI/extension review 1: a session saved before v1.49.0 belongs to the configured server.
+func TestLegacySessionIsBoundToTheConfiguredServer(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv("BRAINITIVE_CONFIG", path)
+	if err := os.WriteFile(path, []byte(`{"server":"https://example.test","session":{"access_token":"a"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Session.Server != "https://example.test" {
+		t.Fatalf("session server = %q", cfg.Session.Server)
+	}
+}
+
 func TestLegacyCloudServerMigratesOnlyWithoutSession(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv("BRAINITIVE_CONFIG", path)

@@ -279,6 +279,9 @@ func Refresh(ctx context.Context, s *config.Session) error {
 	if err := config.CheckServer(s.TokenEndpoint); err != nil {
 		return fmt.Errorf("the saved session's token endpoint is not safe (%v). Run `brainitive login` again", err)
 	}
+	if s.Server != "" && !sameOrigin(s.Server, s.TokenEndpoint) {
+		return fmt.Errorf("the saved session's token endpoint %s is not on %s. Run `brainitive login` again", s.TokenEndpoint, s.Server)
+	}
 	tokens, err := tokenRequest(ctx, s.TokenEndpoint, url.Values{
 		"grant_type":    {"refresh_token"},
 		"client_id":     {s.ClientID},

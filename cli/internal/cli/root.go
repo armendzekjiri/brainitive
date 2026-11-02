@@ -161,16 +161,34 @@ func (a *App) serverURL() string {
 }
 
 // sessionTokens is the TokenSource backed by the config file (refreshed and saved as needed)
-// or by BRAINITIVE_TOKEN.
-type sessionTokens struct{ app *App }
+// or by BRAINITIVE_TOKEN, for requests to one server. The stored session's tokens are only handed
+// out for the server that issued them (Codex CLI/extension review 1); BRAINITIVE_TOKEN is the
+// caller's own pairing with --server / BRAINITIVE_SERVER (else the configured server).
+type sessionTokens struct {
+	app    *App
+	server string
+	// sessionOnly ignores BRAINITIVE_TOKEN: logout and the call right after login use the session.
+	sessionOnly bool
+}
 
-func (s *sessionTokens) Token(ctx context.Context) (string, error) {
-	if env := os.Getenv("BRAINITIVE_TOKEN"); env != "" {
-		return env, nil
-	}
+func (s *sessionTokens) session() (*config.Session, error) {
 	sess := s.app.cfg.Session
 	if sess == nil || sess.AccessToken == "" {
-		return "", errNotSignedIn
+		return nil, errNotSignedIn
+	}
+	if sess.Server != s.server {
+		return nil, fmt.Errorf("you're signed in to %s, not %s. Run `brainitive login --server %s` to sign in there (each server has its own sign-in)", sess.Server, s.server, s.server)
+	}
+	return sess, nil
+}
+
+func (s *sessionTokens) Token(ctx context.Context) (string, error) {
+	if env := os.Getenv("BRAINITIVE_TOKEN"); env != "" && !s.sessionOnly {
+		return env, nil
+	}
+	sess, err := s.session()
+	if err != nil {
+		return "", err
 	}
 	if auth.Expiring(sess) {
 		if err := auth.Refresh(ctx, sess); err != nil {
@@ -182,12 +200,12 @@ func (s *sessionTokens) Token(ctx context.Context) (string, error) {
 }
 
 func (s *sessionTokens) Renew(ctx context.Context) (string, error) {
-	if os.Getenv("BRAINITIVE_TOKEN") != "" {
+	if os.Getenv("BRAINITIVE_TOKEN") != "" && !s.sessionOnly {
 		return "", errors.New("BRAINITIVE_TOKEN was rejected (expired or revoked). Make a new one, or unset it and run `brainitive login`")
 	}
-	sess := s.app.cfg.Session
-	if sess == nil {
-		return "", errNotSignedIn
+	sess, err := s.session()
+	if err != nil {
+		return "", err
 	}
 	if err := auth.Refresh(ctx, sess); err != nil {
 		return "", err
@@ -198,14 +216,16 @@ func (s *sessionTokens) Renew(ctx context.Context) (string, error) {
 
 func (a *App) mcp() *mcp.Client {
 	if a.client == nil {
-		a.client = mcp.New(a.serverURL(), &sessionTokens{app: a}, a.Version)
+		server := a.serverURL()
+		a.client = mcp.New(server, &sessionTokens{app: a, server: server}, a.Version)
 	}
 	return a.client
 }
 
 func (a *App) extAPI() *api.Client {
 	if a.ext == nil {
-		a.ext = api.New(a.serverURL(), &sessionTokens{app: a})
+		server := a.serverURL()
+		a.ext = api.New(server, &sessionTokens{app: a, server: server})
 	}
 	return a.ext
 }

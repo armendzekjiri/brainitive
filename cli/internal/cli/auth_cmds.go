@@ -10,8 +10,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/armendzekjiri/brainitive/cli/internal/api"
 	"github.com/armendzekjiri/brainitive/cli/internal/auth"
 	"github.com/armendzekjiri/brainitive/cli/internal/config"
+	"github.com/armendzekjiri/brainitive/cli/internal/mcp"
 	"github.com/armendzekjiri/brainitive/cli/internal/output"
 )
 
@@ -54,9 +56,12 @@ Profile → Connected apps, or "php artisan mcp:get-token <email>" on the server
 				a.cfg.Defaults = config.Defaults{}
 			}
 			a.cfg.Server = target
+			session.Server = target
 			a.cfg.Session = session
-			a.client = nil
-			if res, err := a.mcp().Call(ctx, "list-workspaces", nil); err == nil {
+			// The first call goes to the server we just signed in to, with the new session's token —
+			// not to a --server / BRAINITIVE_SERVER override, not with BRAINITIVE_TOKEN.
+			a.client = mcp.New(target, &sessionTokens{app: a, server: target, sessionOnly: true}, a.Version)
+			if res, err := a.client.Call(ctx, "list-workspaces", nil); err == nil {
 				rows := output.List(res.Structured["workspaces"])
 				if len(rows) == 1 {
 					a.cfg.Defaults.Workspace = output.Str(rows[0]["slug"])
@@ -90,17 +95,21 @@ func (a *App) logoutCommand() *cobra.Command {
 				a.out.Note("Not signed in.")
 				return nil
 			}
-			// Revoke the access + refresh token on the server (DELETE /api/cli/logout), then forget
-			// the file. If the server can't be reached, the file still goes and we say so.
-			revoked := a.extAPI().Logout(cmd.Context()) == nil
+			// Revoke the access + refresh token on the server that issued them (DELETE
+			// /api/cli/logout) — never on a --server / BRAINITIVE_SERVER override, never with
+			// BRAINITIVE_TOKEN — then forget the file. If the server can't be reached, the file
+			// still goes and we say so.
+			origin := a.cfg.Session.Server
+			client := api.New(origin, &sessionTokens{app: a, server: origin, sessionOnly: true})
+			revoked := client.Logout(cmd.Context()) == nil
 			a.cfg.Session = nil
 			if err := a.cfg.Save(); err != nil {
 				return err
 			}
 			if revoked {
-				a.out.Note("Signed out of %s (token revoked).", a.cfg.Server)
+				a.out.Note("Signed out of %s (token revoked).", origin)
 			} else {
-				a.out.Note("Signed out of %s locally; the server couldn't be reached. Revoke the CLI under Profile → Connected apps.", a.cfg.Server)
+				a.out.Note("Signed out of %s locally; the server couldn't be reached. Revoke the CLI under Profile → Connected apps.", origin)
 			}
 			return nil
 		},
