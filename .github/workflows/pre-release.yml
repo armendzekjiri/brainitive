@@ -63,6 +63,21 @@ jobs:
       # the e2e test users on dev (smoke-dev below); the seeder only creates them once
       E2E_PASSWORD: ${{ secrets.E2E_DEV_PASSWORD }}
     steps:
+      # Codex config review 4: warn (or, with the variable DEPLOY_REQUIRE_HOST_KEY=true, fail)
+      # when the SSH host key isn't pinned; the deploy itself is unchanged.
+      - name: Check the pinned SSH host key
+        env:
+          DEPLOY_FINGERPRINT: ${{ secrets.DEPLOY_FINGERPRINT }}
+          REQUIRE_HOST_KEY: ${{ vars.DEPLOY_REQUIRE_HOST_KEY }}
+        run: |
+          if [ -n "$DEPLOY_FINGERPRINT" ]; then
+            echo "SSH host key pinned (DEPLOY_FINGERPRINT): a server with another key is refused."
+          elif [ "$REQUIRE_HOST_KEY" = true ]; then
+            echo "::error title=SSH host key not pinned::Set the DEPLOY_FINGERPRINT secret (ssh-keyscan -p PORT HOST | ssh-keygen -lf -)."
+            exit 1
+          else
+            echo "::warning title=SSH host key NOT verified::The DEPLOY_FINGERPRINT secret is not set, so this deploy trusts whatever server answers. Add it (ssh-keyscan -p PORT HOST | ssh-keygen -lf -, the SHA256:… value), then set the variable DEPLOY_REQUIRE_HOST_KEY=true."
+          fi
       - name: Deploy via SSH
         uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17 # v1.2.0
         with:
