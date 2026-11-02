@@ -19,6 +19,19 @@ use Illuminate\Http\Request;
  */
 class ExtensionController extends Controller
 {
+    /**
+     * Sign-out: revokes the calling capture token and its refresh token (the extension calls this
+     * before clearing its local session; `/api/cli/logout` rejects capture tokens).
+     */
+    public function logout(Request $request): JsonResponse
+    {
+        $token = $request->user()->currentAccessToken();
+        $token?->revoke();
+        $token?->refreshToken?->revoke();
+
+        return response()->json(['message' => 'Logged out.']);
+    }
+
     public function me(Request $request): JsonResponse
     {
         $user = $request->user();

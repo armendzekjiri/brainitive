@@ -570,7 +570,7 @@ extension: own tokens, guard, throttles; only Support services and policies are 
 - **Sign-in:** OAuth 2.1 + PKCE via Dynamic Client Registration (`/oauth/register` from
   `Mcp::oauthRoutes()`), scope `capture`; consent screen `resources/views/mcp/authorize.blade.php`.
 - **API:** `routes/api.php` → `/api/ext/v1/*` (`ext.*` routes):
-  `Extension/ExtensionController` (me, destinations, search — since v1.43.0 `SearchController::extension`
+  `Extension/ExtensionController` (me, logout (revokes the token + refresh token), destinations, search — since v1.43.0 `SearchController::extension`
   on the search index, **titles and keys only**, no comments; my-work) and
   `Extension/CaptureController` (issue + screenshot, bookmark item, doc, task, snippet, and
   `ext.captures.store` = "Save to inbox", create only). Create logic + policies are shared with
