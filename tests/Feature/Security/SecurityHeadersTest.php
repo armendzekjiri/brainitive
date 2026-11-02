@@ -4,6 +4,7 @@ namespace Tests\Feature\Security;
 
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Vite;
 use Tests\TestCase;
 
 /**
@@ -43,6 +44,8 @@ class SecurityHeadersTest extends TestCase
         // the real Vite manifest (public/build): ~140 preloads on a board page, a nonce on each grew
         // the Link header by ~7 KB (Node's 16 KB header limit, nginx fastcgi buffers)
         $this->withVite();
+        // a running `composer run dev` writes public/hot (dev-server mode: no preloads); use the build
+        Vite::useHotFile(storage_path('framework/testing/no-vite-hot-file'));
         $response = $this->get(route('login'))->assertOk();
 
         $link = (string) $response->headers->get('Link');
