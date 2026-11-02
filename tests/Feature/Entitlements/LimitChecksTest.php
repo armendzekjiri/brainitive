@@ -244,7 +244,7 @@ class LimitChecksTest extends TestCase
 
     // --- Content ------------------------------------------------------------------------
 
-    public function test_full_content_storage_blocks_new_pages_and_issues_but_not_comments(): void
+    public function test_full_content_storage_blocks_new_pages_issues_and_comments(): void
     {
         $this->contentFull();
         $item = $this->item();
@@ -261,8 +261,9 @@ class LimitChecksTest extends TestCase
         $this->assertSame(0, Page::count());
         $this->assertSame(1, Item::count());
 
-        $this->actingAs($this->editor)->postJson($this->itemRoute('boards.items.comments.store', $item), ['body' => 'Still fine'])->assertSessionMissing('limit_reached');
-        $this->assertSame(1, $item->comments()->count());
+        // since v1.49.0 (Codex web review B) comments count too: every type the meter counts
+        $this->actingAs($this->editor)->postJson($this->itemRoute('boards.items.comments.store', $item), ['body' => 'Not anymore'])->assertStatus(402);
+        $this->assertSame(0, $item->comments()->count());
     }
 
     public function test_mcp_and_extension_create_tools_respect_the_content_limit(): void
