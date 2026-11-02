@@ -10,6 +10,7 @@ use App\Notifications\TicketAssignedNotification;
 use App\Notifications\TicketReplyNotification;
 use App\Notifications\TicketResolvedNotification;
 use App\Notifications\TicketStatusChangedNotification;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Helpdesks\Mail\TicketMailer;
@@ -27,6 +28,8 @@ final class TicketActions
     /** A reply ($internal false: emailed to the customer) or an internal note; $html is the editor's HTML. */
     public static function reply(Ticket $ticket, User $agent, string $html, bool $internal): TicketReply
     {
+        // content limit (Codex web review B): every metered type, in the shared create path
+        app(LimitGate::class)->ensureContentRoom($ticket->helpdesk->project->workspace);
         $reply = $ticket->replies()->create([
             'user_id' => $agent->id,
             'body' => $html,

@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\Comment;
 use App\Models\Item;
 use App\Models\User;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Notifications\ItemCommentNotifications;
@@ -19,6 +20,9 @@ class ItemComments
 {
     public static function add(Item $item, User $author, string $html, ?int $parentId = null): Comment
     {
+        // content limit (Codex web review B): every metered type, in the shared create path
+        app(LimitGate::class)->ensureContentRoom($item->board->project->workspace);
+
         $comment = $item->comments()->create([
             'user_id' => $author->id,
             'body' => $html,

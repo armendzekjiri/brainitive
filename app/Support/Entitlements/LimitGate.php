@@ -5,6 +5,7 @@ namespace App\Support\Entitlements;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceUsage;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -72,6 +73,20 @@ final class LimitGate
         if ($usage >= $limits->contentBytes) {
             throw $this->reached('content', $limits->contentBytes, $usage, $limits, $workspace);
         }
+    }
+
+    /**
+     * An edit at or over the content limit (Codex web review B): one that makes the content bigger is refused like a
+     * new item; one that keeps or shrinks the size is always allowed, so people can still clean up. Sizes are the
+     * serialized bytes of what changes (ContentLimits::size).
+     */
+    public function ensureContentGrowth(Workspace $workspace, mixed $before, mixed $after): void
+    {
+        if (ContentLimits::size($after) <= ContentLimits::size($before)) {
+            return;
+        }
+
+        $this->ensureContentRoom($workspace);
     }
 
     public function ensureCanStoreFiles(Workspace $workspace, int $bytes): void

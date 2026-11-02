@@ -17,6 +17,8 @@ use App\Notifications\TicketCreatedNotification;
 use App\Notifications\TicketReplyNotification;
 use App\Rules\NotExecutableUpload;
 use App\Rules\ProjectMember;
+use App\Support\Entitlements\LimitGate;
+use App\Support\Entitlements\PublicContentRoom;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Helpdesks\HelpdeskForm;
@@ -41,6 +43,8 @@ class TicketController extends Controller
     public function store(Request $request, Workspace $workspace, Project $project, Helpdesk $helpdesk)
     {
         $this->authorize('createTickets', $helpdesk);
+        // content limit (Codex web review B): every metered type, in the shared create path
+        app(LimitGate::class)->ensureContentRoom($workspace);
 
         $settings = $helpdesk->settings ?? [];
         $nameRequired = empty($settings['default_field_contact_name']['hidden']) && ! empty($settings['default_field_contact_name']['is_required']);
@@ -127,6 +131,10 @@ class TicketController extends Controller
         $helpdesk->load(['fields' => fn ($q) => $q->orderBy('position')]);
         HelpdeskForm::prepare($request, $helpdesk);
         $validated = $request->validate(HelpdeskForm::publicRules($helpdesk));
+        // a full workspace: a message the widget can show, admins told once a day (Codex web review B)
+        if ($refusal = PublicContentRoom::refusal($project->workspace, 'helpdesk')) {
+            return $refusal;
+        }
         $subject = trim((string) ($validated['subject'] ?? ''));
         if ($subject === '') {
             $subject = HelpdeskForm::autoSubject($helpdesk, $validated['contact_name'] ?? null, $validated['contact_email']);
@@ -303,6 +311,9 @@ class TicketController extends Controller
         $contact = $ticket->contact;
         if (! $contact || ! $ticket->verifyPublicAccessToken($validated['access_token'])) {
             abort(403, 'Invalid access token');
+        }
+        if ($refusal = PublicContentRoom::refusal($helpdesk->project->workspace, 'helpdesk')) {
+            return $refusal; // content limit (Codex web review B)
         }
 
         $reply = $ticket->replies()->create([

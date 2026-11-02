@@ -7,6 +7,7 @@ use App\Models\PageComment;
 use App\Models\PageReview;
 use App\Models\PageReviewReviewer;
 use App\Models\User;
+use App\Support\Entitlements\LimitGate;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -28,6 +29,8 @@ final class PageReviews
      */
     public static function request(Page $page, User $actor, array $reviewerIds, ?string $message): PageReview
     {
+        app(LimitGate::class)->ensureContentRoom($page->project->workspace); // content limit (Codex web review B)
+
         return DB::transaction(function () use ($page, $actor, $reviewerIds, $message) {
             $locked = self::lock($page);
 
@@ -115,6 +118,7 @@ final class PageReviews
         $parent = $data['parent'] ?? null;
         $quote = $parent ? null : QuoteAnchor::normalize(trim((string) ($data['quote'] ?? '')));
 
+        app(LimitGate::class)->ensureContentRoom($review->page->project->workspace); // content limit (Codex web review B)
         $comment = PageComment::create([
             'page_id' => $review->page_id,
             'page_review_id' => $parent?->page_review_id ?? $review->id,

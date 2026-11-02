@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\Collab\PageCollab;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Notifications\PageMentions;
@@ -401,8 +402,13 @@ class Page extends Model
      *
      * @param  array{content?: array<string, mixed>|null, name?: string, icon?: string|null}  $changes
      */
-    public function saveDraft(User $user, array $changes): void
+    public function saveDraft(User $user, array $changes, bool $live = false): void
     {
+        // content limit (Codex web review B): a bigger body needs room. Live co-editing saves ($live) aren't refused —
+        // the typed text stays in the shared document; publishing it is checked (publishChanges).
+        if (! $live && array_key_exists('content', $changes) && ($workspace = $this->project?->workspace)) {
+            app(LimitGate::class)->ensureContentGrowth($workspace, $this->draftState()['content'], $changes['content']);
+        }
         $attributes = ['edit_revision' => $this->edit_revision + 1];
         // what the editor had before this save: @mentions already in it were notified earlier
         $before = $this->isPublished() && $this->hasUnpublishedChanges() ? $this->draft_content : $this->content;
@@ -463,6 +469,9 @@ class Page extends Model
      */
     public function publishChanges(User $user, ?string $message = null): PageVersion
     {
+        if ($this->hasUnpublishedChanges() && ($workspace = $this->project?->workspace)) {
+            app(LimitGate::class)->ensureContentGrowth($workspace, $this->content, $this->draft_content); // Codex web review B
+        }
         if ($this->hasUnpublishedChanges()) {
             $this->fill([
                 'content' => $this->withExcalidrawEmbeds($this->draft_content, $this->content),

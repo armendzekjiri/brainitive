@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\GuardsContentGrowth;
 use App\Observers\TaskListItemObserver;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
@@ -14,7 +15,7 @@ use Illuminate\Support\Str;
 #[ObservedBy([TaskListItemObserver::class])]
 class TaskListItem extends Model
 {
-    use HasFactory, SoftDeletes;
+    use GuardsContentGrowth, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'uuid',
@@ -123,5 +124,16 @@ class TaskListItem extends Model
             'yearly' => $base->addYearNoOverflow(),
             default => null,
         };
+    }
+
+    /** Content limit (Codex web review B): edits that grow these columns need room. */
+    public function growthColumns(): array
+    {
+        return ['description'];
+    }
+
+    public function meteredWorkspace(): ?Workspace
+    {
+        return $this->taskList?->project?->workspace;
     }
 }

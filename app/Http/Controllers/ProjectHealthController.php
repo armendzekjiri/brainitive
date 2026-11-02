@@ -6,6 +6,7 @@ use App\Models\Project;
 use App\Models\ProjectHealthReport;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Entitlements\LimitGate;
 use App\Support\ProjectHealth\HealthAiException;
 use App\Support\ProjectHealth\HealthMetrics;
 use App\Support\ProjectHealth\HealthNarrator;
@@ -143,6 +144,7 @@ class ProjectHealthController extends Controller
         }
 
         $health = HealthMetrics::for($project, $user, $timezone, $from, $to)->compute();
+        app(LimitGate::class)->ensureContentRoom($project->workspace); // content limit (Codex web review B)
         $report = $project->healthReports()->create([
             'created_by' => $user->id,
             'status' => $validated['status'],

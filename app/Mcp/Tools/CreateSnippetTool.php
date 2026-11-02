@@ -4,6 +4,8 @@ namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\InteractsWithBrainitive;
 use App\Models\SnippetCollection;
+use App\Support\Entitlements\LimitGate;
+use App\Support\Entitlements\LimitReached;
 use App\Support\Mcp\ResourceLocator;
 use App\Support\Validation\ContentLimits;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -41,6 +43,12 @@ class CreateSnippetTool extends Tool
         $collection = $workspace->snippetCollections()->where('slug', $validated['collection'])->first();
         if (! $collection) {
             return Response::error('No snippet collection found with that slug in this workspace.');
+        }
+
+        try {
+            app(LimitGate::class)->ensureContentRoom($workspace); // content limit (Codex web review B)
+        } catch (LimitReached $e) {
+            return Response::error($e->getMessage());
         }
 
         $snippet = $collection->snippets()->create([

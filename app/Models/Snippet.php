@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\GuardsContentGrowth;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
 class Snippet extends Model
 {
+    use GuardsContentGrowth;
+
     protected $fillable = [
         'collection_id',
         'created_by',
@@ -68,5 +71,16 @@ class Snippet extends Model
     public function getRouteKeyName(): string
     {
         return 'slug';
+    }
+
+    /** Content limit (Codex web review B): edits that grow these columns need room. */
+    public function growthColumns(): array
+    {
+        return ['title', 'description', 'content'];
+    }
+
+    public function meteredWorkspace(): ?Workspace
+    {
+        return $this->collection?->workspace;
     }
 }

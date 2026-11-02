@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Notifications\ClientCommentedNotification;
 use App\Notifications\ClientDecisionNotification;
 use App\Notifications\ClientPortalGuestNotification;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\Plans\PlanDocument;
 use Illuminate\Support\Collection;
@@ -102,6 +103,7 @@ final class Deliverables
     {
         $message = $message !== null && trim($message) !== '' ? trim($message) : null;
 
+        app(LimitGate::class)->ensureContentRoom($portal->project->workspace); // content limit (Codex web review B)
         [$deliverable, $created] = DB::transaction(function () use ($portal, $user, $attributes, $isSame, $nextVersion, $message) {
             // one publish at a time per portal: "the current deliverable of this page / plan" stays unique
             ClientPortal::whereKey($portal->id)->lockForUpdate()->first();

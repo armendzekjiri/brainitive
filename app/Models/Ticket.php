@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\GuardsContentGrowth;
 use App\Support\Helpdesks\Sla\TicketSla;
 use App\Support\References\ContentReferences;
 use App\Support\SafeHtml;
@@ -16,7 +17,7 @@ use Illuminate\Support\Str;
 
 class Ticket extends Model
 {
-    use HasFactory, SoftDeletes;
+    use GuardsContentGrowth, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'helpdesk_id',
@@ -275,6 +276,17 @@ class Ticket extends Model
      * Get the workspace through the helpdesk and project.
      */
     public function getWorkspaceAttribute(): ?Workspace
+    {
+        return $this->helpdesk?->project?->workspace;
+    }
+
+    /** Content limit (Codex web review B): edits that grow these columns need room. */
+    public function growthColumns(): array
+    {
+        return ['description'];
+    }
+
+    public function meteredWorkspace(): ?Workspace
     {
         return $this->helpdesk?->project?->workspace;
     }

@@ -6,6 +6,7 @@ use App\Models\Snippet;
 use App\Models\SnippetCollection;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Validation\ContentLimits;
 use Illuminate\Support\Str;
 
@@ -75,6 +76,9 @@ final class Snippets
      */
     public static function createSnippet(SnippetCollection $collection, User $user, array $data): Snippet
     {
+        // content limit (Codex web review B): every metered type, in the shared create path
+        app(LimitGate::class)->ensureContentRoom($collection->workspace);
+
         return Snippet::create([
             'title' => $data['title'],
             'description' => $data['description'] ?? null,

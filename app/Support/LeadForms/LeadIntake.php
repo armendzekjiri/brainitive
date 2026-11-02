@@ -8,6 +8,7 @@ use App\Models\LeadForm;
 use App\Models\User;
 use App\Notifications\LeadConfirmationNotification;
 use App\Notifications\NewLeadNotification;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use Illuminate\Support\Arr;
@@ -30,6 +31,8 @@ class LeadIntake
      */
     public static function create(LeadForm $form, array $answers, string $source, array $meta = [], array $contact = [], array $consent = []): Lead
     {
+        // content limit (Codex web review B): every metered type, in the shared create path
+        app(LimitGate::class)->ensureContentRoom($form->project->workspace);
         $definition = $form->definition ?? ['steps' => []];
         // Labels at submit time, so answers to questions removed later stay readable
         $labels = [];

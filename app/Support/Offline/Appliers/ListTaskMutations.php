@@ -4,6 +4,7 @@ namespace App\Support\Offline\Appliers;
 
 use App\Models\TaskList;
 use App\Models\TaskListItem;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Offline\FieldMerge;
 use App\Support\Offline\MutationContext;
 use App\Support\Offline\SyncAbort;
@@ -29,6 +30,8 @@ final class ListTaskMutations
             'status' => 'nullable|in:todo,done',
         ]);
         $list = self::list($ctx, (int) $data['task_list_id']);
+        // content limit (Codex web review B): 402 limit_reached for this change, nothing stored
+        app(LimitGate::class)->ensureContentRoom($list->project->workspace);
 
         $task = $list->items()->create([
             'title' => $data['title'],

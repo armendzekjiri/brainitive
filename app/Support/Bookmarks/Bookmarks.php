@@ -7,6 +7,7 @@ use App\Models\Bookmark;
 use App\Models\BookmarkItem;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Uploads;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -127,6 +128,8 @@ final class Bookmarks
      */
     public static function createItem(Bookmark $bookmark, User $user, array $data, ?UploadedFile $file = null): BookmarkItem
     {
+        // content limit (Codex web review B): every metered type, in the shared create path
+        app(LimitGate::class)->ensureContentRoom($bookmark->workspace);
         $filePath = $file ? self::storeFile($bookmark, $file) : null;
 
         $item = $bookmark->items()->create([
