@@ -8,6 +8,7 @@ use App\Http\Requests\AppApi\RefreshTokenRequest;
 use App\Http\Resources\AppApi\TokenResource;
 use App\Http\Resources\AppApi\WebSessionResource;
 use App\Models\AppDevice;
+use App\Models\AppDeviceRefreshUse;
 use App\Models\User;
 use App\Notifications\AppRefreshReuseNotification;
 use App\Support\AppApi\AppApiErrors;
@@ -71,8 +72,8 @@ class AuthController extends Controller
     }
 
     /**
-     * Rotate the token pair. The refresh token works once; presenting an already-used one again
-     * (reuse = a stolen copy) signs this device out — its tokens, live connections and the web session its
+     * Rotate the token pair. The refresh token works once; presenting an already-used one again —
+     * any earlier one of this device, not only the last (reuse = a stolen copy) — signs this device out — its tokens, live connections and the web session its
      * webview opened — and emails the user. Clients must send one refresh at a time: two parallel refreshes
      * with the same token count as reuse.
      *
@@ -100,7 +101,12 @@ class AuthController extends Controller
                 return ['ok', $device, AppTokens::issue($device)];
             }
 
-            $reused = AppDevice::query()->active()->where('previous_refresh_hash', $hash)->lockForUpdate()->first();
+            // any refresh token the device already used (Codex review: not only the last one), else the last one of a
+            // pair issued before that table existed
+            $reused = AppDevice::query()->active()
+                ->where(fn ($q) => $q->where('previous_refresh_hash', $hash)
+                    ->orWhereIn('id', AppDeviceRefreshUse::query()->select('app_device_id')->where('token_hash', $hash)))
+                ->lockForUpdate()->first();
             if ($reused) {
                 AppTokens::revoke($reused, 'refresh_reuse');
 

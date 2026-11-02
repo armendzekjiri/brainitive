@@ -230,7 +230,7 @@
         "/auth/refresh": {
             "post": {
                 "operationId": "app.v1.auth.refresh",
-                "summary": "Rotate the token pair. The refresh token works once; presenting an already-used one again\n(reuse = a stolen copy) signs this device out \u2014 its tokens, live connections and the web session its\nwebview opened \u2014 and emails the user. Clients must send one refresh at a time: two parallel refreshes\nwith the same token count as reuse",
+                "summary": "Rotate the token pair. The refresh token works once; presenting an already-used one again \u2014\nany earlier one of this device, not only the last (reuse = a stolen copy) \u2014 signs this device out \u2014 its tokens, live connections and the web session its\nwebview opened \u2014 and emails the user. Clients must send one refresh at a time: two parallel refreshes\nwith the same token count as reuse",
                 "tags": [
                     "Auth"
                 ],

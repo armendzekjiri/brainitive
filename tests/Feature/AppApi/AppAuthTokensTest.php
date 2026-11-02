@@ -278,6 +278,62 @@ class AppAuthTokensTest extends TestCase
         $this->assertGuest('web');
     }
 
+    /** Codex review, finding 7: reuse of ANY earlier refresh token of the device counts, not only the last one. */
+    public function test_a_thief_who_rotated_twice_is_caught_when_the_app_presents_its_old_token(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create();
+        $stolen = $this->exchange($this->code($user))->json();
+        $device = AppDevice::findOrFail($stolen['device']['id']);
+
+        // the thief refreshes with the stolen token, then again with their own
+        $thief1 = $this->refresh($stolen['refresh_token'])->assertOk()->json();
+        $thief2 = $this->refresh($thief1['refresh_token'])->assertOk()->json();
+
+        // the app (still holding the stolen pair's refresh token) refreshes: two rotations ago → reuse
+        $this->assertInvalidGrant($this->refresh($stolen['refresh_token']), 401);
+        $this->assertSame('refresh_reuse', $device->fresh()->revoked_reason);
+        Notification::assertSentToTimes($user, AppRefreshReuseNotification::class, 1);
+
+        // the thief's newest pair is dead too
+        $this->assertInvalidGrant($this->refresh($thief2['refresh_token']), 401);
+        $this->getJson('/api/v1/me', $this->appHeaders($thief2['access_token']))->assertUnauthorized();
+    }
+
+    public function test_a_long_rotation_chain_keeps_working_and_old_links_count_as_reuse(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create();
+        $pair = $this->exchange($this->code($user))->json();
+        $chain = [$pair['refresh_token']];
+        for ($i = 0; $i < 5; $i++) {
+            $pair = $this->refresh($pair['refresh_token'])->assertOk()->json();
+            $chain[] = $pair['refresh_token'];
+        }
+        $this->getJson('/api/v1/me', $this->appHeaders($pair['access_token']))->assertOk();
+        Notification::assertNothingSent();
+
+        // the third token of the chain, long replaced: reuse
+        $this->assertInvalidGrant($this->refresh($chain[2]), 401);
+        $this->assertSame('refresh_reuse', AppDevice::findOrFail($pair['device']['id'])->revoked_reason);
+    }
+
+    public function test_a_double_refresh_with_the_same_token_still_counts_as_reuse_and_a_stranger_token_does_not(): void
+    {
+        Notification::fake();
+        $user = User::factory()->create();
+        $first = $this->exchange($this->code($user))->json();
+
+        // a made-up token never signs a device out
+        $this->assertInvalidGrant($this->refresh('brr_'.Str::random(48)), 401);
+        $this->assertNull(AppDevice::findOrFail($first['device']['id'])->revoked_at);
+
+        // two parallel refreshes with the same token: the first wins (row lock), the second is reuse
+        $this->refresh($first['refresh_token'])->assertOk();
+        $this->assertInvalidGrant($this->refresh($first['refresh_token']), 401);
+        $this->assertSame('refresh_reuse', AppDevice::findOrFail($first['device']['id'])->revoked_reason);
+    }
+
     public function test_the_reuse_email_is_branded_account_mail(): void
     {
         $user = User::factory()->create(['name' => 'Ada']);
