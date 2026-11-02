@@ -1310,8 +1310,8 @@ also wait for read / archive actions in flight (a page older than the action is 
   stays exempt. Accepting an invitation checks with `adding = 0` (the open invitation already counts). Sign-up
   acceptance (`acceptPendingForUser`) skips a full workspace instead of failing registration.
 - **Content size is `pg_column_size` (compressed / TOAST) over a fixed table list** — add a new user-content table
-  to `WorkspaceUsageMeter::CONTENT`. 0 on SQLite. Editor uploads (`uploads/images|documents`) have no size column
-  and don't count as files yet.
+  to `WorkspaceUsageMeter::CONTENT` **and** call `ensureContentRoom` in its shared create path (see "Plan limits
+  cover everything the meter counts"). 0 on SQLite. Files: see the same entry.
 - **Pruning never deletes:** before `enforced()`, during grace, the newest version, the `current_version`, or a
   `client_deliverables.page_version_id`. A new feature that points at a version must be added to `VersionPruner`.
   `Page::versions()` / `Plan::versions()` are ordered `version desc` — use `reorder()` in queries.
@@ -1321,6 +1321,52 @@ also wait for read / archive actions in flight (a page older than the action is 
 - **e2e:** limits apply only to slugs starting with `plan-limit-`; never set `ENTITLEMENTS_FREE_WORKSPACES_PER_OWNER`
   in e2e (the shared owner creates hundreds of workspaces). Several upload endpoints answer 302 even to JSON — assert
   on the session in PHPUnit.
+
+### Plan limits cover everything the meter counts (v1.49.0, Codex web review B / C / D)
+**Policy (the owner's decision, 2026-11-02):** what `WorkspaceUsageMeter` counts is what `LimitGate` checks, on
+every surface (web, App API + sync, MCP, CLI, browser extension) — checked in the shared service / model, never only
+in one controller.
+- **Content (`ensureContentRoom`, at or over the limit → refused):** creating anything in `WorkspaceUsageMeter::CONTENT`
+  — pages, issues, comments, task lists, tasks, snippets, bookmark items, tickets and agent replies, leads, plans,
+  releases, meetings, health reports, client deliverables, doc reviews and review comments. A new metered table
+  needs its create path checked too (`ContentLimitEverywhereTest`).
+- **Edits:** one that makes content bigger is refused at the limit, one that keeps or shrinks the size always passes
+  (people can clean up). `LimitGate::ensureContentGrowth`; models with the `GuardsContentGrowth` trait (Item,
+  TaskListItem, Snippet, Ticket, Comment, BookmarkItem) check it in `updating`; pages in `Page::saveDraft` /
+  `publishChanges`. Live co-editing saves (`saveDraft(…, live: true)`) are not refused — the text stays in the shared
+  document; publishing it is checked.
+- **Public forms** (helpdesk widget tickets and replies, lead forms incl. the inbound API, feedback portals): 422
+  `{message: "This form can't accept submissions right now.", errors: {form: […]}, limit_reached: true}` — never the
+  plan, usage or a 500. `PublicContentRoom` tells the workspace admins once per workspace and day (in-app
+  `plan_limit_reached`, category workspace; no extra emails beyond the user's own channel settings). Inbound
+  helpdesk **mail** is still accepted (a refused mail would be lost).
+- **Surfaces:** web → `limit_reached` flash / 402 JSON; App API → 402 `limit_reached`; sync (App API and web
+  `/offline/sync`) → that change 402 `limit_reached`, nothing stored, retried later; MCP → a tool error with the
+  message (`guard()` / explicit catch); CLI and extension → the 402 JSON message.
+- **Files (`reserveFiles`):** every user-controlled stored file reserves its bytes atomically before it is kept and
+  releases them when deleted or superseded. Files without a size column go through `WorkspaceFiles::store` and are
+  recorded in `editor_uploads` (`kind`: logos, headers, bookmark icons / files, project and item-type icons,
+  lead-form images, whiteboard previews, `temp`); attachments and ticket attachments reserve in a model hook
+  (`ReservesFileStorage`). Whiteboard previews are not deleted when superseded (versions show them). Temporary icons
+  are pruned after a day (`files:prune-temp`, daily 02:40). Files from before v1.49.0: `files:backfill-usage`
+  (dry run; `--force`). Profile photos are per user, not per workspace, and don't count.
+- **Maximum lengths (`App\Support\Validation\ContentLimits`, one place for all surfaces):** bodies (issue
+  descriptions, snippets, task notes) 1 000 000 characters; page bodies 10 MB (the live editor's existing limit);
+  legacy whiteboard scenes 50 MB; comments 100 000; ticket descriptions 200 000, replies 50 000; helpdesk field
+  options ≤ 200 × 255; reorder requests ≤ 2 000 ids; titles keep the web's limits. Task descriptions accept only the
+  editor's formats (`EditorDocument`: `{type: lexical, html}` or a TipTap doc with known nodes, depth ≤ 50) — never
+  arbitrary JSON.
+
+### MCP needs `mcp:use` — the legacy CLI allowance ends (v1.49.0, Codex review 13)
+`EnsureMcpScope` on `/mcp`: tokens with `mcp:use` or `*` pass; MCP connectors get `mcp:use` by default
+(`Passport::defaultScopes`); new CLI / Copilot tokens (`/api/cli/login`, `mcp:token`) are issued with
+`['cli', 'mcp:use']`. Every other scope-less token gets 403, except the CLI's **legacy** scope-less personal access
+tokens (name `brainitive-cli`), logged at info once per token and day ("MCP used with a legacy scope-less CLI
+token"). **Enforcement plan:** CLI tokens are personal access tokens (1-year lifetime, `personalAccessTokensExpireIn`),
+not the 60-day OAuth refresh tokens. (1) Watch the log; after 60 days without that line, or (2) at the latest one
+year after the v1.49.0 deploy, delete the legacy branch in `EnsureMcpScope` (and the McpScopeTest case). Users who
+still hold one sign in again (`brainitive login`). Before `/mcp`'s auth, `GuardMcpEndpoint` limits unauthenticated
+attempts per IP (60 / min of 401s, then 429; signed-in calls never count) and refuses bodies over 12 MB (413).
 
 ### Licence: Business Source License 1.1 instead of AGPL-3.0 (v1.46.0, 2026-10-30)
 - **Why:** the AGPL let anyone resell Brainitive as a hosted service and let big companies self-host for

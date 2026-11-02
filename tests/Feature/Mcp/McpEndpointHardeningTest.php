@@ -92,7 +92,7 @@ class McpEndpointHardeningTest extends TestCase
             $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.9'])->postJson('/mcp', $list)->assertOk();
         }
 
-        $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.9'])->call('POST', '/mcp', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'], str_repeat('x', GuardMcpEndpoint::MAX_BYTES + 1))
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.9'])->call('POST', '/mcp', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json', 'CONTENT_LENGTH' => (string) (GuardMcpEndpoint::MAX_BYTES + 1)], '{}')
             ->assertStatus(413);
     }
 }

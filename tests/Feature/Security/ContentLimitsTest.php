@@ -12,6 +12,7 @@ use App\Models\TicketContact;
 use App\Models\User;
 use App\Support\Validation\ContentLimits;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Validator;
 use Tests\Feature\AppApi\Concerns\ActsAsAppClient;
 use Tests\Feature\Boards\InteractsWithBoards;
 use Tests\TestCase;
@@ -91,11 +92,14 @@ class ContentLimitsTest extends TestCase
         ])->assertHasErrors();
         $this->assertSame(0, $collection->snippets()->count());
 
-        // web page draft
+        // page bodies: the page rules (draft save, update, publish) carry the 10 MB budget. Checked on the rule, not
+        // over HTTP: a 10 MB request body copied through the test kernel exhausts the full suite's memory.
+        $this->assertTrue(Validator::make(['content' => ['type' => 'lexical', 'html' => str_repeat('x', ContentLimits::PAGE_BODY)]], ['content' => ContentLimits::pageContent()])->fails());
+        $this->assertTrue(Validator::make(['content' => ['type' => 'lexical', 'html' => 'ok']], ['content' => ContentLimits::pageContent()])->passes());
         $page = Page::factory()->create(['project_id' => $this->project->id, 'created_by' => $this->editor->id]);
         $this->actingAs($this->editor)->putJson(route('pages.draft.save', [$this->workspace->slug, $this->project->slug, $page->uuid]), [
-            'content' => ['type' => 'lexical', 'html' => str_repeat('x', ContentLimits::PAGE_BODY)],
-        ])->assertUnprocessable()->assertJsonValidationErrors('content');
+            'content' => ['type' => 'lexical', 'html' => '<p>fits</p>'],
+        ])->assertOk();
     }
 
     public function test_helpdesk_inputs_are_bounded(): void

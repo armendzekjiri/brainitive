@@ -793,7 +793,49 @@ Also: CI's e2e `app-api-uploads` 403 on `GET upload.url` — a fresh checkout ha
 fell through to the private `local` disk's signed route (`serve: true`) → 403; the e2e global setup now runs
 `storage:link` when the link is missing. `item-types-toggle` passes locally (3/3), untouched.
 Follow-ups (not done): attachments / bookmark files still use the stale file check (no reservation); content-limit scope
-(10), shared max lengths (11) and MCP scope enforcement (13) need the owner's decision.
+(10), shared max lengths (11) and MCP scope enforcement (13) need the owner's decision. → all done in "Codex web review + hardening" below
+(C, B, D, F).
+
+## Codex web review + hardening (`fix/v1.49-limits-hardening`, 2026-11-02)
+Codex's web route review (509 routes, `/private/tmp/brainitive-web-*.md`) plus the deferred Codex review items 10, 11
+and 13 — the owner decided everything goes into v1.49.0. Each item was reproduced with a failing PHPUnit test first
+(PostgreSQL), fixed at the shared service / model level and committed on its own. Policy details: KNOWLEDGE.md →
+"Plan limits cover everything the meter counts" and "MCP needs `mcp:use`".
+
+| # | Finding | Verified? | Fix | Tests |
+|---|---|---|---|---|
+| A | Public Gantt share leaks a hidden status and internal `itemId` | **yes** | `PlanDocument::publicData`: explicit whitelist respecting the column settings; public snippet / collection / bookmark pages also sent raw models (workspace, user ids, settings, metadata) → whitelists. `/r`, `/changelog`, `/s` already whitelisted | `PublicSharePayloadTest` (3) |
+| B | Content limit only for pages / issues (Codex review 10) | **yes** (web, MCP, sync, public forms) | `ensureContentRoom` in every metered type's shared create path; `PublicContentRoom` (friendly 422 + one admin notification per workspace / day, `plan_limit_reached`); growing edits refused (`GuardsContentGrowth`, `Page::saveDraft` / `publishChanges`; live co-editing not refused) | `ContentLimitEverywhereTest` (4), `LimitChecksTest` (updated) |
+| C | Files outside the meter / no reservation (logos, icons, bookmark files, attachments) | **yes** | `WorkspaceFiles` (reserve → store → `editor_uploads` row with `kind`, release on failure / delete / supersede), `ReservesFileStorage` hook on attachments + ticket attachments; `files:prune-temp` (daily), `files:backfill-usage` | `FileStorageEverywhereTest` (5) |
+| D + J | No shared maximum lengths; task descriptions accept arbitrary JSON; unbounded helpdesk options / ticket text / reorders / page + diagram payloads (Codex review 11) | **yes** | `ContentLimits` (+ rules `JsonSize`, `EditorDocument`) used by web, App API, MCP, sync | `ContentLimitsTest` (3) |
+| E | Votes for made-up polls / options | **yes** | `PollDocuments` (polls of the saved doc / issue; draft for editors); `polls:prune-orphans` | `PollVoteTest` (+2) |
+| F | MCP accepts scope-less tokens (Codex review 13, step 1) | **yes** | CLI tokens `['cli', 'mcp:use']`, `Passport::defaultScopes(['mcp:use'])`, `EnsureMcpScope` (legacy `brainitive-cli` tokens logged once / day); end date in KNOWLEDGE | `McpScopeTest` (4), `McpEndpointHardeningTest` (updated) |
+| G | Child page under another author's private draft discloses it | **yes** | parent must pass `view` (create; duplicate → top level); `pages.show` no longer serializes `parent`, breadcrumbs filtered (`Page::pathFor`, also App API) | `PrivateParentTest` (4) |
+| H | Embedded whiteboard save writes into published content (review bypass) | **yes** | `PageWrites::saveEmbed` → `Page::saveDraft` on the locked row | `EmbeddedWhiteboardReviewTest` (3) |
+| I | Ticket assignable to (and notifying) people without project access | **yes** | `ProjectMember` rule (web + App API); `TicketActions::notifyIfVisible` / `watchersWhoCanView` for assignment, reply and status notifications (web, App API, inbound mail, portal). Issue / task / lead / mention senders already checked | `TicketAssigneeAccessTest` (3) |
+| K | Ticket field updates skip type validation | **yes** | `HelpdeskForm::fieldRules` / `storedValue` shared by the public form, agent create and the panel; issue fields were already strict | `TicketFieldValidationTest` (3) |
+| L | Archiving a private draft exposes it | **yes** | `pages.archived_private` (migration); `Page::isPrivate()` in the policy, `visibleTo`, smart links, search | `ArchivedDraftPrivacyTest` (4) |
+| M | Publishing a whiteboard reveals its draft checkpoints | **yes** | `page_versions.is_draft` (migration), `Page::versionsFor`, `viewDraftVersions` (web + App API); `pages:mark-draft-versions` backfill | `DraftVersionPrivacyTest` (3) |
+| N | Sticky-note x / y overflow int32 (500) | **yes** | `between:-1000000,1000000` on create / update | `StickyNoteCoordinatesTest` |
+| O | Portal identity survives an account email change | **yes** | `identityForUser` follows the current email; `PortalAuth::unlink` in the profile email-change transaction; old guest sessions unaffected | `PortalIdentityEmailChangeTest` (3) |
+| P | Public surfaces of a soft-deleted workspace stay live | **yes** (feedback portal + others) | live workspace + project required: feedback portal scope, helpdesk / ticket uuid bindings, support page, `/s` (410), `/r`, `/changelog`, plan shares, public snippets / bookmarks (lead forms, booking already did) | `DeletedWorkspacePublicSurfacesTest` (16 surfaces) |
+| Q | Array `return_to` → TypeError | **yes** | `PortalAuth::safeReturnTo(mixed)` | `PortalReturnToTest` |
+| AA | `/mcp` unauthenticated attempts not throttled | **yes** (61 × 401, no 429) | `GuardMcpEndpoint` before auth: 60 failed attempts / min / IP → 429, body > 12 MB → 413 | `McpEndpointHardeningTest` (+1) |
+| R | A moved issue's new title leaks into the old workspace's time overview, export, report preview and finalized snapshot | **yes** | `TimeOverview` / `ReportBuilder` use the live issue only while it's in the entry's workspace, else the snapshot | `TimeOverviewTest` (+1), `BillingReportFlowTest` (+1) |
+| S | Timesheet shows a transferred project's new name | **yes** | `TimeEntries::visibleProject` → neutral "Deleted or moved project" (web timesheet + App API work logs) | `TimesheetTest` (+1) |
+| T | Calendar-feed filter of only foreign ids becomes "all projects" | **yes** | a selection with a project out of reach → 422 `options.project_ids` (web + App API `PUT /me/calendar-feed`); a later-revoked selection already shows nothing (pinned) | `CalendarFeedTest` (+1, 1 changed), `CalendarWritesTest` |
+| U | Booking links reschedule after the page / type / host / workspace is gone | **yes** | `BookingService::accepting()` re-checked for manage slots, reschedule and under the host lock in `book()` → 410 (`BookingClosed`); cancel still works | `BookingFlowTest` (×4) |
+| V | Finalizing doesn't detect changed values | **yes** | `ReportComputation::revision()` digest, sent by Show.tsx, rechecked under the locks → 422 `revision` / `report` | `BillingReportFlowTest` (+1) |
+| W | Send vs. void race resurrects "sent" | **yes** | status change on the locked row, mail queued after commit; `BillingReportMail` skips a voided report | `BillingDocumentTest` (+2) |
+| X | Paid report voided without confirmation in a race | **yes** | `ReportFinalizer::void($report, $confirmPaid)` checks on the locked row | `BillingReportFlowTest` (+1) |
+| Y | One-year period limit bypassed with 1970-01-01 | **yes** | Carbon day difference (create + update) | `BillingReportFlowTest` (+1) |
+| Z | Omitted nullable fields → 500 on report update | **yes** | `?? null` defaults (the UI always sends both) | `BillingReportFlowTest` (+1) |
+
+Notes for the owner's decision (not changed): push subscriptions — presenting another user's exact endpoint reassigns
+it (library behaviour; the endpoint is a secret never exposed), accepted as is. `/upload/image|document` authorize
+workspace membership, not a target object; storage is reserved and counted (C), object scoping not added. Public ticket
+attachments that lose a race against the reservation answer the generic 402 `limit_reached` JSON (the
+`file.room` pre-check answers the plain message in the normal case).
 
 ## Release materials (`docs/release-v1.49.0-materials`)
 In-app changelog entry v1.49.0 (`HelpModal.tsx`), homepage (`Welcome.tsx`: "Brainitive on your desktop" spotlight card +
@@ -812,6 +854,17 @@ Before: nothing to build specially; `desktop/` is its own repo and is not part o
    new tables `editor_uploads` (`2026_11_10_110000_create_editor_uploads_table`; earlier editor files are not backfilled —
    their workspace isn't known; a backfill could scan page / issue / comment HTML for `/storage/uploads/…` URLs per
    workspace) and `app_device_refresh_uses` (`2026_11_10_120000_create_app_device_refresh_uses_table`).
+   Codex web review + hardening (all additive): `editor_uploads.kind` (nullable; `2026_11_11_100000_add_kind_to_editor_uploads_table`),
+   `pages.archived_private` (NOT NULL default false; `2026_11_11_100000_add_archived_private_to_pages_table`) and
+   `page_versions.is_draft` (NOT NULL default false; `2026_11_11_110000_add_is_draft_to_page_versions_table`).
+1b. **Backfills after the migration (dry run first, then `--force`; all safe to run again):**
+   - `php artisan files:backfill-usage` — records logos, headers, bookmark icons / files, project and item-type icons, lead-form
+     images and whiteboard previews stored before v1.49.0 so they count (re-measures the touched workspaces);
+   - `php artisan pages:mark-draft-versions` — marks whiteboard versions recorded while the board was a private draft;
+   - `php artisan polls:prune-orphans` — removes votes for polls / options that aren't in the saved doc or issue.
+   New schedule entry (nothing to do if the cron runs `schedule:run`): `files:prune-temp` daily 02:40.
+   MCP: new CLI sign-ins get scoped tokens; legacy scope-less CLI tokens still work and log "MCP used with a legacy
+   scope-less CLI token" once per token and day — the end date is in KNOWLEDGE.md ("MCP needs mcp:use").
 1a. **Orphaned project memberships (Codex review 6), the owner runs it:** `php artisan memberships:prune-orphans` (dry run:
    lists them), then `php artisan memberships:prune-orphans --force`. Access is already cut by the code; this cleans the rows.
 2. **Realtime service:** restart after the deploy (`realtime/` changed): prod `127.0.0.1:6201`, dev `:6202`

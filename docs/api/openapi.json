@@ -3673,11 +3673,11 @@
                             }
                         }
                     },
-                    "401": {
-                        "$ref": "#/components/responses/AuthenticationException"
-                    },
                     "422": {
                         "$ref": "#/components/responses/ValidationException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
                     },
                     "429": {
                         "$ref": "#/components/responses/RateLimited"
@@ -22770,7 +22770,7 @@
                     "body": {
                         "type": "string",
                         "description": "Markdown; mentions as @[Name](user:<id>)",
-                        "maxLength": 20000
+                        "maxLength": 100000
                     },
                     "parent_id": {
                         "type": [
@@ -23103,7 +23103,7 @@
                             "null"
                         ],
                         "description": "docs only",
-                        "maxLength": 1000000
+                        "maxLength": 10000000
                     },
                     "publish": {
                         "type": "boolean",
@@ -23314,7 +23314,8 @@
                         "type": [
                             "string",
                             "null"
-                        ]
+                        ],
+                        "maxLength": 1000000
                     },
                     "visibility": {
                         "type": [
@@ -23452,7 +23453,7 @@
                             "null"
                         ],
                         "description": "Markdown; stored as the web editor's HTML",
-                        "maxLength": 10000
+                        "maxLength": 1000000
                     },
                     "request_id": {
                         "type": [
@@ -25707,7 +25708,7 @@
                             "null"
                         ],
                         "description": "docs only; replaces the whole text",
-                        "maxLength": 1000000
+                        "maxLength": 10000000
                     },
                     "revision": {
                         "type": [
@@ -25832,7 +25833,8 @@
                         "type": [
                             "string",
                             "null"
-                        ]
+                        ],
+                        "maxLength": 1000000
                     },
                     "visibility": {
                         "type": [
@@ -25930,7 +25932,7 @@
                             "null"
                         ],
                         "description": "Markdown; stored as the web editor's HTML; null clears it",
-                        "maxLength": 10000
+                        "maxLength": 1000000
                     }
                 },
                 "title": "UpdateTaskRequest"
@@ -25969,7 +25971,7 @@
                             "integer",
                             "null"
                         ],
-                        "description": "a workspace member, or null"
+                        "description": "someone who can open the ticket's project (a member or a workspace admin), or null"
                     },
                     "priority_id": {
                         "type": [
@@ -26533,25 +26535,50 @@
                         "description": "billed on a finalized report: no edits, no deletes"
                     },
                     "project": {
-                        "type": [
-                            "object",
-                            "null"
-                        ],
-                        "properties": {
-                            "id": {
-                                "type": "integer"
+                        "description": "id null + \"Deleted or moved project\" once it moved away or is out of reach (Codex web review S)",
+                        "anyOf": [
+                            {
+                                "type": "null"
                             },
-                            "name": {
-                                "type": "string"
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "null"
+                                    },
+                                    "name": {
+                                        "type": "string",
+                                        "const": "Deleted or moved project"
+                                    },
+                                    "key": {
+                                        "type": "null"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "name",
+                                    "key"
+                                ]
                             },
-                            "key": {
-                                "type": "string"
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "integer"
+                                    },
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "key": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "id",
+                                    "name",
+                                    "key"
+                                ]
                             }
-                        },
-                        "required": [
-                            "id",
-                            "name",
-                            "key"
                         ]
                     },
                     "issue": {
