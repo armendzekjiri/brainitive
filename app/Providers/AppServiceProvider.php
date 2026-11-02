@@ -102,6 +102,13 @@ class AppServiceProvider extends ServiceProvider
 
         Vite::prefetch(concurrency: 3);
 
+        // e2e runs from the same checkout as `npm run dev`, whose public/hot would point every page at the
+        // Vite dev server: no /build assets (offline shell), and loads from another host (legal.spec.ts).
+        // e2e always serves the build.
+        if ($this->app->environment('e2e')) {
+            Vite::useHotFile(storage_path('e2e/vite.hot'));
+        }
+
         // Web push (BRAI-154): one WebPush client for real notifications and the Profile test push
         // (faked in e2e), and a report handler that records each push service answer on the
         // subscription and flags expired ones instead of deleting them. Overrides the package's

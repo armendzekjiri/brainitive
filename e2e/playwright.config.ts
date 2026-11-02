@@ -57,7 +57,9 @@ export default defineConfig({
             cwd: ROOT,
             env: appEnv(),
             url: `${BASE_URL}/up`,
-            reuseExistingServer: !CI,
+            // only on request: a server left over from an earlier run keeps that run's environment (env.ts may have
+            // grown since) and silently failed newer journeys — a busy port now stops the run instead
+            reuseExistingServer: !CI && !!process.env.E2E_REUSE_SERVER,
             timeout: 60_000,
         },
 });

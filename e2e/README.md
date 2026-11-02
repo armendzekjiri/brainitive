@@ -15,6 +15,7 @@ npx playwright test -c e2e --project=chromium tests/boards.spec.ts   # one area
 npx playwright test -c e2e --project=chromium -g "invited person"    # one test by name
 npx playwright test -c e2e tests/collaboration.spec.ts --debug       # step through click by click
 E2E_PORT=8021 npm run e2e                                            # a second run in parallel (own server + DB)
+E2E_REUSE_SERVER=1 npm run e2e                                       # reuse a server already on the port (default: the run stops)
 ```
 
 ## How it works

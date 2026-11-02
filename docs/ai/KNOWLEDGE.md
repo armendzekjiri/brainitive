@@ -37,6 +37,11 @@ Details in `e2e/README.md`; this lists what isn't obvious.
   `E2E_PORT` with its own Postgres database, `brainitive_e2e_<port>`. `--no-reload` makes it pass
   the e2e environment through instead of re-reading `.env`. `e2e:reset` refuses anything but
   `APP_ENV=e2e` plus an e2e database.
+- **A busy port stops the run (v1.49.0).** A server left over from an earlier run (app on `E2E_PORT`,
+  realtime on `E2E_PORT + 101`) keeps that run's environment and code; reusing it silently failed every
+  journey whose env var or realtime feature came later. Reuse only with `E2E_REUSE_SERVER=1`.
+- **`APP_ENV=e2e` ignores `public/hot`.** `composer run dev` writes it in the same checkout, and the e2e
+  server then served Vite dev URLs: no `/build` assets for the offline shell, loads from another host.
 - **One session per worker** (the worker fixtures in `fixtures.ts`). Laravel's flash data
   (validation errors, toasts) belongs to a session, and workers sharing one session consumed each
   other's flash.

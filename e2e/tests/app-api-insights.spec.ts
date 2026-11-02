@@ -13,12 +13,16 @@ test.describe('app api: insights, health, workload', () => {
 
     test('the API returns the numbers of the web pages', async ({ page, memberPage }) => {
         const auth = { Authorization: `Bearer ${await seedAppToken(page)}` };
-        const api = (await ok(await page.request.get(`/api/v1/workspaces/${SEED.workspace}/insights/overview?period=last_90`, { headers: auth }))).data;
-        expect(api).toMatchObject({ tab: 'overview', filters: { period: 'last_90' } });
-        await page.goto(`/workspaces/${SEED.workspace}/insights/overview?period=last_90`);
-        const web = await pageProps<{ insights: { kpis: Record<string, number> } }>(page);
-        expect(api.insights.kpis.open).toBe(web.insights.kpis.open);
-        expect(api.insights.kpis.created).toBe(web.insights.kpis.created);
+        // the seeded workspace is shared with parallel journeys: an issue made between the two reads moves the
+        // numbers, so read both again until they were taken at the same moment
+        await expect(async () => {
+            const api = (await ok(await page.request.get(`/api/v1/workspaces/${SEED.workspace}/insights/overview?period=last_90`, { headers: auth }))).data;
+            expect(api).toMatchObject({ tab: 'overview', filters: { period: 'last_90' } });
+            await page.goto(`/workspaces/${SEED.workspace}/insights/overview?period=last_90`);
+            const web = await pageProps<{ insights: { kpis: Record<string, number> } }>(page);
+            expect(api.insights.kpis.open).toBe(web.insights.kpis.open);
+            expect(api.insights.kpis.created).toBe(web.insights.kpis.created);
+        }).toPass({ timeout: 15_000 });
 
         const projectId = await appProjectId(page, auth, SEED.workspace, SEED.project);
         const health = (await ok(await page.request.get(`/api/v1/projects/${projectId}/health`, { headers: auth }))).data;

@@ -20,9 +20,19 @@ const healthy = async () => {
 
 export const liveServerAvailable = () => fs.existsSync(path.join(ROOT, 'realtime', 'node_modules'));
 
-/** Start the live server (unless one already answers on the port); returns the stop function. */
+/**
+ * Start the live server; returns the stop function. One already answering on the port is reused only with
+ * E2E_REUSE_SERVER=1: a leftover from an earlier run runs that run's realtime code.
+ */
 export async function startLiveServer(): Promise<() => Promise<void>> {
-    if (!liveServerAvailable() || (await healthy())) return async () => {};
+    if (!liveServerAvailable()) return async () => {};
+    if (await healthy()) {
+        if (process.env.E2E_REUSE_SERVER) return async () => {};
+        throw new Error(
+            `A server already answers on 127.0.0.1:${LIVE.port} (the live server of an earlier run?). Stop it ` +
+                `(lsof -nP -iTCP:${LIVE.port} -sTCP:LISTEN), pick another E2E_PORT, or set E2E_REUSE_SERVER=1 to reuse it.`,
+        );
+    }
     const server: ChildProcess = spawn(process.execPath, [path.join(ROOT, 'realtime', 'src', 'index.js')], {
         cwd: ROOT,
         env: { ...process.env, COLLAB_PORT: String(LIVE.port), COLLAB_HOST: '127.0.0.1', COLLAB_SECRET: COLLAB.secret, COLLAB_APP_URL: BASE_URL },
