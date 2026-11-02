@@ -806,3 +806,22 @@ Before: nothing to build specially; `desktop/` is its own repo and is not part o
 
 ## feat/app-api-client-gaps
 - App API gaps for the desktop menu-bar panel / New-task window: ETags on `/me/work`, `/notifications` (first page) and `/capture-destinations`; notifications get `summary` (the bell's sentence, plain text) + `url` (absolute, null when not visible); `/me/timer` gets `today_logged_seconds` and `timer.description`; sync types `timer.start|stop|discard`, `notification.read`, `notifications.read_all {before}` (status `gone` for a timer / notification no longer there, `invalid` timer stops carry `activities` + `default_activity_id`); `issue.create` takes `description` (Markdown) + `item_type_id` via `Issues::create`. Additive migration `work_timers.description`. Plan: `docs/ai/tasks/feat-app-api-client-gaps.md`, registry: `docs/ai/API.md`.
+
+## fix/v1.49-e2e — the final e2e run (14 failed, 320 passed)
+Method: re-ran the failing specs on a fresh port (`E2E_PORT=8040`, own server, realtime and DB) instead of a `main`
+worktree, and compared env / server start times. No app regression from this release.
+- **Stale servers (8 tests).** An e2e app server on :8010 and a realtime server on :8111 left over from Oct 28 were
+  still running; Playwright (`reuseExistingServer`) and `startLiveServer` silently reused them. The old server had no
+  `ENTITLEMENTS_*` (Oct 30) or `BRAINITIVE_UPDATE_CHECK` (Nov 1), the old realtime code no device revocation (4410).
+  → plan-limits ×3, update-check, app-api-realtime ×2, notifications (page closed after the run timed out), and
+  app-api-insights all pass on a fresh server. Fix: reusing a server is opt-in now (`E2E_REUSE_SERVER=1`); a busy
+  port stops the run with a clear message.
+- **`public/hot` (5 tests).** `composer run dev` writes `public/hot`, and the e2e server (same checkout) then pointed
+  pages at the Vite dev server: legal.spec saw 147 loads from `[::1]:5173`, and offline ×4 had no `/build` assets for
+  the service worker. Fix: `APP_ENV=e2e` ignores `public/hot` (`Vite::useHotFile(storage/e2e/vite.hot)`).
+- **app-api-my-work (outdated test).** It planned My Day with an `android_tv` token; since BRAI-377 the TV may only
+  tick off (`my-day.items.update`). Now the desktop token plans / unplans, the TV reads `/me/today` + ticks off, and a
+  TV plan attempt asserts 403 `client_not_allowed`.
+- **app-api-insights (flaky).** Parallel journeys create issues in the seeded workspace between the API read and the
+  web read (9 vs 10); both reads now retry together (`toPass`).
+- Result: the 14 together on :8040 → 14 passed.

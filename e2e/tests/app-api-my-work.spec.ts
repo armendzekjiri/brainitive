@@ -6,14 +6,15 @@ import { projectPath, request } from '../helpers/workload';
 
 /*
  * App API v1 My Work + My Day (v1.49.0, BRAI-396), as the desktop / TV app calls it: an issue assigned
- * to the owner shows in GET /me/work, goes on My Day through the API and is completed there — and the
- * web's My Day shows the same plan and the same tick, because both share MyDayPlan and WorkCompletion.
- * GET /me/today (the TV wallboard) carries the plan too and answers 304 when nothing changed.
+ * to the owner shows in GET /me/work, goes on My Day through the desktop app and is ticked off on the TV
+ * — and the web's My Day shows the same plan and the same tick, because both share MyDayPlan and
+ * WorkCompletion. GET /me/today (the TV wallboard) carries the plan too and answers 304 when nothing
+ * changed. The TV may only tick off (BRAI-377): planning from it is 403 `client_not_allowed`.
  */
 
-async function seedToken(page: Page): Promise<string> {
+async function seedToken(page: Page, platform: 'macos' | 'android_tv'): Promise<string> {
     await page.goto(urls.home); // any app page, for the XSRF cookie
-    const res = await request(page, 'POST', '/profile/app-devices/e2e-create', { name: `E2E TV ${uid()}`, platform: 'android_tv' });
+    const res = await request(page, 'POST', '/profile/app-devices/e2e-create', { name: `E2E ${platform} ${uid()}`, platform });
     expect(res.ok(), `seed app device: ${res.status()}`).toBeTruthy();
     return ((await res.json()) as { access_token: string }).access_token;
 }
@@ -30,8 +31,8 @@ test.describe('app api: my work and my day', () => {
         test.slow(); // a project with an issue first
         const title = uid('TV wallboard task');
         const project = await projectWithIssue(page, title);
-        const token = await seedToken(page);
-        const auth = { Authorization: `Bearer ${token}` };
+        const auth = { Authorization: `Bearer ${await seedToken(page, 'macos')}` };
+        const tv = { Authorization: `Bearer ${await seedToken(page, 'android_tv')}` };
 
         // assign it to the owner (the signed-in user), due today
         const me = await ok(await page.request.get('/api/v1/me', { headers: auth }));
@@ -39,28 +40,31 @@ test.describe('app api: my work and my day', () => {
         expect(assigned.status(), await assigned.text()).toBeLessThan(400);
 
         const ref = `issue:${project.itemId}`;
-        const work = await ok(await page.request.get('/api/v1/me/work?limit=100', { headers: auth }));
+        const work = await ok(await page.request.get('/api/v1/me/work?limit=100', { headers: tv }));
         const entry = work.data.find((row: { id: string }) => row.id === ref);
         expect(entry, 'the assigned issue is in My Work').toBeTruthy();
         expect(entry).toMatchObject({ type: 'issue', title, done: false, project: { name: project.name } });
 
-        // plan it for today through the API → the web's My Day lists it
+        // the TV can't plan (read-mostly scope); the desktop app plans it for today → the web's My Day lists it
+        const refused = await page.request.post('/api/v1/me/my-day/items', { headers: tv, data: { id: ref } });
+        expect(refused.status()).toBe(403);
+        expect((await refused.json()).code).toBe('client_not_allowed');
         const day = await ok(await page.request.post('/api/v1/me/my-day/items', { headers: auth, data: { id: ref } }));
         expect(day.data.items.map((row: { id: string }) => row.id)).toContain(ref);
 
         // the TV wallboard's one call shows it too, and an unchanged refresh is a 304
-        const today = await page.request.get('/api/v1/me/today', { headers: auth });
+        const today = await page.request.get('/api/v1/me/today', { headers: tv });
         expect((await ok(today)).data.my_day.map((row: { id: string }) => row.id)).toContain(ref);
         const etag = today.headers()['etag'];
         expect(etag).toBeTruthy();
-        expect((await page.request.get('/api/v1/me/today', { headers: { ...auth, 'If-None-Match': etag } })).status()).toBe(304);
+        expect((await page.request.get('/api/v1/me/today', { headers: { ...tv, 'If-None-Match': etag } })).status()).toBe(304);
 
         await page.goto('/my-work');
         const myDay = page.getByRole('region', { name: 'My Day' });
         await expect(myDay.getByRole('checkbox', { name: `Mark “${title}” as done` })).toHaveAttribute('aria-checked', 'false');
 
-        // tick it off through the API → done on the web too, and gone from the open list
-        const ticked = await ok(await page.request.patch(`/api/v1/me/my-day/items/${ref}`, { headers: auth, data: { done: true } }));
+        // tick it off on the TV → done on the web too, and gone from the open list
+        const ticked = await ok(await page.request.patch(`/api/v1/me/my-day/items/${ref}`, { headers: tv, data: { done: true } }));
         expect(ticked.data.items.find((row: { id: string }) => row.id === ref).done).toBe(true);
         await page.reload();
         await expect(myDay.getByRole('checkbox', { name: `Reopen “${title}”` })).toHaveAttribute('aria-checked', 'true');
@@ -71,5 +75,6 @@ test.describe('app api: my work and my day', () => {
         const removed = await ok(await page.request.delete(`/api/v1/me/my-day/items/${ref}`, { headers: auth }));
         expect(removed.data.items.map((row: { id: string }) => row.id)).not.toContain(ref);
         await page.request.post('/api/v1/auth/logout', { headers: auth });
+        await page.request.post('/api/v1/auth/logout', { headers: tv });
     });
 });
