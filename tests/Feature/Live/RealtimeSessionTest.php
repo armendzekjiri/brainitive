@@ -13,7 +13,9 @@ use App\Support\Live\RealtimeSession;
 use App\Support\SignOutEverywhere;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Tests\Feature\Pages\InteractsWithPages;
@@ -129,6 +131,41 @@ class RealtimeSessionTest extends TestCase
             ->assertOk()->assertJsonPath("generations.{$this->editor->id}", 1);
         // tokens issued from now on carry the new generation
         $this->assertSame(1, $this->liveToken($this->editor->fresh(), Str::random(40))['gen']);
+    }
+
+    public function test_a_session_that_ended_without_a_logout_counts_as_ended(): void
+    {
+        // never issued here (or forgotten): fail closed
+        $this->assertSame(['f'.str_repeat('0', 31)], RealtimeSession::endedAmong(['f'.str_repeat('0', 31)]));
+
+        // database sessions: the sid lives exactly as long as its session row (signed in, not expired)
+        config(['session.driver' => 'database', 'session.lifetime' => 120]);
+        $sessionId = Str::random(40);
+        $sid = $this->liveToken($this->editor, $sessionId)['sid'];
+        $row = fn (array $values) => DB::table('sessions')->updateOrInsert(['id' => $sessionId], $values + ['payload' => '', 'ip_address' => null, 'user_agent' => null]);
+
+        $this->assertSame([$sid], RealtimeSession::endedAmong([$sid]), 'no row: the session was never saved');
+        $row(['user_id' => $this->editor->id, 'last_activity' => now()->getTimestamp()]);
+        $this->assertSame([], RealtimeSession::endedAmong([$sid]));
+        $row(['user_id' => $this->editor->id, 'last_activity' => now()->subMinutes(121)->getTimestamp()]);
+        $this->assertSame([$sid], RealtimeSession::endedAmong([$sid]), 'expired');
+        $row(['user_id' => $this->viewer->id, 'last_activity' => now()->getTimestamp()]);
+        $this->assertSame([$sid], RealtimeSession::endedAmong([$sid]), 'someone else signed in on it');
+        DB::table('sessions')->where('id', $sessionId)->delete();
+        $this->assertSame([$sid], RealtimeSession::endedAmong([$sid]), 'gone');
+    }
+
+    public function test_a_background_request_that_signs_in_from_remember_me_keeps_its_new_session(): void
+    {
+        config(['session.driver' => 'database']);
+        $this->editor->forceFill(['remember_token' => $token = Str::random(60)])->save();
+        $recaller = $this->editor->id.'|'.$token.'|'.$this->editor->password;
+        $cookie = Auth::guard('web')->getRecallerName();
+
+        $sid = $this->withCredentials()->withCookie($cookie, $recaller)
+            ->postJson(route('live.token'), ['channels' => ["user.{$this->editor->id}"]])->assertOk()->json('token');
+        $this->assertSame([], RealtimeSession::endedAmong([LiveToken::verify($sid)['sid']]), 'the session the token names was saved');
+        $this->assertSame(1, DB::table('sessions')->where('user_id', $this->editor->id)->count());
     }
 
     public function test_the_access_endpoints_validate_sessions(): void

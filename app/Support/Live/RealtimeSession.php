@@ -7,6 +7,7 @@ use App\Support\AppApi\AppSignInGeneration;
 use App\Support\Collab\CollabConfig;
 use Illuminate\Contracts\Session\Session;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
@@ -25,6 +26,12 @@ use Throwable;
  * - Missed pushes: the realtime server asks on connect and in its minute re-checks (`sessions` in
  *   `internal.collab.access` / `internal.collab.live.access`); the answers carry `ended_sessions` and the users'
  *   current `generations`.
+ * - **An allowlist, not only a denylist** (Codex follow-up review): a session can end without a Logout event — it
+ *   expires (`SESSION_LIFETIME` without a saved request), or remember-me rebuilds the login under a new session id.
+ *   So every issued `sid` is remembered as active (cache, the session lifetime, refreshed with each token) with its
+ *   session id, and endedAmong() answers ended for a `sid` that is unknown, signed out, or — with the database session
+ *   driver — whose session row is gone, signed out or expired. Fails closed: a socket whose session no Laravel request
+ *   can use any more is closed (4401) and reconnects only with a new token.
  */
 final class RealtimeSession
 {
@@ -39,6 +46,8 @@ final class RealtimeSession
 
     private const ENDED_PREFIX = 'realtime-session-ended:';
 
+    private const ACTIVE_PREFIX = 'realtime-session-active:';
+
     /**
      * The claims of a web token for `$user`: `sid` (this request's session, when there is one) and `gen`.
      *
@@ -47,9 +56,19 @@ final class RealtimeSession
     public static function claims(User $user): array
     {
         $claims = ['gen' => (int) ($user->app_auth_generation ?? 0)];
-        $id = self::id(self::session());
+        $session = self::session();
+        $id = self::id($session);
+        if ($id === null) {
+            return $claims;
+        }
+        try {
+            Cache::put(self::ACTIVE_PREFIX.$id, ['session' => (string) $session->getId(), 'user' => (int) $user->id], self::lifetime());
+        } catch (Throwable $e) {
+            // no cache: the realtime server refuses the token (unknown session) — closed, never open
+            report($e);
+        }
 
-        return $id === null ? $claims : ['sid' => $id] + $claims;
+        return ['sid' => $id] + $claims;
     }
 
     /** The realtime id of a session: HMAC of its id, 32 hex characters. */
@@ -71,6 +90,7 @@ final class RealtimeSession
             return;
         }
         try {
+            Cache::forget(self::ACTIVE_PREFIX.$id);
             Cache::put(self::ENDED_PREFIX.$id, true, self::ENDED_TTL);
         } catch (Throwable $e) {
             // no cache: the push below still closes the sockets at once
@@ -86,7 +106,8 @@ final class RealtimeSession
     }
 
     /**
-     * Of the asked session ids, those that were signed out.
+     * Of the asked session ids, those no browser can use any more: signed out, never issued (or forgotten), or — with
+     * the database session driver — whose session is gone, signed out or expired.
      *
      * @param  list<mixed>  $ids
      * @return list<string>
@@ -97,9 +118,52 @@ final class RealtimeSession
         if ($ids === []) {
             return [];
         }
-        $found = Cache::many(array_map(fn (string $id) => self::ENDED_PREFIX.$id, $ids));
+        $ended = Cache::many(array_map(fn (string $id) => self::ENDED_PREFIX.$id, $ids));
+        $active = Cache::many(array_map(fn (string $id) => self::ACTIVE_PREFIX.$id, $ids));
+        $sessions = [];
+        foreach ($ids as $id) {
+            $entry = $active[self::ACTIVE_PREFIX.$id] ?? null;
+            if (($ended[self::ENDED_PREFIX.$id] ?? null) !== true && is_array($entry) && is_string($entry['session'] ?? null)) {
+                $sessions[$id] = $entry;
+            }
+        }
+        $alive = self::aliveSessions($sessions);
 
-        return array_values(array_filter($ids, fn (string $id) => ($found[self::ENDED_PREFIX.$id] ?? null) === true));
+        return array_values(array_filter($ids, fn (string $id) => ! isset($alive[$id])));
+    }
+
+    /**
+     * Which of the candidates' Laravel sessions still exist, signed in as their user and not expired (database driver;
+     * other drivers can't be listed — there the active marker's lifetime is the check).
+     *
+     * @param  array<string, array{session: string, user?: int}>  $candidates  sid → its session
+     * @return array<string, true>
+     */
+    private static function aliveSessions(array $candidates): array
+    {
+        if ($candidates === [] || config('session.driver') !== 'database') {
+            return array_map(fn () => true, $candidates);
+        }
+        $rows = DB::connection(config('session.connection'))
+            ->table(config('session.table', 'sessions'))
+            ->whereIn('id', array_values(array_map(fn (array $entry) => $entry['session'], $candidates)))
+            ->where('last_activity', '>=', now()->subMinutes((int) config('session.lifetime', 120))->getTimestamp())
+            ->pluck('user_id', 'id');
+        $alive = [];
+        foreach ($candidates as $sid => $entry) {
+            $owner = $rows[$entry['session']] ?? null;
+            if ($owner !== null && (int) $owner === (int) ($entry['user'] ?? 0)) {
+                $alive[$sid] = true;
+            }
+        }
+
+        return $alive;
+    }
+
+    /** Seconds an issued `sid` stays known without a new token: the session lifetime (≥ 10 minutes). */
+    private static function lifetime(): int
+    {
+        return max(600, (int) config('session.lifetime', 120) * 60);
     }
 
     /**

@@ -44,6 +44,7 @@ before(async () => {
             });
         }
         if (laravel.stale.has(name)) return json(409, { message: 'Stale document.' });
+        if (request.method === 'GET' && laravel.loadDelayMs) await new Promise((r) => setTimeout(r, laravel.loadDelayMs));
         if (request.method === 'PUT' && laravel.tooLarge.has(name)) return json(413, { message: 'Document too large.' });
         if (request.method === 'GET') return json(200, { state: laravel.states.get(name) ?? null });
         laravel.states.set(name, JSON.parse(body).state);
@@ -413,4 +414,18 @@ test('session ended (push missed): refused on connect, closed by the re-check; a
     [open1, other, fresh, renewed].forEach((c) => c.close());
     laravel.endedSessions.clear();
     laravel.generations.clear();
+});
+
+test('a sign-out pushed while the document was still loading closes the connection once it exists', async () => {
+    const SID = '9'.repeat(32);
+    const SLOW = 'page.123e4567-e89b-42d3-a456-426614174555.0';
+    laravel.loadDelayMs = 400;
+    laravel.accessBodies = [];
+    const client = connect(SLOW, webToken(SLOW, 1, SID));
+    await until(() => laravel.accessBodies.some((b) => b.sessions?.includes(SID))); // authenticated, now loading
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(collab.endSessions({ sessions: [SID], users: [] }), 0, 'no connection to close yet');
+    await until(() => client.events.socketCodes.includes(4401));
+    laravel.loadDelayMs = 0;
+    client.close();
 });

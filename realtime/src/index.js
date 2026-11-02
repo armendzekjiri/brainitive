@@ -40,6 +40,7 @@ const maxAccessFailures = positive(env.COLLAB_ACCESS_MAX_FAILURES, 2);
 // Codex realtime review 4: document sockets per user, messages per socket, message size (DEFAULT_COLLAB_LIMITS)
 const limits = Object.fromEntries(Object.entries({
     maxSocketsPerUser: positive(env.COLLAB_MAX_SOCKETS_PER_USER, null),
+    maxDocumentsPerUser: positive(env.COLLAB_MAX_DOCUMENTS_PER_USER, null),
     messageBurst: positive(env.COLLAB_MESSAGE_BURST, null),
     messagesPerSecond: positive(env.COLLAB_MESSAGES_PER_SECOND, null),
     maxMessageBytes: positive(env.COLLAB_MAX_MESSAGE_BYTES, null),

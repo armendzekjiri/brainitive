@@ -35,11 +35,14 @@ const TOO_MANY_SOCKETS = { code: 4429, reason: 'Too many connections' };
 /**
  * Limits of document sockets (Codex realtime review 4), like the live channels' (live/hub.js DEFAULT_LIMITS) but
  * sized for Yjs: every keystroke is an update plus an awareness message, a drag on a whiteboard many more.
- * Environment: COLLAB_MAX_SOCKETS_PER_USER, COLLAB_MESSAGE_BURST, COLLAB_MESSAGES_PER_SECOND, COLLAB_MAX_MESSAGE_BYTES.
+ * Environment: COLLAB_MAX_SOCKETS_PER_USER, COLLAB_MAX_DOCUMENTS_PER_USER, COLLAB_MESSAGE_BURST,
+ * COLLAB_MESSAGES_PER_SECOND, COLLAB_MAX_MESSAGE_BYTES.
  */
 export const DEFAULT_COLLAB_LIMITS = {
     /** document sockets one user may hold at once (each open doc / whiteboard / description is one) */
     maxSocketsPerUser: 30,
+    /** open documents of one user over all sockets — one socket can carry several (Hocuspocus multiplexes) */
+    maxDocumentsPerUser: 30,
     /** messages per socket: this many at once, refilled at messagesPerSecond — beyond: closed (4429) */
     messageBurst: 300,
     messagesPerSecond: 100,
@@ -67,6 +70,24 @@ function varUint(bytes, at) {
  * The Yjs update a client message carries (Sync / SyncReply → SyncStep2 or Update), else null. A Hocuspocus message is
  * `varString document · varUint type · …`; a sync message continues `varUint syncType · varUint8Array update`.
  */
+/**
+ * An upper bound of how much `update` can grow a document's encoded state: its own bytes, plus for every struct it
+ * inserts (which may split an existing item) and every range it deletes (which may split up to two items and adds to the
+ * delete set) the size of the extra item headers. Deleting every other character of a long text grows the state ~6× the
+ * update's size — the reason a plain `update.length` budget isn't enough (Codex follow-up review). Measured worst cases
+ * stay below half of this bound. Cost: decoding the update only, never the document. null: not a valid update.
+ */
+export function growthBound(update) {
+    try {
+        const { structs, ds } = Y.decodeUpdate(update);
+        let ranges = 0;
+        ds.clients.forEach((items) => { ranges += items.length; });
+        return update.length + 32 * structs.length + 64 * ranges;
+    } catch {
+        return null;
+    }
+}
+
 export function updateOf(message) {
     const bytes = message instanceof Uint8Array ? message : new Uint8Array(message);
     let read = varUint(bytes, 0); // document name: length + UTF-8
@@ -120,25 +141,22 @@ export function createCollabServer({
         const value = result?.max_state_bytes;
         if (Number.isInteger(value) && value >= MIN_STATE_BYTES) stateLimit = value;
     };
-    /** document → its encoded size as far as known (grows by every accepted update; measured when it matters) */
+    /**
+     * document → an upper bound of its encoded size: measured on load and at every store (which encodes the state
+     * anyway), plus growthBound() of every update accepted since. Never re-encoded per message — near the limit that
+     * cost let one editor stall the process (Codex follow-up review); an update that might not fit is refused, and the
+     * next store measures the real size again.
+     */
     const sizes = new WeakMap();
 
-    /** Whether the document stays within stateLimit with this update applied. */
+    /** Whether the document surely stays within stateLimit with this update applied (then counted). */
     function fits(document, update) {
-        const known = sizes.get(document) ?? Y.encodeStateAsUpdate(document).length;
-        if (known + update.length <= stateLimit) {
-            sizes.set(document, known + update.length);
-            return true;
-        }
-        // near the limit: what the document would really be (an update repeating known content adds nothing)
-        let projected;
-        try {
-            projected = Y.mergeUpdates([Y.encodeStateAsUpdate(document), update]).length;
-        } catch {
-            return true; // not a valid update: Yjs ignores it anyway
-        }
-        if (projected > stateLimit) return false;
-        sizes.set(document, projected);
+        const bound = growthBound(update);
+        if (bound === null) return true; // not a valid update: Yjs ignores it
+        if (!sizes.has(document)) sizes.set(document, Y.encodeStateAsUpdate(document).length); // once per document
+        const next = sizes.get(document) + bound;
+        if (next > stateLimit) return false;
+        sizes.set(document, next);
         return true;
     }
     const keys = deriveKeys(secret);
@@ -250,6 +268,13 @@ export function createCollabServer({
                 userSockets.set(payload.sub, held);
                 socketUsers.set(socket, (socketUsers.get(socket) ?? new Set()).add(payload.sub));
             }
+            // and at most maxDocumentsPerUser open documents, however many share one socket (Codex follow-up review)
+            let documents = 0;
+            server.hocuspocus.documents.forEach((open) => open.getConnections().forEach((c) => { if (c.context?.user?.id === payload.sub) documents++; }));
+            if (documents >= L.maxDocumentsPerUser) {
+                warn(`[realtime] refused ${fields({ document: documentName, user: payload.sub, reason: 'too-many-connections', documents })}`);
+                throw Object.assign(new Error('Not authorized: too-many-connections'), { reason: 'too-many-connections' });
+            }
             const device = payload.dev ?? null;
             // a signed-out app device: 4410 (not 4401), so the app drops its tokens instead of retrying
             const refuseDevice = () => {
@@ -341,6 +366,16 @@ export function createCollabServer({
             }
         },
 
+        // between onAuthenticate and here the document was loading: a sign-out / device push in that gap found no
+        // connection to close (Codex follow-up review) — check again now that it exists
+        async connected({ connection, context }) {
+            if (Number.isInteger(context?.device)) {
+                if (revokedDevices.has(context.device)) closeRevoked(connection);
+            } else if (Number.isInteger(context?.user?.id) && isSignedOut(context.user.id, context.session ?? null, context.generation ?? null)) {
+                closeSignedOut(connection);
+            }
+        },
+
         async onLoadDocument({ document, documentName }) {
             let state;
             try {
@@ -350,6 +385,7 @@ export function createCollabServer({
                 throw error;
             }
             if (state) Y.applyUpdate(document, state);
+            sizes.set(document, state ? state.length : 0); // the stored state is the encoded document
         },
 
         async onStoreDocument({ document, documentName }) {

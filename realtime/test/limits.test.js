@@ -7,7 +7,8 @@ import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import WebSocket from 'ws';
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
-import { DEFAULT_MAX_STATE_BYTES, createCollabServer, updateOf } from '../src/server.js';
+import * as Y from 'yjs';
+import { DEFAULT_MAX_STATE_BYTES, createCollabServer, growthBound, updateOf } from '../src/server.js';
 import { deriveKeys, signToken } from '../src/token.js';
 
 const SECRET = 'limits-test-secret';
@@ -112,6 +113,30 @@ test('one user holds at most COLLAB_MAX_SOCKETS_PER_USER document sockets; a ref
     [second, other, third, fourth].forEach((c) => c.close());
 });
 
+test('one socket carrying many documents counts each of them (COLLAB_MAX_DOCUMENTS_PER_USER)', async () => {
+    const url = await start({ limits: { maxDocumentsPerUser: 2 } });
+    const shared = new HocuspocusProviderWebsocket({ url, WebSocketPolyfill: WebSocket, maxAttempts: 1 });
+    const open = (n) => {
+        const name = `page.123e4567-e89b-42d3-a456-42661417400${n}.0`;
+        const provider = new HocuspocusProvider({ name, token: token(1, name), websocketProvider: shared });
+        provider.attach();
+        const state = { synced: false, failed: null };
+        provider.on('synced', () => { state.synced = true; });
+        provider.on('authenticationFailed', ({ reason }) => { state.failed = reason; });
+        return { provider, state };
+    };
+    const first = open(1);
+    await until(() => first.state.synced);
+    const second = open(2);
+    await until(() => second.state.synced);
+    const third = open(3);
+    await until(() => third.state.failed !== null);
+    assert.equal(third.state.failed, 'too-many-connections');
+    assert.equal(third.state.synced, false);
+    [first, second, third].forEach(({ provider }) => provider.destroy());
+    shared.destroy();
+});
+
 test('a message flood on one socket closes it with 4429', async () => {
     const url = await start({ limits: { messageBurst: 5, messagesPerSecond: 1 } });
     const socket = new WebSocket(url);
@@ -170,6 +195,45 @@ test('an update that would grow the document past COLLAB_MAX_STATE_BYTES is refu
     await oversized(url);
     await new Promise((r) => setTimeout(r, 300));
     assert.ok(app.stored.every((state) => Buffer.from(state, 'base64').length <= 2048), 'nothing over the limit was stored');
+});
+
+test('growthBound covers what deletions and splitting inserts really add (they grow the state far beyond their size)', () => {
+    const cases = [
+        (t, n) => { for (let i = n - 2; i >= 0; i -= 2) t.delete(i, 1); },
+        (t, n) => { for (let i = n - 1; i > 0; i -= 2) t.insert(i, 'y'); },
+        (t, n) => { for (let i = 0; i < n; i += 2) t.format(i, 1, { bold: true }); },
+    ];
+    for (const change of cases) {
+        const n = 20_000;
+        const doc = new Y.Doc();
+        doc.getText('t').insert(0, 'x'.repeat(n));
+        const before = Y.encodeStateAsUpdate(doc).length;
+        const remote = new Y.Doc();
+        Y.applyUpdate(remote, Y.encodeStateAsUpdate(doc));
+        let update;
+        remote.on('update', (u) => { update = u; });
+        remote.transact(() => change(remote.getText('t'), n));
+        Y.applyUpdate(doc, update);
+        const growth = Y.encodeStateAsUpdate(doc).length - before;
+        assert.ok(growth > update.length, 'the state grows by more than the update');
+        assert.ok(growth <= growthBound(update), `growth ${growth} ≤ bound ${growthBound(update)}`);
+    }
+    assert.equal(growthBound(new Uint8Array([1, 2, 3])), null);
+});
+
+test('deleting every other character (small update, large growth) is refused before peers see it', async () => {
+    const url = await start({ maxStateBytes: 64 * 1024 });
+    const a = connect(url, 1);
+    const b = connect(url, 2);
+    await until(() => a.events.synced && b.events.synced);
+    a.doc.getText('t').insert(0, 'x'.repeat(20_000));
+    await until(() => b.doc.getText('t').length === 20_000);
+
+    a.doc.transact(() => { for (let i = 19_998; i >= 0; i -= 2) a.doc.getText('t').delete(i, 1); });
+    await until(() => a.events.closed.includes('Document too large'));
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(b.doc.getText('t').length, 20_000, 'the peer never got it');
+    [a, b].forEach((client) => client.close());
 });
 
 test('the default state limit is the app’s (config/collab.php COLLAB_MAX_STATE_BYTES)', () => {
