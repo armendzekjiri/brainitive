@@ -37,6 +37,22 @@ func (r *renewing) Renew(context.Context) (string, error) {
 	return r.token, nil
 }
 
+// Codex CLI/extension review 6: no bearer token over plaintext http to a remote host.
+func TestPlainHTTPRemoteServerIsRefused(t *testing.T) {
+	c := New("http://example.test", StaticToken("secret"), "test")
+	c.HTTP = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		t.Errorf("no request may be sent, got %s %s", r.Method, r.URL)
+		return nil, errors.New("blocked")
+	})}
+	if _, err := c.Call(context.Background(), "list-workspaces", nil); err == nil || !strings.Contains(err.Error(), "https") {
+		t.Fatalf("Call over http = %v, want an https error", err)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
 func TestCallStructuredErrorsAndRenew(t *testing.T) {
 	var calls []map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

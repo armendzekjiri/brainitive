@@ -72,6 +72,46 @@ func TestLoadRejectsInvalidJSON(t *testing.T) {
 	}
 }
 
+// Codex CLI/extension review 6: tokens never travel over plaintext HTTP to a remote host.
+func TestCheckServerRequiresHTTPSExceptLoopback(t *testing.T) {
+	allowed := []string{
+		"https://brainitive.example.com",
+		"https://www.brainitive.app",
+		"http://localhost:8000",
+		"http://127.0.0.1:8000",
+		"http://[::1]:8000",
+		"http://localhost",
+	}
+	for _, s := range allowed {
+		if err := CheckServer(s); err != nil {
+			t.Errorf("CheckServer(%q) = %v, want ok", s, err)
+		}
+	}
+	refused := []string{
+		"http://example.test",
+		"http://brainitive.example.com:8000",
+		"http://localhost.evil.test",
+		"http://127.0.0.1.evil.test",
+		"http://10.0.0.5",
+		"https://user:pass@brainitive.example.com",
+		"ftp://brainitive.example.com",
+		"https://",
+		"not a url",
+	}
+	for _, s := range refused {
+		if err := CheckServer(s); err == nil {
+			t.Errorf("CheckServer(%q) = nil, want an error", s)
+		}
+	}
+	// A deceptive "localhost…" host must not get the http default.
+	if got := NormalizeServer("localhost.evil.test"); got != "https://localhost.evil.test" {
+		t.Errorf("NormalizeServer(localhost.evil.test) = %q", got)
+	}
+	if got := NormalizeServer("127.0.0.1.evil.test:8000"); got != "https://127.0.0.1.evil.test:8000" {
+		t.Errorf("NormalizeServer(127.0.0.1.evil.test:8000) = %q", got)
+	}
+}
+
 func TestLegacyCloudServerMigratesOnlyWithoutSession(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	t.Setenv("BRAINITIVE_CONFIG", path)

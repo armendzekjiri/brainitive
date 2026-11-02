@@ -163,6 +163,28 @@ func TestDiscoverRejectsForeignEndpoints(t *testing.T) {
 	}
 }
 
+// roundTripFunc lets a test see (or forbid) every request a client makes.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// Codex CLI/extension review 6: a remote plain-http server is refused before any request.
+func TestLoginAndRefreshRefusePlainHTTP(t *testing.T) {
+	old := HTTPClient
+	defer func() { HTTPClient = old }()
+	HTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		t.Errorf("no request may be sent, got %s %s", r.Method, r.URL)
+		return nil, http.ErrUseLastResponse
+	})}
+	if _, err := Login(context.Background(), "http://example.test", func(string) {}); err == nil || !strings.Contains(err.Error(), "https") {
+		t.Fatalf("Login over http = %v, want an https error", err)
+	}
+	s := &config.Session{TokenEndpoint: "http://example.test/oauth/token", ClientID: "c", RefreshToken: "r"}
+	if err := Refresh(context.Background(), s); err == nil || !strings.Contains(err.Error(), "https") {
+		t.Fatalf("Refresh over http = %v, want an https error", err)
+	}
+}
+
 func TestDiscoverRejectsNonBrainitive(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("<html>")) }))
 	defer srv.Close()

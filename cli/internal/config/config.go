@@ -5,9 +5,11 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 )
@@ -123,7 +125,8 @@ func NormalizeServer(input string) string {
 	}
 	lower := strings.ToLower(s)
 	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
-		if strings.HasPrefix(lower, "localhost") || strings.HasPrefix(lower, "127.0.0.1") || strings.HasPrefix(lower, "[::1]") {
+		// Only an exact loopback host gets the http default ("localhost.evil.test" is a remote host).
+		if loopbackInput.MatchString(lower) {
 			s = "http://" + s
 		} else {
 			s = "https://" + s
@@ -138,4 +141,39 @@ func NormalizeServer(input string) string {
 		return DefaultServer
 	}
 	return strings.ToLower(u.Scheme) + "://" + u.Host
+}
+
+var loopbackInput = regexp.MustCompile(`^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(/|$)`)
+
+// IsLoopback reports whether host (no port) is exactly a loopback development address.
+func IsLoopback(host string) bool {
+	switch strings.ToLower(host) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return false
+}
+
+// CheckServer refuses a server origin the CLI must not send credentials to: anything but https,
+// except plain http on an exact loopback address (localhost, 127.0.0.1, [::1]) for local
+// development; credentials in the URL; a missing host. Bearer and refresh tokens would otherwise
+// cross the network unencrypted (Codex CLI/extension review 6). There is no override flag.
+func CheckServer(origin string) error {
+	u, err := url.Parse(origin)
+	if err != nil || u.Host == "" || u.Hostname() == "" {
+		return fmt.Errorf("%q is not a valid server address", origin)
+	}
+	if u.User != nil {
+		return fmt.Errorf("%s: a server address must not contain a user name or password", u.Redacted())
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return nil
+	case "http":
+		if IsLoopback(u.Hostname()) {
+			return nil
+		}
+		return fmt.Errorf("refusing plain http for %s: use https (plain http only works for localhost, 127.0.0.1 and [::1])", origin)
+	}
+	return fmt.Errorf("%q is not an http(s) server address", origin)
 }
