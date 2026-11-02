@@ -533,6 +533,9 @@ Pages work like Confluence. Keep these rules when touching pages:
   with Vite / @fontsource, copy assets into `public/build`), no CDN `<script>` / `<link>`; iframes or scripts
   from other services in content render inside `ExternalEmbedGate` (click to load). `LegalPagesTest` fails on
   known CDN hosts.
+- **Every `<script>` in a Blade view carries the CSP nonce** (`nonce="{{ Vite::cspNonce() }}"`, Ziggy:
+  `@routes(nonce: Vite::cspNonce())`); no inline `on…=` handlers. The script CSP is report-only today
+  (`SecurityHeaders`), but a script without the nonce is what would break once it is enforced.
 - **Every new processor / integration / outbound host, cookie or storage key → update
   `docs/legal/data-inventory.md`, the sub-processor list (`Pages/Legal/Subprocessors.tsx` /
   `LegalInfo::providers()`) and the privacy policy (`Pages/Privacy.tsx`, cookies / storage in
