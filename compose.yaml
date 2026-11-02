@@ -31,9 +31,12 @@ services:
     environment:
       <<: *environment
       CONTAINER_ROLE: app
+    # Only this machine can connect by default (BIND_ADDRESS=127.0.0.1): the local quick start, or your
+    # own HTTPS reverse proxy on this host. Brainitive's own HTTPS (SERVER_NAME=<domain>, ports 80/443)
+    # needs BIND_ADDRESS=0.0.0.0. Never publish plain HTTP to a network: passwords travel unencrypted.
     ports:
-      - "${HTTP_PORT:-8080}:80"
-      - "${HTTPS_PORT:-8443}:443"
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:80"
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTPS_PORT:-8443}:443"
     volumes:
       - storage:/app/storage
       - caddy_data:/data
