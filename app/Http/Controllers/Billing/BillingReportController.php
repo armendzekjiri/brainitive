@@ -123,6 +123,8 @@ class BillingReportController extends Controller
             'rows' => $computation?->rows ?? ($report->snapshot['entries'] ?? []),
             'excluded' => $computation?->excludedRows ?? [],
             'entryIds' => $computation?->entryIds ?? [],
+            // sent back on finalize: refused when anything of the document changed since (Codex web review V)
+            'revision' => $computation?->revision(),
             'warnings' => $computation?->warnings,
             'projects' => $projects,
             'settings' => [
@@ -192,10 +194,11 @@ class BillingReportController extends Controller
         $data = $request->validate([
             'entry_ids' => ['present', 'array', 'max:10000'],
             'entry_ids.*' => ['integer'],
+            'revision' => ['required', 'string', 'size:64'],
         ]);
         $wasFinal = $report->isFinal();
 
-        $report = $this->finalizer->finalize($report, $data['entry_ids'], $request->user());
+        $report = $this->finalizer->finalize($report, $data['entry_ids'], $request->user(), $data['revision']);
 
         return redirect()->route('billing.reports.show', [$workspace, $report->id])
             ->with('success', $wasFinal ? 'This report was already finalized.' : ($report->number ? "Finalized as invoice {$report->number}." : 'Report finalized. Its time entries are locked.'));

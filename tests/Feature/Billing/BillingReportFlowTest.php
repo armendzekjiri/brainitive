@@ -4,6 +4,7 @@ namespace Tests\Feature\Billing;
 
 use App\Models\BillingFixedCharge;
 use App\Models\BillingReport;
+use App\Models\BillingSetting;
 use App\Models\Board;
 use App\Models\Client;
 use App\Models\Project;
@@ -40,9 +41,18 @@ class BillingReportFlowTest extends TestCase
         return app(ReportBuilder::class)->compute($report->fresh())->entryIds;
     }
 
-    private function finalize(BillingReport $report, ?array $ids = null)
+    private function finalize(BillingReport $report, ?array $ids = null, ?string $revision = null)
     {
-        return $this->actingAs($this->admin)->post($this->url('billing.reports.finalize', $report), ['entry_ids' => $ids ?? $this->reviewedIds($report)]);
+        return $this->actingAs($this->admin)->post($this->url('billing.reports.finalize', $report), [
+            'entry_ids' => $ids ?? $this->reviewedIds($report),
+            'revision' => $revision ?? $this->revision($report),
+        ]);
+    }
+
+    /** What the preview page hands the browser to send back on finalize (Codex web review V). */
+    private function revision(BillingReport $report): string
+    {
+        return app(ReportBuilder::class)->compute($report->fresh())->revision();
     }
 
     /** @return list<int> ids of October entries in the client's projects */
@@ -224,6 +234,38 @@ class BillingReportFlowTest extends TestCase
         $this->assertSame(0, TimeEntry::whereNotNull('billing_report_id')->count());
 
         $this->finalize($report)->assertSessionHasNoErrors(); // after reviewing again
+        $this->assertSame('finalized', $report->fresh()->status);
+    }
+
+    /**
+     * Codex web review V: the reviewed preview's revision covers every value of the document — a changed entry
+     * (same ids), rate or option since the review refuses the finalize; nothing is locked and no number is used.
+     */
+    public function test_finalize_is_refused_when_values_changed_since_the_preview(): void
+    {
+        $this->settings(['invoice_mode' => true, 'next_number' => 7]);
+
+        $report = $this->draft();
+        [$ids, $revision] = [$this->reviewedIds($report), $this->revision($report)];
+        $this->entries['web1_ada']->forceFill(['minutes' => 200])->saveQuietly(); // same ids, other minutes
+        $this->finalize($report, $ids, $revision)->assertSessionHasErrors('report');
+
+        [$ids, $revision] = [$this->reviewedIds($report), $this->revision($report)];
+        $this->programming->update(['rate_cents' => 99900]); // a rate
+        $this->finalize($report, $ids, $revision)->assertSessionHasErrors('report');
+
+        [$ids, $revision] = [$this->reviewedIds($report), $this->revision($report)];
+        $report->update(['options' => ['show_notes' => true] + $report->options]); // an option
+        $this->finalize($report, $ids, $revision)->assertSessionHasErrors('report');
+
+        $this->actingAs($this->admin)->post($this->url('billing.reports.finalize', $report), ['entry_ids' => $this->reviewedIds($report)])
+            ->assertSessionHasErrors('revision'); // the page always sends it
+
+        $this->assertSame('draft', $report->fresh()->status);
+        $this->assertSame(0, TimeEntry::whereNotNull('billing_report_id')->count());
+        $this->assertSame(7, (int) BillingSetting::where('workspace_id', $this->workspace->id)->value('next_number'));
+
+        $this->finalize($report)->assertSessionHasNoErrors(); // reviewed again: fine
         $this->assertSame('finalized', $report->fresh()->status);
     }
 
