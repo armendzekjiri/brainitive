@@ -2239,7 +2239,7 @@ Never migrate devdb just to export the spec.
   connected devices (`users.*.devices`, also users without subscriptions) and `LiveInternalController` answers
   `revoked_devices` (revoked, deleted or another user's). Both fields optional: old realtime ↔ new Laravel stay compatible.
   Deploys that change `realtime/` need the realtime service restarted (until then the old server ignores `dev` and the push 404s,
-  harmlessly). A signed-out **web** tab still keeps its socket until it reconnects (per-user check; no session id in web tokens).
+  harmlessly). Since the Codex realtime review (below) a signed-out **web** session loses its sockets too (4401 "Signed out").
 - e2e: the API needs `X-E2E-Live: 1` on the token / info calls (`LiveConfig::enabled` opt-in); the spec opens a plain
   `WebSocket` in the page (Node 20 has none built in).
 
@@ -2264,3 +2264,37 @@ Never migrate devdb just to export the spec.
   else publishing the draft would bring the old title back; "review required" → the title waits in the draft (web rename).
 - `get-page` `markdown` is still the **published** text (readers and today's agents unchanged); editors also get
   `draft_markdown` when there are unpublished changes. No MCP e2e exists — PHPUnit `tests/Feature/Mcp/UpdatePageToolTest.php`.
+
+### Codex realtime review v1.49.0 (2026-11-02, `fix/v1.49-realtime`)
+Findings and tests: `docs/ai/tasks/release-v1.49.0.md` → Codex realtime review. Decisions and traps:
+- **Web realtime tokens are bound to the browser session** (`RealtimeSession`): `sid` = first 32 hex of
+  `HMAC(live token key, 'realtime-session|' . session id)` — the token routes run `ReadOnlySession`, so nothing may be
+  *written* to the session there; an HMAC of the id needs no write and never exposes the id. It changes only on
+  `regenerate()` (sign-in) / `invalidate()`. Ended sessions are found by the **Logout / CurrentDeviceLogout event**
+  (LiveServiceProvider) — it fires before `invalidate()`, so `request()->session()->getId()` is still the old id. A
+  remember-me sign-in after an expired session is a new session id → new `sid`; the old sockets were never "signed out".
+- **`gen` reuses `users.app_auth_generation`** (bumped only by `SignOutEverywhere`) instead of a new column: one bump ends
+  app approvals *and* all web realtime sockets. The session a password change keeps is closed too (4401) and reconnects at
+  once with a new token — by design ("sign out everywhere closes all sockets").
+- **4401 "Signed out" vs 4410:** 4410 is only for App API devices (drop tokens, show sign-in); a web socket of a
+  signed-out session gets 4401 with reason `Signed out`. Browsers just reconnect: the token request then fails (401 / 419)
+  because the session is gone. Tokens without `sid` / `gen` (App API, or issued before the deploy) skip the session check.
+- **The live hub asks Brainitive on every `auth`** (not only every minute): `ready` waits for the answer (batched per
+  `authBatchMs` = 10 ms, ≤ 100 entries per request). Node tests: the fake access endpoint allows everything for users
+  without an `allowed` entry; set restrictions *after* `joined()` when a test needs a socket that later loses access.
+- **Collab re-checks fail closed:** `COLLAB_ACCESS_MAX_FAILURES` (2) unanswered rounds in a row close that user's
+  document connection with the CLOSE reason `Access could not be checked`, which `useLiveDocument` / the whiteboard treat
+  like `Forbidden` (fetch a session, reattach). Re-checks go in batches (≤ 200 users, ≤ 500 devices + sessions):
+  Laravel validates `max:500`, so one big document used to get a 422 forever.
+- **Document size is enforced in the realtime server's `beforeHandleMessage`** (before Yjs applies the update and before
+  any peer gets it): a running size estimate per document, measured exactly (`Y.mergeUpdates`) only near the limit. The
+  limit is Laravel's `collab.max_state_bytes` (the access answer's `max_state_bytes`; env `COLLAB_MAX_STATE_BYTES` with
+  the same 16 MiB default — a Node test compares the defaults). It is the **Yjs state** limit, not
+  `ContentLimits::PAGE_BODY` (characters of the draft HTML, 10 M): the HTML of a doc that fits the state limit can still
+  be refused by the draft save, and the other way round.
+- **Collab rate limit runs before Hocuspocus:** `socket.prependListener('message')` + a `flooded` set checked in
+  `beforeHandleMessage` — ws calls every listener for a message, so the limiter can't stop Hocuspocus's own listener,
+  only make the hook reject what follows. Defaults (`DEFAULT_COLLAB_LIMITS`): 30 sockets / user, 300 burst, 100 msg/s.
+- **Log lines with client values** go through `realtime/src/log.js` `fields()`: escaped, truncated, `key="value"`.
+- **Deploy:** restart `brainitive-realtime` after the deploy (old server: the session push 404s — reported, harmless —
+  and old tokens without `sid` keep working until they expire). New realtime env vars are optional (defaults above).
