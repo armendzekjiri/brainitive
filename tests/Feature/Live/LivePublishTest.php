@@ -75,6 +75,48 @@ class LivePublishTest extends TestCase
         Http::assertSentCount(1);
     }
 
+    public function test_a_revoked_app_device_is_pushed_after_commit_with_the_publish_key(): void
+    {
+        Http::fake(['127.0.0.1:6299/*' => Http::response(['closed' => 1], 202)]);
+
+        DB::transaction(function () {
+            Live::deviceRevoked(41);
+            Http::assertNothingSent();
+        });
+        Http::assertSent(fn (Request $request) => $request->url() === 'http://127.0.0.1:6299/internal/live/devices/revoked'
+            && $request->header('Authorization')[0] === 'Bearer '.LiveConfig::publishKey()
+            && json_decode($request->body(), true) === ['devices' => [41]]);
+
+        try {
+            DB::transaction(function () {
+                Live::deviceRevoked(42);
+                throw new \RuntimeException('rolled back');
+            });
+        } catch (\RuntimeException) {
+        }
+        Http::assertSentCount(1);
+
+        // live off: nothing to tell (the realtime server re-checks devices anyway)
+        config(['live.publish_url' => null, 'live.url' => 'wss://brainitive.test/collab?live=1']);
+        Live::deviceRevoked(43);
+        Http::assertSentCount(1);
+    }
+
+    public function test_a_realtime_server_without_the_device_push_does_not_pause_events(): void
+    {
+        // not restarted after the deploy: the new path is unknown there
+        Http::fake([
+            '127.0.0.1:6299/internal/live/devices/revoked' => Http::response(['message' => 'Not found.'], 404),
+            '127.0.0.1:6299/*' => Http::response(['delivered' => 1], 202),
+        ]);
+
+        Live::deviceRevoked(44);
+        Live::publish('user.1', 'notifications.changed', ['unread_count' => 0]);
+
+        Http::assertSentCount(2);
+        $this->assertNull(Cache::get('live:publish:paused'));
+    }
+
     public function test_a_dead_realtime_server_never_breaks_the_caller_and_pauses_publishing(): void
     {
         // nothing listens there: connection refused

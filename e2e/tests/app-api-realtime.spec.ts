@@ -7,7 +7,8 @@ import { liveServerAvailable } from '../helpers/live';
 /*
  * App API v1 realtime (v1.49.0, BRAI-426), as the desktop app's native notifications use it: connection info and a
  * channel token from the App API (only channels the user may open — someone else's user channel is denied), a WebSocket
- * to the realtime server global-setup started, and a live event when the inbox changes through the API.
+ * to the realtime server global-setup started, and a live event when the inbox changes through the API. Signing the
+ * device out closes its socket with 4410 ("Device signed out", fix/live-revoked-devices).
  */
 
 type Message = { type: string; channel?: string; event?: string; payload?: Record<string, unknown>; code?: string };
@@ -15,9 +16,11 @@ type Message = { type: string; channel?: string; event?: string; payload?: Recor
 /** Open a socket in the page (a plain WebSocket, as a native client would), auth + subscribe, collect messages. */
 async function connect(page: Page, url: string, token: string, channel: string): Promise<void> {
     await page.evaluate(([u, t, c]) => new Promise<void>((resolve, reject) => {
-        const w = window as unknown as { __appLive: Message[] };
+        const w = window as unknown as { __appLive: Message[]; __appLiveClosed: { code: number; reason: string } | null };
         w.__appLive = [];
+        w.__appLiveClosed = null;
         const socket = new WebSocket(u);
+        socket.onclose = (event) => { w.__appLiveClosed = { code: event.code, reason: event.reason }; };
         socket.onopen = () => socket.send(JSON.stringify({ type: 'auth', token: t }));
         socket.onerror = () => reject(new Error('socket error'));
         socket.onmessage = (message) => {
@@ -30,6 +33,7 @@ async function connect(page: Page, url: string, token: string, channel: string):
 }
 
 const messages = (page: Page) => page.evaluate(() => (window as unknown as { __appLive: Message[] }).__appLive);
+const closed = (page: Page) => page.evaluate(() => (window as unknown as { __appLiveClosed: { code: number; reason: string } | null }).__appLiveClosed);
 
 test.describe('app api: realtime', () => {
     test.skip(REMOTE, 'the device seed is an e2e-only route and the realtime server is local');
@@ -56,6 +60,9 @@ test.describe('app api: realtime', () => {
         await expect.poll(async () => (await messages(page)).find((m) => m.type === 'event' && m.event === 'notifications.changed'), { timeout: 10_000 })
             .toMatchObject({ channel: `user.${me}`, payload: { unread_count: 0 } });
 
+        // signing the device out closes its open socket at once (pushed by Brainitive, else the minute re-check)
+        expect(await closed(page)).toBeNull();
         await page.request.post('/api/v1/auth/logout', { headers: auth });
+        await expect.poll(() => closed(page), { timeout: 10_000 }).toEqual({ code: 4410, reason: 'Device signed out' });
     });
 });

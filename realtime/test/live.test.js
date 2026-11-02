@@ -14,7 +14,7 @@ const keys = deriveLiveKeys(SECRET);
 const internal = deriveKeys(SECRET).internal;
 
 /** Brainitive's internal access endpoint, in memory: user id → channels they may still use. */
-const laravel = { allowed: new Map(), calls: [], fail: false };
+const laravel = { allowed: new Map(), calls: [], fail: false, revokedDevices: new Set() };
 let api;
 let collab;
 let live;
@@ -27,8 +27,10 @@ before(async () => {
         laravel.calls.push({ url: request.url, auth: request.headers.authorization, body: JSON.parse(body || '{}') });
         const failing = laravel.fail || JSON.parse(body || '{}').users?.some(({ id }) => laravel.failFor?.has(id));
         if (request.headers.authorization !== `Bearer ${internal}` || failing) return response.writeHead(failing ? 500 : 401).end();
-        const users = Object.fromEntries(JSON.parse(body).users.map(({ id, channels }) => [String(id), channels.filter((c) => laravel.allowed.get(id)?.has(c))]));
-        response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ users }));
+        const entries = JSON.parse(body).users;
+        const users = Object.fromEntries(entries.map(({ id, channels }) => [String(id), channels.filter((c) => laravel.allowed.get(id)?.has(c))]));
+        const revoked = entries.flatMap(({ devices = [] }) => devices).filter((device) => laravel.revokedDevices.has(device));
+        response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ users, revoked_devices: revoked }));
     });
     api.listen(0, '127.0.0.1');
     await once(api, 'listening');
@@ -92,9 +94,9 @@ async function open(path = '/collab?live=1') {
     return client;
 }
 
-async function joined(sub, channels, { presence = false, path } = {}) {
+async function joined(sub, channels, { presence = false, path, dev } = {}) {
     const client = await open(path);
-    client.send({ type: 'auth', token: token(sub, channels) });
+    client.send({ type: 'auth', token: token(sub, channels, dev === undefined ? {} : { dev }) });
     await client.next('ready');
     for (const channel of channels) {
         client.send({ type: 'subscribe', channel, presence });
@@ -128,6 +130,9 @@ test('live tokens: accepts Brainitive’s, refuses expired, forged, document tok
     assert.equal(verifyLiveToken(token(1, ['../etc']), keys.token), null, 'channel names are checked');
     assert.equal(verifyLiveToken(token(1, ['user.1'], { typ: 'doc' }), keys.token), null);
     assert.equal(verifyLiveToken(token(1, ['user.1'], { iat: undefined }), keys.token), null, 'iat is required');
+    assert.equal(verifyLiveToken(token(1, ['user.1'], { dev: 4 }), keys.token).dev, 4, 'App API tokens carry their device');
+    assert.equal(verifyLiveToken(token(1, ['user.1'], { dev: '4' }), keys.token), null, 'dev is a positive integer');
+    assert.equal(verifyLiveToken(token(1, ['user.1'], { dev: 0 }), keys.token), null);
     assert.equal(verifyLiveToken('abc', keys.token), null);
     assert.equal(verifyLiveToken(undefined, keys.token), null);
     assert.notEqual(keys.publish, internal, 'the publish key is not the internal API key');
@@ -351,4 +356,84 @@ test('signal limits are per person, not per socket', async () => {
     tabB.send({ type: 'signal', channel: 'item.8', name: 'typing', data: 'b' });
     assert.equal((await tabB.next('error')).code, 'rate_limited');
     [tabA, tabB, bob].forEach((c) => c.close());
+});
+
+// ── revoked app devices ──────────────────────────────────────────────────────────────────────────
+
+async function revokeDevices(body, key = keys.publish) {
+    return fetch(`http://${base}/internal/live/devices/revoked`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify(body),
+    });
+}
+
+test('revoked device (pushed): its sockets close with 4410; the web and the user’s other device stay', async () => {
+    const desktop = await joined(20, ['user.20', 'item.20'], { dev: 101 });
+    const phone = await joined(20, ['user.20'], { dev: 102 });
+    const web = await joined(20, ['user.20']);
+    const other = await joined(21, ['item.20'], { dev: 103 });
+
+    assert.equal((await revokeDevices({ devices: [101] }, 'wrong')).status, 401, 'needs the publish key');
+    assert.equal((await revokeDevices({ devices: ['101'] })).status, 422);
+    assert.equal((await revokeDevices({})).status, 422);
+    const response = await revokeDevices({ devices: [101] });
+    assert.equal(response.status, 202);
+    assert.deepEqual(await response.json(), { closed: 1 });
+    await until(() => desktop.closed);
+    assert.deepEqual(desktop.closed, { code: 4410, reason: 'Device signed out' });
+
+    await publish([{ channel: 'user.20', event: 'notifications.changed', payload: { unread_count: 1 } }]);
+    await phone.next('event');
+    await web.next('event');
+    assert.equal(phone.closed, null);
+    assert.equal(web.closed, null);
+    assert.equal(other.closed, null);
+
+    // a still-valid token of the revoked device can't come back
+    const again = await open();
+    again.send({ type: 'auth', token: token(20, ['user.20'], { dev: 101 }) });
+    await until(() => again.closed);
+    assert.equal(again.closed.code, 4410);
+    [phone, web, other].forEach((c) => c.close());
+});
+
+test('revoked device (re-check): found even without subscriptions; others untouched', async () => {
+    laravel.allowed.set(22, new Set(['user.22']));
+    const desktop = await joined(22, ['user.22'], { dev: 111 });
+    const idle = await joined(22, [], { dev: 112 }); // no subscriptions: still asked about
+    const phone = await joined(22, ['user.22'], { dev: 113 });
+    const web = await joined(22, ['user.22']);
+
+    await live.recheckAccess();
+    const asked = laravel.calls.at(-1).body.users.find((u) => u.id === 22);
+    assert.deepEqual(asked.devices.sort(), [111, 112, 113]);
+    assert.equal(desktop.closed, null, 'nothing revoked yet');
+
+    laravel.revokedDevices = new Set([111, 112]);
+    await live.recheckAccess();
+    await until(() => desktop.closed && idle.closed);
+    assert.equal(desktop.closed.code, 4410);
+    assert.equal(idle.closed.code, 4410);
+    await phone.none('revoked');
+    assert.equal(phone.closed, null);
+    assert.equal(web.closed, null);
+    // web sockets send no devices
+    laravel.revokedDevices = new Set();
+    await live.recheckAccess();
+    assert.deepEqual(laravel.calls.at(-1).body.users.find((u) => u.id === 22).devices, [113]);
+    phone.close();
+    web.close();
+});
+
+test('a socket keeps its device: a token of another device (or the web) closes it', async () => {
+    const desktop = await joined(23, ['user.23'], { dev: 121 });
+    desktop.send({ type: 'auth', token: token(23, ['item.23'], { dev: 122 }) });
+    await until(() => desktop.closed);
+    assert.equal(desktop.closed.code, 4401);
+
+    const web = await joined(23, ['user.23']);
+    web.send({ type: 'auth', token: token(23, ['item.23'], { dev: 121 }) });
+    await until(() => web.closed);
+    assert.equal(web.closed.code, 4401);
 });

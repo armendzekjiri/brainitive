@@ -2128,10 +2128,16 @@ Never migrate devdb just to export the spec.
   `LiveConfig::absoluteUrl()` (APP_URL, https → wss). The web keeps `LiveConfig::url()`.
 - **Echo suppression works for app writes unchanged:** `BoardLive` reads `X-Live-Client` from any request and the actor from
   `auth()->id()`, which `auth:app` sets as the default guard (`Authenticate::shouldUse`). Test: `RealtimeTest`.
-- **Revoking a device does not close its socket** (gap, deferred): the realtime server re-checks access per **user**, not per
-  device / token, so a signed-out desktop's open socket keeps its channels until it disconnects (as a signed-out web tab does).
-  Exposure is ids / counts only (payload rule); new tokens are refused at once. Closing sockets per device would need the
-  device id in the live token and a re-check in `realtime/src/live/access.js`.
+- **Revoking a device closes its socket (fixed in `fix/live-revoked-devices`):** App API live tokens carry the device (`dev`;
+  the web's have none), the hub keeps it per socket (fixed for the socket's life, like the user). `AppTokens::revoke` — the one
+  path of sign-out, remote sign-out, refresh reuse, password change, suspension, device limit — calls `Live::deviceRevoked()`:
+  after commit, deferred, a loopback `POST /internal/live/devices/revoked {devices}` (publish key + the publish endpoint's
+  guards) closes the device's sockets with **4410 "Device signed out"** and refuses its still-valid tokens for an hour. The push
+  is best effort (publish URL unset, paused or down → skipped): the minute re-check is the guarantee — it sends each user's
+  connected devices (`users.*.devices`, also users without subscriptions) and `LiveInternalController` answers
+  `revoked_devices` (revoked, deleted or another user's). Both fields optional: old realtime ↔ new Laravel stay compatible.
+  Deploys that change `realtime/` need the realtime service restarted (until then the old server ignores `dev` and the push 404s,
+  harmlessly). A signed-out **web** tab still keeps its socket until it reconnects (per-user check; no session id in web tokens).
 - e2e: the API needs `X-E2E-Live: 1` on the token / info calls (`LiveConfig::enabled` opt-in); the spec opens a plain
   `WebSocket` in the page (Node 20 has none built in).
 

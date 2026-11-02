@@ -2,10 +2,14 @@
 // HTTP port. Never reachable through a proxy: nginx / Caddy only forward /collab, a request carrying
 // proxy headers is refused anyway, the peer must be loopback (or a private network with
 // LIVE_PUBLISH_FROM=private — Docker), and the bearer is a key derived from the shared secret.
+// Same guards for POST /internal/live/devices/revoked {devices: [ids]}: Brainitive signed these app devices
+// out, their sockets are closed at once (the minute re-check catches what this misses).
 import { timingSafeEqual } from 'node:crypto';
 import { CHANNEL } from './token.js';
 
 export const PUBLISH_PATH = '/internal/live/publish';
+export const REVOKED_DEVICES_PATH = '/internal/live/devices/revoked';
+const MAX_DEVICES = 1000;
 const EVENT = /^[a-z][a-z0-9_.-]{0,63}$/;
 const PROXY_HEADERS = ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-real-ip', 'forwarded'];
 const MAX_BODY = 64 * 1024;
@@ -73,7 +77,7 @@ export function createPublishHandler({ key, hub, allowFrom = 'loopback', logger 
     return async function handle(request, response) {
         const path = (request.url ?? '').split('?')[0];
         if (!path.startsWith('/internal/')) return false;
-        if (path !== PUBLISH_PATH) {
+        if (path !== PUBLISH_PATH && path !== REVOKED_DEVICES_PATH) {
             reply(response, 404, { message: 'Not found.' });
             return true;
         }
@@ -99,6 +103,17 @@ export function createPublishHandler({ key, hub, allowFrom = 'loopback', logger 
             data = JSON.parse(body);
         } catch {
             data = null;
+        }
+        if (path === REVOKED_DEVICES_PATH) {
+            const devices = Array.isArray(data?.devices) && data.devices.length <= MAX_DEVICES ? data.devices : null;
+            if (!devices || !devices.every((id) => Number.isInteger(id) && id > 0)) {
+                reply(response, 422, { message: 'Invalid devices.' });
+                return true;
+            }
+            const closed = hub.revokeDevices(devices);
+            reply(response, 202, { closed });
+            if (closed > 0) logger.debug?.(`[live] closed ${closed} socket(s) of revoked device(s)`);
+            return true;
         }
         const entries = Array.isArray(data?.messages) ? data.messages : null;
         const messages = entries && entries.length <= MAX_MESSAGES ? entries.map(message) : null;

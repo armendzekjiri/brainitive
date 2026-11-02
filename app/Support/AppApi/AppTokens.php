@@ -4,6 +4,7 @@ namespace App\Support\AppApi;
 
 use App\Models\AppDevice;
 use App\Models\User;
+use App\Support\Live\Live;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -99,7 +100,10 @@ final class AppTokens
         return $device instanceof AppDevice ? $device : null;
     }
 
-    /** Sign the device out: both tokens stop working immediately. */
+    /**
+     * Sign the device out: both tokens stop working immediately, and the realtime server closes the
+     * device's live sockets (pushed now, else at its next minute re-check).
+     */
     public static function revoke(AppDevice $device, string $reason): void
     {
         $device->forceFill([
@@ -110,6 +114,8 @@ final class AppTokens
             'refresh_token_hash' => null,
             'refresh_expires_at' => null,
         ])->save();
+
+        Live::deviceRevoked((int) $device->id);
     }
 
     /**

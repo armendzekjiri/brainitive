@@ -2,15 +2,20 @@
 
 namespace Tests\Feature\AppApi;
 
+use App\Models\AppDevice;
 use App\Models\Board;
 use App\Models\Item;
 use App\Models\Plan;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\AppApi\AppTokens;
+use App\Support\Collab\CollabConfig;
 use App\Support\Live\BoardLive;
+use App\Support\Live\LiveConfig;
 use App\Support\Live\LiveToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -108,6 +113,7 @@ class RealtimeTest extends TestCase
         $this->assertNotNull($payload, 'a token the realtime server accepts (same key as the web)');
         $this->assertSame($this->viewer->id, $payload['sub']);
         $this->assertSame($channels, $payload['ch']);
+        $this->assertSame($this->deviceOf($this->token)->id, $payload['dev'], 'bound to the device: closed when it is signed out');
     }
 
     public function test_never_a_channel_the_user_could_not_see_on_the_web(): void
@@ -162,5 +168,71 @@ class RealtimeTest extends TestCase
         $this->assertNotNull($moved);
         $this->assertSame(['client_id' => 'desktop-window-01', 'actor_id' => $this->editor->id], array_intersect_key($moved['payload'], ['client_id' => 1, 'actor_id' => 1]));
         $this->assertSame($item->id, $moved['payload']['id']);
+    }
+
+    private function deviceOf(string $token): AppDevice
+    {
+        $device = AppTokens::deviceForAccessToken($token);
+        $this->assertNotNull($device);
+
+        return $device;
+    }
+
+    /** @return list<list<int>> the device lists pushed to the realtime server */
+    private function pushedRevocations(): array
+    {
+        return collect(Http::recorded())
+            ->filter(fn (array $pair) => $pair[0]->url() === 'http://127.0.0.1:6299/internal/live/devices/revoked')
+            ->map(fn (array $pair) => json_decode($pair[0]->body(), true)['devices'])
+            ->values()->all();
+    }
+
+    public function test_a_signed_out_device_is_pushed_to_the_realtime_server(): void
+    {
+        $device = $this->deviceOf($this->token);
+        $other = $this->appDevice($this->viewer, ['name' => 'Phone']);
+        $otherToken = $this->appToken($this->viewer, $other);
+        defer()->invoke();
+        $this->assertSame([], $this->pushedRevocations(), 'signing in pushes nothing');
+
+        // remote sign-out from the other device
+        $this->deleteJson("/api/v1/devices/{$device->id}", [], $this->appHeaders($otherToken))->assertSuccessful();
+        defer()->invoke();
+
+        $this->assertSame([[$device->id]], $this->pushedRevocations());
+        Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/internal/live/devices/revoked')
+            && $request->header('Authorization')[0] === 'Bearer '.LiveConfig::publishKey());
+        // the revoked device gets no new live token; the other one still does
+        $this->grant(["user.{$this->viewer->id}"])->assertUnauthorized();
+        $this->grant(["user.{$this->viewer->id}"], $otherToken)->assertOk();
+
+        // "sign out everywhere" (password change, suspension): every remaining device in one push
+        $third = $this->appDevice($this->viewer, ['name' => 'TV', 'client' => 'tv', 'platform' => 'android_tv']);
+        $this->appToken($this->viewer, $third);
+        AppTokens::revokeAllFor($this->viewer, 'password_changed');
+        defer()->invoke();
+        $this->assertEqualsCanonicalizing([$other->id, $third->id], $this->pushedRevocations()[1]);
+    }
+
+    public function test_the_minute_recheck_names_revoked_devices(): void
+    {
+        $device = $this->deviceOf($this->token);
+        $phone = $this->appDevice($this->viewer, ['name' => 'Phone']);
+        $this->appToken($this->viewer, $phone);
+        $foreign = $this->appDevice($this->editor);
+        $this->appToken($this->editor, $foreign);
+        $ask = fn () => $this->postJson(route('internal.collab.live.access'), ['users' => [
+            ['id' => $this->viewer->id, 'channels' => ["user.{$this->viewer->id}"], 'devices' => [$device->id, $phone->id, $foreign->id, 999999]],
+            ['id' => $this->editor->id, 'channels' => []],
+        ]], ['Authorization' => 'Bearer '.CollabConfig::internalKey()])->assertOk();
+
+        // another user's device and a missing one never count as the viewer's
+        $ask()->assertJsonPath("users.{$this->viewer->id}", ["user.{$this->viewer->id}"])
+            ->assertJsonPath('revoked_devices', [$foreign->id, 999999]);
+
+        AppTokens::revoke($device, 'sign_out');
+        $ask()->assertJsonPath('revoked_devices', [$device->id, $foreign->id, 999999]);
+        // the channels themselves are still the user's: the web and the phone keep them
+        $ask()->assertJsonPath("users.{$this->viewer->id}", ["user.{$this->viewer->id}"]);
     }
 }

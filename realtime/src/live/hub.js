@@ -8,6 +8,8 @@
 //   {type: 'event', channel, event, payload} · {type: 'presence', channel, members} ·
 //   {type: 'signal', channel, name, data, from: {id, name}} · {type: 'revoked', channel} ·
 //   {type: 'error', code, channel?} · {type: 'pong'}
+// A socket opened with an app device's token (`dev`, App API) is closed with 4410 once Brainitive revokes
+// that device (pushed to revokeDevices(), or found by the minute re-check).
 import { CHANNEL, verifyLiveToken } from './token.js';
 
 export const CLOSE = {
@@ -16,6 +18,8 @@ export const CLOSE = {
     tooMany: [4429, 'Too many messages'],
     tooManySockets: [4429, 'Too many connections'],
     accessUnknown: [4403, 'Access could not be checked'],
+    /** the app device of the token was signed out / revoked: drop tokens, show sign-in */
+    deviceRevoked: [4410, 'Device signed out'],
     shutdown: [1001, 'Server shutting down'],
 };
 
@@ -66,6 +70,8 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
     const signalLimits = new Map();
     /** `${user}|${channel}` → when access was revoked (unix s): older tokens can't grant it back */
     const revoked = new Map();
+    /** app device id → when it was revoked (unix s): its tokens can't open a socket any more */
+    const revokedDevices = new Map();
     /** user id → access re-checks failed in a row */
     const accessFailures = new Map();
     let rechecking = false;
@@ -125,13 +131,16 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
 
     function authenticate(client, token) {
         const payload = verifyLiveToken(token, tokenKey);
-        // one socket = one user for its whole life
-        if (!payload || (client.user && client.user.id !== payload.sub)) return close(client, CLOSE.unauthorized);
+        const device = payload?.dev ?? null;
+        // one socket = one user (and one app device, or none: the web) for its whole life
+        if (!payload || (client.user && (client.user.id !== payload.sub || client.device !== device))) return close(client, CLOSE.unauthorized);
+        if (device !== null && revokedDevices.has(device)) return close(client, CLOSE.deviceRevoked);
         if (!client.user) {
             let sockets = 0;
             clients.forEach((other) => { if (other.user?.id === payload.sub) sockets++; });
             if (sockets >= L.maxSocketsPerUser) return close(client, CLOSE.tooManySockets);
             clearTimeout(client.deadline);
+            client.device = device;
         }
         client.user = { id: payload.sub, name: payload.name.slice(0, 80), avatar: payload.avatar ? payload.avatar.slice(0, 500) : null };
         for (const channel of payload.ch) {
@@ -220,6 +229,8 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
         const client = {
             socket,
             user: null,
+            /** app device id from the token (App API), null for the web */
+            device: null,
             grants: new Set(),
             subs: new Map(),
             messageLimit: bucket(L.messageBurst, L.messagesPerSecond),
@@ -257,7 +268,26 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
     }
 
     /**
-     * Ask Brainitive which channels each connected user may still use; drop the rest. Only subscribed
+     * Brainitive revoked these app devices (sign-out, password change, suspension …): close their sockets
+     * and refuse their remaining tokens. Returns the number of sockets closed.
+     */
+    function revokeDevices(ids) {
+        const at = Math.floor(Date.now() / 1000);
+        const gone = new Set(ids.filter((id) => Number.isInteger(id) && id > 0));
+        gone.forEach((id) => revokedDevices.set(id, at));
+        let closed = 0;
+        clients.forEach((client) => {
+            if (client.device !== null && gone.has(client.device)) {
+                closed++;
+                close(client, CLOSE.deviceRevoked);
+            }
+        });
+        return closed;
+    }
+
+    /**
+     * Ask Brainitive which channels each connected user may still use; drop the rest. With them go the
+     * app devices of the user's sockets: a revoked one is closed (revokeDevices), even without subscriptions. Only subscribed
      * channels are checked (grants nobody subscribed to are forgotten: the browser asks for a new
      * token when it needs one). A failing request is retried per user, so one entry can't shield the
      * others; a user whose check keeps failing is disconnected (fail closed).
@@ -270,10 +300,12 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
             clients.forEach((client) => {
                 if (!client.user) return;
                 client.grants = new Set([...client.grants].filter((channel) => client.subs.has(channel)));
-                if (!wanted.has(client.user.id)) wanted.set(client.user.id, new Set());
-                client.subs.forEach((_, channel) => wanted.get(client.user.id).add(channel));
+                if (!wanted.has(client.user.id)) wanted.set(client.user.id, { channels: new Set(), devices: new Set() });
+                const entry = wanted.get(client.user.id);
+                client.subs.forEach((_, channel) => entry.channels.add(channel));
+                if (client.device !== null) entry.devices.add(client.device);
             });
-            const entries = [...wanted.entries()].filter(([, set]) => set.size > 0);
+            const entries = [...wanted.entries()].filter(([, entry]) => entry.channels.size > 0 || entry.devices.size > 0);
             for (let i = 0; i < entries.length; i += 100) {
                 const chunk = entries.slice(i, i + 100);
                 if (!(await checkChunk(chunk)) && chunk.length > 1) {
@@ -287,9 +319,11 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
 
     /** @returns {Promise<boolean>} whether Brainitive answered */
     async function checkChunk(chunk) {
-        let allowed;
+        let answer;
         try {
-            allowed = await access(chunk.map(([id, set]) => ({ id, channels: [...set] })));
+            answer = await access(chunk.map(([id, { channels: set, devices }]) => (devices.size > 0
+                ? { id, channels: [...set], devices: [...devices] }
+                : { id, channels: [...set] })));
         } catch (error) {
             if (chunk.length === 1) {
                 const [id] = chunk[0];
@@ -303,7 +337,10 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
             }
             return false;
         }
-        for (const [id, checked] of chunk) {
+        const { users: allowed, revokedDevices: lost } = answer;
+        const asked = new Set(chunk.flatMap(([, { devices }]) => [...devices]));
+        revokeDevices(lost.filter((device) => asked.has(device)));
+        for (const [id, { channels: checked }] of chunk) {
             accessFailures.delete(id);
             const ok = new Set(Array.isArray(allowed[String(id)]) ? allowed[String(id)] : []);
             clients.forEach((client) => {
@@ -322,6 +359,7 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
         signalLimits.forEach((limit, key) => { if (now - limit.used > 60_000) signalLimits.delete(key); });
         // a token lives minutes at most: older revocations can't matter any more
         revoked.forEach((at, key) => { if (now / 1000 - at > 3600) revoked.delete(key); });
+        revokedDevices.forEach((at, id) => { if (now / 1000 - at > 3600) revokedDevices.delete(id); });
         clients.forEach((client) => {
             if (!client.alive) return client.socket.terminate();
             client.alive = false;
@@ -334,6 +372,7 @@ export function createLiveHub({ tokenKey, access, logger = console, limits = {} 
         handleConnection,
         publish,
         recheckAccess,
+        revokeDevices,
         members,
         /** for tests / health */
         stats: () => ({ sockets: clients.size, channels: channels.size }),
