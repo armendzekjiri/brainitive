@@ -39,6 +39,10 @@ The extension can only save content and search titles. It can't use the MCP serv
 disconnect it, go to **your avatar → Profile settings → Connected apps**, where it's listed as "Save pages, links
 and notes".
 
+**Sign out** removes the session from the browser and asks your server to revoke the extension's access. If the
+server can't confirm the revocation (for example when you're offline), the sign-in screen tells you, and you can
+remove the extension under Connected apps.
+
 ## Self-hosting
 
 There's nothing to set up. The extension registers itself over OAuth, using the same keys as the

@@ -39,7 +39,7 @@ export async function getAccount(): Promise<Account | null> {
     return (account as Account | undefined) ?? null;
 }
 
-/** Sessions stored before v1.2 have no `account` yet. */
+/** Sessions stored before Brainitive v1.49.0 (extension 1.1.x) have no `account` yet. */
 export async function syncAccount(): Promise<void> {
     const session = await getSession();
     if (session && !(await getAccount())) {

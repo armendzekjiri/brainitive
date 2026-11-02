@@ -863,3 +863,30 @@ worktree, and compared env / server start times. No app regression from this rel
 - **app-api-insights (flaky).** Parallel journeys create issues in the seeded workspace between the API read and the
   web read (9 vs 10); both reads now retry together (`toPass`).
 - Result: the 14 together on :8040 → 14 passed.
+
+## Codex CLI/extension review (`fix/v1.49-cli-extension`)
+Source: `/private/tmp/brainitive-cli-extension-review.md` (11 findings, CLI `cli/` + extension `browser-extension/`).
+Each one was reproduced with a failing test first; one commit per finding. CLI: `go test ./...`. Extension: `npm test`
+(vitest + WXT fake browser, new in this branch and in the Browser extension workflow).
+
+| # | Finding | Verified? | Fix | Test |
+|---|---|---|---|---|
+| 1 | CLI sends a session's token to `--server` / `BRAINITIVE_SERVER` | yes: server B got `Bearer token-A`, also right after `login --server A` | `session.server`; `sessionTokens` per origin; logout and post-login on the session's origin | `TestStoredSessionNeverGoesToAnotherServer`, `TestLoginUsesTheServerItSignedInTo`, `TestLegacySessionIsBoundToTheConfiguredServer` |
+| 2 | Extension sign-out doesn't revoke | yes: no server call | clear locally, then `DELETE /api/ext/v1/logout`; note when not confirmed; late-refresh tokens revoked. **Server route still missing** (see below) | `tests/sign-out.test.ts` |
+| 3 | Late refresh restores / replaces session | yes: all three races | stored session generation + serialized writes | `tests/refresh-race.test.ts` |
+| 4 | Extension trusts foreign discovery endpoints | yes: host, port, userinfo, http, authorize, registration | exact-origin check of all endpoints + stored token endpoint; background-side https check | `tests/auth.test.ts` |
+| 5 | Redirects forward credentials | yes (CLI): 307/308 to another port got `Authorization` + refresh body | CLI `config.HTTPClient` refuses redirects; extension `redirect: 'error'` | `TestRedirectsAreNotFollowedWithCredentials`, `tests/redirects.test.ts` |
+| 6 | CLI accepts remote plain http | yes: discovery/MCP sent to `http://example.test` | `config.CheckServer` (https, http only on exact loopback); no override flag | `TestCheckServerRequiresHTTPSExceptLoopback`, `TestLoginAndRefreshRefusePlainHTTP`, `TestPlainHTTPRemoteServerIsRefused` |
+| 7 | Existing temp file keeps permissive mode | yes: 0644 temp → 0644 config; symlinked temp followed | `os.CreateTemp` 0600 + chmod + fsync + rename (Windows: unchanged rename) | `TestSaveIsPrivateWhateverIsAlreadyThere` |
+| 8 | Credentials reachable from content-script contexts | yes: `get-token` answered any sender | no token message; background makes API calls; sender must be an extension page; pages read `account` | `tests/messaging.test.ts` |
+| 9 | MCP capture-deny instead of scope check | server side (fix/v1.49-limits-hardening, `EnsureMcpScope`) | CLI checked only: it asks for `mcp:use capture` at authorize and refresh, so it passes `EnsureMcpScope`, `RejectCaptureTokens` (`/api/cli/logout`) and `/api/ext/v1`; no change needed | `TestScopeCoversMcpAndCapture` (guard) |
+| 10 | Checksums on the same mutable release | yes (by reading `release.yml`) | Sigstore build-provenance attestations for every CLI/extension file; `gh attestation verify` documented in cli/README.md | `TestReleaseWorkflowAttestsEveryArtifact` |
+| 11 | Refresh save errors ignored | yes: command continued with an unsaved rotated token | save before use; error names the path; retry in-process | `TestRefreshThatCannotBeSavedFails` |
+
+Open / for the release:
+- **Server:** add a capture-scoped `DELETE /api/ext/v1/logout` (ext/v1 group; revoke `currentAccessToken()` and its
+  refresh token like `CliController::logout`) + a feature test. Until then extension sign-out says "couldn't confirm".
+- **New CLI release:** findings 1, 5, 6, 7, 11 ship in the binaries (`release.yml` builds them from the app version).
+- **New extension release:** findings 2, 3, 4, 5, 8. Bump `browser-extension/package.json` to 1.2.0 for the store upload
+  (README: bump per upload; not bumped here).
+- Not done: cross-process refresh lock in the CLI; OS keychain storage (both noted in KNOWLEDGE).

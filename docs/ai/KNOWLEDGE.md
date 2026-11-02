@@ -2011,6 +2011,43 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 ### CLI Cloud OAuth origin
 The Cloud CLI defaults to `https://www.brainitive.app`, matching the OAuth metadata. Keep strict same-origin checks for all servers; the non-www Cloud alias can be normalized explicitly, while existing signed-in configurations stay untouched until sign-in.
 
+### CLI / extension credential handling (Codex CLI/extension review, v1.49.0)
+- **A CLI session is bound to its origin** (`session.server` in config.json; sessions saved before v1.49.0 are bound
+  to `cfg.server` on load). `sessionTokens` is created per target server and refuses to hand out the session's
+  token for any other origin, so `--server` / `BRAINITIVE_SERVER` can't leak it. Anything new that talks to a server
+  must build its client with `sessionTokens{server: <that origin>}`, not reuse another one. `logout` and the call
+  right after `login` use `sessionOnly` (the session, never `BRAINITIVE_TOKEN`, on the session's own origin).
+- **`config.CheckServer` is the http gate:** https, or http only for exactly `localhost` / `127.0.0.1` / `[::1]`
+  (`NormalizeServer("localhost.evil.test")` is https now). The MCP and extension-API clients check it before asking
+  for a token; `auth.Login` and `auth.Refresh` check it too. There's deliberately no `--insecure-http`.
+- **CLI requests to a server never follow redirects** (`config.HTTPClient`). Go replays a 307/308 POST body and
+  keeps `Authorization` for a same-host, different-port target, which got past `sameOrigin`. A redirect now
+  surfaces as "the server redirected to …; use that address with --server". `brainitive update` keeps
+  `http.DefaultClient` (GitHub download redirects, no credentials).
+- **A refresh is saved before its token is used** (refresh tokens are single use). A failed save is an error, and the
+  next call in the same process retries the save. There is still no cross-process lock: two CLI processes refreshing
+  the same expired session at once can lose one rotation (re-login fixes it).
+- **Config writes:** `os.CreateTemp` (O_EXCL, 0600) + chmod + fsync + rename. Never `os.WriteFile` to a fixed temp
+  name: it keeps an existing file's mode and follows a symlink.
+- **Extension: tokens never leave the background.** No `get-token` message. Pages call `api.*` from
+  `lib/client.ts` (a proxy that sends `{type: 'api'}`), and the background runs `createApi(getAccessToken)`.
+  Message arguments are JSON, so an upload crosses as plain fields plus a `data:image/…` URL, and the background
+  builds the `FormData`. `createMessageHandler` refuses senders that aren't this extension's pages (a content
+  script's `sender.url` is the web page). Pages read `account` (`{server}`), never `session`.
+- **Extension session generation:** `sessionGeneration` in storage.local changes on every sign-in / sign-out, and
+  session writes go through one in-memory queue (`exclusive()` in `lib/auth.ts`). A refresh only writes if its
+  generation is still current. Any new code that writes the session must go through that queue and bump the
+  generation when the account changes.
+- **Extension sign-out calls `DELETE /api/ext/v1/logout`.** As of this branch the server has **no such route**:
+  `/api/cli/logout` rejects capture-only tokens. Until the capture-scoped route exists (same body as
+  `CliController::logout`: revoke the access token and its refresh token), sign-out is local-only and the
+  sign-in screen says so.
+- **Extension tests:** `npm test` (vitest + `WxtVitest`, `wxt/testing/fake-browser`). Mock `identity.getRedirectURL`
+  / `launchWebAuthFlow` per test (fake-browser doesn't implement them), and stub `navigator` on Node < 21.
+- **Release provenance:** `release.yml` attests every CLI and extension file (`actions/attest-build-provenance`,
+  job-level `id-token` / `attestations: write`). `TestReleaseWorkflowAttestsEveryArtifact` (cli/internal/cli)
+  fails if an attest step or subject goes missing. Verify with `gh attestation verify <file> --repo armendzekjiri/brainitive`.
+
 ### Marketing homepage may be outside Inertia
 On Brainitive Cloud nginx can serve `/` from the separate website. Links from Laravel pages to `/` must use a native `<a>` so the browser performs a full navigation; Inertia links can display the website HTML in an error modal. Self-hosted installations work with the same anchors.
 

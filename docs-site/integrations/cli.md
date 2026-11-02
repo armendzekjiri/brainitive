@@ -29,7 +29,9 @@ irm https://github.com/armendzekjiri/brainitive/releases/latest/download/install
 The script downloads the latest release for your machine from GitHub, checks its checksum and puts
 `brainitive` on your `PATH`. Prefer to do it yourself? Download `brainitive_<os>_<arch>.tar.gz`
 (or `.zip`) from the [latest release](https://github.com/armendzekjiri/brainitive/releases/latest).
-Later, `brainitive update` upgrades in place.
+Later, `brainitive update` upgrades in place. Every release file also has a signed build-provenance
+attestation, which you can check with the GitHub CLI:
+`gh attestation verify <file> --repo armendzekjiri/brainitive`.
 
 The installer also adds `bi` as a short command when that name is available, so `bi login` and `brainitive login` do the same thing. It never replaces an existing `bi` command. Use `bi -s "search words"` to search or `bi -c "a quick note"` to capture.
 
@@ -62,6 +64,10 @@ can revoke it; changing your password disconnects it too.
 For scripts and CI, skip the browser and set two environment variables: `BRAINITIVE_SERVER` and
 `BRAINITIVE_TOKEN` (a token from Connected apps, or `php artisan mcp:get-token <email>` on a
 self-hosted server).
+
+Each server needs its own sign-in. The CLI only sends a session's tokens to the server that issued
+them, so `--server` with another address asks you to sign in there first. Servers must use https;
+plain `http://` works only for `localhost`, `127.0.0.1` and `[::1]`.
 
 ## Set your defaults once
 
