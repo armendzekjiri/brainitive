@@ -290,4 +290,14 @@ class Ticket extends Model
     {
         return $this->helpdesk?->project?->workspace;
     }
+
+    /** `{ticket:uuid}` (public portal / widget): only tickets of a live project in a live workspace (Codex web review P). */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if ($field === 'uuid') {
+            return $this->where('uuid', $value)->whereHas('helpdesk.project.workspace')->first();
+        }
+
+        return parent::resolveRouteBinding($value, $field);
+    }
 }

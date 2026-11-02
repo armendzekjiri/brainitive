@@ -15,7 +15,7 @@ class PublicPlanController extends Controller
 {
     public function show(string $token): Response
     {
-        $plan = Plan::where('share_token', $token)->with('project:id,name,color,workspace_id', 'project.workspace')->firstOrFail();
+        $plan = Plan::where('share_token', $token)->whereHas('project.workspace')->with('project:id,name,color,workspace_id', 'project.workspace')->firstOrFail();
         $settings = PlanDocument::normalizeSettings($plan->settings);
         $data = PlanDocument::publicData($plan->data ?? Plan::emptyData(), $settings);
 

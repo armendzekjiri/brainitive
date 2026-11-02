@@ -16,7 +16,7 @@ class PublicReleaseController extends Controller
 {
     public function show(string $token): Response
     {
-        $release = Release::with('project:id,name,changelog_token,workspace_id', 'project.workspace')->where('public_token', $token)->whereNotNull('published_at')->firstOrFail();
+        $release = Release::with('project:id,name,changelog_token,workspace_id', 'project.workspace')->where('public_token', $token)->whereNotNull('published_at')->whereHas('project.workspace')->firstOrFail(); // a live workspace (P)
 
         return Inertia::render('Releases/Public', [
             'project' => ['name' => $release->project->name],
@@ -28,7 +28,7 @@ class PublicReleaseController extends Controller
 
     public function changelog(string $token): Response
     {
-        $project = Project::where('changelog_token', $token)->firstOrFail();
+        $project = Project::where('changelog_token', $token)->whereHas('workspace')->firstOrFail(); // a live workspace (P)
         $releases = $project->releases()->whereNotNull('published_at')->whereNotNull('public_token')
             ->orderByRaw('coalesce(release_date, published_at) desc')->orderByDesc('id')
             ->paginate(10);
