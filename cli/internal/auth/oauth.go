@@ -44,7 +44,7 @@ type tokenResponse struct {
 }
 
 // HTTPClient is what the package uses for every request (tests swap it).
-var HTTPClient = &http.Client{Timeout: 30 * time.Second}
+var HTTPClient = config.HTTPClient(30 * time.Second) // never follows redirects (Codex CLI/extension review 5)
 
 // OpenBrowser opens the sign-in page; tests replace it.
 var OpenBrowser = func(u string) error {

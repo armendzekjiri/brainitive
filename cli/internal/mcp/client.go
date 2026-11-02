@@ -50,7 +50,7 @@ func New(server string, tokens TokenSource, version string) *Client {
 	return &Client{
 		Server:    strings.TrimRight(server, "/"),
 		Tokens:    tokens,
-		HTTP:      &http.Client{Timeout: 120 * time.Second},
+		HTTP:      config.HTTPClient(120 * time.Second), // never follows redirects
 		UserAgent: "brainitive-cli/" + version,
 	}
 }

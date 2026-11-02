@@ -29,7 +29,7 @@ type Client struct {
 
 // New makes a client for a server origin.
 func New(server string, tokens mcp.TokenSource) *Client {
-	return &Client{Server: strings.TrimRight(server, "/"), Tokens: tokens, HTTP: &http.Client{Timeout: 120 * time.Second}}
+	return &Client{Server: strings.TrimRight(server, "/"), Tokens: tokens, HTTP: config.HTTPClient(120 * time.Second)} // never follows redirects
 }
 
 // Board is a board the user may create issues on, with its numeric id.

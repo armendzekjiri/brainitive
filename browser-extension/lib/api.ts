@@ -26,6 +26,8 @@ export function createApi(getToken: TokenProvider) {
                 ...(init.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
                 ...init.headers,
             },
+            // Never follow a redirect with the bearer token or a body (Codex CLI/extension review 5).
+            redirect: 'error',
         });
 
         if (response.status === 401 && retry) {

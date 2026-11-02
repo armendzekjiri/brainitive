@@ -196,7 +196,7 @@ async function refresh(session: Session): Promise<Session> {
 async function discover(server: string): Promise<ServerMetadata> {
     let response: Response;
     try {
-        response = await fetch(`${server}/.well-known/oauth-authorization-server`, { headers: { Accept: 'application/json' } });
+        response = await fetch(`${server}/.well-known/oauth-authorization-server`, { headers: { Accept: 'application/json' }, redirect: 'error' });
     } catch {
         throw new Error(`Couldn’t reach ${server}. Check the address and your connection.`);
     }
@@ -217,6 +217,7 @@ async function register(metadata: ServerMetadata, redirectUri: string): Promise<
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ client_name: `Brainitive for ${browserName()}`, redirect_uris: [redirectUri] }),
+        redirect: 'error',
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok || !body.client_id) {
@@ -230,6 +231,8 @@ async function tokenRequest(endpoint: string, params: Record<string, string>): P
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
         body: new URLSearchParams(params),
+        // A 307/308 would replay the code + verifier or the refresh token elsewhere (Codex CLI/extension review 5).
+        redirect: 'error',
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok || !body.access_token) {
