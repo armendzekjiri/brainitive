@@ -38,6 +38,7 @@ Read [Workspaces and projects](./workspaces-and-projects) first, then [Boards an
 | [Calendar](./calendar-and-tasks) | Your calendar and connected calendars |
 | [Meetings](./meetings) | Google Meet and Microsoft Teams meetings from issues and the calendar |
 | [My Work, My Day and quick capture](./my-work) | Everything assigned to you, focus and capture |
+| [Desktop app](./desktop-app) | Quick capture with a shortcut, My Day and the timer in your menu bar (beta, coming soon) |
 | [Notifications](./notifications) | Inbox, email and push notifications |
 | [Search and smart links](./search) | Find anything and link it anywhere |
 

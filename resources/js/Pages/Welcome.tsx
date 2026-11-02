@@ -75,9 +75,9 @@ import {
     Video,
     CalendarSync,
     WifiOff,
-    MailCheck,
     UsersRound,
     Terminal,
+    Laptop,
     type LucideIcon,
 } from 'lucide-react';
 import { useTheme } from '@/hooks/useTheme';
@@ -402,6 +402,20 @@ const SPOTLIGHT: {
     shortcut?: string;
 }[] = [
     {
+        key: 'desktop',
+        version: 'v1.49',
+        icon: Laptop,
+        color: '#0E83DC',
+        title: 'Brainitive on your desktop',
+        description:
+            'A desktop app for Mac, Windows and Linux is on its way, built on a new open API. Capture a thought from anywhere with one shortcut; My Day and the timer live in your menu bar. Beta, coming soon.',
+        points: [
+            'Quick capture with a global shortcut, even offline',
+            'Cloud or your own server, signed in through your browser',
+            'Sign in a TV or other device with a short code',
+        ],
+    },
+    {
         key: 'email-digest',
         version: 'v1.48',
         icon: Inbox,
@@ -427,20 +441,6 @@ const SPOTLIGHT: {
             CLI_INSTALL_SH,
             'brainitive capture "ask Dana about Q4"',
             'brainitive mcp: your account for Claude Code, Cursor & co.',
-        ],
-    },
-    {
-        key: 'branded-email',
-        version: 'v1.44',
-        icon: MailCheck,
-        color: '#69A748',
-        title: 'Emails that look like Brainitive',
-        description:
-            'Every email — notifications, invitations, helpdesk replies, portals — in one clean, branded layout that works on phones and in dark mode.',
-        points: [
-            '“Manage notifications” in every member email',
-            'Helpdesk customers see your helpdesk’s name',
-            'Test web push on each of your devices',
         ],
     },
 ];
@@ -765,6 +765,85 @@ function CliSection() {
                     >
                         CLI docs <ArrowRight className="h-4 w-4" />
                     </a>
+                </div>
+            </RevealSection>
+        </section>
+    );
+}
+
+/** Brainitive Desktop and the open App API (v1.49.0): beta, no downloads yet; /download lists the platforms. */
+function DesktopSection() {
+    const features = [
+        { icon: Command, title: 'Quick capture', text: 'A global shortcut opens a small capture window over any app. Type, press Enter, back to work.' },
+        { icon: Timer, title: 'My Day and timer in the menu bar', text: 'See what is on your plate today, check things off and start or stop the timer without opening a browser tab.' },
+        { icon: WifiOff, title: 'Captures work offline', text: 'No connection on the train? Your captures wait on your computer and arrive when you are back online.' },
+        { icon: Globe, title: 'Cloud or self-hosted', text: 'Enter your server address once and sign in through your browser, like the extension and the CLI.' },
+    ];
+
+    return (
+        <section id="desktop" className="relative z-10 px-6 py-24 sm:py-28">
+            <RevealSection className="max-w-6xl mx-auto">
+                <div className="grid lg:grid-cols-[1.1fr_1fr] gap-10 items-center">
+                    <div>
+                        <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 mb-4">
+                            <Laptop className="h-3.5 w-3.5" />
+                            Desktop app · Beta, coming soon
+                        </div>
+                        <h2 className="text-3xl sm:text-4xl font-bold text-[#485E72] dark:text-slate-100 mb-4">Brainitive on your desktop</h2>
+                        <p className="text-[#485E72]/60 dark:text-slate-400 text-lg mb-8 max-w-xl">
+                            For macOS, Windows and Linux. Brainitive one shortcut away, even when the browser is closed.
+                        </p>
+                        <div className="grid sm:grid-cols-2 gap-4">
+                            {features.map((f) => (
+                                <div key={f.title} className="flex gap-3">
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#0E83DC]/10 text-[#0E83DC]">
+                                        <f.icon className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                        <p className="font-semibold text-[#485E72] dark:text-slate-100 text-sm">{f.title}</p>
+                                        <p className="text-sm text-[#485E72]/60 dark:text-slate-400">{f.text}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <Link
+                            href="/download"
+                            className="mt-8 inline-flex items-center gap-2 rounded-xl bg-[#0E83DC] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-[#0E83DC]/20 hover:bg-[#0b6fbf]"
+                        >
+                            <Download className="h-4 w-4" /> Download page
+                        </Link>
+                    </div>
+
+                    <div className="bg-white/70 dark:bg-slate-900/60 backdrop-blur-sm border border-[#C0C5C0]/30 dark:border-slate-700/60 rounded-2xl p-6 sm:p-8">
+                        <div className="inline-flex items-center gap-2 rounded-full border border-[#485E72]/20 bg-[#485E72]/5 px-3 py-1 text-xs font-semibold text-[#485E72] dark:text-slate-300 mb-3">
+                            <Code2 className="h-3.5 w-3.5" />
+                            Open API · Beta
+                        </div>
+                        <h3 className="text-xl font-bold text-[#485E72] dark:text-slate-100 mb-2">Open API for apps</h3>
+                        <p className="text-sm text-[#485E72]/60 dark:text-slate-400 mb-4">
+                            The desktop app, the mobile app and a TV app all use the same documented App API, with its own sign-in and per-device access you can revoke any time.
+                        </p>
+                        <ul className="space-y-2 text-sm text-[#485E72]/75 dark:text-slate-300">
+                            {[
+                                'Boards, issues, docs, My Work, captures, time tracking and more',
+                                'Offline sync and live updates for apps',
+                                'See and sign out every app under Profile',
+                            ].map((point) => (
+                                <li key={point} className="flex items-start gap-2.5">
+                                    <Check className="h-4 w-4 shrink-0 mt-0.5 text-[#69A748]" strokeWidth={2.5} />
+                                    {point}
+                                </li>
+                            ))}
+                        </ul>
+                        <a
+                            href={`${DOCS_URL}/integrations/app-api`}
+                            target="_blank"
+                            rel="noopener"
+                            className="mt-6 inline-flex items-center gap-2 rounded-xl border border-[#C0C5C0]/60 dark:border-slate-600 px-4 py-2 text-sm font-semibold text-[#485E72] dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800"
+                        >
+                            About the App API <ArrowRight className="h-4 w-4" />
+                        </a>
+                    </div>
                 </div>
             </RevealSection>
         </section>
@@ -1773,6 +1852,9 @@ export default function Welcome({
 
                 {/* ═══ CLI ═══ */}
                 <CliSection />
+
+                {/* ═══ Desktop app ═══ */}
+                <DesktopSection />
 
                 {/* ═══ Pricing ═══ */}
                 <PricingSection />

@@ -101,6 +101,24 @@ const WELCOME_FEATURES = [
 
 const CHANGELOG = [
     {
+        version: 'v1.49.0',
+        title: 'Desktop app support, app sign-in and a public API',
+        tag: 'Feature',
+        date: '2026-11-02',
+        items: [
+            'Brainitive Desktop (beta, coming soon): the server side is ready. The app signs you in through your browser, whether you use Brainitive Cloud or your own server, so Google, Microsoft and GitHub sign-in work as usual.',
+            'Desktop & mobile apps: Profile → Notifications lists every app you signed in, with its name, platform and last use. Sign one out with Revoke, or all of them at once. Changing your password signs them all out.',
+            'TV sign-in with a code: open /app/device on your phone or computer, enter the code the TV shows (or scan its QR code) and approve. The code works once, for 10 minutes.',
+            'A public App API for the Brainitive apps, documented at /docs/api: workspaces, boards, issues, docs, My Work, captures, time tracking, calendar, helpdesk, leads and more, with offline sync and live updates. Access is per device and can be revoked at any time.',
+            'AI assistants (MCP): when a doc has unpublished changes, edits now go to the draft instead of replacing it, and they never overwrite what someone is typing right now. A doc without a draft is still published with a new version.',
+            'AI assistants (MCP): moving a card now notifies the people watching it, and can complete its subtasks, just like moving it on the board.',
+            'Fixed: the workspace "Projects" address no longer shows an error page; it takes you to the workspace home.',
+            'Fixed: renaming a bookmark group gives it its own address, so it no longer clashes with another group (also with deleted ones) of the same name.',
+            'Fixed: issue attachments and bookmark files are now checked against the storage limit everywhere, and images are kept when text is converted to or from Markdown (docs, descriptions, comments).',
+            'Self-hosted: add the new migration (php artisan migrate) and restart the realtime service. If your proxy forwards only selected paths, also forward /api/v1/ and /app/. APP_API_MIN_DESKTOP_VERSION sets the oldest desktop app version your server accepts.',
+        ]
+    },
+    {
         version: 'v1.48.0',
         title: 'One email instead of ten, move docs anywhere, and links for AI',
         tag: 'Feature',

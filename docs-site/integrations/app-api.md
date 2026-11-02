@@ -1,0 +1,35 @@
+---
+title: App API
+description: "The App API (/api/v1) behind the Brainitive desktop, mobile and TV apps: how apps sign in, what a token is, how devices are listed and revoked, and where the API reference lives."
+order: 85
+---
+
+# App API
+
+The **App API** is the JSON API under `/api/v1` that the official Brainitive apps use: Brainitive Desktop, the mobile app and the TV app. It covers what the web app does for your day-to-day work (boards, issues, docs, My Work, captures, time tracking, the calendar and more), with offline sync and live updates for apps.
+
+It is separate from the other ways to connect: [AI and MCP](./ai-and-mcp) for AI assistants, the [CLI](./cli) and the [browser extension](./browser-extension) each have their own access.
+
+## How apps sign in
+
+- **Desktop and mobile** open your browser at `/app/authorize`. You sign in as usual (password, Google, Microsoft or GitHub) and confirm the app. The app receives a one-time code and trades it for tokens.
+- **TV** has no usable browser. It shows a short code and a QR code; open `/app/device` on your phone or computer, enter the code and click **Approve**. The code works once, for 10 minutes.
+
+No OAuth app or client secret has to be set up for any of this.
+
+## Tokens and devices
+
+- Every sign-in creates a **device** with its own access token. A token is short-lived and is renewed in the background; it only works for the API, never for the web app.
+- A device is listed under **Profile → Notifications → Desktop & mobile apps** with its name, platform and last use.
+- **Revoke** signs one device out immediately: its token stops working and its live connection is closed. You can also sign out all devices.
+- Changing your password, or a suspended account, signs out every device.
+
+## Reference
+
+The full reference (OpenAPI 3.1) is the file [`docs/api/openapi.json`](https://github.com/armendzekjiri/brainitive/blob/main/docs/api/openapi.json) in the repository. On a server, instance admins can browse it at `/docs/api`.
+
+Using the App API with your own scripts is not supported yet: tokens are only issued to the official apps.
+
+## Self-hosting
+
+Nothing to configure, but make sure your proxy forwards `/api/v1`, `/app` and the live websocket. See [Desktop and mobile apps](../self-hosting/desktop-and-mobile-apps).

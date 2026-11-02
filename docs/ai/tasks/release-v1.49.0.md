@@ -689,3 +689,36 @@ devices untouched, reconnect refused, device fixed per socket), e2e `app-api-rea
 - **Deploy:** restart the realtime service on prod (`127.0.0.1:6201`) and dev (`:6202`) after this deploys — `realtime/` changed
   (KNOWLEDGE: restart after every deploy that touches it). Until then the old server ignores `dev` and answers 404 to the push
   (reported, events keep flowing — a 404 there doesn't pause publishing), i.e. today's per-user behaviour; nothing breaks.
+
+## Release materials (`docs/release-v1.49.0-materials`)
+In-app changelog entry v1.49.0 (`HelpModal.tsx`), homepage (`Welcome.tsx`: "Brainitive on your desktop" spotlight card +
+`#desktop` section with "Open API for apps", both marked beta / coming soon; `e2e/tests/homepage.spec.ts`), docs site
+(`guide/desktop-app.md`, `integrations/app-api.md`, update of `self-hosting/desktop-and-mobile-apps.md`; the sidebar builds
+itself from the folders and `order:`), public download page `GET /download` (`DesktopDownloadController`, `Pages/Download.tsx`,
+`config/desktop.php` ← `DESKTOP_DOWNLOAD_{MACOS,WINDOWS,LINUX}_URL`, empty = disabled "Coming soon"; `tests/Feature/DesktopDownloadTest.php`,
+`e2e/tests/desktop-download.spec.ts`). The Cloud homepage is the separate Astro website (brainitive-website repo): its own copy of
+the desktop section is the owner's to do.
+
+## Deploy checklist v1.49.0
+Before: nothing to build specially; `desktop/` is its own repo and is not part of this deploy.
+1. **Migration:** `php artisan migrate` — additive, one new table `sync_tombstones` (`2026_11_08_100000_create_sync_tombstones_table`).
+2. **Realtime service:** restart after the deploy (`realtime/` changed): prod `127.0.0.1:6201`, dev `:6202`
+   (`sudo systemctl restart brainitive-realtime` of each instance). Until then old servers ignore the device claim (per-user behaviour, nothing breaks).
+3. **nginx:** check `/api/v1` (Authorization header unchanged, no basic-auth / IP allow-list on prod; dev's basic auth must not cover
+   it if the apps are tested against dev), `/app/authorize`, `/app/device`, `/app/session/` and the websocket `/collab` are not blocked.
+   The `brainitive.app` → `https://www` redirect is already fixed (verify it still answers 301, not a loop).
+4. **Env** (prod and dev `.env`):
+   - `APP_API_MIN_DESKTOP_VERSION` (default `0.1.0`; raise only when an app version must be forced to update) and `APP_API_MIN_MOBILE_VERSION`;
+   - the download links `DESKTOP_DOWNLOAD_MACOS_URL`, `DESKTOP_DOWNLOAD_WINDOWS_URL`, `DESKTOP_DOWNLOAD_LINUX_URL` — leave empty until builds exist (phase 10 fills them);
+   - prod has no config cache, so no `config:cache` step; otherwise run `php artisan optimize` after editing `.env`.
+5. **Scheduler:** `routes/console.php` already schedules `model:prune --model=SyncTombstone` daily at 04:37 (tombstones older than 30 days). Check the
+   cron `schedule:run` runs on prod and dev, and that `php artisan schedule:list` shows the entry.
+6. **Docs site:** push triggers `docs.brainitive.app` deploy (new pages Desktop app and App API). Docs-only pushes skip app CI.
+7. **Smoke tests after the deploy:**
+   - `curl -s https://<host>/api/v1/instance` answers 200 JSON with `min_versions`;
+   - `curl -s -o /dev/null -w '%{http_code}' https://<host>/api/v1/me` answers 401 (not 404 / 502);
+   - sign in from the desktop app (dev build pointed at dev): browser opens `/app/authorize`, app is signed in, the device shows under Profile → Notifications → Desktop & mobile apps, Revoke signs the app out;
+   - `/app/device` opens signed in and asks for a code; `/download` renders three "Coming soon" tiles;
+   - `/docs/api` opens as an instance admin;
+   - the homepage shows the new "Brainitive on your desktop" section; Help → Changelog lists v1.49.0;
+   - realtime: open a board in two browsers, a card move shows live (the service restarted correctly).

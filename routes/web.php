@@ -15,6 +15,7 @@ use App\Http\Controllers\CaptureInboxController;
 use App\Http\Controllers\CommandPaletteController;
 use App\Http\Controllers\ContentReferenceController;
 use App\Http\Controllers\DataExportController;
+use App\Http\Controllers\DesktopDownloadController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\HelpdeskController;
 use App\Http\Controllers\HelpdeskForwardingController;
@@ -90,6 +91,9 @@ Route::get('/', function () {
         'url' => url('/'),
     ]]);
 });
+
+// Brainitive Desktop download page (v1.49.0): public, URLs from config/desktop.php.
+Route::get('/download', DesktopDownloadController::class)->name('download');
 
 // The CLI installers (v1.47.0; v1.47.1: hosted on GitHub). install.sh / install.ps1 ship on the GitHub
 // release next to the binaries they download (release.yml, job `cli`); these short addresses forward
