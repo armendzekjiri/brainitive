@@ -269,6 +269,27 @@ class AppSignInTest extends TestCase
         $response->assertSessionHas(AppWebSessions::SESSION_KEY, $device->id);
     }
 
+    public function test_the_mobile_webview_signs_in_at_once_too(): void
+    {
+        $user = User::factory()->create();
+        $device = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios']);
+
+        $this->withHeader('User-Agent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 BrainitiveMobile/1.0.0')
+            ->get('/app/session/'.$this->webSessionCode($user, $device->id))
+            ->assertRedirect(route('dashboard', absolute: false))
+            ->assertSessionHas(AppWebSessions::SESSION_KEY, $device->id);
+        $this->assertAuthenticatedAs($user, 'web');
+
+        // the marker needs its leading space and slash: lookalikes get the confirm page
+        Auth::logout();
+        $this->flushSession();
+        foreach (['BrainitiveMobile/1.0.0', 'Mozilla/5.0 BrainitiveMobile', 'Mozilla/5.0 NotBrainitiveMobile/1.0'] as $agent) {
+            $this->withHeader('User-Agent', $agent)->get('/app/session/'.$this->webSessionCode($user, $device->id))->assertOk()
+                ->assertInertia(fn (Assert $page) => $page->component('AppAuth/Session'));
+            $this->assertGuest('web');
+        }
+    }
+
     public function test_a_web_session_code_works_once(): void
     {
         $user = User::factory()->create();

@@ -51,8 +51,8 @@ rate limits. Conventions (full text in `docs/ai/API.md` of the repository):
 
 - **Auth:** `Authorization: Bearer bra_...` - a 15-minute access token from the native sign-in
   (`/app/authorize` in the system browser -> `POST /auth/exchange`). Refresh with
-  `POST /auth/refresh` (`brr_...`, 60 days, single use; replaying an old one signs the user out
-  everywhere). Tokens of the MCP / CLI / extension clients get 401 here. The TV app (device-code
+  `POST /auth/refresh` (`brr_...`, 60 days, single use; replaying an old one revokes the
+  device). Tokens of the MCP / CLI / extension clients get 401 here. The TV app (device-code
   sign-in, `POST /auth/device`) may only call a read-mostly list of endpoints (`docs/ai/API.md`);
   anything else answers 403 `client_not_allowed`.
 - **Errors:** always `{"message": "...", "code": "...", "errors"?: {"field": ["..."]}}` - 401

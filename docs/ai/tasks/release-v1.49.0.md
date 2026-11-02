@@ -738,8 +738,8 @@ Findings of the App API security review; the design is the owner's (decided 2026
   rules unchanged.
 - **M3 — revoking a device ends its web session.** `/app/session` stores `app_device_id` in the session; web middleware
   `EndRevokedAppDeviceSessions` checks the device (one indexed query, cached 60 s per device; `AppTokens::revoke` forgets
-  the cache so the next request sees it) and logs the session out (remember token cycled). Refresh reuse also runs
-  `SignOutEverywhere` (theft signal).
+  the cache so the next request sees it) and logs the session out (remember token cycled). Refresh reuse revokes only
+  that device, which now ends its webview session too (follow-up `fix/app-api-reuse-scope`).
 - **L1 — collab sockets of revoked devices.** `CollabToken` gets `dev` for App API callers (`PageCollab::session(…, $device)`);
   `internal/collab/access` takes `devices` [{id, user_id}] → `revoked_devices` (shared with the live endpoint:
   `AppTokens::revokedAmong`); the collab server sends them on connect and in the minute re-check and closes revoked
@@ -756,7 +756,9 @@ Built as planned, no migration (the device code's IP + created time live in its 
 `AppDeviceCodes::coarseIp`, `AppWebSessions` + `EndRevokedAppDeviceSessions` (web group), `Pages/AppAuth/Session.tsx` +
 `POST /app/session` (`app.session.confirm`), `AppTokens::revokedAmong`, collab `dev` claim, `createCollabServer().revokeDevices`
 + `attachLive({onDevicesRevoked})`. `SignOutEverywhere::run($user, $keepSessionId, $appReason)` revokes the apps; the direct
-`revokeAllFor` calls in password change / reset and suspension are gone. Refresh reuse → `SignOutEverywhere` (all devices out).
+`revokeAllFor` calls in password change / reset and suspension are gone. Follow-up `fix/app-api-reuse-scope`: refresh reuse
+revokes only that device (+ its webview session, + email), not `SignOutEverywhere`; the mobile webview marker
+` BrainitiveMobile/<version>` gets the one-step `/app/session` like ` BrainitiveDesktop/`.
 Tests: `AppClientAbilitiesTest` (6), `AppWebSessionRevocationTest` (5), `AppSignInTest` (+7, webview tests now send the desktop UA),
 `AppAuthTokensTest` (+reuse everywhere), `DeviceCodeSignInTest` (+2), `PageCollabTest` (+2), takeover asserts in
 `AuthOAuthHardeningTest` / `MicrosoftLoginTest`; realtime `server.test.js` (+4), `live.test.js` (+1); e2e `app-sign-in` (+2),

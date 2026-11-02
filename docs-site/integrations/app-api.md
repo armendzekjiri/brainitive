@@ -22,7 +22,7 @@ No OAuth app or client secret has to be set up for any of this.
 - Every sign-in creates a **device** with its own access token. A token is short-lived and is renewed in the background; it only works for the API, never for the web app.
 - A device is listed under **Profile → Notifications → Desktop & mobile apps** with its name, platform and last use.
 - **Revoke** signs one device out immediately: its token stops working, its live connections (updates and live doc editing) are closed, and the web session its window opened ends. You can also sign out all devices.
-- Changing your password, or a suspended account, signs out every device. So does an old sign-in token being used again (a sign that it was copied): then every browser and app is signed out, and you get an email.
+- Changing your password, or a suspended account, signs out every device. If an old sign-in token of an app is used again (a sign that it was copied), that device is signed out and you get an email.
 - A one-time app link opened in a normal browser, or where someone else is signed in, asks before it signs anyone in.
 
 ## Reference

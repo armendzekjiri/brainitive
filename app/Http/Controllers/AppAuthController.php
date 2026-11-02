@@ -82,8 +82,8 @@ class AppAuthController extends Controller
      * The code is consumed here, once, and the sign-in it carries is bound to this browser session
      * (`app_session.pending`, PENDING_TTL to confirm). Then:
      *  - the same user is already signed in → continue at once;
-     *  - nobody is signed in and the request comes from the desktop app's webview (user agent with
-     *    ` BrainitiveDesktop/`) → sign in at once, as before;
+     *  - nobody is signed in and the request comes from a native app's webview (user agent with
+     *    ` BrainitiveDesktop/` or ` BrainitiveMobile/`) → sign in at once, as before;
      *  - anyone else is signed in, or it is a plain browser → a confirm page ("Continue as B?" /
      *    "Sign in as B on this browser?"); only its POST (CSRF) signs in. Nobody is logged out silently.
      * Consuming on the GET (not on the POST) keeps the link single-use from the first open: a copy of the
@@ -103,7 +103,7 @@ class AppAuthController extends Controller
         $current = Auth::guard('web')->user();
         $to = is_string($request->query('to')) ? $request->query('to') : null;
 
-        if (($current && $current->is($user)) || (! $current && $this->fromDesktopWebview($request))) {
+        if (($current && $current->is($user)) || (! $current && $this->fromAppWebview($request))) {
             return $this->signIn($request, $device, $to);
         }
 
@@ -180,13 +180,15 @@ class AppAuthController extends Controller
     }
 
     /**
-     * The desktop app's webview: its user agent ends in ` BrainitiveDesktop/<version>` (resources/js/lib/desktop.ts).
-     * A web page can't set another browser's user agent, so a link planted in someone's normal browser never
-     * takes this path (KNOWLEDGE → App API security review).
+     * A native app's webview: its user agent ends in ` BrainitiveDesktop/<version>` (resources/js/lib/desktop.ts)
+     * or ` BrainitiveMobile/<version>`. A web page can't set another browser's user agent, so a link planted in
+     * someone's normal browser never takes this path (KNOWLEDGE → App API security review).
      */
-    private function fromDesktopWebview(Request $request): bool
+    private function fromAppWebview(Request $request): bool
     {
-        return str_contains((string) $request->userAgent(), ' BrainitiveDesktop/');
+        $agent = (string) $request->userAgent();
+
+        return str_contains($agent, ' BrainitiveDesktop/') || str_contains($agent, ' BrainitiveMobile/');
     }
 
     /**

@@ -11,8 +11,7 @@ use Illuminate\Support\Str;
  * End every session and token of a user: browser sessions (database driver), the remember-me
  * token, OAuth / CLI / MCP access + refresh tokens, and every signed-in desktop / mobile / TV app
  * (AppTokens::revokeAllFor: tokens, live and collab sockets, the webviews' sessions — BRAI-377).
- * Used on suspension, deletion, password change and reset, refresh-token reuse, and when a social
- * login takes over an account whose email was never verified.
+ * Used on suspension, deletion, password change and reset, and when a social login takes over an account whose email was never verified.
  */
 class SignOutEverywhere
 {

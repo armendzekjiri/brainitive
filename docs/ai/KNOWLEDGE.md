@@ -573,8 +573,10 @@ the allowlist renaming only.
 - **Revocation:** `SignOutEverywhere::run($user, $keepSessionId, $appReason)` ends browser sessions, the
   remember token, Passport tokens **and** every app device (`AppTokens::revokeAllFor`, since BRAI-377 — before,
   the social-login takeover paths left the squatter's apps signed in). Reasons: `suspended`, `deleted`,
-  `password_changed`, `account_takeover`, `refresh_reuse`, default `signed_out_everywhere`. Refresh reuse runs it
-  too (a theft signal), so one misbehaving client that refreshes twice in parallel signs the user out everywhere.
+  `password_changed`, `account_takeover`, default `signed_out_everywhere`. **Refresh reuse does not run it**
+  (decided 2026-11-02): it revokes only that device — which also ends the web session its webview opened
+  (`EndRevokedAppDeviceSessions`) — plus the email, so a client that refreshes twice in parallel doesn't sign the
+  user out everywhere.
 - **Webview session:** `/app/session/{code}` logs into `web` with remember-me (cookies survive app
   restarts) and only follows a relative `?to=` (`/…`, not `//` or `/\`). Confirm page + device binding: see
   "App API security review" below.
@@ -593,7 +595,8 @@ the allowlist renaming only.
 - **`/app/session/{code}`: why the desktop webview may skip the confirm page.** The attack is login CSRF / a silent
   account swap: someone sends the victim a link to *their own* web-session code. A web page can't set the user
   agent of the victim's browser (it's not a header `fetch` / a link may set), so a planted link in a normal browser
-  never carries ` BrainitiveDesktop/` and gets the confirm page; and a signed-in user is never swapped without a
+  never carries ` BrainitiveDesktop/` or ` BrainitiveMobile/` (the mobile webview's marker, same rule) and gets the
+  confirm page; and a signed-in user is never swapped without a
   click, even in the webview. The code is consumed on the **GET** and the pending sign-in bound to that session
   (5 min): a copy of the URL is dead from the first open, and the POST carries no code, only the session's CSRF
   token. Link unfurlers spend the code — fine, it's never meant to be shared.
