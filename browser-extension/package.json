@@ -13,7 +13,8 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox --mv3",
     "typecheck": "tsc --noEmit",
-    "postinstall": "wxt prepare"
+    "postinstall": "wxt prepare",
+    "test": "vitest run"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
@@ -29,6 +30,7 @@
     "@types/turndown": "^5.0.6",
     "@wxt-dev/module-react": "^1.2.2",
     "typescript": "^5.9.3",
+    "vitest": "^4.1.12",
     "wxt": "^0.21.4"
   }
 }
