@@ -35,6 +35,18 @@ Nothing extra is needed when your proxy forwards everything to Brainitive (the n
 
 The App API sends no CORS headers on purpose: only the native apps call it, never a website.
 
+### Paths to allow
+
+If a proxy, firewall or login wall sits in front of Brainitive, these paths must reach it:
+
+| Path | Why |
+|---|---|
+| `/api/v1/` | The App API, with the `Authorization` header unchanged. Do not put another login in front of it |
+| `/app/authorize` | Sign-in page the app opens in the browser |
+| `/app/device` | Where people approve a TV code |
+| `/app/session/` | One-time link that signs the app window into the web app |
+| `/collab` (websocket) | Live updates for apps use the same websocket as the browser. Forward the `Upgrade` and `Connection` headers, as in [Realtime server](./realtime) |
+
 ## Settings
 
 | Variable | Default | What it does |
@@ -43,6 +55,12 @@ The App API sends no CORS headers on purpose: only the native apps call it, neve
 | `APP_API_MIN_MOBILE_VERSION` | `0.1.0` | The same for the mobile app |
 
 Raise them only when an upgrade note asks you to. All variables: [Configuration](./configuration#desktop-and-mobile-apps).
+
+## Upgrading to v1.49.0
+
+1. Run the database migration: `php artisan migrate`. It adds one table, `sync_tombstones`, which remembers deleted or reassigned items for 30 days so offline apps can drop them. Nothing existing changes.
+2. Restart the realtime service (`sudo systemctl restart brainitive-realtime`, or the `realtime` container with Docker). App sign-out then also closes that device's live connection. See [Realtime server](./realtime).
+3. Make sure the scheduler runs (`php artisan schedule:run` every minute). It prunes old tombstones daily. See [Queue and scheduler](./queue-and-scheduler).
 
 ## Signed-in devices
 

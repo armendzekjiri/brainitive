@@ -21,6 +21,7 @@ page explains both.
 | [Outgoing webhooks](./webhooks) | Signed events for Zapier, Make, n8n or your own service | Ready | A running queue worker |
 | [Browser extension](./browser-extension) | Save pages, issues, bookmarks, docs, tasks and snippets | Install the extension | HTTPS |
 | [Command line (CLI)](./cli) | Capture, issues, tasks, snippets, docs and search from the terminal; an MCP bridge for local AI tools | `curl -fsSL https://github.com/armendzekjiri/brainitive/releases/latest/download/install.sh \| sh` | Nothing |
+| [App API](./app-api) | The API behind the desktop, mobile and TV apps: sign-in, devices and revoking | Nothing | `/api/v1` and `/app` reachable (see [Desktop and mobile apps](../self-hosting/desktop-and-mobile-apps)) |
 | [Imports](./imports) | Jira, Trello, Notion, Brainitive project exports | Ready | A running queue worker |
 
 ::: tip After changing environment variables
