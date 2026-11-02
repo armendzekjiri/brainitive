@@ -39,9 +39,42 @@ export const DEFAULT_COLLAB_LIMITS = {
     /** messages per socket: this many at once, refilled at messagesPerSecond — beyond: closed (4429) */
     messageBurst: 300,
     messagesPerSecond: 100,
-    /** largest single WebSocket message (bytes; larger closes the socket with 1009) */
-    maxMessageBytes: 16 * 1024 * 1024,
+    /** largest single WebSocket message (bytes; larger closes the socket with 1009). null: maxStateBytes + 64 KiB */
+    maxMessageBytes: null,
 };
+
+/** COLLAB_MAX_STATE_BYTES: same variable, default and 1 KiB floor as config/collab.php → CollabConfig::maxStateBytes() */
+export const DEFAULT_MAX_STATE_BYTES = 16 * 1024 * 1024;
+const MIN_STATE_BYTES = 1024;
+
+/** Read a varUint (lib0 encoding) at `at`: [value, next offset], or null past the end. */
+function varUint(bytes, at) {
+    let value = 0;
+    let shift = 0;
+    for (let i = at; i < bytes.length && shift < 53; i++) {
+        value += (bytes[i] & 0x7f) * 2 ** shift;
+        if (bytes[i] < 0x80) return [value, i + 1];
+        shift += 7;
+    }
+    return null;
+}
+
+/**
+ * The Yjs update a client message carries (Sync / SyncReply → SyncStep2 or Update), else null. A Hocuspocus message is
+ * `varString document · varUint type · …`; a sync message continues `varUint syncType · varUint8Array update`.
+ */
+export function updateOf(message) {
+    const bytes = message instanceof Uint8Array ? message : new Uint8Array(message);
+    let read = varUint(bytes, 0); // document name: length + UTF-8
+    if (!read) return null;
+    read = varUint(bytes, read[1] + read[0]);
+    if (!read || (read[0] !== 0 && read[0] !== 4)) return null; // Sync / SyncReply
+    read = varUint(bytes, read[1]);
+    if (!read || (read[0] !== 1 && read[0] !== 2)) return null; // SyncStep2 / Update (SyncStep1 is a state vector)
+    const length = varUint(bytes, read[1]);
+    if (!length || length[1] + length[0] > bytes.length) return null;
+    return bytes.subarray(length[1], length[1] + length[0]);
+}
 
 export function createCollabServer({
     port = 1234,
@@ -65,11 +98,45 @@ export function createCollabServer({
     authDeadlineMs = 10_000,
     /** see DEFAULT_COLLAB_LIMITS */
     limits = {},
+    /**
+     * Largest Yjs state of one document (bytes) — Brainitive refuses to store more (413). Codex realtime review 5: an
+     * update that would grow a document past it is refused before anyone else sees it. Brainitive's own value (the
+     * access answer's `max_state_bytes`) replaces this default as soon as it answers.
+     */
+    maxStateBytes = DEFAULT_MAX_STATE_BYTES,
 }) {
     if (!secret) throw new Error('COLLAB_SECRET (or APP_KEY) is required');
     if (!appUrl) throw new Error('COLLAB_APP_URL (or APP_URL) is required');
 
+    let stateLimit = Math.max(MIN_STATE_BYTES, maxStateBytes);
     const L = { ...DEFAULT_COLLAB_LIMITS, ...limits };
+    L.maxMessageBytes ??= stateLimit + 64 * 1024;
+    /** Brainitive said how large a document may be (config collab.max_state_bytes): that is the limit */
+    const learnLimit = (result) => {
+        const value = result?.max_state_bytes;
+        if (Number.isInteger(value) && value >= MIN_STATE_BYTES) stateLimit = value;
+    };
+    /** document → its encoded size as far as known (grows by every accepted update; measured when it matters) */
+    const sizes = new WeakMap();
+
+    /** Whether the document stays within stateLimit with this update applied. */
+    function fits(document, update) {
+        const known = sizes.get(document) ?? Y.encodeStateAsUpdate(document).length;
+        if (known + update.length <= stateLimit) {
+            sizes.set(document, known + update.length);
+            return true;
+        }
+        // near the limit: what the document would really be (an update repeating known content adds nothing)
+        let projected;
+        try {
+            projected = Y.mergeUpdates([Y.encodeStateAsUpdate(document), update]).length;
+        } catch {
+            return true; // not a valid update: Yjs ignores it anyway
+        }
+        if (projected > stateLimit) return false;
+        sizes.set(document, projected);
+        return true;
+    }
     const keys = deriveKeys(secret);
     const warn = (message) => (logger.warn ?? logger.error)?.call(logger, message);
     const laravel = createLaravelClient({ appUrl, appHost, internalKey: keys.internal, fetchImpl });
@@ -104,7 +171,9 @@ export function createCollabServer({
 
     async function store(documentName, document) {
         try {
-            await laravel.storeState(documentName, Y.encodeStateAsUpdate(document));
+            const state = Y.encodeStateAsUpdate(document);
+            sizes.set(document, state.length); // measured anyway: the size estimate starts again from here
+            await laravel.storeState(documentName, state);
             clearTimeout(unsaved.get(documentName));
             unsaved.delete(documentName);
             return true;
@@ -198,6 +267,7 @@ export function createCollabServer({
                 revokedDevices.set(device, Math.floor(Date.now() / 1000));
                 refuseDevice();
             }
+            learnLimit(result);
             if (!result?.current) refuse('document-replaced');
             const access = result.users?.[String(payload.sub)] ?? null;
             if (access === null) refuse('access-denied');
@@ -234,10 +304,18 @@ export function createCollabServer({
             });
         },
 
-        // a flooding socket is being closed: what it still sends is dropped, never applied or passed on
-        async beforeHandleMessage({ connection }) {
+        // a flooding socket is being closed: what it still sends is dropped, never applied or passed on.
+        // Codex realtime review 5: an update that would make the document larger than Brainitive stores is refused
+        // here — before Yjs applies it and before any peer sees it; only its sender's document closes (4413).
+        async beforeHandleMessage({ connection, document, documentName, update }) {
             if (connection?.webSocket && flooded.has(connection.webSocket)) {
                 throw Object.assign(new Error(TOO_MANY_MESSAGES.reason), TOO_MANY_MESSAGES);
+            }
+            if (connection?.readOnly) return; // Hocuspocus drops a viewer's updates anyway
+            const incoming = updateOf(update);
+            if (incoming && incoming.length > 0 && !fits(document, incoming)) {
+                warn(`[realtime] refused an update ${fields({ document: documentName, user: connection?.context?.user?.id, reason: 'document-too-large', bytes: incoming.length, limit: stateLimit })}`);
+                throw Object.assign(new Error(TOO_LARGE.reason), TOO_LARGE);
             }
         },
 
@@ -395,6 +473,7 @@ export function createCollabServer({
                     logger.error(`[realtime] access re-check failed: ${fields({ document: documentName, users: batch.length, error: error?.message ?? String(error) })}`);
                     continue;
                 }
+                learnLimit(result);
                 if (!result?.current) {
                     closeDocument(documentName, RESET);
                     break;

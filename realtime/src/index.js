@@ -45,7 +45,11 @@ const limits = Object.fromEntries(Object.entries({
     maxMessageBytes: positive(env.COLLAB_MAX_MESSAGE_BYTES, null),
 }).filter(([, value]) => value !== null));
 
-const collab = createCollabServer({ port, address, secret, appUrl, appHost, accessIntervalMs, maxAccessFailures, limits });
+// Codex realtime review 5: the largest document Brainitive stores — the app's COLLAB_MAX_STATE_BYTES (same name, same
+// default); the app's access answers carry its value (max_state_bytes), so the two can't drift for long
+const maxStateBytes = positive(env.COLLAB_MAX_STATE_BYTES, undefined);
+
+const collab = createCollabServer({ port, address, secret, appUrl, appHost, accessIntervalMs, maxAccessFailures, limits, maxStateBytes });
 
 // Live channels (BRAI-151) on the same port: `?live=1` sockets + Brainitive's publish endpoint.
 // LIVE_PUBLISH_FROM=private (Docker): the app container publishes over the private network.

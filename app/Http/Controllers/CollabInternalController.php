@@ -76,7 +76,9 @@ class CollabInternalController extends Controller
      * Who of the connected users may still view / edit (on connect and every minute by the server). `devices`
      * (optional): the app devices of the connections whose token carries `dev` (App API), each with its user;
      * the answer's `revoked_devices` names those revoked, gone or not that user's — the server closes their
-     * sockets with 4410 (BRAI-377, as LiveInternalController does for live channels).
+     * sockets with 4410 (BRAI-377, as LiveInternalController does for live channels). `max_state_bytes`: the largest
+     * state store() accepts — the realtime server refuses updates that would grow a document past it before any
+     * peer sees them (Codex realtime review 5), so its limit always follows this one.
      */
     public function access(Request $request): JsonResponse
     {
@@ -108,6 +110,7 @@ class CollabInternalController extends Controller
             'current' => (PageCollab::epoch($page) ?? 0) === $epoch,
             'users' => (object) $access,
             'revoked_devices' => $revoked,
+            'max_state_bytes' => CollabConfig::maxStateBytes(),
         ]);
     }
 
@@ -196,6 +199,7 @@ class CollabInternalController extends Controller
             'current' => (ItemCollab::epoch($item) ?? 0) === $epoch,
             'users' => (object) $access,
             'revoked_devices' => $revokedDevices,
+            'max_state_bytes' => CollabConfig::maxStateBytes(),
         ]);
     }
 }

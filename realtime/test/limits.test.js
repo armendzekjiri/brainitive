@@ -4,9 +4,10 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { readFileSync } from 'node:fs';
 import WebSocket from 'ws';
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
-import { createCollabServer } from '../src/server.js';
+import { DEFAULT_MAX_STATE_BYTES, createCollabServer, updateOf } from '../src/server.js';
 import { deriveKeys, signToken } from '../src/token.js';
 
 const SECRET = 'limits-test-secret';
@@ -139,4 +140,61 @@ test('normal editing stays well inside the limits', async () => {
     assert.deepEqual(a.events.socketCodes, []);
     a.close();
     b.close();
+});
+
+// ── finding 5: the document never outgrows what Brainitive stores — checked before peers see the update ──
+
+async function oversized(url) {
+    const a = connect(url, 1);
+    const b = connect(url, 2);
+    await until(() => a.events.synced && b.events.synced);
+    a.doc.getText('t').insert(0, 'small ');
+    await until(() => b.doc.getText('t').toString() === 'small ');
+
+    a.doc.getText('t').insert(6, 'x'.repeat(3000));
+    await until(() => a.events.closed.includes('Document too large'));
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(b.doc.getText('t').toString(), 'small ', 'the peer never got it');
+    assert.deepEqual(b.events.closed, [], 'only the sender is refused');
+
+    // the others keep working on the document
+    b.doc.getText('t').insert(6, 'still fine');
+    const c = connect(url, 3);
+    await until(() => c.events.synced && c.doc.getText('t').toString() === 'small still fine');
+    [a, b, c].forEach((client) => client.close());
+}
+
+test('an update that would grow the document past COLLAB_MAX_STATE_BYTES is refused for its sender only, before peers see it', async () => {
+    app.stored = [];
+    const url = await start({ maxStateBytes: 2048 });
+    await oversized(url);
+    await new Promise((r) => setTimeout(r, 300));
+    assert.ok(app.stored.every((state) => Buffer.from(state, 'base64').length <= 2048), 'nothing over the limit was stored');
+});
+
+test('the default state limit is the app’s (config/collab.php COLLAB_MAX_STATE_BYTES)', () => {
+    const config = readFileSync(new URL('../../config/collab.php', import.meta.url), 'utf8');
+    const match = config.match(/env\('COLLAB_MAX_STATE_BYTES',\s*([\d\s*_]+)\)/);
+    assert.ok(match, 'config/collab.php still reads COLLAB_MAX_STATE_BYTES');
+    assert.equal(match[1].replaceAll('_', '').split('*').reduce((product, n) => product * Number(n.trim()), 1), DEFAULT_MAX_STATE_BYTES);
+});
+
+test('updateOf finds the Yjs update in sync step 2 / update messages, nothing in others', () => {
+    // varString "d" · type · syncType · varUint8Array
+    assert.deepEqual([...updateOf(new Uint8Array([1, 100, 0, 2, 3, 7, 8, 9]))], [7, 8, 9], 'Sync · Update');
+    assert.deepEqual([...updateOf(new Uint8Array([1, 100, 0, 1, 2, 7, 8]))], [7, 8], 'Sync · SyncStep2');
+    assert.deepEqual([...updateOf(new Uint8Array([1, 100, 4, 2, 1, 7]))], [7], 'SyncReply · Update');
+    assert.equal(updateOf(new Uint8Array([1, 100, 0, 0, 1, 7])), null, 'SyncStep1 is a state vector');
+    assert.equal(updateOf(new Uint8Array([1, 100, 1, 2, 1, 7])), null, 'awareness');
+    assert.equal(updateOf(new Uint8Array([1, 100, 0, 2, 9, 7])), null, 'cut short');
+    assert.equal(updateOf(new Uint8Array([])), null);
+});
+
+test('Brainitive’s own limit (max_state_bytes in the access answer) wins over the default', async () => {
+    app.maxStateBytes = 2048;
+    try {
+        await oversized(await start());
+    } finally {
+        app.maxStateBytes = null;
+    }
 });
