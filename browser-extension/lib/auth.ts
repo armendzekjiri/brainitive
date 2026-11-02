@@ -145,13 +145,49 @@ export async function signIn(server: string): Promise<Session> {
     return session;
 }
 
-/** Forget the tokens and everything cached from the account. */
-export async function signOut(): Promise<void> {
-    await exclusive(async () => {
+/**
+ * The server endpoint that revokes the calling capture token and its refresh token (like
+ * `DELETE /api/cli/logout` for the CLI). Codex CLI/extension review 2.
+ */
+export const REVOKE_PATH = '/api/ext/v1/logout';
+
+/** Revokes an access token (and, on the server, its refresh token). True when the server confirmed it. */
+async function revoke(server: string, accessToken: string): Promise<boolean> {
+    try {
+        const response = await fetch(`${server}${REVOKE_PATH}`, {
+            method: 'DELETE',
+            headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` },
+            redirect: 'error',
+        });
+        return response.ok;
+    } catch {
+        return false; // offline, or a redirect
+    }
+}
+
+/**
+ * Sign out: forget the tokens and everything cached from the account (right away, so nothing
+ * can use them any more), then revoke them on the server. If the server can't confirm — offline,
+ * or a server without the endpoint — the local sign-out stands and a note says how to revoke
+ * the extension by hand (shown on the sign-in screen).
+ */
+export async function signOut(): Promise<{ revoked: boolean }> {
+    const session = await exclusive(async () => {
+        const current = await getSession();
         await bumpGeneration();
         await setSession(null);
-        await browser.storage.local.remove(['destinations', 'lastDestination']);
+        await browser.storage.local.remove(['destinations', 'lastDestination', 'signOutNotice']);
+        return current;
     });
+    if (!session) return { revoked: false };
+
+    const revoked = await revoke(session.server, session.accessToken);
+    if (!revoked) {
+        await browser.storage.local.set({
+            signOutNotice: `Signed out on this device, but ${new URL(session.server).host} couldn’t confirm that the extension’s access was revoked. To be sure, remove “Brainitive for …” under Profile → Connected apps.`,
+        });
+    }
+    return { revoked };
 }
 
 /*
@@ -221,8 +257,9 @@ async function refresh(session: Session, generation: number): Promise<Session> {
 
     return exclusive(async () => {
         if ((await getGeneration()) !== generation) {
-            // Signed out or signed in again meanwhile: drop these tokens and hand out the
-            // current session (if any), never the old one's fresh token.
+            // Signed out or signed in again meanwhile: revoke and drop these tokens and hand out
+            // the current session (if any), never the old one's fresh token.
+            void revoke(session.server, tokens.access_token);
             const current = await getSession();
             if (!current) throw new NotSignedInError();
             return current;

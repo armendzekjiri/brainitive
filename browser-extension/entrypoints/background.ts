@@ -71,8 +71,7 @@ export default defineBackground(() => {
                     return { ok: true, data: { server: session.server } };
                 }
                 case 'sign-out':
-                    await signOut();
-                    return { ok: true, data: null };
+                    return { ok: true, data: await signOut() };
                 case 'get-token':
                     return { ok: true, data: await getAccessToken(message.force) };
                 case 'capture-area':

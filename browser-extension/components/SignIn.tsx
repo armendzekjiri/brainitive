@@ -15,12 +15,20 @@ export default function SignIn({ inPopup = false, initialServer }: { inPopup?: b
     const [server, setServer] = useState(initialServer ?? '');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
 
     useEffect(() => {
         getLastServer().then((last) => {
             if (!initialServer && last && last !== CLOUD_ORIGIN) {
                 setWhere('self');
                 setServer(last);
+            }
+        });
+        // Set by sign-out when the server couldn't confirm the revocation; shown once.
+        browser.storage.local.get('signOutNotice').then(({ signOutNotice }) => {
+            if (typeof signOutNotice === 'string') {
+                setNotice(signOutNotice);
+                browser.storage.local.remove('signOutNotice');
             }
         });
     }, []);
@@ -95,6 +103,12 @@ export default function SignIn({ inPopup = false, initialServer }: { inPopup?: b
                         required
                     />
                 </label>
+            )}
+
+            {notice && (
+                <div className="banner" role="status" style={{ width: '100%', textAlign: 'left' }}>
+                    {notice}
+                </div>
             )}
 
             {error && (
