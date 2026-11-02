@@ -133,7 +133,8 @@ class TaskListController extends Controller
         $data = $this->attributes($request->safe()->except(['request_id']));
 
         [$task, $replayed] = $this->createOnce($request, 'task-lists.items.store', TaskListItem::class, ['list' => $list->id] + $request->safe()->except(['request_id']),
-            fn () => TaskLists::createTask($list, $request->user(), $data));
+            fn () => TaskLists::createTask($list, $request->user(), $data),
+            fn (TaskListItem $task) => $task->taskList !== null && $request->user()->can('view', $task->taskList));
 
         $task = $this->prepared($task, $list);
         if ($replayed) {

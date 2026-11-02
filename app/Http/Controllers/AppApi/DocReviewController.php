@@ -157,7 +157,10 @@ class DocReviewController extends Controller
                 'quote' => $data['quote'] ?? null,
                 'prefix' => $data['prefix'] ?? null,
                 'suffix' => $data['suffix'] ?? null,
-            ]));
+            ]),
+            // as visibleThread(): a project the user can open and a review they may see
+            fn (PageComment $comment) => $comment->page?->project !== null && $comment->review !== null
+                && $request->user()->hasProjectAccess($comment->page->project) && $request->user()->can('view', $comment->review));
 
         $thread = self::thread($comment->parent_id === null ? $comment : $comment->parent()->firstOrFail(), $review, $page, $request->user());
         if ($replayed) {

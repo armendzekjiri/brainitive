@@ -90,7 +90,8 @@ class WorkLogController extends Controller
         $form = ['item_id' => $data['issue_id'] ?? null] + collect($data)->except('issue_id')->all();
 
         [$entry, $replayed] = $this->createOnce($request, 'work-logs.store', TimeEntry::class, $data,
-            fn () => $this->asIssueErrors(fn () => TimeEntries::create($user, $workspace, $form)));
+            fn () => $this->asIssueErrors(fn () => TimeEntries::create($user, $workspace, $form)),
+            fn (TimeEntry $entry) => (bool) $this->own($user, (string) $entry->id));
 
         $resource = new WorkLogResource($this->loaded($entry), array_flip($user->accessibleProjectIds()));
         if ($replayed) {

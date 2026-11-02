@@ -77,7 +77,8 @@ class ProjectController extends Controller
      * Create a project, blank or from a template (`template` + `start_date`).
      *
      * A blank project gets a "Main Board" and the user as project admin. A template run is
-     * idempotent with `request_id` (UUID): a retry answers 200 with the project it created.
+     * idempotent with `request_id` (UUID): a retry answers 200 with the project it created — or 404
+     * once the caller can no longer open it (moved to another workspace).
      *
      * @throws LimitReached the workspace is at its project or storage limit (402 limit_reached)
      * @throws ValidationException the template can't be used or is still being created (422)
@@ -87,7 +88,9 @@ class ProjectController extends Controller
         $user = $request->user();
 
         if ($existing = $request->existingProject()) {
-            return (new ProjectResource($existing->load('workspace')))->response();
+            // re-resolved (Codex review): a project transferred meanwhile to a workspace the caller can't open is the
+            // same 404 as GET /projects/{id}, never its data
+            return (new ProjectResource($this->visibleProject($request, $existing->id)))->response();
         }
 
         [$project] = ProjectCreator::create($workspace, $user, $request->validated());

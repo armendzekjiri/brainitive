@@ -70,7 +70,8 @@ class SnippetController extends Controller
         $data = $request->safe()->except(['request_id']);
 
         [$collection, $replayed] = $this->createOnce($request, 'snippet-collections.store', SnippetCollection::class, ['workspace' => $workspace->id] + $data,
-            fn () => Snippets::createCollection($workspace, $request->user(), $data));
+            fn () => Snippets::createCollection($workspace, $request->user(), $data),
+            fn (SnippetCollection $collection) => (bool) $this->visibleSnippetCollection($request, $collection->id));
 
         $collection = $this->withCount($collection);
         if ($replayed) {
@@ -156,7 +157,8 @@ class SnippetController extends Controller
         $data = $request->safe()->except(['request_id']);
 
         [$snippet, $replayed] = $this->createOnce($request, 'snippets.store', Snippet::class, ['collection' => $collection->id] + $data,
-            fn () => Snippets::createSnippet($collection, $request->user(), $data));
+            fn () => Snippets::createSnippet($collection, $request->user(), $data),
+            fn (Snippet $snippet) => (bool) $this->visibleSnippet($request, $snippet->id));
 
         $snippet->setRelation('collection', $collection);
         if ($replayed) {
