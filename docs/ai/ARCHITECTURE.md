@@ -243,6 +243,9 @@ Plan + normative contract [`tasks/feat-live-foundation.md`](./tasks/feat-live-fo
 - **Laravel:** `config/live.php`; `app/Support/Live/` — `LiveConfig` (on when live editing is configured, `LIVE_ENABLED=false` turns it off; URLs), `LiveToken` (HMAC token, key label `live-token`, TTL `LIVE_TOKEN_TTL` 120 s; sent as the first socket message, never in the URL), `LiveChannels` (`TYPES` = type → id pattern + policy resolver: `user.{id}`, `item.{id}`, `board.{id}`, `plan.{id}`, `page.{uuid}`, `ticket.{id}`; parents must not be trashed; suspended users get nothing), `Live` (`publish()`, allow-list `KEY`, `flush()`). `LiveTokenController` (`live.token`, POST `{channels[]}` ≤ 50 → `{url, token, expires_at, channels, denied, user}`; 404 when off), `LiveInternalController` (`internal.collab.live.access`, `VerifyCollabSecret`), `app/Providers/LiveServiceProvider.php` (bell: `NotificationSent` on `database` → `user.{id}` `notification.created`; registers `BoardLive`). Shared prop `live` (null = off).
 - **Publishing:** `Live::publish($channel, $event, $payload)` — payload validated against `Live::KEY` (ids / uuids, counts, revisions, positions, `*_at`, status / type keys, `fields`; ≤ 16 keys, flat, ≤ 2 KB; never titles / names / bodies), queued in `DB::afterCommit`, sent once per request / queued job / command after the response (`defer(..., 'live.publish')->always()`) to `LIVE_PUBLISH_URL` (the realtime server's own address: prod `http://127.0.0.1:6201`, dev `:6202`, Docker `http://realtime:1234`; empty → derived from a localhost live URL, else publishing off). Never throws; after a failure publishing pauses 15 s.
 - **Frontend:** `resources/js/lib/live/` — `client.ts` (`LiveClient` singleton: ref-counted subscriptions, batched token fetch, reconnect with backoff + jitter, re-auth to add channels, hidden tab > 2 min disconnects), `hooks.ts` (`useLiveConfig`, `useLiveChannel(channel, {onEvent, onResync})`, `useLivePresence`, `useLiveSignal`). Complete no-op when `live` is null. Subscribers refetch through the normal permission-checked endpoints and again on `onResync` (events during a gap are lost). e2e only: `window.__brainitiveLive` (`e2e/helpers/live.ts` → `liveTab(page)`).
+- **Native clients (v1.49.0, BRAI-426):** `GET /api/v1/realtime` + `POST /api/v1/realtime/token` (App API) hand out the same token
+  through `LiveToken::grant()`; the realtime server needs no change (no Origin check, token as first message). Every event: `API.md` →
+  Realtime (keep that catalog in sync when adding an event).
 - **Tests:** `tests/Feature/Live/{LiveChannelsTest,LivePublishTest}.php`, `realtime/test/live.test.js`, e2e `e2e/tests/live-channel.spec.ts`. Self-hosting: `docs/self-hosting.md` → "Live updates (bell, presence, typing)", `.env.example` (`LIVE_*`).
 
 ### Live whiteboards — draw together (v1.44.0, BRAI-153)
@@ -455,7 +458,7 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   Workspace, Project, Member, Navigation, Search, Notification, ConnectedApp, DeviceAuth, MyWork, Today,
   Calendar, TaskList, Capture, Snippet, Bookmark, Timer + WorkLog, Board, Issue + IssueActivity + IssueLink, Sprint,
   Page + PageCollab + DocReview + Link, Whiteboard, Plan, Release, Upload, CalendarEvent + Meeting + CalendarFeed, Booking,
-  Helpdesk, Lead, Portal, Insights, Sync —
+  Helpdesk, Lead, Portal, Insights, Sync, Realtime —
   one `#[Group]` tag per
   `API.md` module), Form Requests in `app/Http/Requests/AppApi/`, Resources in
   `app/Http/Resources/AppApi/`. The tables in `API.md` are the list.
@@ -520,6 +523,11 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   (wraps the existing resources) / `SyncResultResource`. Deletions = soft deletes + table `sync_tombstones` (`SyncTombstone`,
   migration `2026_11_08_100000`, pruned 30 days at 04:37): written by `Capture::deleted` and the Item / TaskListItem observers when
   the assignee changes. Tests `tests/Feature/AppApi/SyncTest.php`, e2e `e2e/tests/app-api-sync.spec.ts`.
+- **Realtime (phase 09, BRAI-426):** `Controllers\AppApi\RealtimeController` (`GET /realtime`, `POST /realtime/token`, tag
+  Realtime 340): native clients join the web's **live channels** (no Laravel broadcasting exists). `LiveToken::grant()` (extracted
+  from `LiveTokenController`, used by both) → `LiveChannels::authorize` (one copy of the channel rules); `LiveConfig::absoluteUrl()`
+  (a path `LIVE_URL` resolved against APP_URL, ws / wss). Resources `RealtimeInfoResource`, `RealtimeTokenResource`. The event
+  catalog is in `API.md` → Realtime. Tests `tests/Feature/AppApi/RealtimeTest.php`, e2e `e2e/tests/app-api-realtime.spec.ts`.
 - **TV device-code sign-in (BRAI-438):** `Support\AppApi\AppDeviceCodes` (RFC 8628 codes in the cache),
   `AppDeviceSignIn` (device row + `max_devices` + first pair; also used by `/auth/exchange`), `AppClients`
   (`config/app-api.php` → `clients.*.grant` / `platforms`); `Controllers\AppApi\DeviceAuthController`;

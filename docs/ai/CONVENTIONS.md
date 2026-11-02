@@ -209,6 +209,9 @@ Full conventions and the endpoint registry: [`API.md`](./API.md); recipe:
 - Content the apps keep offline must be visible to `ChangeFeed`: soft deletes, or a `SyncTombstone::record()` where a row
   leaves a user's scope without a trace (hard delete, reassignment). Feed queries are the user's own or limited to
   `accessibleProjectIds()`.
+- Realtime for the apps = the web's live channels (`POST /api/v1/realtime/token` → `LiveToken::grant` → `LiveChannels`). A new
+  live event or channel type gets a row in `API.md` → Realtime "Event catalog" in the same change; never a second channel rule
+  for app tokens.
 - The spec's `info.version` is the API version (`1.0.0`), not the app release; breaking changes → `/api/v2`.
 - Web ↔ desktop: call native features only through `resources/js/lib/desktop.ts` (feature-detected,
   no-op in a browser); never import `@tauri-apps/api` into the web app.

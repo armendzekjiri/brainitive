@@ -17,7 +17,7 @@ logic underneath (Support services, policies) is shared.
   the mobile work only has to read the card (template below).
 - Spec tags = the module headings below (`#[Group('Account', weight: 30)]` on the controller):
   Instance 10, Auth 20, Account 30, Devices 40, Invitations 50 (the "Invitations & onboarding"
-  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270, Bookings 280, Helpdesk 290, Leads 300, Portals 310, Insights 320, Sync 330. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
+  section), Workspaces 60, Projects 70, Members 80, Navigation 90, Search 100, Notifications 110, Connected apps 120, My Work 130, Calendar 140, Task lists 150, Captures 160, Snippets 170, Bookmarks 180, Time tracking 190, Boards 200, Issues 210, Sprints 220, Docs 230, Whiteboards 240, Plans 250, Releases 260, Files 270, Bookings 280, Helpdesk 290, Leads 300, Portals 310, Insights 320, Sync 330, Realtime 340. A new module gets a heading here, a weight, and an entry in `OpenApiSpecTest`.
 
 ## Conventions
 
@@ -160,6 +160,7 @@ rules in each module's section below; the typed spec is `docs/api/openapi.json`.
 | Portals | Portals | `GET /projects/{id}/feedback-portal`, `GET /feedback-portals/{id}/posts`, `PATCH /feedback-posts/{id}`, `POST /feedback-posts/{id}/moderate`, `GET /projects/{id}/client-portal`, `GET /client-portals/{id}/deliverables`, `GET /client-deliverables/{id}` |
 | Insights | Insights | `GET /workspaces/{slug}/insights/{tab}`, `GET /projects/{id}/health`, `GET /projects/{id}/workload` |
 | Sync | Sync | `GET /sync/changes`, `POST /sync` |
+| Realtime | Realtime | `GET /realtime`, `POST /realtime/token` + the WebSocket (event catalog in "Realtime") |
 | Web only | — | see "Web only (no App API in v1)" |
 
 Columns of the module tables: **Mobile** = scope in the mobile app (Full / Read + light edit / Read-only / web only);
@@ -986,6 +987,67 @@ Result of a change: `{request_id, type, status, http_status, replayed, entity_ty
   policies as the web (`ItemPolicy::update`, `BoardPolicy::createItems`, `TaskListPolicy::manageItems`).
 - Docs are not part of offline sync: drafts go through the live editor / `PATCH /pages/{uuid}` with `revision` (409).
 
+### Realtime
+| Method + path | Auth | Desktop use | Mobile | Card | Status |
+|---|---|---|---|---|---|
+| `GET /api/v1/realtime` | app + verified | How to connect → `{data: {enabled, url (ws:// / wss://, null when off), token_path, token_ttl, max_channels, protocol: 1, channel_types: [{type, id: number\|uuid, access}]}}`. `enabled: false` → no live updates on this server: poll | Full | BRAI-196, BRAI-265 | ready (v1.49.0, BRAI-426) |
+| `POST /api/v1/realtime/token` | app + verified, 60/min | `{channels: ["user.12", "board.4", …]}` (≤ 50) → `{data: {token, expires_at, expires_in, url, channels, denied, user: {id, name, avatar}}}`: a token for the channels the user may join, the rest in `denied` (never a 403). Live off → 404 | Full | BRAI-196, BRAI-265 | ready (v1.49.0, BRAI-426) |
+
+Brainitive's realtime is **not** Laravel broadcasting / Reverb / Pusher: it is the app's own **live channels** (BRAI-151) on its
+realtime server (`realtime/`, the same process as live co-editing), and the App API gives native clients the same tokens the web's
+tabs get (`LiveToken::grant`, shared with the web's `POST /live/token`). Access = `LiveChannels` (the web's policies, one copy).
+- **Who may join:** `user.{id}` only your own id; `board.{id}` / `item.{id}` / `plan.{id}` / `ticket.{id}` / `page.{uuid}` when you
+  can open the board / issue / plan / helpdesk ticket / doc on the web (`view` policy; a trashed record or parent = no access). A
+  suspended user gets nothing. The realtime server **re-checks every minute** and sends `{type: "revoked", channel}` for lost
+  access — drop that view's channel then.
+- **Connect:** open a WebSocket to `url`, send `{"type": "auth", "token": "…"}` as the **first message within 10 s** (never in the
+  URL) → `{type: "ready", user: {id}, channels: [granted]}`. Then `{type: "subscribe", channel, presence?: true}` → `{type:
+  "subscribed", channel, members}`; `{type: "unsubscribe", channel}`; `{type: "ping"}` → `{type: "pong"}` (optional keep-alive; the server pings every 30 s).
+  New channels: ask for a new token and send another `auth` on the same socket (grants add up). Reconnect with a new token
+  (tokens only need to be valid to join; `token_ttl` = 120 s by default).
+- **Server → client:** `{type: "event", channel, event, payload}` · `{type: "presence", channel, members: [{id, name, avatar}]}`
+  (with `presence: true`) · `{type: "signal", channel, name, data, from: {id, name}}` · `{type: "revoked", channel}` ·
+  `{type: "error", code: forbidden|too_many_subscriptions|not_subscribed|invalid_signal|rate_limited, channel?}`. Close codes:
+  4400 bad request, 4401 bad / expired token, 4403 access check failed, 4429 too many messages / sockets, 1001 server restart.
+- **Client → server signals:** `{type: "signal", channel, name, data}` (subscribed channels, ≤ 1 KB, ~4/s): today only `typing`
+  on `item.{id}` — `{}` while typing (≤ every 2 s), `{stop: true}` on send / cancel; receivers expire it after 4.5 s.
+- **Limits:** 50 subscriptions per socket, 20 sockets per user, 8 messages/s (burst 40).
+- **Payloads are ids, never content** (a socket whose access just ended can still get up to a minute of events): on an event,
+  **refetch through the normal endpoint** (`GET /items/{id}`, `GET /boards/{id}/items`, `GET /notifications` …). Events during a
+  disconnect are lost: refetch everything a view shows after every (re)connect.
+- **Echo suppression:** send a per-window `X-Live-Client: <8–40 chars [A-Za-z0-9_-]>` header with your writes; board events then carry
+  `client_id` + `actor_id`, and a window ignores an event only when **both** are its own.
+
+**Event catalog** (every event Brainitive publishes; `client_id` / `actor_id` = the sender, on board / plan / item events of a write
+that sent `X-Live-Client`):
+
+| Channel | Event | Payload | When |
+|---|---|---|---|
+| `user.{id}` | `notification.created` | `{id}` (notification uuid) | a notification lands in the user's inbox (any type) → `GET /notifications` / badge |
+| `user.{id}` | `notifications.changed` | `{unread_count}` | read / unread / archive / read-all, on the web or through the API |
+| `board.{id}` | `item.created` · `item.restored` | `{id, column_id}` | a card is created / restored on the board |
+| `board.{id}` | `item.moved` | `{id, column_id, from_column_id, position, fields}` | a card changed column (`fields`: what else changed) |
+| `board.{id}` | `item.updated` | `{id, fields}` | a card changed (`fields` = attribute names, e.g. `title`, `assigned_to`, `due_date`, `labels`, `comments`, `attachments`, `links`, `time_spent`) |
+| `board.{id}` | `item.deleted` | `{id}` | a card was deleted |
+| `board.{id}` | `item.moved_out` · `item.moved_in` | `{id}` · `{id, column_id}` | a card moved to / from another board |
+| `board.{id}` | `items.changed` | `{ids, deleted_ids, count, fields}` | several cards at once (bulk edit, sprint moves, subtrees; ≤ 100 ids per message) → reload the board's items |
+| `board.{id}` | `column.created` · `column.updated` · `column.deleted` | `{id, fields?}` | one column changed |
+| `board.{id}` | `columns.reordered` · `columns.changed` | `{ids}` | columns reordered / several changed → reload the board |
+| `board.{id}` | `sprint.changed` | `{id, action: created\|updated\|deleted\|planned\|active\|completed, status}` | a sprint was created, edited, started, completed, deleted |
+| `board.{id}` | `board.updated` | `{fields}` | board settings changed (name, type, swimlanes …) |
+| `board.{id}` | `board.deleted` · `board.refreshed` | `{}` | the board was deleted · an import changed it (reload everything) |
+| `item.{id}` | `item.updated` | `{id, fields}` | the issue changed (`title`, `description`, any card field; `deleted` / `moved_out` / `restored` as field names) → `GET /items/{id}` |
+| `item.{id}` | `comment.created` · `comment.updated` · `comment.deleted` | `{id, comment_id, parent_id}` (`id` = the issue) | a comment was added / edited / removed → `GET /items/{id}/comments` |
+| `item.{id}` | signal `typing` | `{}` / `{stop: true}` | someone is writing a comment (see signals) |
+| `plan.{id}` | `plan.updated` | `{revision, fields}` | the Gantt plan changed (rows, bars, settings) → `GET /plans/{id}` |
+| `plan.{id}` | `plan.deleted` | `{}` | the plan was deleted |
+| `plan.{id}` | `issues.changed` | `{ids}` | issues linked to plan rows changed (dates, status, assignee …) |
+| `ticket.{id}` | `reply.created` · `reply.updated` · `reply.deleted` | `{id, reply_id}` (`id` = the ticket) | a reply / internal note (agents, customer mail, portal) → `GET /tickets/{id}` |
+| `page.{uuid}` | — | — | presence only (no events yet). Live doc / whiteboard editing is Yjs on the same server, not channels: `POST /pages/{uuid}/collab-token` (docs); whiteboards' live drawing is web only (BRAI-208) |
+
+Presence (`presence: true`) is used by the web on `board.{id}`, `item.{id}` and `plan.{id}` ("who's here" avatars). Not live:
+task lists, My Day, captures, calendar, notifications' content — poll those or use `GET /sync/changes`.
+
 ### Web only (no App API in v1, BRAI-424)
 These mobile cards get **no native API in v1**: the apps show a short note and open the web page in the browser (desktop: the
 webview). Their `## API: web only — open in browser` texts are under "Mobile card texts".
@@ -1404,6 +1466,7 @@ Built in: BRAI-414 (desktop) · Mobile scope: View only (autosave, duplicate, ex
 ## API: web only — open in browser
 Drawing, templates, live cursors and turning sticky notes into issues run in the web's whiteboard editor (the desktop app's webview).
 The apps show the scene read-only: GET /api/v1/whiteboards/{uuid}.
+Realtime (BRAI-426): live drawing and named cursors are the whiteboard's Yjs document (web only); the apps can show "who's here" on the page.{uuid} live channel (POST /api/v1/realtime/token) — no events there yet, reload the scene on open / pull-to-refresh.
 Registry: docs/ai/API.md#whiteboards · Decided in: BRAI-414
 ```
 
@@ -1660,4 +1723,26 @@ Built in: BRAI-425 (desktop) · Mobile scope: Full (keep mine = a new change wit
 - Live co-editing (Yjs) merges offline edits by itself: POST /api/v1/pages/{uuid}/collab-token (BRAI-200)
 Scope: app · OpenAPI: docs/api/openapi.json#/Docs · Registry: docs/ai/API.md#sync
 Built in: BRAI-411, BRAI-412, BRAI-425 (desktop) · Mobile scope: Light edit offline (Markdown draft + revision check)
+```
+
+**BRAI-196** (live card updates, optimistic actions and conflict handling)
+```
+## API (ready)
+- GET /api/v1/realtime — WebSocket url, token path, limits, channel types (enabled: false → poll)
+- POST /api/v1/realtime/token {channels: ["board.4", "item.88", "user.12"]} — a token for the channels the user can open on the web (rest in denied); send it as the socket's first message
+- Events on board.{id}: item.created|moved|updated|deleted|moved_in|moved_out|restored, items.changed, column.*, columns.*, sprint.changed, board.updated|deleted|refreshed — ids only, refetch GET /boards/{id}/items or GET /items/{id}
+- Optimistic writes: send X-Live-Client: <window id> with POST /items/{id}/move, PATCH /items/{id} …; ignore events whose client_id + actor_id are your own. Conflicts: PATCH /items/{id} with updated_at → 409
+Scope: app · OpenAPI: docs/api/openapi.json#/Realtime · Registry: docs/ai/API.md#realtime
+Built in: BRAI-426 (desktop) · Mobile scope: Full (foreground socket; refetch everything on reconnect)
+```
+
+**BRAI-265** (live updates on boards, Gantt, comments, docs and whiteboards)
+```
+## API (ready)
+- GET /api/v1/realtime · POST /api/v1/realtime/token — connection info + channel tokens (the web's channel rules; re-checked every minute, `revoked` when access ends)
+- Channels: user.{id} (notification.created, notifications.changed), board.{id} (cards, columns, sprints), item.{id} (item.updated, comment.*, typing signal, presence), plan.{id} (plan.updated|deleted, issues.changed), ticket.{id} (reply.*), page.{uuid} (presence only)
+- Presence: subscribe with presence: true → members [{id, name, avatar}]; reconnect = refetch (events while offline are lost)
+- Docs: live co-editing through POST /api/v1/pages/{uuid}/collab-token (BRAI-200); whiteboards' live drawing: web only (BRAI-208)
+Scope: app · OpenAPI: docs/api/openapi.json#/Realtime · Registry: docs/ai/API.md#realtime (event catalog)
+Built in: BRAI-426 (desktop) · Mobile scope: Full (boards, issues, comments, Gantt, notifications); whiteboard drawing web only
 ```

@@ -116,6 +116,9 @@
         },
         {
             "name": "Sync"
+        },
+        {
+            "name": "Realtime"
         }
     ],
     "security": [
@@ -12809,6 +12812,94 @@
                     }
                 }
             }
+        },
+        "/realtime": {
+            "get": {
+                "operationId": "app.v1.realtime.show",
+                "description": "The WebSocket URL, the token endpoint, limits and channel types. `enabled: false` (and `url: null`) when the\nserver runs without live updates: then poll (notifications every 30 s, boards on focus).",
+                "summary": "How to connect to live updates",
+                "tags": [
+                    "Realtime"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "`RealtimeInfoResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/RealtimeInfoResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
+        },
+        "/realtime/token": {
+            "post": {
+                "operationId": "app.v1.realtime.token",
+                "description": "`{channels: [\"user.12\", \"board.4\", \"item.88\"]}` (\u2264 50) \u2192 a token for the ones the user may join (as on the\nweb: the board / issue / plan / ticket / doc must be one they can open, `user.<id>` only their own); the\nothers come back in `denied`, never as an error. Valid for `token_ttl` seconds to join; ask for a new one\non every reconnect or for new channels. The realtime server re-checks access every minute and sends\n`revoked` for a channel the user lost.",
+                "summary": "A token to join live channels",
+                "tags": [
+                    "Realtime"
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RealtimeTokenRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "`RealtimeTokenResource`",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/RealtimeTokenResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "$ref": "#/components/responses/NotFoundHttpException"
+                    },
+                    "401": {
+                        "$ref": "#/components/responses/AuthenticationException"
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
+                    },
+                    "429": {
+                        "$ref": "#/components/responses/RateLimited"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -20842,6 +20933,162 @@
                     }
                 },
                 "title": "PublishPageRequest"
+            },
+            "RealtimeInfoResource": {
+                "type": "object",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean",
+                        "description": "false: this server has no live updates \u2014 poll the normal endpoints instead"
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the WebSocket URL (ws:// or wss://), null when off"
+                    },
+                    "token_path": {
+                        "type": "string",
+                        "description": "POST it {channels: [...]} for a token (send that as the socket's first message)",
+                        "const": "/api/v1/realtime/token"
+                    },
+                    "token_ttl": {
+                        "type": "integer",
+                        "description": "seconds a token is valid for joining (ask again for every reconnect / new channel)"
+                    },
+                    "max_channels": {
+                        "type": "integer",
+                        "description": "most channels per token request (and subscriptions per socket)",
+                        "const": 50
+                    },
+                    "protocol": {
+                        "type": "integer",
+                        "description": "the realtime server's message protocol (docs/ai/API.md \u2192 Realtime)",
+                        "const": 1
+                    },
+                    "channel_types": {
+                        "type": "array",
+                        "description": "channel `<type>.<id>` and who may join it",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string"
+                                },
+                                "id": {
+                                    "type": "string"
+                                },
+                                "access": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "type",
+                                "id",
+                                "access"
+                            ]
+                        }
+                    }
+                },
+                "required": [
+                    "enabled",
+                    "url",
+                    "token_path",
+                    "token_ttl",
+                    "max_channels",
+                    "protocol",
+                    "channel_types"
+                ],
+                "title": "RealtimeInfoResource"
+            },
+            "RealtimeTokenRequest": {
+                "type": "object",
+                "description": "`POST /api/v1/realtime/token`: the live channels to join (404 while live channels are off, before any 422).",
+                "properties": {
+                    "channels": {
+                        "type": "array",
+                        "description": "channel names `<type>.<id>`: user.{id} (own), board.{id}, item.{id}, plan.{id}, ticket.{id}, page.{uuid}",
+                        "items": {
+                            "type": "string",
+                            "maxLength": 100
+                        },
+                        "minItems": 1,
+                        "maxItems": 50
+                    }
+                },
+                "required": [
+                    "channels"
+                ],
+                "title": "RealtimeTokenRequest"
+            },
+            "RealtimeTokenResource": {
+                "type": "object",
+                "properties": {
+                    "token": {
+                        "type": "string",
+                        "description": "send {\"type\": \"auth\", \"token\": \u2026} as the socket's first message (never in the URL)"
+                    },
+                    "expires_at": {
+                        "type": "string",
+                        "description": "join before this; the server re-checks access every minute after that"
+                    },
+                    "expires_in": {
+                        "type": "integer",
+                        "description": "seconds until expires_at"
+                    },
+                    "url": {
+                        "type": "string",
+                        "description": "the WebSocket URL (ws: or wss:)"
+                    },
+                    "channels": {
+                        "type": "array",
+                        "description": "the channels this token lets you subscribe to",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "denied": {
+                        "type": "array",
+                        "description": "requested channels you may not join (unknown, gone, or not visible to you)",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "user": {
+                        "type": "object",
+                        "description": "how others see you in presence",
+                        "properties": {
+                            "id": {
+                                "type": "integer"
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "avatar": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "id",
+                            "name",
+                            "avatar"
+                        ]
+                    }
+                },
+                "required": [
+                    "token",
+                    "expires_at",
+                    "expires_in",
+                    "url",
+                    "channels",
+                    "denied",
+                    "user"
+                ],
+                "title": "RealtimeTokenResource"
             },
             "RecentDestinationResource": {
                 "type": "object",
