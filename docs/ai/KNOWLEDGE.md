@@ -2084,10 +2084,10 @@ The Cloud CLI defaults to `https://www.brainitive.app`, matching the OAuth metad
   session writes go through one in-memory queue (`exclusive()` in `lib/auth.ts`). A refresh only writes if its
   generation is still current. Any new code that writes the session must go through that queue and bump the
   generation when the account changes.
-- **Extension sign-out calls `DELETE /api/ext/v1/logout`.** As of this branch the server has **no such route**:
-  `/api/cli/logout` rejects capture-only tokens. Until the capture-scoped route exists (same body as
-  `CliController::logout`: revoke the access token and its refresh token), sign-out is local-only and the
-  sign-in screen says so.
+- **Extension sign-out calls `DELETE /api/ext/v1/logout`** (`ext.logout`, capture scope; same body as
+  `CliController::logout`: revokes the access token and its refresh token). `/api/cli/logout` rejects capture
+  tokens, so the extension can't use that one. An old server without the route answers 404: the extension then
+  signs out locally and the sign-in screen says to revoke under Connected apps.
 - **Extension tests:** `npm test` (vitest + `WxtVitest`, `wxt/testing/fake-browser`). Mock `identity.getRedirectURL`
   / `launchWebAuthFlow` per test (fake-browser doesn't implement them), and stub `navigator` on Node < 21.
 - **Release provenance:** `release.yml` attests every CLI and extension file (`actions/attest-build-provenance`,

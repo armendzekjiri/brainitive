@@ -51,6 +51,7 @@ Route::prefix('ext/v1')
     ->name('ext.')
     ->group(function () {
         Route::get('me', [ExtensionController::class, 'me'])->name('me');
+        Route::delete('logout', [ExtensionController::class, 'logout'])->name('logout');
         Route::get('destinations', [ExtensionController::class, 'destinations'])->name('destinations');
         Route::get('search', [ExtensionController::class, 'search'])->name('search');
         Route::get('my-work', [ExtensionController::class, 'myWork'])->name('my-work');
