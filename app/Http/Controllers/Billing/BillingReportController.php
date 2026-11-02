@@ -215,11 +215,9 @@ class BillingReportController extends Controller
     {
         $report = $this->report($workspace, $billingReport);
         $data = $request->validate(['confirm' => ['nullable', 'boolean']]);
-        if ($report->status === 'paid' && ! ($data['confirm'] ?? false)) {
-            throw ValidationException::withMessages(['report' => 'This report is paid. Confirm to void it anyway.']);
-        }
 
-        $report = $this->finalizer->void($report);
+        // the paid check happens on the locked row (Codex web review X)
+        $report = $this->finalizer->void($report, (bool) ($data['confirm'] ?? false));
 
         return redirect()->route('billing.reports.show', [$workspace, $report->id])
             ->with('success', 'Report voided. Its time entries can be billed again.');

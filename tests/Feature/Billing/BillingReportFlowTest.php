@@ -12,7 +12,9 @@ use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Billing\ReportBuilder;
+use App\Support\Billing\ReportFinalizer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -344,6 +346,33 @@ class BillingReportFlowTest extends TestCase
         $this->assertSame('paid', $draft->fresh()->status);
         $this->actingAs($this->admin)->post($this->url('billing.reports.void', $draft), ['confirm' => true])->assertSessionHasNoErrors();
         $this->assertSame('void', $draft->fresh()->status);
+    }
+
+    /**
+     * Codex web review X: the "paid needs a confirm" check ran before the finalizer locked the row, so a report
+     * marked paid in between was voided without the confirmation. The finalizer checks it on the locked row now.
+     */
+    public function test_a_report_paid_meanwhile_is_not_voided_without_the_confirmation(): void
+    {
+        $report = $this->draft();
+        $this->finalize($report)->assertSessionHasNoErrors();
+        $locked = TimeEntry::where('billing_report_id', $report->id)->count();
+        $paid = false;
+        DB::listen(function ($query) use (&$paid, $report) {
+            if (! $paid && str_contains($query->sql, 'from "billing_reports"') && ! str_contains($query->sql, 'for update')) {
+                $paid = true; // right after the void request read the report: another admin marks it paid
+                app(ReportFinalizer::class)->markPaid(BillingReport::find($report->id));
+            }
+        });
+
+        $this->actingAs($this->admin)->post($this->url('billing.reports.void', $report))->assertSessionHasErrors('report');
+
+        $this->assertTrue($paid);
+        $this->assertSame('paid', $report->fresh()->status);
+        $this->assertSame($locked, TimeEntry::where('billing_report_id', $report->id)->count());
+
+        $this->actingAs($this->admin)->post($this->url('billing.reports.void', $report), ['confirm' => true])->assertSessionHasNoErrors();
+        $this->assertSame('void', $report->fresh()->status);
     }
 
     public function test_a_draft_can_be_deleted(): void

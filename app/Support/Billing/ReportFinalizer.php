@@ -131,16 +131,23 @@ class ReportFinalizer
         }
     }
 
-    /** Void a final report: its entries become billable again and its fixed prices are freed. */
-    public function void(BillingReport $report): BillingReport
+    /**
+     * Void a final report: its entries become billable again and its fixed prices are freed. A paid report needs
+     * `$confirmPaid`, checked on the locked row (Codex web review X): one marked paid in between is never voided
+     * without the confirmation.
+     */
+    public function void(BillingReport $report, bool $confirmPaid = false): BillingReport
     {
-        return DB::transaction(function () use ($report) {
+        return DB::transaction(function () use ($report, $confirmPaid) {
             $locked = BillingReport::whereKey($report->id)->lockForUpdate()->firstOrFail();
             if ($locked->status === 'void') {
                 return $locked;
             }
             if (! $locked->isFinal()) {
                 throw ValidationException::withMessages(['report' => 'Only finalized reports can be voided. Delete the draft instead.']);
+            }
+            if ($locked->status === 'paid' && ! $confirmPaid) {
+                throw ValidationException::withMessages(['report' => 'This report is paid. Confirm to void it anyway.']);
             }
 
             TimeEntry::where('billing_report_id', $locked->id)->update(['billing_report_id' => null]);
