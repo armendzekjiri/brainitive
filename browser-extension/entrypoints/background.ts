@@ -1,8 +1,9 @@
 import { createApi } from '@/lib/api';
 import { getAccessToken, NotSignedInError, signIn, signOut } from '@/lib/auth';
-import type { Message, Reply } from '@/lib/messages';
+import { createMessageHandler } from '@/lib/background-messages';
+import type { Message } from '@/lib/messages';
 import { cropScreenshot, isRestrictedUrl, selectArea } from '@/lib/page';
-import { getSession, setPendingCapture } from '@/lib/storage';
+import { getSession, restrictStorageToExtensionPages, setPendingCapture, syncAccount } from '@/lib/storage';
 import type { PendingCapture, SearchHit } from '@/lib/types';
 import { browser, type Browser } from 'wxt/browser';
 
@@ -57,31 +58,27 @@ export default defineBackground(() => {
         if (target) await captureArea(target);
     });
 
-    browser.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
-        handle(message).then(sendResponse);
-        return true; // async reply
+    // Tokens stay in the background (Codex CLI/extension review 8): pages send `api` messages,
+    // only this extension's pages may message it, and where the browser supports it content
+    // scripts can't read storage.local (where the session lives). Pages read `account`.
+    void restrictStorageToExtensionPages();
+    void syncAccount();
+
+    const handle = createMessageHandler({
+        api,
+        signIn: async (server) => {
+            const session = await signIn(server);
+            await openPopup();
+            return { server: session.server };
+        },
+        signOut,
+        captureArea: async (tabId) => captureArea(await browser.tabs.get(tabId)),
     });
 
-    async function handle(message: Message): Promise<Reply> {
-        try {
-            switch (message.type) {
-                case 'sign-in': {
-                    const session = await signIn(message.server);
-                    await openPopup();
-                    return { ok: true, data: { server: session.server } };
-                }
-                case 'sign-out':
-                    return { ok: true, data: await signOut() };
-                case 'get-token':
-                    return { ok: true, data: await getAccessToken(message.force) };
-                case 'capture-area':
-                    await captureArea(await browser.tabs.get(message.tabId));
-                    return { ok: true, data: null };
-            }
-        } catch (error) {
-            return { ok: false, error: (error as Error).message, signedOut: error instanceof NotSignedInError };
-        }
-    }
+    browser.runtime.onMessage.addListener((message: Message, sender, sendResponse) => {
+        handle(message, sender).then(sendResponse);
+        return true; // async reply
+    });
 
     /** Drag a rectangle on the page → cropped PNG → new issue in the popup. */
     async function captureArea(tab: Browser.tabs.Tab): Promise<void> {
