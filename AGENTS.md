@@ -17,7 +17,24 @@
 
 ### Overview
 
-Brainitive is a Laravel 12 + Inertia.js + React 18 + TypeScript monolith. It uses SQLite by default (zero-config), with all services (cache, queue, session) backed by the same SQLite database. No external services (Redis, MySQL, etc.) are needed for local development.
+Brainitive is a Laravel 12 + Inertia.js + React 18 + TypeScript monolith on **PostgreSQL only** (like production).
+Cache, queue and sessions use the same database (`database` drivers); no Redis / MySQL is needed. Set
+`DB_CONNECTION=pgsql` and the `DB_*` values in `.env`. SQLite is not supported — not for the app, the tests or e2e.
+
+### Ground rules (read before running anything)
+
+- **Never reset a database you didn't create for the run.** No `migrate:fresh`, `migrate:refresh`, `migrate:reset`,
+  `db:wipe`, truncating seeders, or dropping / truncating tables against the database in `.env`: it is the owner's real
+  local data. New migrations run only in the test / e2e databases (PHPUnit and Playwright migrate their own).
+- **Tests:** PHPUnit always uses `brainitive_test` (forced in `phpunit.xml`); `TEST_DB_SUFFIX=<a-z0-9_>` switches to
+  `brainitive_test_<suffix>` (one per worktree / parallel run; create it once:
+  `createdb -O <your DB user> brainitive_test_<suffix>`). e2e uses `brainitive_e2e_<port>` (created by its global setup,
+  one per `E2E_PORT`).
+- **Commits:** identity `armendzekjiri <armendzekjiri@outlook.de>`
+  (`git -c user.name=armendzekjiri -c user.email=armendzekjiri@outlook.de commit …`), never another address.
+- **No push, no PRs, no merges into `main` / `pre-release`** without the owner: branches stay local until they say so.
+- **No broad process kills** (`pkill -f php`, `pkill node`, `killall …`): the owner runs `composer run dev` on :8000.
+  Stop only processes you started, by PID.
 
 ### Running the app
 
@@ -37,8 +54,8 @@ This runs: `php artisan serve`, `php artisan queue:listen`, `php artisan pail`, 
 
 - **PHP lint**: `./vendor/bin/pint --test` (Laravel Pint)
 - **TypeScript check**: `npx tsc --noEmit`
-- **PHPUnit tests**: `php artisan test` (PostgreSQL like production, in the forced database `brainitive_test` — create it once with `createdb -O <your DB user> brainitive_test`)
-- **E2E tests**: `npm run e2e` (Playwright; see `e2e/README.md`)
+- **PHPUnit tests**: `php artisan test` (PostgreSQL, in the forced database `brainitive_test` — create it once with `createdb -O <your DB user> brainitive_test`; `TEST_DB_SUFFIX=<name> php artisan test …` for a separate `brainitive_test_<name>`)
+- **E2E tests**: `npm run e2e` (Playwright, PostgreSQL database `brainitive_e2e_<port>`; see `e2e/README.md`)
 - **Frontend build**: `npm run build` (runs `tsc && vite build`)
 
 ### Known issues

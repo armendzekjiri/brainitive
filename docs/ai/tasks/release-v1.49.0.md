@@ -642,3 +642,17 @@ server (`realtime/`, `/collab?live=1`), joined with a short-lived HMAC token lis
 "Cursor Cloud specific instructions" still said SQLite: PostgreSQL only, `brainitive_test` / `TEST_DB_SUFFIX`, e2e
 `brainitive_e2e_<port>`, never `migrate:fresh` / `db:wipe` / … against the `.env` database, commit identity, no push
 without the owner, no broad `pkill`.
+
+### Phase 09 — result
+Merged into `release/v1.49.0`: `feat/app-api-sync` (BRAI-425), `feat/app-api-realtime` (BRAI-426), `docs/agents-postgres-rules`
+(AGENTS.md). New spec tags Sync 330, Realtime 340. e2e: `app-api-sync`, `app-api-realtime`.
+- **Migration (additive):** `2026_11_08_100000_create_sync_tombstones_table` (`sync_tombstones`, pruned after 30 days). Not run
+  on the dev database — only in the test / e2e databases.
+- Deviations from the cards: BRAI-425 asked for `POST /sync` with one mutation and `GET /sync/snapshot?scope=`; built as a batch
+  (≤ 50, per-change results) and one cursor-based delta feed `GET /sync/changes` (full run = the snapshot, then deltas with
+  deletions) — one endpoint for both, and it can report deletes and lost access, which snapshots per scope can't. BRAI-426
+  asked for `POST /broadcasting/auth` (Reverb); the app has no Laravel broadcasting, so it is `POST /realtime/token` for the
+  existing live channels + `GET /realtime`.
+- Deferred: closing an open socket when its device is revoked (the realtime server re-checks per user, KNOWLEDGE → phase 09
+  realtime); docs in the offline feed (BRAI-204 uses the docs endpoints); the web's outbox doesn't use `work.done` yet;
+  `.env.example` still shows `DB_CONNECTION=sqlite`.
