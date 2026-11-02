@@ -8,6 +8,7 @@ use App\Models\LeadFormColumn;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Files\WorkspaceFiles;
 use App\Support\LeadForms\LeadFormAnalytics;
 use App\Support\LeadForms\LeadFormDefinition;
 use App\Support\LeadForms\LeadFormOptions;
@@ -200,7 +201,7 @@ class LeadFormController extends Controller
 
         $request->validate(['file' => 'required|file|mimes:jpg,jpeg,png,gif,webp|max:4096']);
         $file = $request->file('file');
-        $path = $file->storeAs('lead-forms/'.$leadForm->uuid, Uploads::imageName($file), 'public');
+        $path = WorkspaceFiles::store($workspace, $file, 'lead-forms/'.$leadForm->uuid, Uploads::imageName($file), 'lead_form_image', $request->user()); // Codex web review C
 
         return response()->json(['url' => '/storage/'.$path]);
     }

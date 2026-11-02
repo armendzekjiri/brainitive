@@ -14,9 +14,10 @@ use Illuminate\Support\Facades\DB;
  * - content: the stored size of the rows (`pg_column_size`, compressed / TOASTed) in the tables
  *   below — an approximation, the tables are shared. Not measured on other databases (SQLite
  *   self-hosted installs are unlimited anyway): stays 0 there.
- * - files: the `size` columns of the upload tables, editor uploads (`editor_uploads`, since the Codex review)
- *   included. Bookmark files, icons and logos have no size column and don't count; whiteboard images live in
- *   the page content. Editor uploads are never attachments (their own table and folder): nothing counts twice.
+ * - files: the `size` columns of the upload tables. `editor_uploads` records every stored file without a size
+ *   column of its own (rich-text uploads since the Codex review; logos, headers, bookmark icons and files, project /
+ *   item-type icons, lead-form images, whiteboard previews and temporary icons since Codex web review C,
+ *   WorkspaceFiles). Attachments are never recorded there (their own tables): nothing counts twice.
  */
 final class WorkspaceUsageMeter
 {

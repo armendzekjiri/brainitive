@@ -7,6 +7,7 @@ use App\Models\BookmarkItem;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Bookmarks\Bookmarks;
+use App\Support\Files\WorkspaceFiles;
 use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -101,7 +102,7 @@ class BookmarkController extends Controller
         $bookmark = Bookmarks::createGroup($workspace, $request->user(), ['icon' => $iconValue] + $validated);
 
         if ($request->hasFile('icon_image')) {
-            $path = $request->file('icon_image')->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'public');
+            $path = WorkspaceFiles::store($workspace, $request->file('icon_image'), 'bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'bookmark_icon', $request->user());
             $bookmark->update(['icon' => $path]);
         } elseif ($isTempIcon && isset($validated['icon'])) {
             $tempPath = str_contains($validated['icon'], 'storage/') ? Str::after($validated['icon'], 'storage/') : $validated['icon'];
@@ -110,6 +111,7 @@ class BookmarkController extends Controller
                 $ext = pathinfo($tempPath, PATHINFO_EXTENSION);
                 $newPath = 'bookmark-icons/'.$bookmark->id.'/icon.'.$ext;
                 Storage::disk('public')->move($tempPath, $newPath);
+                WorkspaceFiles::adopt($workspace, $tempPath, $newPath, 'bookmark_icon');
                 $bookmark->update(['icon' => $newPath]);
             }
         }
@@ -135,12 +137,16 @@ class BookmarkController extends Controller
             $validated['icon'] = Str::after($validated['icon'], 'storage/');
         }
 
+        $previousIcon = $bookmark->getRawOriginal('icon');
         if ($request->hasFile('icon_image')) {
-            $path = $request->file('icon_image')->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'public');
+            $path = WorkspaceFiles::store($workspace, $request->file('icon_image'), 'bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'bookmark_icon', $request->user());
             $validated['icon'] = $path;
         }
 
         $bookmark->update($validated);
+        if (array_key_exists('icon', $validated) && $validated['icon'] !== $previousIcon) {
+            WorkspaceFiles::forget($workspace, $previousIcon, 'bookmark-icons/'.$bookmark->id.'/'); // superseded (Codex web review C)
+        }
 
         if ($request->wantsJson()) {
             return response()->json(['bookmark' => $bookmark->fresh()]);
@@ -163,8 +169,12 @@ class BookmarkController extends Controller
 
         $file = $request->file('icon');
         $ext = Uploads::imageExtension($file);
-        $path = $file->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.$ext, 'public');
+        $previousIcon = $bookmark->getRawOriginal('icon');
+        $path = WorkspaceFiles::store($workspace, $file, 'bookmark-icons/'.$bookmark->id, 'icon.'.$ext, 'bookmark_icon', $request->user());
         $bookmark->update(['icon' => $path]);
+        if ($previousIcon !== $path) {
+            WorkspaceFiles::forget($workspace, $previousIcon, 'bookmark-icons/'.$bookmark->id.'/');
+        }
 
         return response()->json(['icon_display' => $bookmark->fresh()->icon_display]);
     }
@@ -183,7 +193,8 @@ class BookmarkController extends Controller
 
         $file = $request->file('icon');
         $ext = Uploads::imageExtension($file);
-        $path = $file->storeAs('bookmark-icons/temp', Str::uuid().'.'.$ext, 'public');
+        // counted until it's used or pruned (files:prune-temp, Codex web review C)
+        $path = WorkspaceFiles::store($workspace, $file, 'bookmark-icons/temp', Str::uuid().'.'.$ext, 'temp', $request->user());
 
         return response()->json(['icon_display' => asset('storage/'.$path), 'icon_path' => $path]);
     }

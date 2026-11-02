@@ -11,10 +11,12 @@ use App\Support\Collab\CollabConfig;
 use App\Support\Collab\PageCollab;
 use App\Support\Collab\WhiteboardCollab;
 use App\Support\Entitlements\LimitGate;
+use App\Support\Files\WorkspaceFiles;
 use App\Support\PageReviews\ReviewGate;
 use App\Support\PageReviews\ReviewPresenter;
 use App\Support\Pages\PageMover;
 use App\Support\Pages\PageWrites;
+use App\Support\Uploads;
 use App\Support\Validation\ContentLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -255,10 +257,8 @@ class PageController extends Controller
         ];
 
         if ($request->hasFile('image')) {
-            $path = $request->file('image')->store(
-                'excalidraw-previews',
-                'public'
-            );
+            // counted against the workspace's file storage (Codex web review C); older previews stay: versions show them
+            $path = WorkspaceFiles::store($workspace, $request->file('image'), 'excalidraw-previews', Uploads::imageName($request->file('image')), 'whiteboard_image', $request->user());
             $content['previewImageUrl'] = asset('storage/'.$path);
         } elseif (is_array($page->content ?? null) && ! empty(($page->content ?? [])['previewImageUrl'])) {
             $content['previewImageUrl'] = $page->content['previewImageUrl'];
@@ -304,10 +304,7 @@ class PageController extends Controller
             'libraryItems' => $data['libraryItems'] ?? [],
         ];
 
-        $path = $request->file('image')->store(
-            'excalidraw-embeds/'.$page->id,
-            'public'
-        );
+        $path = WorkspaceFiles::store($workspace, $request->file('image'), 'excalidraw-embeds/'.$page->id, Uploads::imageName($request->file('image')), 'whiteboard_image', $request->user());
         $imageUrl = asset('storage/'.$path);
 
         // the page's draft, like every other edit (Codex web review H): never the published content directly

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Snippet;
 use App\Models\SnippetCollection;
 use App\Models\Workspace;
+use App\Support\Files\WorkspaceFiles;
 use App\Support\Snippets\Snippets;
 use App\Support\Uploads;
 use Illuminate\Http\Request;
@@ -184,7 +185,8 @@ class SnippetController extends Controller
 
         $file = $request->file('icon');
         $ext = Uploads::imageExtension($file);
-        $path = $file->storeAs('snippet-icons/temp', Str::uuid().'.'.$ext, 'public');
+        // counted until pruned (files:prune-temp, Codex web review C)
+        $path = WorkspaceFiles::store($workspace, $file, 'snippet-icons/temp', Str::uuid().'.'.$ext, 'temp', $request->user());
 
         return response()->json(['icon_display' => asset('storage/'.$path)]);
     }
