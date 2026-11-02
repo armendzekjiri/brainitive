@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Mcp;
 
+use App\Http\Middleware\GuardMcpEndpoint;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
@@ -71,5 +72,27 @@ class McpEndpointHardeningTest extends TestCase
 
         Passport::actingAs($user, ['capture']);
         $this->postJson('/mcp', $list)->assertForbidden();
+    }
+
+    /** Codex recheck, item AA: unauthenticated attempts are limited per IP before authentication; signed-in clients aren't. */
+    public function test_unauthenticated_attempts_are_throttled_per_ip_and_bodies_are_capped(): void
+    {
+        $this->usePassportKeys();
+        $list = ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'];
+
+        for ($i = 0; $i < GuardMcpEndpoint::UNAUTHENTICATED_PER_MINUTE; $i++) {
+            $this->postJson('/mcp', $list)->assertUnauthorized();
+        }
+        $this->postJson('/mcp', $list)->assertStatus(429);
+
+        // a signed-in client from another address is not affected, and its own calls never count
+        $user = User::factory()->create();
+        Passport::actingAs($user, ['mcp:use']);
+        for ($i = 0; $i < 5; $i++) {
+            $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.9'])->postJson('/mcp', $list)->assertOk();
+        }
+
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.9'])->call('POST', '/mcp', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'], str_repeat('x', GuardMcpEndpoint::MAX_BYTES + 1))
+            ->assertStatus(413);
     }
 }
