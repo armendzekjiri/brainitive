@@ -151,6 +151,9 @@ class BillingReportController extends Controller
             'excluded_entry_ids.*' => ['integer'],
         ]);
 
+        // both optional: left out = all of the client's projects / the default title (Codex web review Z)
+        $data['project_ids'] ??= null;
+        $data['title'] ??= null;
         $projectIds = null;
         if ($data['project_ids'] !== null) {
             $projectIds = Project::where('workspace_id', $workspace->id)->where('client_id', $report->client_id)
