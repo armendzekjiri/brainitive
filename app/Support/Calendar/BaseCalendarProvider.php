@@ -126,7 +126,7 @@ abstract class BaseCalendarProvider implements CalendarProvider
         throw new CalendarReadOnly;
     }
 
-    public function deleteEvent(CalendarConnection $connection, string $eventId): void
+    public function deleteEvent(CalendarConnection $connection, string $eventId, bool $wholeSeries = false): void
     {
         throw new CalendarReadOnly;
     }

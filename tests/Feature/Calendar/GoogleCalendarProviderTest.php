@@ -299,6 +299,34 @@ class GoogleCalendarProviderTest extends TestCase
             && ! isset($r['summary']));
     }
 
+    /** Codex review, finding 16: Google's series id (an instance id without its "_<time>") isn't deleted by accident. */
+    public function test_a_series_id_is_deleted_only_when_the_whole_series_is_asked_for(): void
+    {
+        $this->connection->update(['token_expires_at' => now()->addHour()]);
+        Http::fake(function (HttpRequest $r) {
+            $id = rawurldecode(basename((string) parse_url($r->url(), PHP_URL_PATH)));
+
+            return $r->method() === 'DELETE'
+                ? Http::response('', 204)
+                : Http::response($id === 'standup' ? ['id' => 'standup', 'recurrence' => ['RRULE:FREQ=DAILY']] : ['id' => $id, 'recurringEventId' => 'standup']);
+        });
+        $provider = CalendarProviders::make('google');
+
+        try {
+            $provider->deleteEvent($this->connection, 'standup');
+            $this->fail('expected CalendarSyncFailed');
+        } catch (CalendarSyncFailed $e) {
+            $this->assertStringContainsString('whole recurring series', $e->getMessage());
+        }
+        Http::assertNotSent(fn (HttpRequest $r) => $r->method() === 'DELETE');
+
+        $provider->deleteEvent($this->connection, 'standup_20261112T090000Z');
+        Http::assertSent(fn (HttpRequest $r) => $r->method() === 'DELETE' && str_contains($r->url(), '/events/standup_20261112T090000Z'));
+
+        $provider->deleteEvent($this->connection, 'standup', wholeSeries: true);
+        Http::assertSent(fn (HttpRequest $r) => $r->method() === 'DELETE' && str_ends_with(strtok($r->url(), '?'), '/events/standup'));
+    }
+
     public function test_rejected_writes_throw_a_user_facing_error(): void
     {
         Http::fake(['www.googleapis.com/calendar/v3/calendars/*' => Http::response(['error' => 'forbidden'], 403)]);

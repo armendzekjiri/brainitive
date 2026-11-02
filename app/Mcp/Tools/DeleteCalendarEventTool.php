@@ -13,7 +13,7 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Tool;
 
-#[Description('Delete a calendar event from a writable connected calendar. Identify it by connection_id + event_id (from list_calendar_events). This permanently removes it from the user\'s calendar — confirm with the user before calling.')]
+#[Description('Delete a calendar event from a writable connected calendar. Identify it by connection_id + event_id (from list_calendar_events). A recurring event is deleted one occurrence at a time (scope "occurrence", the default); deleting a whole series needs scope "series". This permanently removes it from the user\'s calendar and may notify guests — always confirm with the user before calling.')]
 class DeleteCalendarEventTool extends Tool
 {
     use ResolvesCalendarConnections;
@@ -23,6 +23,8 @@ class DeleteCalendarEventTool extends Tool
         $validated = $request->validate([
             'connection_id' => 'required|integer',
             'event_id' => 'required|string|max:1024|not_in:.,..',
+            // occurrence (default) | series: a whole recurring series only when asked for explicitly (Codex review 16)
+            'scope' => 'sometimes|string|in:occurrence,series',
         ]);
 
         try {
@@ -32,7 +34,7 @@ class DeleteCalendarEventTool extends Tool
         }
 
         try {
-            CalendarProviders::writable($connection)->deleteEvent($connection, $validated['event_id']);
+            CalendarProviders::writable($connection)->deleteEvent($connection, $validated['event_id'], ($validated['scope'] ?? 'occurrence') === 'series');
         } catch (CalendarProviderException $e) {
             return Response::error($e->getMessage());
         }
@@ -59,6 +61,7 @@ class DeleteCalendarEventTool extends Tool
         return [
             'connection_id' => $schema->integer()->description('The calendar id (from list_calendar_connections).')->required(),
             'event_id' => $schema->string()->description('The event id (from list_calendar_events).')->required(),
+            'scope' => $schema->string()->enum(['occurrence', 'series'])->description('"occurrence" (default): only this event / occurrence. "series": the whole recurring series — only when the user asked to delete all occurrences.'),
         ];
     }
 }
