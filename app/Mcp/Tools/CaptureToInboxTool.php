@@ -4,6 +4,7 @@ namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\InteractsWithBrainitive;
 use App\Models\Capture;
+use App\Support\Captures\CaptureInbox;
 use App\Support\Mcp\IdempotentRequest;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Support\Str;
@@ -34,13 +35,7 @@ class CaptureToInboxTool extends Tool
 
         return $this->guard(function () use ($user, $v) {
             $run = IdempotentRequest::run($user, 'capture_to_inbox', $v['request_id'], collect($v)->except('request_id')->all(), function () use ($user, $v) {
-                $capture = Capture::create([
-                    'user_id' => $user->id,
-                    'text' => $v['text'],
-                    'url' => $v['url'] ?? null,
-                    'intended_type' => $v['intended_type'] ?? null,
-                    'source' => ($v['source'] ?? null) ?: 'MCP',
-                ]);
+                $capture = CaptureInbox::create($user, $v, 'MCP');
 
                 return [
                     'capture_id' => $capture->uuid,

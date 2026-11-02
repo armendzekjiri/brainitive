@@ -28,7 +28,7 @@
         <link rel="preload" href="{{ asset('images/logo.png') }}" as="image">
 
         <!-- Prevent flash of wrong theme: apply stored preference (or system pref) before first paint -->
-        <script>
+        <script nonce="{{ Vite::cspNonce() }}">
             (function() {
                 try {
                     var stored = localStorage.getItem('brainitive-theme');
@@ -51,18 +51,18 @@
         </script>
 
         <!-- Excalidraw fonts from our own build, not its third-party CDN fallback (BRAI-156, vite.config.js) -->
-        <script>window.EXCALIDRAW_ASSET_PATH = @json(asset('build/excalidraw-assets').'/');</script>
+        <script nonce="{{ Vite::cspNonce() }}">window.EXCALIDRAW_ASSET_PATH = @json(asset('build/excalidraw-assets').'/');</script>
 
         <!-- Analytics: the operator's self-hosted, cookieless Umami — ONLY with the visitor's consent (§ 25 (1) TDDDG).
              No tracker here: where analytics may run (brainitive.app, never dev / e2e / local / self-hosted installs,
              customers' public pages or token links — Analytics::enabledFor) the browser gets this config, asks
              (components/legal/AnalyticsConsentNotice) and loads the script only after "Allow" (lib/analytics). -->
         @if (\App\Support\Legal\Analytics::enabledFor(request()))
-            <script>window.brainitiveAnalytics = @json(\App\Support\Legal\Analytics::clientConfig());</script>
+            <script nonce="{{ Vite::cspNonce() }}">window.brainitiveAnalytics = @json(\App\Support\Legal\Analytics::clientConfig());</script>
         @endif
 
         <!-- Scripts -->
-        @routes
+        @routes(nonce: Vite::cspNonce())
         @viteReactRefresh
         {{-- "Cloud/…" pages come from the private brainitive/cloud package (Brainitive Cloud only, resources/js/app.tsx) --}}
         @vite(['resources/js/app.tsx', str_starts_with($page['component'], 'Cloud/')

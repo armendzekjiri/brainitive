@@ -1,8 +1,9 @@
 import AppLayout from '@/Layouts/AppLayout';
-import { NotificationCategoryPreference, PageProps } from '@/types';
+import { AppDevice, NotificationCategoryPreference, PageProps } from '@/types';
 import { Head } from '@inertiajs/react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import OfflineSettingCard from '@/components/offline/OfflineSettingCard';
+import AppDevices from './Partials/AppDevices';
 import ConnectedAppsForm, { ConnectedApp } from './Partials/ConnectedAppsForm';
 import DeleteUserForm from './Partials/DeleteUserForm';
 import DownloadDataForm from './Partials/DownloadDataForm';
@@ -17,7 +18,14 @@ export default function Edit({
     status,
     connectedApps = [],
     notificationCategories = [],
-}: PageProps<{ mustVerifyEmail: boolean; status?: string; connectedApps?: ConnectedApp[]; notificationCategories?: NotificationCategoryPreference[] }>) {
+    appDevices = [],
+}: PageProps<{
+    mustVerifyEmail: boolean;
+    status?: string;
+    connectedApps?: ConnectedApp[];
+    notificationCategories?: NotificationCategoryPreference[];
+    appDevices?: AppDevice[];
+}>) {
     return (
         <AppLayout>
             <Head title="Profile" />
@@ -50,6 +58,9 @@ export default function Edit({
                     <CardContent className="space-y-6">
                         <NotificationPreferencesForm categories={notificationCategories} />
                         <NotificationSettingsForm className="max-w-xl border-t pt-6" />
+                        <div id="app-devices" className="scroll-mt-20">
+                            <AppDevices devices={appDevices} className="max-w-xl border-t pt-6" />
+                        </div>
                         <TaskDigestSetting className="max-w-xl border-t pt-6" />
                     </CardContent>
                 </Card>

@@ -1,7 +1,7 @@
 # Builds the self-hosting image ghcr.io/<owner>/brainitive.
 # - Called by release.yml on every push to main: :edge + :sha-<short>, plus :X.Y.Z, :X.Y and
 #   :latest when that push released a new version.
-# - A v* tag pushed by hand builds that version too.
+# - A v* tag pushed by hand (or a manual run) builds that version too, after the test gate below.
 name: Docker image
 
 on:
@@ -11,6 +11,10 @@ on:
         description: 'Released version (X.Y.Z) to tag the image with; empty for an edge build'
         type: string
         default: ''
+      tested:
+        description: 'true when the caller already gated this exact commit on the tests (release.yml)'
+        type: boolean
+        default: false
   push:
     tags: ['v*']
   workflow_dispatch:
@@ -20,15 +24,37 @@ permissions:
   packages: write
 
 jobs:
+  # Test gate (Codex config review 1): a hand-pushed v* tag or a manual run publishes only code that
+  # passed the tests: the same tree as a green tests / pre-release / release run, else the full
+  # tests.yml runs first. release.yml gates before calling and passes tested: true.
+  already-tested:
+    if: ${{ !inputs.tested }}
+    uses: ./.github/workflows/already-tested.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      proven-by: pre-release.yml tests.yml release.yml
+
+  tests:
+    needs: already-tested
+    if: ${{ !cancelled() && !inputs.tested && needs.already-tested.result == 'success' && needs.already-tested.outputs.tested != 'true' }}
+    uses: ./.github/workflows/tests.yml
+    permissions:
+      contents: read
+      actions: read
+
   publish:
+    needs: [already-tested, tests]
+    if: ${{ !cancelled() && (inputs.tested || (needs.already-tested.result == 'success' && (needs.tests.result == 'success' || needs.tests.result == 'skipped'))) }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -46,7 +72,7 @@ jobs:
           fi
 
       - id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ghcr.io/${{ github.repository_owner }}/brainitive
           tags: |
@@ -54,9 +80,10 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.version }},enable=${{ steps.version.outputs.version != '' }}
             type=raw,value=latest,enable=${{ steps.version.outputs.version != '' }}
             type=raw,value=edge,enable=${{ github.ref == 'refs/heads/main' }}
-            type=sha,format=short,enable=${{ github.ref == 'refs/heads/main' }}
+            # immutable: every build, also a release or a hand-pushed tag, is reachable by its commit
+            type=sha,format=short
 
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           platforms: linux/amd64,linux/arm64

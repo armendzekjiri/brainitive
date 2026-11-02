@@ -14,7 +14,7 @@ const DOC = 'page.123e4567-e89b-42d3-a456-426614174000.0';
 const OTHER = 'page.123e4567-e89b-42d3-a456-426614174999.0';
 
 /** Brainitive's internal API, in memory. */
-const laravel = { states: new Map(), stale: new Set(), tooLarge: new Set(), access: { 1: 'edit', 2: 'edit', 3: 'view', 4: 'edit' }, calls: [], bearer: [] };
+const laravel = { states: new Map(), stale: new Set(), tooLarge: new Set(), access: { 1: 'edit', 2: 'edit', 3: 'view', 4: 'edit' }, calls: [], bearer: [], revokedDevices: new Set(), accessBodies: [], endedSessions: new Set(), generations: new Map() };
 let api;
 let collab;
 let url;
@@ -32,10 +32,19 @@ before(async () => {
         const name = decodeURIComponent(request.url.split('/documents/')[1] ?? '');
         const json = (status, data) => response.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(data));
         if (request.url.endsWith('/access')) {
-            const { document, user_ids: ids } = JSON.parse(body);
-            return json(200, { current: !laravel.stale.has(document), users: Object.fromEntries(ids.map((id) => [String(id), laravel.access[id] ?? null])) });
+            const { document, user_ids: ids, devices = [], sessions = [] } = JSON.parse(body);
+            laravel.accessBodies.push(JSON.parse(body));
+            if (laravel.failAccess) return json(laravel.failAccess, { message: 'down' });
+            return json(200, {
+                current: !laravel.stale.has(document),
+                users: Object.fromEntries(ids.map((id) => [String(id), laravel.access[id] ?? null])),
+                revoked_devices: devices.map(({ id }) => id).filter((id) => laravel.revokedDevices.has(id)),
+                ended_sessions: sessions.filter((sid) => laravel.endedSessions.has(sid)),
+                generations: Object.fromEntries(ids.map((id) => [String(id), laravel.generations.get(id) ?? 0])),
+            });
         }
         if (laravel.stale.has(name)) return json(409, { message: 'Stale document.' });
+        if (request.method === 'GET' && laravel.loadDelayMs) await new Promise((r) => setTimeout(r, laravel.loadDelayMs));
         if (request.method === 'PUT' && laravel.tooLarge.has(name)) return json(413, { message: 'Document too large.' });
         if (request.method === 'GET') return json(200, { state: laravel.states.get(name) ?? null });
         laravel.states.set(name, JSON.parse(body).state);
@@ -66,13 +75,15 @@ after(async () => {
     api.close();
 });
 
-const token = (doc, edit, sub = 1, exp = Math.floor(Date.now() / 1000) + 60) => signToken({ v: 1, sub, name: `User ${sub}`, doc, edit, exp }, keys.token);
+const token = (doc, edit, sub = 1, exp = Math.floor(Date.now() / 1000) + 60, extra = {}) => signToken({ v: 1, sub, name: `User ${sub}`, doc, edit, exp, ...extra }, keys.token);
+const deviceToken = (doc, sub, dev) => token(doc, true, sub, undefined, { dev });
 
 function connect(name, tokenValue) {
     const websocketProvider = new HocuspocusProviderWebsocket({ url, WebSocketPolyfill: WebSocket, maxAttempts: 1 });
     const provider = new HocuspocusProvider({ name, token: tokenValue, websocketProvider });
     provider.attach();
-    const events = { failed: null, synced: false, closed: [] };
+    const events = { failed: null, synced: false, closed: [], socketCodes: [] };
+    websocketProvider.on('close', ({ event }) => events.socketCodes.push(event?.code));
     provider.on('authenticationFailed', ({ reason }) => { events.failed = reason; });
     provider.on('synced', () => { events.synced = true; });
     // the server closes one document of a shared socket with a CLOSE message: code 1000 + reason
@@ -214,4 +225,207 @@ test('a stale document is not loaded', async () => {
     assert.equal(client.events.synced, false);
     client.close();
     laravel.stale.delete(OTHER);
+});
+
+// ── revoked app devices (BRAI-377) ────────────────────────────────────────────────────────────────
+
+test('collab tokens: `dev` must be a positive integer', async () => {
+    const { verifyToken } = await import('../src/token.js');
+    assert.equal(verifyToken(deviceToken(DOC, 1, 7), keys.token).dev, 7);
+    assert.equal(verifyToken(deviceToken(DOC, 1, '7'), keys.token), null);
+    assert.equal(verifyToken(deviceToken(DOC, 1, 0), keys.token), null);
+    assert.equal(verifyToken(token(DOC, true), keys.token).dev, undefined, 'web tokens have no device');
+});
+
+test('revoked device (re-check): its document socket closes with 4410; the web and other devices stay', async () => {
+    laravel.accessBodies = [];
+    const desktop = connect(DOC, deviceToken(DOC, 1, 201));
+    const phone = connect(DOC, deviceToken(DOC, 1, 202));
+    const web = connect(DOC, token(DOC, true, 2));
+    await until(() => desktop.events.synced && phone.events.synced && web.events.synced);
+    assert.deepEqual(laravel.accessBodies.find((b) => b.devices?.[0]?.id === 201).devices, [{ id: 201, user_id: 1 }], 'asked on connect');
+
+    await collab.recheckAccess();
+    assert.deepEqual(laravel.accessBodies.at(-1).devices.sort((a, b) => a.id - b.id), [{ id: 201, user_id: 1 }, { id: 202, user_id: 1 }]);
+    assert.equal(desktop.events.socketCodes.length, 0, 'nothing revoked yet');
+
+    laravel.revokedDevices.add(201);
+    await collab.recheckAccess();
+    await until(() => desktop.events.socketCodes.includes(4410));
+    await new Promise((r) => setTimeout(r, 150));
+    assert.equal(phone.events.socketCodes.length, 0);
+    assert.equal(web.events.socketCodes.length, 0);
+    assert.equal(phone.events.closed.length, 0);
+
+    // a still-valid token of the revoked device can't come back
+    const again = connect(DOC, deviceToken(DOC, 1, 201));
+    await until(() => again.events.failed !== null);
+    assert.equal(again.events.failed, 'device-revoked');
+    assert.equal(again.events.synced, false);
+    [desktop, phone, web, again].forEach((c) => c.close());
+    laravel.revokedDevices.clear();
+});
+
+test('revoked device (pushed): revokeDevices closes its connections at once and refuses its tokens', async () => {
+    const desktop = connect(DOC, deviceToken(DOC, 1, 211));
+    const other = connect(OTHER, deviceToken(OTHER, 2, 212));
+    await until(() => desktop.events.synced && other.events.synced);
+
+    assert.equal(collab.revokeDevices([211, 'x']), 1);
+    await until(() => desktop.events.socketCodes.includes(4410));
+    assert.equal(other.events.socketCodes.length, 0);
+
+    // known as revoked without asking Brainitive (which still thinks it's active here)
+    const again = connect(DOC, deviceToken(DOC, 1, 211));
+    await until(() => again.events.failed !== null);
+    assert.equal(again.events.failed, 'device-revoked');
+    [desktop, other, again].forEach((c) => c.close());
+});
+
+test('a device Brainitive answers as revoked on connect is refused with 4410', async () => {
+    laravel.revokedDevices.add(221);
+    const revoked = connect(DOC, deviceToken(DOC, 1, 221));
+    await until(() => revoked.events.failed !== null);
+    assert.equal(revoked.events.failed, 'device-revoked');
+    await until(() => revoked.events.socketCodes.includes(4410));
+    revoked.close();
+    laravel.revokedDevices.clear();
+});
+
+// ── Codex realtime review 2: re-checks that keep failing close the document (fail closed) ────────────
+
+test('a re-check that keeps failing closes the document after COLLAB_ACCESS_MAX_FAILURES (2) rounds; an answer resets the count', async () => {
+    const editor = connect(DOC, token(DOC, true, 1));
+    await until(() => editor.events.synced);
+
+    for (const status of [500, 503]) {
+        laravel.failAccess = status;
+        await collab.recheckAccess();
+        await new Promise((r) => setTimeout(r, 100));
+        assert.deepEqual(editor.events.closed, [], `one failed round (${status}) keeps the connection`);
+        laravel.failAccess = 0;
+        await collab.recheckAccess(); // answered: the count starts again
+    }
+
+    laravel.failAccess = 500;
+    await collab.recheckAccess();
+    await collab.recheckAccess();
+    await until(() => editor.events.closed.includes('Access could not be checked'));
+    laravel.failAccess = 0;
+
+    // closed means closed: its edits no longer reach anyone
+    const other = connect(DOC, token(DOC, true, 2));
+    await until(() => other.events.synced);
+    editor.doc.getText('t').insert(0, 'AFTER-CLOSE ');
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(other.doc.getText('t').toString().includes('AFTER-CLOSE'), false);
+    editor.close();
+    other.close();
+});
+
+test('an explicit denial closes at once, no failure budget', async () => {
+    laravel.access[7] = 'edit';
+    const client = connect(DOC, token(DOC, true, 7));
+    await until(() => client.events.synced);
+    laravel.access[7] = null;
+    await collab.recheckAccess();
+    await until(() => client.events.closed.includes('Forbidden'));
+    client.close();
+});
+
+test('re-checks ask in batches Brainitive accepts (≤ 500 users / devices): many users never mean a 422 forever', async () => {
+    const small = createCollabServer({
+        port: 0, secret: SECRET, appUrl: `http://127.0.0.1:${api.address().port}`, accessIntervalMs: 3_600_000, stopOnSignals: false,
+        logger: { error() {}, warn() {} }, accessBatchSize: 2,
+    });
+    await small.listen();
+    const smallUrl = `ws://127.0.0.1:${small.server.address.port}`;
+    const at = (sub) => {
+        const websocketProvider = new HocuspocusProviderWebsocket({ url: smallUrl, WebSocketPolyfill: WebSocket, maxAttempts: 1 });
+        const provider = new HocuspocusProvider({ name: DOC, token: token(DOC, true, sub), websocketProvider });
+        provider.attach();
+        let synced = false;
+        provider.on('synced', () => { synced = true; });
+        return { synced: () => synced, close: () => { provider.destroy(); websocketProvider.destroy(); } };
+    };
+    const clients = [1, 2, 3].map(at);
+    await until(() => clients.every((c) => c.synced()));
+    laravel.accessBodies = [];
+    await small.recheckAccess();
+    assert.equal(laravel.accessBodies.length, 2);
+    assert.deepEqual(laravel.accessBodies.map((b) => b.user_ids.length).sort(), [1, 2]);
+    assert.deepEqual(laravel.accessBodies.flatMap((b) => b.user_ids).sort(), [1, 2, 3]);
+    clients.forEach((c) => c.close());
+    await small.destroy();
+    small.server.httpServer.closeAllConnections();
+});
+
+// ── Codex realtime review 1: a signed-out browser session loses its document sockets ────────────────
+
+const SID_A = 'a'.repeat(32);
+const SID_B = 'b'.repeat(32);
+const webToken = (doc, sub, sid, gen = 0) => token(doc, true, sub, undefined, { sid, gen });
+
+test('collab tokens: `sid` is 32 hex characters, `gen` a non-negative integer', async () => {
+    const { verifyToken } = await import('../src/token.js');
+    assert.equal(verifyToken(webToken(DOC, 1, SID_A), keys.token).sid, SID_A);
+    assert.equal(verifyToken(webToken(DOC, 1, 'x'), keys.token), null);
+    assert.equal(verifyToken(webToken(DOC, 1, SID_A, -1), keys.token), null);
+});
+
+test('session ended (pushed): its document sockets close with 4401 "Signed out", other sessions stay, its tokens are refused', async () => {
+    const signedOut = connect(DOC, webToken(DOC, 1, SID_A));
+    const otherBrowser = connect(DOC, webToken(DOC, 1, SID_B));
+    await until(() => signedOut.events.synced && otherBrowser.events.synced);
+    assert.deepEqual(laravel.accessBodies.find((b) => b.sessions?.includes(SID_A)).sessions, [SID_A], 'asked on connect');
+
+    assert.equal(collab.endSessions({ sessions: [SID_A], users: [] }), 1);
+    await until(() => signedOut.events.socketCodes.includes(4401));
+    await new Promise((r) => setTimeout(r, 150));
+    assert.deepEqual(otherBrowser.events.socketCodes, []);
+
+    const again = connect(DOC, webToken(DOC, 1, SID_A));
+    await until(() => again.events.failed !== null);
+    assert.equal(again.events.failed, 'signed-out');
+    assert.equal(again.events.synced, false);
+    [signedOut, otherBrowser, again].forEach((c) => c.close());
+});
+
+test('session ended (push missed): refused on connect, closed by the re-check; a newer generation closes older tokens', async () => {
+    const SID_C = 'c'.repeat(32);
+    const open1 = connect(DOC, webToken(DOC, 2, SID_C));
+    const other = connect(DOC, webToken(DOC, 2, SID_B));
+    await until(() => open1.events.synced && other.events.synced);
+    laravel.endedSessions.add(SID_C);
+    await collab.recheckAccess();
+    await until(() => open1.events.socketCodes.includes(4401));
+    assert.deepEqual(other.events.socketCodes, []);
+
+    const fresh = connect(DOC, webToken(DOC, 2, SID_C));
+    await until(() => fresh.events.failed !== null);
+    assert.equal(fresh.events.failed, 'signed-out');
+
+    // signed out everywhere, push missed: the generation in the answer closes the rest
+    laravel.generations.set(2, 1);
+    await collab.recheckAccess();
+    await until(() => other.events.socketCodes.includes(4401));
+    const renewed = connect(DOC, webToken(DOC, 2, SID_B, 1));
+    await until(() => renewed.events.synced);
+    [open1, other, fresh, renewed].forEach((c) => c.close());
+    laravel.endedSessions.clear();
+    laravel.generations.clear();
+});
+
+test('a sign-out pushed while the document was still loading closes the connection once it exists', async () => {
+    const SID = '9'.repeat(32);
+    const SLOW = 'page.123e4567-e89b-42d3-a456-426614174555.0';
+    laravel.loadDelayMs = 400;
+    laravel.accessBodies = [];
+    const client = connect(SLOW, webToken(SLOW, 1, SID));
+    await until(() => laravel.accessBodies.some((b) => b.sessions?.includes(SID))); // authenticated, now loading
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(collab.endSessions({ sessions: [SID], users: [] }), 0, 'no connection to close yet');
+    await until(() => client.events.socketCodes.includes(4401));
+    laravel.loadDelayMs = 0;
+    client.close();
 });

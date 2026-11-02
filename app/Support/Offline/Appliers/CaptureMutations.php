@@ -3,12 +3,16 @@
 namespace App\Support\Offline\Appliers;
 
 use App\Models\Capture;
+use App\Support\Captures\CaptureInbox;
 use App\Support\Offline\MutationContext;
 use App\Support\Offline\SyncOutcome;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Support\Facades\RateLimiter;
 
-/** A quick capture written offline (BRAI-82): lands in the user's own inbox, like captures.store. */
+/**
+ * A quick capture written offline (BRAI-82): lands in the user's own inbox, like captures.store
+ * (`CaptureInbox::create`, shared with the web, the App API, the extension and the MCP).
+ */
 final class CaptureMutations
 {
     public const ENTITY = 'capture';
@@ -22,7 +26,7 @@ final class CaptureMutations
             throw new ThrottleRequestsException('Too many captures. Try again in a minute.');
         }
 
-        $capture = Capture::create(['user_id' => $ctx->user->id] + $ctx->validate(Capture::rules()));
+        $capture = CaptureInbox::create($ctx->user, $ctx->validate(Capture::rules()));
 
         return SyncOutcome::applied(self::ENTITY, ['uuid' => $capture->uuid, 'text' => $capture->text], $capture->id);
     }

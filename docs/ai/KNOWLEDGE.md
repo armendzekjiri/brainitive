@@ -37,6 +37,11 @@ Details in `e2e/README.md`; this lists what isn't obvious.
   `E2E_PORT` with its own Postgres database, `brainitive_e2e_<port>`. `--no-reload` makes it pass
   the e2e environment through instead of re-reading `.env`. `e2e:reset` refuses anything but
   `APP_ENV=e2e` plus an e2e database.
+- **A busy port stops the run (v1.49.0).** A server left over from an earlier run (app on `E2E_PORT`,
+  realtime on `E2E_PORT + 101`) keeps that run's environment and code; reusing it silently failed every
+  journey whose env var or realtime feature came later. Reuse only with `E2E_REUSE_SERVER=1`.
+- **`APP_ENV=e2e` ignores `public/hot`.** `composer run dev` writes it in the same checkout, and the e2e
+  server then served Vite dev URLs: no `/build` assets for the offline shell, loads from another host.
 - **One session per worker** (the worker fixtures in `fixtures.ts`). Laravel's flash data
   (validation errors, toasts) belongs to a session, and workers sharing one session consumed each
   other's flash.
@@ -553,6 +558,146 @@ the allowlist renaming only.
   can keep its password login locked (reset / social login still work). Real fix for IP spoofing is
   a correct `TRUSTED_PROXIES` (never `*` when the app port is reachable directly).
 
+### App API sign-in: own tokens, refresh reuse, serialize refreshes (v1.49.0, BRAI-428 / BRAI-355)
+- **Own opaque tokens, not Passport** (decided with the user 2026-11-01): Passport TTLs are global
+  (MCP / CLI keep 30 days) and it has no refresh-reuse detection or device binding. One table,
+  `app_devices`, holds each install and its one current pair (sha256 only); codes live in the cache
+  (`AppAuthCodes`, atomic `Cache::add` marker = single use). Isolation is structural: `bra_…` is not a
+  JWT (Passport rejects it), a Passport JWT is not in `app_devices` (`auth:app` rejects it).
+- **Refresh reuse:** every refresh replaces the pair and keeps the old refresh hash in
+  `previous_refresh_hash`. Seeing that hash again = a copy was stolen (or the client misbehaved) →
+  `AppTokens::revoke($device, 'refresh_reuse')`, `AppRefreshReuseNotification` (account mail) and
+  401 `invalid_grant`. The lookup runs under `lockForUpdate`, so of two parallel refreshes with the
+  same token the second sees the rotated row and counts as reuse. **Clients must serialize
+  refreshes** (one in flight, the others wait for its result) or they sign themselves out.
+- **Consent page is Inertia, not Blade:** a password login is an Inertia XHR that follows
+  `url.intended`; a Blade page would land in Inertia's error modal. The decision answers with
+  `Inertia::location()` (409 + `X-Inertia-Location`), so the browser itself navigates to
+  `brainitive://…` — a 302 to a custom scheme inside an XHR goes nowhere. Password, Google, GitHub and
+  Microsoft logins all return through `redirect()->intended()` (tests in `AppSignInTest`).
+- **Revocation:** `SignOutEverywhere::run($user, $keepSessionId, $appReason)` ends browser sessions, the
+  remember token, Passport tokens **and** every app device (`AppTokens::revokeAllFor`, since BRAI-377 — before,
+  the social-login takeover paths left the squatter's apps signed in). Reasons: `suspended`, `deleted`,
+  `password_changed`, `account_takeover`, default `signed_out_everywhere`. **Refresh reuse does not run it**
+  (decided 2026-11-02): it revokes only that device — which also ends the web session its webview opened
+  (`EndRevokedAppDeviceSessions`) — plus the email, so a client that refreshes twice in parallel doesn't sign the
+  user out everywhere.
+- **Webview session:** `/app/session/{code}` logs into `web` with remember-me (cookies survive app
+  restarts) and only follows a relative `?to=` (`/…`, not `//` or `/\`). Confirm page + device binding: see
+  "App API security review" below.
+- **Tests:** after an `auth:app` request the test client keeps the guard's user and the default
+  guard is `app` — call `Auth::forgetGuards()` before re-using a revoked token, and
+  `assertGuest('web')` / `assertAuthenticatedAs($u, 'web')`.
+
+### App API security review (v1.49.0, BRAI-377)
+- **TV scope = route-name allow-list.** `config/app-api.php` → `clients.*.abilities` (`Str::is` patterns on the
+  route name without `app.v1.`), checked by `EnsureAppClientAbility` on the `auth:app` group → 403
+  `client_not_allowed`. It is in the middleware priority list **before `SubstituteBindings`**, so a refused call
+  never says through a 404 whether a record exists. A guard that already knew the user (one app instance, several
+  test requests) has no device on the request: the middleware then looks the bearer up itself, else it would
+  refuse desktop calls in tests. `AppClientAbilitiesTest` pins the TV's exact list — a new route is closed to it
+  until added. The device code's origin (IP, created_at) lives in the cache payload: no migration.
+- **`/app/session/{code}`: why the desktop webview may skip the confirm page.** The attack is login CSRF / a silent
+  account swap: someone sends the victim a link to *their own* web-session code. A web page can't set the user
+  agent of the victim's browser (it's not a header `fetch` / a link may set), so a planted link in a normal browser
+  never carries ` BrainitiveDesktop/` or ` BrainitiveMobile/` (the mobile webview's marker, same rule) and gets the
+  confirm page; and a signed-in user is never swapped without a
+  click, even in the webview. The code is consumed on the **GET** and the pending sign-in bound to that session
+  (5 min): a copy of the URL is dead from the first open, and the POST carries no code, only the session's CSRF
+  token. Link unfurlers spend the code — fine, it's never meant to be shared.
+- **A webview session ends with its device.** `/app/session` stores `app_device_id`; `EndRevokedAppDeviceSessions`
+  (web group) asks `AppWebSessions::deviceActiveFor` — one indexed query cached 60 s **per device**, and
+  `AppTokens::revoke` forgets that cache (now and after commit), so the next request already sees it. Logout
+  there cycles the remember token: the user's remember-me cookies in other browsers stop working too (their
+  sessions stay). Sessions without the key (normal logins) are never checked.
+- **Collab (live doc editing) sockets close on revoke too.** `CollabToken` carries `dev` for App API callers
+  (`PageCollab::session(…, $device)`); `internal/collab/access` takes optional `devices: [{id, user_id}]` and answers
+  `revoked_devices` (`AppTokens::revokedAmong`, shared with the live endpoint). The collab server asks on connect
+  (refuses with 4410 / reason `device-revoked`, not 4401) and in its minute re-check, and closes the **whole socket**
+  (`connection.webSocket.close(4410)`, not just the document's CLOSE message, which arrives as code 1000). The live
+  push `POST /internal/live/devices/revoked` reaches it through `attachLive({onDevicesRevoked})` in
+  `realtime/src/index.js`. Old realtime ↔ new Laravel stay compatible (`devices` optional); restart the realtime
+  service after the deploy.
+
+### Codex security review of v1.49.0 (2026-11-02, `fix/app-api-codex-review`)
+Decisions and traps from the review; the finding list is in `docs/ai/tasks/release-v1.49.0.md` → Codex security review.
+- **Never remember an app webview.** A remember-me cookie rebuilds an authenticated session from scratch — without
+  `app_device_id` — once the session expires or is lost, so `EndRevokedAppDeviceSessions` never sees the device and a
+  revoked device is back in. `/app/session` signs in **without** remember-me and expires an older recaller; a
+  native-app webview (UA ` BrainitiveDesktop/` / ` BrainitiveMobile/`) that was signed in *via the recaller* (no
+  device binding) is logged out of that browser with `logoutCurrentDevice()` — **not** `logout()`, which cycles
+  `users.remember_token` and signs every normal browser of the user out of remember-me too (Laravel keeps one token
+  per user). The app then lands on `/login` and mints a fresh session with its token (desktop: `flows::on_web_session_lost`).
+  The revoked-device path still uses `logout()` (cycles the token) to kill recallers webviews got before the fix.
+- **Pending approvals live in the cache, so they carry a generation.** Consent-page codes and approved TV codes can't be
+  listed per user; each carries `users.app_auth_generation` from the approval, `SignOutEverywhere` bumps it, and
+  `AppDeviceSignIn::create` compares it under the user row lock it already takes (no gap between check and insert).
+- **A replay must re-check visibility.** `CreatesOnce` and the template-project replay answer the model as it is
+  *now*; the caller must still see it (policy `view`, else the call site's `$visible`) — otherwise 404, never its data.
+  A model without a `view` policy and without `$visible` throws a LogicException on replay (caught by the tests).
+- **Editor uploads are metered and reserved.** `editor_uploads` rows (workspace, size) are counted by
+  `WorkspaceUsageMeter`; `LimitGate::reserveFiles` checks and adds the bytes under a row lock of `workspace_usages`, so
+  repeated / concurrent uploads stop at the limit before the nightly measure (which recomputes the real total). The
+  web `/upload/*` needs a workspace (field, else the `/workspaces/{slug}` referrer; none → 422, not theirs → 404).
+  Editor files are never attachments, so nothing counts twice. Attachments / bookmark files still use the stale check
+  (`FileRoom::ensure` / `file.room`): a follow-up, not a leak.
+- **The content limit covers pages and issues only** (`Issues::create` holds the issue check, so sync and every caller
+  get it). Task lists, tasks, snippets, bookmark items and comments are metered but not blocked on any surface (web,
+  App API, MCP, CLI, extension) — a product decision, not an MCP bypass.
+- **Project membership needs the workspace membership.** There is no project-only role. `User::projectRole` /
+  `hasProjectAccess` / `adminProjectIds` ignore project rows of workspaces the user left, `Workspace::removeUser` drops
+  both in one transaction, `php artisan memberships:prune-orphans [--force]` cleans rows from before.
+- **Refresh reuse: any earlier token.** Every used refresh hash is kept (`app_device_refresh_uses`, pruned after the
+  refresh TTL and on revoke). A token-format counter (`brr_<device>.<n>.<secret>`) was rejected: without the old
+  token's hash, anyone could forge `brr_<id>.0.x` and sign out any device by id.
+- **A calendar's `is_active` is an off switch** ("turn single calendars on or off"; the app also switches a connection
+  off when its Google access expired, so Google isn't called). Lists *and* explicit ids (MCP tools, App API
+  create / show / update / delete) require it.
+- **Provider ids are one path segment.** `rawurlencode` keeps `.` and `..`, so ids that are dot segments or hold `/`,
+  `\` or controls are refused before building a URL (`GoogleTasksService::segment`).
+- **Series vs occurrence.** Lists hand out occurrence ids only; a CalDAV id without `~<occurrence>` or a Google id
+  without `_<time>` names the whole series. `CalendarProvider::deleteEvent(…, $wholeSeries)` refuses a series unless
+  asked (MCP `scope: series`); meetings / bookings pass `true` for their own single events (skips Google's extra GET).
+- **MCP:** no request logging before `auth:api` (the `[MCP-DEBUG]` logger is gone); `/mcp` is `throttle:120,1,mcp`
+  per user after auth (connectors share egress IPs). Scope-less Passport tokens still reach MCP on purpose: the CLI /
+  Copilot token `brainitive-cli` has no scopes (see the review section for the enforcement plan).
+- **Google failures log reason codes only** (`GoogleCalendarService::errorSummary`), never the response body.
+
+### Codex config review of v1.49.0: CI, Docker, headers (2026-11-02, `fix/v1.49-config`)
+Item list + what needs the owner: `docs/ai/tasks/release-v1.49.0.md` → Codex config review.
+- **Nothing is published untested.** `release.yml` (push to `main`) runs `already-tested.yml` (`proven-by: pre-release.yml
+  tests.yml`, same git tree) and else the full `tests.yml` before the release, extension zips, CLI binaries and image.
+  `docker-publish.yml` gates hand-pushed `v*` tags / manual runs itself; `release.yml` calls it with `tested: true`. A
+  called workflow's jobs may only ask for permissions the caller's job grants, even when they're skipped: `release.yml`'s
+  `docker` job grants `actions: read` for that reason. Jobs after a skipped `tests` need an explicit
+  `if: !cancelled() && needs.X.result == 'success'` (default `success()` treats a skipped ancestor as failure).
+- **Every action is SHA-pinned** (`@<sha> # vX.Y.Z`); `release.yml` and `cla.yml` default to `permissions: {}` and grant
+  per job. `cla.yml` runs on `pull_request_target`: never add a checkout or any step that runs PR code there.
+- **SSH host key:** `appleboy/ssh-action` checks the host key only when `fingerprint` (`DEPLOY_FINGERPRINT`) is set; it
+  has no known_hosts input. A step before every SSH deploy warns when it is missing, and fails when the repo variable
+  `DEPLOY_REQUIRE_HOST_KEY=true` (fail closed only once the secret exists, so a missing secret can't turn a deploy red).
+- **Security headers (`SecurityHeaders`, web group, `config/security.php`).** HSTS (`max-age=31536000; includeSubDomains`,
+  no preload) on HTTPS responses, default on only with `APP_ENV=production` (dev = `staging` → none). The script CSP is
+  **report-only** (`CSP_MODE=report-only|off`, no enforce mode yet): `script-src 'nonce-…' 'strict-dynamic'` +
+  CSP2 fallbacks, `object-src 'none'`, `base-uri 'self'`, `report-uri` only with `CSP_REPORT_URI`. The nonce is
+  `Vite::useCspNonce()` from the middleware; every inline / external `<script>` in a Blade view needs
+  `nonce="{{ Vite::cspNonce() }}"` and `@routes(nonce: Vite::cspNonce())`, or the console reports it (it'll block once
+  enforced). Violations are console messages, not `pageerror`s, so the e2e fixtures don't fail on them.
+  **Trap:** with a nonce, Laravel's `AddLinkHeadersForPreloadedAssets` puts `nonce="…"` on every preloaded chunk (~140 on a
+  board page → +7 KB `Link` header; Playwright's request client failed with "Header overflow"). The web group uses our
+  `App\Http\Middleware\AddLinkHeadersForPreloadedAssets` (same, minus the nonce); the page's `<link>` tags keep it.
+- **Debug only for `APP_ENV=local` by default** (`config/app.php`); `.env.example` no longer sets `APP_DEBUG`, so
+  `phpunit.xml` sets `APP_DEBUG=true` (as CI had it). `ProductionConfigWarnings` logs `[config] …` warnings in
+  production (hourly per problem, via the cache): debug on, a non-local `http://` `APP_URL` (boot), and mail actually
+  sent through a `log`-transport mailer (`MessageSending`: an admin-console SMTP replaces `MAIL_MAILER=log` at runtime,
+  so a boot check would be wrong).
+- **Docker:** `compose.yaml` publishes on `BIND_ADDRESS` (default `127.0.0.1`); Brainitive's own HTTPS needs
+  `BIND_ADDRESS=0.0.0.0`. `TRUSTED_PROXIES` is empty in `.env.docker.example` (was all of RFC1918): a host proxy reaches
+  the container from the Docker network gateway, which is what to trust. Base images in the `Dockerfile` are pinned
+  `tag@sha256:<index digest>` (refresh with `docker buildx imagetools inspect`); images also get `sha-<short>` always.
+- **Docs site:** VitePress 1.6.4 (newest 1.x) runs on vite 6 through `overrides` in `docs-site/package.json`; check
+  `npm run build` there after any VitePress bump and drop the override once VitePress ships a patched vite.
+
 ### Lead form logic lives twice
 Which steps / questions a visitor sees is evaluated in the browser (`lib/leadForms.ts`) *and*
 on submit (`LeadFormDefinition::visibleFields`) — hidden questions are never validated and
@@ -792,7 +937,7 @@ Plan: [`tasks/feat-document-review.md`](./tasks/feat-document-review.md).
 - **`ReviewGate` publishing rule:** with `pages.review_required`, publish / publish changes run in a
   transaction that locks the page row, re-reads it, applies the pending editor changes, and refuse unless
   an approved, open review has the current draft hash. Requests / decisions / cancels lock the same row.
-  Side doors are closed too: MCP `update-page`, restoring a version, `PageController::update` name / icon
+  Side doors are closed too: MCP `update-page` (saves into the draft), restoring a version, `PageController::update` name / icon
   (go to the draft), `saveExcalidraw` on non-whiteboards. Any new path that changes a published
   review-required page must go through the gate.
 
@@ -1200,8 +1345,8 @@ also wait for read / archive actions in flight (a page older than the action is 
   stays exempt. Accepting an invitation checks with `adding = 0` (the open invitation already counts). Sign-up
   acceptance (`acceptPendingForUser`) skips a full workspace instead of failing registration.
 - **Content size is `pg_column_size` (compressed / TOAST) over a fixed table list** — add a new user-content table
-  to `WorkspaceUsageMeter::CONTENT`. 0 on SQLite. Editor uploads (`uploads/images|documents`) have no size column
-  and don't count as files yet.
+  to `WorkspaceUsageMeter::CONTENT` **and** call `ensureContentRoom` in its shared create path (see "Plan limits
+  cover everything the meter counts"). 0 on SQLite. Files: see the same entry.
 - **Pruning never deletes:** before `enforced()`, during grace, the newest version, the `current_version`, or a
   `client_deliverables.page_version_id`. A new feature that points at a version must be added to `VersionPruner`.
   `Page::versions()` / `Plan::versions()` are ordered `version desc` — use `reorder()` in queries.
@@ -1211,6 +1356,52 @@ also wait for read / archive actions in flight (a page older than the action is 
 - **e2e:** limits apply only to slugs starting with `plan-limit-`; never set `ENTITLEMENTS_FREE_WORKSPACES_PER_OWNER`
   in e2e (the shared owner creates hundreds of workspaces). Several upload endpoints answer 302 even to JSON — assert
   on the session in PHPUnit.
+
+### Plan limits cover everything the meter counts (v1.49.0, Codex web review B / C / D)
+**Policy (the owner's decision, 2026-11-02):** what `WorkspaceUsageMeter` counts is what `LimitGate` checks, on
+every surface (web, App API + sync, MCP, CLI, browser extension) — checked in the shared service / model, never only
+in one controller.
+- **Content (`ensureContentRoom`, at or over the limit → refused):** creating anything in `WorkspaceUsageMeter::CONTENT`
+  — pages, issues, comments, task lists, tasks, snippets, bookmark items, tickets and agent replies, leads, plans,
+  releases, meetings, health reports, client deliverables, doc reviews and review comments. A new metered table
+  needs its create path checked too (`ContentLimitEverywhereTest`).
+- **Edits:** one that makes content bigger is refused at the limit, one that keeps or shrinks the size always passes
+  (people can clean up). `LimitGate::ensureContentGrowth`; models with the `GuardsContentGrowth` trait (Item,
+  TaskListItem, Snippet, Ticket, Comment, BookmarkItem) check it in `updating`; pages in `Page::saveDraft` /
+  `publishChanges`. Live co-editing saves (`saveDraft(…, live: true)`) are not refused — the text stays in the shared
+  document; publishing it is checked.
+- **Public forms** (helpdesk widget tickets and replies, lead forms incl. the inbound API, feedback portals): 422
+  `{message: "This form can't accept submissions right now.", errors: {form: […]}, limit_reached: true}` — never the
+  plan, usage or a 500. `PublicContentRoom` tells the workspace admins once per workspace and day (in-app
+  `plan_limit_reached`, category workspace; no extra emails beyond the user's own channel settings). Inbound
+  helpdesk **mail** is still accepted (a refused mail would be lost).
+- **Surfaces:** web → `limit_reached` flash / 402 JSON; App API → 402 `limit_reached`; sync (App API and web
+  `/offline/sync`) → that change 402 `limit_reached`, nothing stored, retried later; MCP → a tool error with the
+  message (`guard()` / explicit catch); CLI and extension → the 402 JSON message.
+- **Files (`reserveFiles`):** every user-controlled stored file reserves its bytes atomically before it is kept and
+  releases them when deleted or superseded. Files without a size column go through `WorkspaceFiles::store` and are
+  recorded in `editor_uploads` (`kind`: logos, headers, bookmark icons / files, project and item-type icons,
+  lead-form images, whiteboard previews, `temp`); attachments and ticket attachments reserve in a model hook
+  (`ReservesFileStorage`). Whiteboard previews are not deleted when superseded (versions show them). Temporary icons
+  are pruned after a day (`files:prune-temp`, daily 02:40). Files from before v1.49.0: `files:backfill-usage`
+  (dry run; `--force`). Profile photos are per user, not per workspace, and don't count.
+- **Maximum lengths (`App\Support\Validation\ContentLimits`, one place for all surfaces):** bodies (issue
+  descriptions, snippets, task notes) 1 000 000 characters; page bodies 10 MB (the live editor's existing limit);
+  legacy whiteboard scenes 50 MB; comments 100 000; ticket descriptions 200 000, replies 50 000; helpdesk field
+  options ≤ 200 × 255; reorder requests ≤ 2 000 ids; titles keep the web's limits. Task descriptions accept only the
+  editor's formats (`EditorDocument`: `{type: lexical, html}` or a TipTap doc with known nodes, depth ≤ 50) — never
+  arbitrary JSON.
+
+### MCP needs `mcp:use` — the legacy CLI allowance ends (v1.49.0, Codex review 13)
+`EnsureMcpScope` on `/mcp`: tokens with `mcp:use` or `*` pass; MCP connectors get `mcp:use` by default
+(`Passport::defaultScopes`); new CLI / Copilot tokens (`/api/cli/login`, `mcp:token`) are issued with
+`['cli', 'mcp:use']`. Every other scope-less token gets 403, except the CLI's **legacy** scope-less personal access
+tokens (name `brainitive-cli`), logged at info once per token and day ("MCP used with a legacy scope-less CLI
+token"). **Enforcement plan:** CLI tokens are personal access tokens (1-year lifetime, `personalAccessTokensExpireIn`),
+not the 60-day OAuth refresh tokens. (1) Watch the log; after 60 days without that line, or (2) at the latest one
+year after the v1.49.0 deploy, delete the legacy branch in `EnsureMcpScope` (and the McpScopeTest case). Users who
+still hold one sign in again (`brainitive login`). Before `/mcp`'s auth, `GuardMcpEndpoint` limits unauthenticated
+attempts per IP (60 / min of 401s, then 429; signed-in calls never count) and refuses bodies over 12 MB (413).
 
 ### Licence: Business Source License 1.1 instead of AGPL-3.0 (v1.46.0, 2026-10-30)
 - **Why:** the AGPL let anyone resell Brainitive as a hosted service and let big companies self-host for
@@ -1901,5 +2092,339 @@ _(Add as discovered — e.g. flaky tests, N+1 hotspots, third-party quirks.)_
 ### CLI Cloud OAuth origin
 The Cloud CLI defaults to `https://www.brainitive.app`, matching the OAuth metadata. Keep strict same-origin checks for all servers; the non-www Cloud alias can be normalized explicitly, while existing signed-in configurations stay untouched until sign-in.
 
+### CLI / extension credential handling (Codex CLI/extension review, v1.49.0)
+- **A CLI session is bound to its origin** (`session.server` in config.json; sessions saved before v1.49.0 are bound
+  to `cfg.server` on load). `sessionTokens` is created per target server and refuses to hand out the session's
+  token for any other origin, so `--server` / `BRAINITIVE_SERVER` can't leak it. Anything new that talks to a server
+  must build its client with `sessionTokens{server: <that origin>}`, not reuse another one. `logout` and the call
+  right after `login` use `sessionOnly` (the session, never `BRAINITIVE_TOKEN`, on the session's own origin).
+- **`config.CheckServer` is the http gate:** https, or http only for exactly `localhost` / `127.0.0.1` / `[::1]`
+  (`NormalizeServer("localhost.evil.test")` is https now). The MCP and extension-API clients check it before asking
+  for a token; `auth.Login` and `auth.Refresh` check it too. There's deliberately no `--insecure-http`.
+- **CLI requests to a server never follow redirects** (`config.HTTPClient`). Go replays a 307/308 POST body and
+  keeps `Authorization` for a same-host, different-port target, which got past `sameOrigin`. A redirect now
+  surfaces as "the server redirected to …; use that address with --server". `brainitive update` keeps
+  `http.DefaultClient` (GitHub download redirects, no credentials).
+- **A refresh is saved before its token is used** (refresh tokens are single use). A failed save is an error, and the
+  next call in the same process retries the save. There is still no cross-process lock: two CLI processes refreshing
+  the same expired session at once can lose one rotation (re-login fixes it).
+- **Config writes:** `os.CreateTemp` (O_EXCL, 0600) + chmod + fsync + rename. Never `os.WriteFile` to a fixed temp
+  name: it keeps an existing file's mode and follows a symlink.
+- **Extension: tokens never leave the background.** No `get-token` message. Pages call `api.*` from
+  `lib/client.ts` (a proxy that sends `{type: 'api'}`), and the background runs `createApi(getAccessToken)`.
+  Message arguments are JSON, so an upload crosses as plain fields plus a `data:image/…` URL, and the background
+  builds the `FormData`. `createMessageHandler` refuses senders that aren't this extension's pages (a content
+  script's `sender.url` is the web page). Pages read `account` (`{server}`), never `session`.
+- **Extension session generation:** `sessionGeneration` in storage.local changes on every sign-in / sign-out, and
+  session writes go through one in-memory queue (`exclusive()` in `lib/auth.ts`). A refresh only writes if its
+  generation is still current. Any new code that writes the session must go through that queue and bump the
+  generation when the account changes.
+- **Extension sign-out calls `DELETE /api/ext/v1/logout`** (`ext.logout`, capture scope; same body as
+  `CliController::logout`: revokes the access token and its refresh token). `/api/cli/logout` rejects capture
+  tokens, so the extension can't use that one. An old server without the route answers 404: the extension then
+  signs out locally and the sign-in screen says to revoke under Connected apps.
+- **Extension tests:** `npm test` (vitest + `WxtVitest`, `wxt/testing/fake-browser`). Mock `identity.getRedirectURL`
+  / `launchWebAuthFlow` per test (fake-browser doesn't implement them), and stub `navigator` on Node < 21.
+- **Release provenance:** `release.yml` attests every CLI and extension file (`actions/attest-build-provenance`,
+  job-level `id-token` / `attestations: write`). `TestReleaseWorkflowAttestsEveryArtifact` (cli/internal/cli)
+  fails if an attest step or subject goes missing. Verify with `gh attestation verify <file> --repo armendzekjiri/brainitive`.
+
 ### Marketing homepage may be outside Inertia
 On Brainitive Cloud nginx can serve `/` from the separate website. Links from Laravel pages to `/` must use a native `<a>` so the browser performs a full navigation; Inertia links can display the website HTML in an error modal. Self-hosted installations work with the same anchors.
+
+### The OpenAPI spec depends on the database schema (BRAI-381, v1.49.0)
+Scramble reads each model's column types from the database (`ModelInfo`), so `php artisan scramble:export`
+against a dev database that misses a migration (warning MD001 "table … does not exist") writes a
+different `docs/api/openapi.json` than CI does. Regenerate it with `composer openapi` instead
+(`OPENAPI_WRITE=1 php artisan test --filter=OpenApiSpecTest`, `TEST_DB_SUFFIX=<name>` in a worktree):
+the export then runs on the migrated test database, the same one the drift test checks against.
+Never migrate devdb just to export the spec.
+- **Scramble keeps inference state in statics** (the extension broker of the first app, reflection
+  caches). A test that rendered the docs before (`ApiDocsAccessTest`) changed what a later export in the
+  same PHPUnit process inferred (a cursor list's response description), so the drift check depended on
+  test order. `OpenApiSpecTest::setUp()` resets `Context` and the reflector / resource caches; keep that
+  when upgrading Scramble (phase 03, v1.49.0).
+- **ETag endpoints need `@response` for their type** (feat/app-api-client-gaps): a method that returns
+  `$this->withETag(...)` (`JsonResponse|Response`) loses its inferred body — Scramble writes `{type: object}`. Name it in
+  the PHPDoc: `@response TimerStateResource`, `@response AnonymousResourceCollection<int, CaptureDestinationResource>`, and for
+  cursor lists `@response WorkItemCollection<CursorPaginator<int, mixed>>` (the paginator generic brings `next_cursor` back).
+  `/me/my-day`, `/me/today` and `/notifications/unread-count` still lack it.
+- **A nested resource with a null model renders as `null`** (Laravel drops it): `TimerStateResource` passes the user as its
+  resource and keeps the timer in a property, so "not running" still renders inside a `POST /sync` result.
+- **Getting real types into the spec:** Scramble types a field from inference, not from `@var`. A
+  value that comes out as `string` / `{}` (a `(object)` cast, `array_map`, an interface call, a pivot
+  attribute) gets its type from a small private method with a declared return type (`?string`,
+  `object`) or from `collect(...)->map(...)->all()`; a list of arrays becomes typed by wrapping the rows
+  in a Resource (`PinResource::collection(...)`). Keep `->resolve()` out of `response()->json([...])` —
+  pass the collection itself, or its items are `{}`.
+
+### App API phase 03: what the apps can see (v1.49.0, BRAI-388 … BRAI-394)
+- **Verified address for all workspace content.** The whole web app sits behind `verified`, so the App
+  API's workspace / project / members / navigation / search / notifications / connected-apps routes
+  are in a `verified` group (403). `/me`, devices and sign-in stay open so an unverified user can be
+  shown "verify your email".
+- **404 before validation.** A write whose Form Request would answer 422 ("name already taken",
+  "already a member") checks visibility in `authorize()` first (`abort_unless(can('view'), 404)`, then
+  the policy → 403), so outsiders can't probe the workspace (`StoreProjectRequest`,
+  `StoreInvitationRequest`). Reads use `AppApi\Concerns\ResolvesVisible`.
+- **No route `where()` on non-GET App API routes.** web.php ends in a GET `{fallbackPlaceholder}`
+  route, so a POST / PUT / DELETE whose URI fails a route constraint answers **405**, not 404. Check
+  malformed ids in the controller instead (`notifications/{id}` → `Str::isUuid`, `connected-apps/{id}`).
+  Also guard uuid columns: Postgres refuses to compare a non-uuid (500) — `ConnectedApps::disconnect`.
+- **Projects by id** (`/projects/{id}`): slugs are unique only per workspace and change on rename.
+- **Recent destinations live on the client** (browser local storage on the web, the device in the
+  apps); `RecentDestinations::resolve()` only turns `{type, id}` into titles / links the user may open.
+- **Search by workspace:** `search_entries.workspace_id` is not rewritten when a project moves, so the
+  workspace filter matches project content through `projects.workspace_id` and only snippets /
+  bookmarks by their own `workspace_id` (`TableSearchEngine::visibleEntries`).
+- **`GET /workspaces/{slug}/projects` (web) redirects to the workspace home** (fixed in v1.49.0 phase
+  04a): it used to render a `Projects/Index` page that never existed. The workspace home lists the
+  projects; there is no separate projects page.
+
+### App API phase 04a: device code, My Work, calendar (v1.49.0, BRAI-438 / 396 / 418)
+- **TV sign-in = RFC 8628 device code, not a WebView.** An embedded WebView can read the password, so
+  the TV client (`tv`, platform `android_tv`) has no redirect and `/app/authorize` refuses it. Codes live
+  in the cache (`AppDeviceCodes`): device code = 64 chars, only its sha256 is a key; user code = 8
+  letters of `BCDFGHJKLMNPQRSTVWXZ` (`XXXX-XXXX`), single use. Approve / deny / poll run under
+  `Cache::lock`, so two clicks or two polls never both win; a poll that can't get the lock counts as
+  `slow_down`. The poll's interval check uses `now()` (not `microtime`), so `travel()` works in tests, and
+  allows 1 s of jitter. The QR link (`verification_uri_complete`) only fills in the code: approval is
+  always the POST from the Approve button. 10 wrong codes per user in 15 min → 429 page.
+- **Inertia pages may answer 4xx.** `/app/device` renders the "wrong code" page with 422 and the
+  lock-out with 429 on an Inertia XHR; the client swaps the page as for a 200 (e2e covers it).
+- **Cursor pages over a UNION.** `/me/work` merges issues and tasks in SQL (`AssignedWork::combined`:
+  `kind`, `id`, `sort_due` = `COALESCE(due_date, '9999-12-31')`, ordered by those three) and cursor-
+  paginates the `fromSub`. The page's rows are then replaced by models — and the models must keep
+  `kind` / `sort_due` as attributes, because `next_cursor` is built from the **last item of the
+  collection**; without them the next request fails with "Illegal operator and value combination".
+  A bound string literal in a Postgres UNION select has no type: write constants into the SQL.
+- **Local days vs calendar dates.** `CalendarEvents` (shared with the web page) works on calendar dates
+  in the app zone. `AgendaEvent::forDays` asks one day more on each side and then cuts by the user's
+  local days, so an event at 23:30 in Auckland is neither lost nor doubled. Repeating list tasks are
+  projected backwards too (as on the web calendar), so their ids carry the date (`task:<id>:<Y-m-d>`).
+- **Scramble and nullable fields.** A field copied straight out of an array (`$event['location']`)
+  comes out as `string` or `{}`: cast through a small `?string` helper, build nested objects inline,
+  and wrap lists of arrays in a Resource (`CalendarErrorResource`).
+
+### App API phase 04b: task lists, captures, snippets, bookmarks, time (v1.49.0, BRAI-397 … BRAI-400)
+- **`request_id`, not `Idempotency-Key`.** The registry promised an `Idempotency-Key` header that was never built.
+  Creates now take a `request_id` (uuid) in the body, stored per user + endpoint in `mcp_requests` (tool
+  `app-api:<endpoint>`, pruned after 7 days, same `IdempotentRequest` as the MCP): replay → 200 + the record,
+  other input → 409. Converting a capture needs none (`CaptureConversion` is idempotent by itself).
+- **Scramble and status codes.** `->response()->setStatusCode($replayed ? 200 : 201)`, or `->response()` on a
+  helper's return value, documents the body as `{type: string}`. Two plain return statements on
+  `(new XResource(...))->response()` give typed 201 and 200 answers. A nested list of resources that need extra
+  constructor data (`WorkLogResource($entry, $accessible)`) is typed by wrapping the built resources in the list's
+  `CursorCollection` subclass (`new WorkLogCollection($resources)`).
+- **Form Request names.** `Request::capture()` is static: a Form Request method named `capture()` is a fatal error
+  (`CaptureRequest::ownedCapture()`). `{bookmark}` and `{page}` have explicit route bindings in
+  `AppServiceProvider` (slug lookups): App API routes use `{group}` for bookmark groups.
+- **Inputs are trimmed** (global `TrimStrings`), as on the web: a snippet's `content` loses leading / trailing
+  blank lines and spaces through the API too.
+- **CLI task lists follow project access.** `/api/cli/lists` used to list every list of the user's workspaces,
+  also of projects they aren't in; it now uses `TaskLists::visibleTo()` (the projects the user can open).
+- **Slugs incl. deleted rows.** Task lists and bookmark groups keep their slug when soft-deleted and the
+  `(parent, slug)` index is unique, so new slugs are checked `withTrashed()` (`TaskLists::uniqueSlug`,
+  `Bookmarks::uniqueSlug`); renaming a bookmark group now gets a unique slug too (it used to collide).
+- **Bookmark visibility in the API = member + policy.** `BookmarkPolicy::view` allows any public group, even of
+  another workspace (for the share page); the API also requires workspace membership, so other workspaces' public
+  groups are only on their share link.
+- **Time: never money, own entries only.** Work logs are the user's own (admins change others' on the web's time
+  overview); billed entries answer 422 `entry` (the web's message). Tests that travel past 15 minutes need a fresh
+  app access token (access tokens live 15 minutes).
+
+### App API phase 06: boards, issues, comments, scrum, views (v1.49.0, BRAI-403 … BRAI-409)
+- **The issue dialog's code is shared now.** `BoardController@storeItem|updateItem|updateItemLabels|destroyItem` call
+  `Support\Boards\Issues`; attachments `ItemAttachments`. The rules got two small fixes on the way: `priority_id` must be a
+  priority of the project (`ItemPriority::forProject`, it used to accept any row of `item_priorities`), and `story_points`,
+  `original_estimate`, `release_id` are accepted on create too (the web form doesn't send them yet). Custom field errors come back
+  as `values.<id>` from `ItemFieldValues::apply`: the API renames them to `fields.<id>`.
+- **`JsonResource::with()` is an instance method** (extra top-level data): a static `with()` on a resource is a fatal error —
+  `IssueResource::eagerLoad()`.
+- **`withCount()` on a `fromSub()` query fails** ("Expression could not be converted to string"). Put the counts on the inner
+  query and only `with()` on the outer one (`IssueController@dated`, which cursor-paginates over `COALESCE(start_date, due_date)`
+  as a sub-select column — same trick as `AssignedWork`).
+- **Board cards ≠ all issues.** The board page shows a Scrum board's running sprint only and hides old done cards on Kanban
+  (client side, `lib/doneRetention.ts`); `BoardCards::query` reproduces both in SQL, and the board filters (`BoardFilters`) mirror
+  `Show.tsx` / `lib/customFields.ts` — change them together.
+- **Comment rights follow the web, not `ItemPolicy::comment`.** The web's `storeComment` authorizes `update`, so project viewers
+  can't comment; the API does the same (`can.comment` = `can.update`). There is no comment edit / delete on the web, so none in
+  the API (the card asked for "own comments").
+- **Sprint moves validate inside the idempotent write.** `SprintLifecycle::moveIssues` throws `DomainException` for a completed
+  sprint or ids that aren't top-level issues of the board; inside `IdempotentRequest::run` the transaction rolls back and no
+  request row is stored, so a corrected retry with the same `request_id` still runs.
+
+### App API phase 07: docs, whiteboards, plans, releases, files (v1.49.0, BRAI-411 … BRAI-416)
+- **App doc edits follow the web editor** (and since `fix/mcp-update-page-safe` so does the MCP): the App API saves into the draft
+  (`PageWrites::saveDraft`, published only by `POST …/publish`) and needs `revision` with `markdown`. Live editors bump
+  `edit_revision` with every save, so an app holding an old revision gets 409 —
+  intended: the app never overwrites live typing. The write resets the live epoch (`Page::saved` → `PageCollab::reset`): open browsers
+  reload on the app's text, as after the web's single-user save. The web's autosave revision check now runs on the locked row too.
+- **`{page}` is an explicitly bound route parameter** (slug / uuid lookup in `AppServiceProvider`): App API routes use `{uuid}` for
+  pages, like `{group}` for bookmark groups.
+- **Native live editing needs the save, not just the token.** A client that joins the Yjs document and edits must also send the
+  live draft (`PUT /pages/{uuid}/collab/draft`, as the leading browser does) — otherwise its edits live only in the server's Y state
+  and are lost at the next epoch reset. Hence BRAI-412 exposes bootstrap + save, not only the token.
+- **Reviewers can't open the draft they review.** `PageReviewPolicy::view` = page editors or active reviewers; the API finds reviews
+  through a page of a project the user can open, then that policy (`ResolvesPageReviews`). An approved review stays `approved` and
+  open (`can.decide` still true) until publish or a draft change (`stale`).
+- **Markdown keeps only the link of a smart link** (`data-smart-link` is dropped), so `GET /links/resolve` also takes Brainitive URLs
+  (`SmartLinks::refFromUrl`: this host or relative paths only; `boards/<b>/items/<id>`, `boards/<b>#item-<id>`, `pages/<uuid>`,
+  `helpdesks/<h>/tickets/<id>`, `plans/<slug>` → `plan:<project>/<slug>`).
+- **The Markdown converter now keeps images** (`![alt](src)` ⇄ `<img>`; http(s) / site paths only, `data:` / `javascript:` dropped).
+  Before, a doc's or issue's images vanished on any Markdown write (MCP included).
+- **Tree without content:** `GET /projects/{id}/pages` never loads `pages.content` (whiteboard scenes are large): `kind` comes from
+  SQL (`content::jsonb ->> 'type'`, `jsonb_exists(…, 'elements')`), the icon as `substr(icon, 1, 64)` (image icons are long `data:`
+  URLs; the list only says `has_image_icon`).
+- **No whiteboard image export on the server** (nothing renders Excalidraw server-side): `preview_image_url` is the last "Save & exit"
+  PNG and can be older than the scene. **No file registry:** uploads return their public URL (as attachments do); no signed URLs or
+  thumbnails.
+- **App API uploads skipped the storage limit** before phase 07 (issue attachments, bookmark files: `file.room` is web middleware). Now
+  `FileRoom::ensure` inside the idempotent write, so a replayed `request_id` is never refused.
+
+
+
+### App API phase 08: calendar writes, booking, helpdesk, leads, portals, insights (v1.49.0, BRAI-418 … BRAI-424)
+- **Calendar event ids hold the connection:** writes use the list's `event:<connection>:<event id>` (`/calendar/events/{id}`,
+  URL-encoded); the connection must be the user's own (else 404). Provider event ids never contain `/` (the web routes rely on it
+  too). Dates / times default to the user's `effective_timezone`, not the server's (the MCP / web pass the browser zone).
+- **`CalendarProviderException` renders itself** (Laravel calls an exception's own `render()` before the app's renderers), so on
+  `/api/v1` it now returns the App API shape itself (422 `validation_failed` + `errors.calendar`).
+- **Meetings' `conference_provider` without `join_url`** = the provider hasn't returned the link yet (the web shows a warning).
+  The conferencing lookup is cached per connection + `updated_at` (`MeetingCalendars`): tests with a frozen clock `Cache::flush()`.
+- **Host reschedule doesn't exist on the web** (only the guest's manage link), so the API offers cancel only; lead notes don't
+  exist on the web either (card asked for them): deferred until the web has them.
+- **Ticket replies strip mentions** (`TicketReply::body` is sanitized, the thread is the customer's email): Markdown without
+  `@[Name](user:<id>)`. The SLA state is computed twice — `lib/sla.ts` (web) and `SlaStatus` (API, also as SQL for `?sla=`):
+  change both together.
+- **Cursor-paginating arrays:** a paginator whose collection was replaced by row arrays reads the cursor keys from the arrays,
+  so rows must keep the order columns (`BookingRows::rows` keeps `id` + `starts_at`).
+- **Feedback portals are project-admin pages** (`ProjectPolicy::update`): other project members get 403, outsiders 404. Client
+  portals are readable by every project member; clients' addresses only for project admins.
+- **Billing stays web only:** team time in the apps is the Insights `team` tab (hours); the billing time overview (amounts) is not
+  exposed.
+
+### App API phase 09: offline sync for native clients (v1.49.0, BRAI-425)
+- **One offline engine.** `POST /api/v1/sync` runs the web's `OfflineSync::handle` per change (same types, appliers, idempotency
+  in `offline_mutations`, field-level conflicts); the card's "one mutation per call" became a batch of ≤ 50 with **per-change
+  results** (`status` + `http_status`), because native outboxes are long after a flight. Each change has its own transaction;
+  exceptions (validation, policy, the capture throttle) are caught per change and become `invalid` / `forbidden` /
+  `rate_limited` — never a failed batch. `request_id` = the web's mutation `id`; the same uuid with other content → `invalid`
+  with `errors.id`.
+- **The feed is not `updated_since` on each list.** A list endpoint can't report deletions or rows that left the user's scope.
+  `ChangeFeed` walks phases (upserts, then deletions) with a keyset per phase inside one opaque cursor; a run's `since` is the
+  previous run's **start** minus 10 s (a change committed during the run is sent again next time, never missed). Clients
+  apply by `updated_at` and tolerate duplicates.
+- **Deletions:** issues, tasks, lists, boards are soft-deleted (`deleted_at` — also a trashed board / list means all its work is
+  gone). Captures are hard-deleted and reassignment leaves no trace → `sync_tombstones` (additive migration), written in the
+  same transaction as the delete / update (a rollback leaves none). A tombstone of work that is assigned to the user again is
+  skipped (the upsert wins). Tombstones live 30 days, so a cursor whose `since` is older starts a full run.
+- **Lost access is not a tombstone:** membership changes have many paths (workspace / project removal, role changes, trashed
+  projects). The feed answers `project_ids` (= `accessibleProjectIds()` now) on every page; clients drop rows of other projects.
+- **My Day is one record** (`type: my_day`), sent when a hash of (date, entries, order, work `updated_at` + done, carry-over
+  count) changed — the hash travels in the cursor, so no server state per device.
+- **The cursor is not signed**, on purpose: it is bound to the user id, every query is the token user's own or limited to the
+  projects they can open, and the keyset values are validated (timestamp regex, ints) before use — a forged cursor can only
+  skip or repeat the caller's own changes. A test feeds an injection string through it.
+- **Docs are not in the feed** (BRAI-204): offline doc edits use `PATCH /pages/{uuid}` with `revision` (409) or live co-editing.
+- **v2 (BRAI-441): task lists are a set with a diff, not part of the scope.** The cursor keeps the lists resolved at the start
+  of the last run (`kept`); every run start resolves them again (ids asked for + `mine`, visible only) and diffs: new lists get
+  a full pass inside the delta run (`orWhereIn(fresh)` in the list phases), dropped ones a `task_list` delete (phase
+  `goneTaskLists` now walks that `gone` set — a trashed or hidden list simply drops out of `kept`). So changing `task_lists`
+  never restarts the other scopes; scopes and the captures filter still do. The cursor stores the **phase name** (v1 stored
+  the index — `SyncCursor::V1_PHASES` maps it; append phases, never reorder). `can` on lists can go stale without any row
+  changing (roles), hence the abilities hash per project in the cursor → all kept lists re-sent when it changes.
+- **`POST /sync` entities are looked up again**, not converted from the web engine's snapshot: `OfflineSync::replay` now passes
+  the stored entity type + id, `SyncRecords::find` loads it with the feed's relations and visibility rules. The web's
+  `/offline/sync` body is unchanged.
+
+### App API phase 09: realtime for native clients (v1.49.0, BRAI-426)
+- **There is no Reverb / `routes/channels.php` / Laravel broadcasting.** The card asked for `POST /api/v1/broadcasting/auth`
+  (Pusher-style private channel auth); Brainitive's realtime is its own live channels (BRAI-151): one token listing the allowed
+  channels, sent as the socket's first message, re-checked every minute by the realtime server. So the App API got
+  `POST /realtime/token` (same `LiveToken::grant` as the web) + `GET /realtime` (connection info), and the realtime server needed
+  no change (it has no Origin check; any WebSocket client can connect).
+- **`LIVE_URL` may be a path** (`/collab?live=1`, behind nginx): browsers resolve it, native clients can't →
+  `LiveConfig::absoluteUrl()` (APP_URL, https → wss). The web keeps `LiveConfig::url()`.
+- **Echo suppression works for app writes unchanged:** `BoardLive` reads `X-Live-Client` from any request and the actor from
+  `auth()->id()`, which `auth:app` sets as the default guard (`Authenticate::shouldUse`). Test: `RealtimeTest`.
+- **Revoking a device closes its socket (fixed in `fix/live-revoked-devices`):** App API live tokens carry the device (`dev`;
+  the web's have none), the hub keeps it per socket (fixed for the socket's life, like the user). `AppTokens::revoke` — the one
+  path of sign-out, remote sign-out, refresh reuse, password change, suspension, device limit — calls `Live::deviceRevoked()`:
+  after commit, deferred, a loopback `POST /internal/live/devices/revoked {devices}` (publish key + the publish endpoint's
+  guards) closes the device's sockets with **4410 "Device signed out"** and refuses its still-valid tokens for an hour. The push
+  is best effort (publish URL unset, paused or down → skipped): the minute re-check is the guarantee — it sends each user's
+  connected devices (`users.*.devices`, also users without subscriptions) and `LiveInternalController` answers
+  `revoked_devices` (revoked, deleted or another user's). Both fields optional: old realtime ↔ new Laravel stay compatible.
+  Deploys that change `realtime/` need the realtime service restarted (until then the old server ignores `dev` and the push 404s,
+  harmlessly). Since the Codex realtime review (below) a signed-out **web** session loses its sockets too (4401 "Signed out").
+- e2e: the API needs `X-E2E-Live: 1` on the token / info calls (`LiveConfig::enabled` opt-in); the spec opens a plain
+  `WebSocket` in the page (Node 20 has none built in).
+
+### MCP `update-page` writes through `PageWrites` (v1.49.0, `fix/mcp-update-page-safe`)
+- **Before:** a Markdown body on a published page was written straight into `content` (`discardDraft` + `update`): an
+  unpublished draft was thrown away, live (Yjs) editors were ignored, no revision check. Now every body write goes through
+  `PageWrites`: never published → `saveDraft`; published without a draft, nobody editing, no "review required" →
+  `publishChanges` (version "Edited via MCP", watchers notified, like the web's "publish changes"); otherwise → `saveDraft`
+  into the draft (`result: saved_as_draft` + `note`: publish in the app). Replacing an existing draft needs `expected_revision`
+  (the agent must have read `draft_markdown` from `get-page`), else refused; `append` adds to the draft.
+- **Optional `expected_revision`** (`get-page` → `edit_revision`): stale → tool error with the current revision, nothing
+  changed (also no move). Without it the tool passes the revision it just read as the base, so a save landing between
+  read and write gives `STALE` → re-read, at most 3 tries — it never overwrites an unseen save.
+- **"Someone is editing" has no exact signal.** `PageCollabState` only says a live document existed (its state stays after
+  everyone leaves). `PageCollab::editingNow` = a `pages.presence` heartbeat with `editing: true` (browsers, every 20 s;
+  45 s window, `PageCollab::PRESENCE_TTL_SECONDS` / `presenceKey`, shared with `PageController::presence`) or a realtime
+  state store (2–10 s after typing) in the last 45 s. Native App API clients send no heartbeat, so only their typing counts.
+  Best effort: the revision check is the guarantee. The requesting user's own edit-mode tab counts too.
+- **Never-published pages save directly even with live editors** (as the web / App API): their open browsers reload on the
+  agent's text. Pass `expected_revision` to avoid overwriting their last seconds of typing.
+- **Title only** stays a rename in place (published: version recorded) but keeps the draft and sets its `draft_name` too,
+  else publishing the draft would bring the old title back; "review required" → the title waits in the draft (web rename).
+- `get-page` `markdown` is still the **published** text (readers and today's agents unchanged); editors also get
+  `draft_markdown` when there are unpublished changes. No MCP e2e exists — PHPUnit `tests/Feature/Mcp/UpdatePageToolTest.php`.
+
+### Codex realtime review v1.49.0 (2026-11-02, `fix/v1.49-realtime`)
+Findings and tests: `docs/ai/tasks/release-v1.49.0.md` → Codex realtime review. Decisions and traps:
+- **Web realtime tokens are bound to the browser session** (`RealtimeSession`): `sid` = first 32 hex of
+  `HMAC(live token key, 'realtime-session|' . session id)` — the token routes run `ReadOnlySession`, so nothing may be
+  *written* to the session there; an HMAC of the id needs no write and never exposes the id. It changes only on
+  `regenerate()` (sign-in) / `invalidate()`. Ended sessions are found by the **Logout / CurrentDeviceLogout event**
+  (LiveServiceProvider) — it fires before `invalidate()`, so `request()->session()->getId()` is still the old id.
+- **…and an allowlist** (security follow-up): a session can end with no Logout event — it expires (ReadOnly requests,
+  like the token / live-save routes, never refresh `last_activity`), or remember-me rebuilds the login under a new id. So
+  each issued `sid` is cached as active (session lifetime, refreshed per token) with its session id, and `endedAmong()`
+  reports ended for unknown sids and — database driver — sids whose `sessions` row is gone, signed out / another user or
+  older than `SESSION_LIFETIME`. Consequence: a tab that only live-edits for longer than the session lifetime loses its
+  sockets (4401) like any expired session; with remember-me the reconnect signs in again. `ReadOnlySession` therefore
+  **saves** a session that remember-me rebuilt in that request (else the token names a session no request ever saved).
+- **`gen` reuses `users.app_auth_generation`** (bumped only by `SignOutEverywhere`) instead of a new column: one bump ends
+  app approvals *and* all web realtime sockets. The session a password change keeps is closed too (4401) and reconnects at
+  once with a new token — by design ("sign out everywhere closes all sockets").
+- **4401 "Signed out" vs 4410:** 4410 is only for App API devices (drop tokens, show sign-in); a web socket of a
+  signed-out session gets 4401 with reason `Signed out`. Browsers just reconnect: the token request then fails (401 / 419)
+  because the session is gone. Tokens without `sid` / `gen` (App API, or issued before the deploy) skip the session check.
+- **The live hub asks Brainitive on every `auth`** (not only every minute): `ready` waits for the answer (batched per
+  `authBatchMs` = 10 ms, ≤ 100 entries per request). Node tests: the fake access endpoint allows everything for users
+  without an `allowed` entry; set restrictions *after* `joined()` when a test needs a socket that later loses access.
+- **Collab re-checks fail closed:** `COLLAB_ACCESS_MAX_FAILURES` (2) unanswered rounds in a row close that user's
+  document connection with the CLOSE reason `Access could not be checked`, which `useLiveDocument` / the whiteboard treat
+  like `Forbidden` (fetch a session, reattach). Re-checks go in batches (≤ 200 users, ≤ 500 devices + sessions):
+  Laravel validates `max:500`, so one big document used to get a 422 forever.
+- **Document size is enforced in the realtime server's `beforeHandleMessage`** (before Yjs applies the update and before
+  any peer gets it): each update is charged `growthBound()` — its bytes + 32 per struct + 64 per delete range, from
+  decoding the update only (deleting every other character grows the state ~6× the update; a plain `update.length`
+  budget let it through). The real size is measured only on load and at each store (which encodes anyway): never
+  re-encode the whole document per message — near 16 MB that is ~0.4 s and let one editor stall the process. The
+  limit is Laravel's `collab.max_state_bytes` (the access answer's `max_state_bytes`; env `COLLAB_MAX_STATE_BYTES` with
+  the same 16 MiB default — a Node test compares the defaults). It is the **Yjs state** limit, not
+  `ContentLimits::PAGE_BODY` (characters of the draft HTML, 10 M): the HTML of a doc that fits the state limit can still
+  be refused by the draft save, and the other way round.
+- **Collab rate limit runs before Hocuspocus:** `socket.prependListener('message')` + a `flooded` set checked in
+  `beforeHandleMessage` — ws calls every listener for a message, so the limiter can't stop Hocuspocus's own listener,
+  only make the hook reject what follows. Defaults (`DEFAULT_COLLAB_LIMITS`): 30 sockets / user, 30 open documents / user
+  (Hocuspocus multiplexes many documents over one socket, so sockets alone don't bound it), 300 burst, 100 msg/s.
+- **The `connected` hook re-checks sign-out / device revocation:** between `onAuthenticate` and the connection being
+  added the document loads from Laravel; a push in that gap finds nothing to close.
+- **Log lines with client values** go through `realtime/src/log.js` `fields()`: escaped, truncated, `key="value"`.
+- **Deploy:** restart `brainitive-realtime` after the deploy (old server: the session push 404s — reported, harmless —
+  and old tokens without `sid` keep working until they expire). New realtime env vars are optional (defaults above).

@@ -8,6 +8,9 @@ use App\Support\Offline\Appliers\CaptureMutations;
 use App\Support\Offline\Appliers\IssueMutations;
 use App\Support\Offline\Appliers\ListTaskMutations;
 use App\Support\Offline\Appliers\MyDayMutations;
+use App\Support\Offline\Appliers\NotificationMutations;
+use App\Support\Offline\Appliers\TimerMutations;
+use App\Support\Offline\Appliers\WorkMutations;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -35,6 +38,14 @@ final class OfflineSync
         'capture.create' => [CaptureMutations::class, 'create'],
         'my_day.add' => [MyDayMutations::class, 'add'],
         'my_day.remove' => [MyDayMutations::class, 'remove'],
+        // the circle of My Work / My Day (App API sync, BRAI-425)
+        'work.done' => [WorkMutations::class, 'done'],
+        // the focus timer and the notification inbox, for the desktop tray / mobile offline (App API sync)
+        'timer.start' => [TimerMutations::class, 'start'],
+        'timer.stop' => [TimerMutations::class, 'stop'],
+        'timer.discard' => [TimerMutations::class, 'discard'],
+        'notification.read' => [NotificationMutations::class, 'read'],
+        'notifications.read_all' => [NotificationMutations::class, 'readAll'],
     ];
 
     /**
@@ -97,7 +108,7 @@ final class OfflineSync
             throw ValidationException::withMessages(['id' => 'This change id was already used for a different change.']);
         }
 
-        return SyncOutcome::replayed($existing->status, $existing->response + ['replayed' => true]);
+        return SyncOutcome::replayed($existing->status, $existing->response + ['replayed' => true], $existing->entity_type, $existing->entity_id === null ? null : (int) $existing->entity_id);
     }
 
     /** @param array<string, mixed> $mutation */

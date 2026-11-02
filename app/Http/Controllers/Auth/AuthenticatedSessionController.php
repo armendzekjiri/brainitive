@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
-use App\Support\Auth\MicrosoftLogin;
+use App\Support\Auth\SignInMethods;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -22,9 +22,9 @@ class AuthenticatedSessionController extends Controller
     {
         return Inertia::render('Auth/Login', [
             'canResetPassword' => Route::has('password.request'),
-            'canLoginWithGoogle' => (bool) config('services.google.client_id'),
-            'canLoginWithGitHub' => (bool) config('services.github.client_id'),
-            'canLoginWithMicrosoft' => MicrosoftLogin::available(),
+            'canLoginWithGoogle' => SignInMethods::google(),
+            'canLoginWithGitHub' => SignInMethods::github(),
+            'canLoginWithMicrosoft' => SignInMethods::microsoft(),
             'status' => session('status'),
         ]);
     }

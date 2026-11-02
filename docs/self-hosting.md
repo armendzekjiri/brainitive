@@ -75,10 +75,11 @@ HTTPS_PORT=443
 `docker compose up -d` again — Caddy (inside the image) fetches and renews a Let's Encrypt
 certificate. Certificates live in the `caddy_data` volume.
 
-**Option B — behind your own reverse proxy** (nginx, Traefik, Cloudflare Tunnel): keep
-`SERVER_NAME=:80`, proxy to port `HTTP_PORT`, set `APP_URL=https://…` and
-`TRUSTED_PROXIES` to your proxy's IP or network (e.g. `172.16.0.0/12` for a proxy on the Docker
-network) so links and cookies use HTTPS. Avoid `*` unless the app port is reachable only through
+**Option B — behind your own reverse proxy** (nginx, Traefik, Caddy on the same host): keep
+`SERVER_NAME=:80` and `BIND_ADDRESS=127.0.0.1` (the default since v1.49.0: only this machine can
+connect), proxy to `127.0.0.1:HTTP_PORT`, set `APP_URL=https://…` and `TRUSTED_PROXIES` to the
+proxy's address as the container sees it (the Docker network's gateway, e.g. `172.18.0.1`) so links
+and cookies use HTTPS. Option A needs `BIND_ADDRESS=0.0.0.0`. Avoid `*` unless the app port is reachable only through
 the proxy — with `*`, any client can fake its IP (and so dodge login rate limits).
 
 ## Updating

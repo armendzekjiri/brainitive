@@ -11,6 +11,7 @@ use App\Models\Ticket;
 use App\Models\Workspace;
 use App\Support\Helpdesks\HelpdeskForm;
 use App\Support\Helpdesks\HelpdeskTemplates;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -297,7 +298,7 @@ class HelpdeskController extends Controller
         $this->authorize('update', $helpdesk);
 
         $validated = $request->validate([
-            'columns' => 'required|array',
+            'columns' => 'required|array|max:'.ContentLimits::REORDER_IDS,
             'columns.*.id' => 'required|integer|exists:helpdesk_columns,id',
             'columns.*.position' => 'required|integer|min:0',
         ]);
@@ -319,7 +320,7 @@ class HelpdeskController extends Controller
         $this->authorize('update', $helpdesk);
 
         $validated = $request->validate([
-            'tickets' => 'required|array',
+            'tickets' => 'required|array|max:'.ContentLimits::REORDER_IDS,
             'tickets.*.id' => 'required|integer|exists:tickets,id',
             'tickets.*.position' => 'required|integer|min:0',
         ]);
@@ -360,8 +361,8 @@ class HelpdeskController extends Controller
         $validated = $request->validate([
             'label' => 'required|string|max:255',
             'type' => 'required|string|in:text,rich_text,select,checkbox,file,number,radio,date,checkboxes',
-            'options' => 'nullable|array',
-            'options.*' => 'string',
+            'options' => 'nullable|array|max:'.ContentLimits::FIELD_OPTIONS,
+            'options.*' => 'string|max:'.ContentLimits::FIELD_OPTION,
             'is_required' => 'boolean',
             'is_visible_on_card' => 'boolean',
         ]);
@@ -390,8 +391,8 @@ class HelpdeskController extends Controller
         $validated = $request->validate([
             'label' => 'required|string|max:255',
             'type' => 'required|string|in:text,rich_text,select,checkbox,file,number,radio,date,checkboxes',
-            'options' => 'nullable|array',
-            'options.*' => 'string',
+            'options' => 'nullable|array|max:'.ContentLimits::FIELD_OPTIONS,
+            'options.*' => 'string|max:'.ContentLimits::FIELD_OPTION,
             'is_required' => 'boolean',
             'is_visible_on_card' => 'boolean',
         ]);
@@ -409,7 +410,7 @@ class HelpdeskController extends Controller
         $this->authorize('update', $helpdesk);
 
         $validated = $request->validate([
-            'fields' => 'required|array',
+            'fields' => 'required|array|max:'.ContentLimits::REORDER_IDS,
             'fields.*.id' => 'required|integer|exists:helpdesk_fields,id',
             'fields.*.position' => 'required|integer|min:0',
         ]);

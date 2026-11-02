@@ -3,9 +3,10 @@
 namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\InteractsWithSprints;
-use App\Models\Item;
+use App\Support\Boards\SprintLifecycle;
 use App\Support\Mcp\IdempotentRequest;
 use App\Support\Mcp\RequestIdConflict;
+use DomainException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -38,32 +39,12 @@ class MoveItemsToSprintTool extends Tool
             return Response::error($e->getMessage());
         }
 
-        if ($sprint && $sprint->isCompleted()) {
-            return Response::error('Issues can only move into a planned or active sprint, or the backlog.');
-        }
-
         $ids = array_values(array_unique(array_map('intval', $v['item_ids'])));
-        $items = $board->items()->whereIn('id', $ids)->whereNull('parent_id')->get()->keyBy('id');
-        $invalid = array_values(array_diff($ids, $items->keys()->all()));
-        if ($invalid !== []) {
-            return Response::error('Not top-level issues of this board: '.implode(', ', $invalid).'. Nothing was moved.');
-        }
 
         try {
-            $run = IdempotentRequest::run($user, 'move_items_to_sprint', $v['request_id'], ['board' => $board->id, 'sprint' => $sprint?->id, 'items' => $ids], function () use ($ids, $items, $sprint) {
-                $moved = 0;
-                foreach ($ids as $id) {
-                    /** @var Item $item */
-                    $item = $items[$id];
-                    if ($item->sprint_id !== $sprint?->id) {
-                        $item->moveToSprint($sprint);
-                        $moved++;
-                    }
-                }
-
-                return ['moved' => $moved];
-            });
-        } catch (RequestIdConflict $e) {
+            $run = IdempotentRequest::run($user, 'move_items_to_sprint', $v['request_id'], ['board' => $board->id, 'sprint' => $sprint?->id, 'items' => $ids],
+                fn () => ['moved' => SprintLifecycle::moveIssues($board, $sprint, $ids)]);
+        } catch (RequestIdConflict|DomainException $e) {
             return Response::error($e->getMessage());
         }
 

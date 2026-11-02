@@ -6,6 +6,7 @@ use App\Models\Booking;
 use App\Models\BookingPage;
 use App\Models\BookingType;
 use App\Support\Booking\Availability;
+use App\Support\Booking\BookingClosed;
 use App\Support\Booking\BookingInput;
 use App\Support\Booking\BookingService;
 use App\Support\Booking\BookingText;
@@ -105,6 +106,8 @@ class PublicBookingController extends Controller
             ]);
         } catch (SlotTaken $e) {
             return response()->json(['message' => $e->getMessage()], 409);
+        } catch (BookingClosed $e) {
+            return response()->json(['message' => $e->getMessage()], 410);
         }
 
         return response()->json(['ok' => true, 'booking' => $this->bookingProps($booking), 'manage_url' => route('booking.manage', $token)]);
@@ -132,6 +135,7 @@ class PublicBookingController extends Controller
     {
         $booking = $this->booking($token);
         abort_unless($this->changeable($booking), 410);
+        abort_unless(BookingService::accepting($booking->type), 410, (new BookingClosed)->getMessage()); // Codex web review U
 
         return response()->json($this->freeSlots($request, $booking->type->page, $booking->type));
     }
@@ -150,11 +154,14 @@ class PublicBookingController extends Controller
     {
         $booking = $this->booking($token);
         abort_unless($this->changeable($booking), 410);
+        abort_unless(BookingService::accepting($booking->type), 410, (new BookingClosed)->getMessage()); // Codex web review U
         $validated = $request->validate(['start' => ['required', 'date']]);
         try {
             [$new, $newToken] = BookingService::reschedule($booking, CarbonImmutable::parse($validated['start'])->utc());
         } catch (SlotTaken $e) {
             return response()->json(['message' => $e->getMessage()], 409);
+        } catch (BookingClosed $e) {
+            return response()->json(['message' => $e->getMessage()], 410);
         }
 
         return response()->json(['ok' => true, 'booking' => $this->bookingProps($new), 'manage_url' => route('booking.manage', $newToken)]);

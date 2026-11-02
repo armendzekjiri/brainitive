@@ -5,7 +5,7 @@ import { expect, test } from '../fixtures';
  * The public homepage (Pages/Welcome.tsx) shows what the latest releases shipped (BRAI-98).
  * When a release adds feature cards to the homepage, add their titles here.
  */
-const SPOTLIGHT = ['One email, not ten', 'Brainitive in your terminal', 'Emails that look like Brainitive'];
+const SPOTLIGHT = ['Brainitive on your desktop', 'One email, not ten', 'Brainitive in your terminal'];
 const NEW_FEATURES = [
     'Command line (CLI)',
     'AI agents (MCP)',
@@ -113,6 +113,23 @@ test.describe('homepage', () => {
         await expect(page.locator('#cli').getByText('curl -fsSL https://github.com/armendzekjiri/brainitive/releases/latest/download/install.sh | sh')).toBeVisible();
 
         expect(errors, 'uncaught errors on the homepage').toEqual([]);
+        await context.close();
+    });
+
+    test('the desktop app section is marked beta and leads to the download page (v1.49.0)', async ({ browser }) => {
+        const { context, page, errors } = await guestPage(browser, { viewport: { width: 1280, height: 900 } });
+        await page.goto('/');
+        if (await page.locator('astro-island').count()) {
+            await context.close();
+            return; // the Cloud homepage is the separate Astro website
+        }
+        const desktop = page.locator('#desktop');
+        await desktop.scrollIntoViewIfNeeded();
+        await expect(desktop.getByRole('heading', { level: 2, name: 'Brainitive on your desktop' })).toBeVisible();
+        await expect(desktop.getByText(/Beta, coming soon/)).toBeVisible();
+        await expect(desktop.getByRole('heading', { level: 3, name: 'Open API for apps' })).toBeVisible();
+        await expect(desktop.getByRole('link', { name: 'Download page' })).toHaveAttribute('href', '/download');
+        expect(errors, 'uncaught errors on homepage').toEqual([]);
         await context.close();
     });
 

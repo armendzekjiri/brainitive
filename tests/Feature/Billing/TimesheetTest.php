@@ -10,9 +10,12 @@ use App\Models\Project;
 use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Billing\TimeOverview;
+use App\Support\Projects\ProjectTransfer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Inertia\Testing\AssertableInertia;
+use Tests\Feature\AppApi\Concerns\ActsAsAppClient;
 use Tests\Feature\Boards\InteractsWithBoards;
 use Tests\TestCase;
 
@@ -22,6 +25,7 @@ use Tests\TestCase;
  */
 class TimesheetTest extends TestCase
 {
+    use ActsAsAppClient;
     use InteractsWithBoards;
     use RefreshDatabase;
 
@@ -133,6 +137,16 @@ class TimesheetTest extends TestCase
         $this->post($this->url('timesheet.entries.store'), $this->payload(['item_id' => $foreignItem->id]))->assertSessionHasErrors('item_id');
 
         $this->assertSame(2, TimeEntry::count());
+    }
+
+    public function test_a_new_entry_shows_its_own_project_so_it_can_be_edited(): void
+    {
+        // regression: the eager load lacked workspace_id, so every project looked moved away
+        $this->actingAs($this->editor)->post($this->url('timesheet.entries.store'), $this->payload(['time' => '45m', 'note' => 'Pairing']))
+            ->assertSessionHasNoErrors();
+
+        $this->get($this->url('timesheet.index'))
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('entries.0.project.id', $this->project->id));
     }
 
     public function test_editing_moving_and_deleting_keep_the_issue_totals_right(): void
@@ -251,6 +265,31 @@ class TimesheetTest extends TestCase
         $onTrashed->update(['minutes' => 45]);
         $onTrashed->delete();
         $this->assertSame(60, $trashed->fresh()->time_spent);
+    }
+
+    /**
+     * Codex web review S: a billed entry stays here when its project moves to another workspace; the timesheet (web
+     * and App API) then shows a neutral label, never the project's new name or key from there.
+     */
+    public function test_a_project_moved_away_shows_a_neutral_label_not_its_new_name(): void
+    {
+        $billed = $this->entry(['minutes' => 45]);
+        $report = BillingReport::create(['workspace_id' => $this->workspace->id, 'kind' => 'report', 'period_from' => '2026-10-01', 'period_to' => '2026-10-31', 'status' => 'finalized']);
+        $billed->forceFill(['billing_report_id' => $report->id])->saveQuietly();
+
+        $target = Workspace::factory()->create();
+        ProjectTransfer::move($this->project, $target);
+        $this->project->update(['name' => 'Secret new name', 'key' => 'SEC']);
+
+        $this->actingAs($this->editor)->get($this->url('timesheet.index'))
+            ->assertInertia(fn (AssertableInertia $p) => $p
+                ->where('entries.0.minutes', 45)
+                ->where('entries.0.project', ['id' => null, 'name' => TimeOverview::PROJECT_GONE, 'key' => null]));
+
+        $this->app['auth']->forgetGuards();
+        $json = $this->getJson('/api/v1/me/timesheet?workspace='.$this->workspace->slug.'&week=2026-10-19', $this->appHeaders($this->appToken($this->editor)))->assertOk();
+        $this->assertStringNotContainsString('Secret new name', $json->getContent());
+        $this->assertStringNotContainsString('"SEC"', $json->getContent());
     }
 
     public function test_the_issue_picker_lists_issues_of_projects_you_can_log_on(): void

@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Item;
 use App\Models\Page;
 use App\Models\PollVote;
+use App\Support\Polls\PollDocuments;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Votes for polls in rich text. Anyone who can view the doc / issue can vote (voting
@@ -23,8 +25,12 @@ class PollVoteController extends Controller
 
     public function vote(Request $request, string $scopeType, string $scopeId, string $pollId): JsonResponse
     {
-        $this->authorizeScope($request, $scopeType, $scopeId);
+        $scope = $this->authorizeScope($request, $scopeType, $scopeId);
         $validated = $request->validate(['option_uid' => ['nullable', 'string', 'max:40', 'regex:/^[A-Za-z0-9_-]+$/']]);
+        // only polls and options of the saved doc / issue (Codex web review E): no made-up vote rows
+        if (! empty($validated['option_uid']) && ! PollDocuments::allows($scope, $request->user(), $pollId, $validated['option_uid'])) {
+            throw ValidationException::withMessages(['option_uid' => 'This poll or option doesn’t exist (any more). Reload the page.']);
+        }
 
         $key = ['scope_type' => $scopeType, 'scope_id' => $scopeId, 'poll_id' => $pollId, 'user_id' => $request->user()->id];
         if (empty($validated['option_uid'])) {
@@ -51,7 +57,7 @@ class PollVoteController extends Controller
         ];
     }
 
-    private function authorizeScope(Request $request, string $scopeType, string $scopeId): void
+    private function authorizeScope(Request $request, string $scopeType, string $scopeId): Page|Item
     {
         $model = match ($scopeType) {
             'page' => Page::where('uuid', $scopeId)->first(),
@@ -60,5 +66,7 @@ class PollVoteController extends Controller
         };
 
         abort_unless($model && $request->user()->can('view', $model), 404);
+
+        return $model;
     }
 }

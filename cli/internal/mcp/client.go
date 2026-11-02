@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/armendzekjiri/brainitive/cli/internal/config"
 )
 
 // TokenSource hands out a valid bearer token and can renew it after a 401.
@@ -48,7 +50,7 @@ func New(server string, tokens TokenSource, version string) *Client {
 	return &Client{
 		Server:    strings.TrimRight(server, "/"),
 		Tokens:    tokens,
-		HTTP:      &http.Client{Timeout: 120 * time.Second},
+		HTTP:      config.HTTPClient(120 * time.Second), // never follows redirects
 		UserAgent: "brainitive-cli/" + version,
 	}
 }
@@ -171,6 +173,10 @@ func (c *Client) Request(ctx context.Context, method string, params any) (json.R
 // Forward posts a raw JSON-RPC message (request or notification) and returns the server's
 // JSON message (empty for a notification) and the status code. A 401 renews the token once.
 func (c *Client) Forward(ctx context.Context, message []byte) ([]byte, int, error) {
+	// No token over plaintext http to a remote host (Codex CLI/extension review 6).
+	if err := config.CheckServer(c.Server); err != nil {
+		return nil, 0, err
+	}
 	token, err := c.Tokens.Token(ctx)
 	if err != nil {
 		return nil, 0, err

@@ -5,15 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Lead;
 use App\Models\LeadForm;
 use App\Models\Project;
-use App\Models\User;
 use App\Models\Workspace;
+use App\Support\LeadForms\LeadActions;
 use App\Support\LeadForms\LeadFormDefinition;
-use App\Support\Notifications\Assignments;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 
 /**
  * Leads on a lead form's board: move between columns, edit contact / assignee, delete.
@@ -72,17 +69,7 @@ class LeadController extends Controller
             'ids.*' => 'integer',
         ]);
 
-        DB::transaction(function () use ($lead, $validated, $leadForm) {
-            $lead->update(['column_id' => $validated['column_id']]);
-            $ids = $validated['ids'] ?? [];
-            if ($ids !== []) {
-                $inColumn = Lead::where('lead_form_id', $leadForm->id)->where('column_id', $validated['column_id'])
-                    ->whereIn('id', $ids)->pluck('id')->all();
-                foreach (array_values(array_intersect($ids, $inColumn)) as $position => $id) {
-                    Lead::whereKey($id)->update(['position' => $position]);
-                }
-            }
-        });
+        LeadActions::move($lead, $leadForm, (int) $validated['column_id'], array_map('intval', $validated['ids'] ?? []));
 
         return back();
     }
@@ -91,24 +78,7 @@ class LeadController extends Controller
     {
         $this->authorize('manageLeads', $leadForm);
 
-        $validated = $request->validate([
-            'name' => 'sometimes|nullable|string|max:255',
-            'email' => 'sometimes|nullable|email|max:255',
-            'phone' => 'sometimes|nullable|string|max:60',
-            'company' => 'sometimes|nullable|string|max:255',
-            'assigned_to' => 'sometimes|nullable|integer',
-        ]);
-
-        if (! empty($validated['assigned_to'])) {
-            $assignee = User::find($validated['assigned_to']);
-            if (! $assignee || ! $assignee->hasProjectAccess($project)) {
-                throw ValidationException::withMessages(['assigned_to' => 'Pick a member of this project.']);
-            }
-        }
-
-        $previousAssigneeId = $lead->assigned_to;
-        $lead->update($validated);
-        Assignments::lead($lead, $previousAssigneeId);
+        LeadActions::update($lead, $project, $request->validate(LeadActions::rules()));
 
         return back();
     }

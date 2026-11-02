@@ -1,7 +1,11 @@
 <?php
 
 use App\Http\Middleware\AddCorsHeaders;
+use App\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use App\Http\Middleware\AppApiJson;
 use App\Http\Middleware\DeferAutomations;
+use App\Http\Middleware\EndRevokedAppDeviceSessions;
+use App\Http\Middleware\EnsureAppClientAbility;
 use App\Http\Middleware\EnsureFileRoom;
 use App\Http\Middleware\EnsureInstanceAdmin;
 use App\Http\Middleware\EnsurePortalIdentity;
@@ -9,11 +13,14 @@ use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\FrameProtection;
 use App\Http\Middleware\GuardOAuthFlows;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\SecurityHeaders;
+use App\Support\AppApi\AppApiErrors;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -23,6 +30,11 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        // App API v1 for the desktop / mobile apps (BRAI-380): own guard, own group, no session
+        then: function () {
+            Route::middleware('app-api')->prefix('api/v1')->name('app.v1.')
+                ->group(base_path('routes/app-api.php'));
+        },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Self-hosting behind a reverse proxy: TRUSTED_PROXIES = the proxy's address(es) / CIDR ranges.
@@ -39,10 +51,23 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             GuardOAuthFlows::class, // the /oauth/authorize check needs the session (StartSession runs in this group)
             FrameProtection::class,
+            SecurityHeaders::class, // HSTS (production, HTTPS) + report-only script CSP with a per-request nonce
             EnsureUserIsNotSuspended::class,
+            EndRevokedAppDeviceSessions::class, // a webview's session ends with its app device (BRAI-377)
             HandleInertiaRequests::class,
-            AddLinkHeadersForPreloadedAssets::class,
+            AddLinkHeadersForPreloadedAssets::class, // Laravel's, minus the CSP nonce (header size)
         ]);
+
+        // App API v1 (routes/app-api.php): JSON only, throttled; no session, CSRF or CORS
+        $middleware->group('app-api', [
+            AppApiJson::class,
+            SubstituteBindings::class,
+            'throttle:app-api',
+        ]);
+
+        // the App API client's abilities (BRAI-377) are checked before route-model binding: a TV probing
+        // an endpoint it may not use gets 403 `client_not_allowed`, never a 404 that says whether a record exists
+        $middleware->prependToPriorityList(before: SubstituteBindings::class, prepend: EnsureAppClientAbility::class);
 
         $middleware->alias([
             'cors' => AddCorsHeaders::class,
@@ -60,11 +85,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // App API v1: one error shape {message, code, errors?} for every api/v1/* failure
+        $exceptions->render(fn (Throwable $e, Request $request) => AppApiErrors::render($e, $request));
+
         // Friendly error pages (Pages/Error.tsx) instead of bare status screens; JSON stays JSON.
         $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
             $status = $response->getStatusCode();
 
-            if ($request->expectsJson() && ! $request->header('X-Inertia')) {
+            if (($request->expectsJson() && ! $request->header('X-Inertia')) || AppApiErrors::applies($request)) {
                 return $response;
             }
 

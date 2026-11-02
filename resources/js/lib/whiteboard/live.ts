@@ -133,7 +133,7 @@ const KEEPALIVE_LIMIT = 60_000;
 const LOCAL = 'brainitive-whiteboard-local';
 const BOOTSTRAP = 'brainitive-whiteboard-bootstrap';
 /** Reasons the server gives when it closes one document of a shared socket (realtime/src/server.js). */
-const DOCUMENT_CLOSED = new Set(['Document replaced', 'Forbidden', 'Server closed the connection']);
+const DOCUMENT_CLOSED = new Set(['Document replaced', 'Forbidden', 'Access could not be checked', 'Server closed the connection']);
 const UPLOADABLE = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
 const REPLACED_NOTICE = 'This whiteboard was changed outside live drawing (a version restored or saved without live drawing). Load the latest version to keep drawing.';

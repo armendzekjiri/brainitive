@@ -6,6 +6,7 @@ use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Rules\ProjectMember;
 use App\Support\AccountLoginThrottle;
+use App\Support\TaskLists\TaskLists;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -62,7 +63,7 @@ class CliController extends Controller
 
         // Passport personal access token (Bearer). Validated by the `api`
         // guard (config/auth.php) — the same guard the MCP server uses.
-        $token = $user->createToken('brainitive-cli')->accessToken;
+        $token = $user->createToken('brainitive-cli', ['cli', 'mcp:use'])->accessToken; // explicit scopes since v1.49.0 (Codex review 13)
 
         return response()->json([
             'token' => $token,
@@ -109,22 +110,12 @@ class CliController extends Controller
         $user = $request->user();
         $workspaceSlug = $request->query('workspace');
 
-        // Load all task lists the user has access to across their workspaces
-        $lists = TaskList::query()
-            ->whereHas('project.workspace', function ($q) use ($user, $workspaceSlug) {
-                $q->whereHas('users', fn ($u) => $u->where('users.id', $user->id));
-                if ($workspaceSlug) {
-                    $q->where('slug', $workspaceSlug);
-                }
-            })
+        // The lists of the projects the user can open (TaskLists, shared with the web and the App API)
+        $lists = TaskLists::visibleTo($user)
+            ->when($workspaceSlug, fn ($q) => $q->whereHas('project.workspace', fn ($w) => $w->where('slug', $workspaceSlug)))
             ->with([
                 'project:id,name,slug,workspace_id',
                 'project.workspace:id,name,slug',
-            ])
-            ->withCount([
-                'items',
-                'items as todo_count' => fn ($q) => $q->where('status', 'todo'),
-                'items as done_count' => fn ($q) => $q->where('status', 'done'),
             ])
             ->orderBy('project_id')
             ->orderBy('position')
@@ -163,17 +154,7 @@ class CliController extends Controller
             'recurrence' => 'nullable|in:daily,weekly,monthly,yearly',
         ]);
 
-        $position = $taskList->items()->max('position') + 1;
-
-        $item = $taskList->items()->create([
-            'title' => $validated['title'],
-            'status' => 'todo',
-            'assignee_id' => $validated['assignee_id'] ?? null,
-            'due_date' => $validated['due_date'] ?? null,
-            'recurrence' => $validated['recurrence'] ?? null,
-            'position' => $position,
-            'created_by' => $request->user()->id,
-        ]);
+        $item = TaskLists::createTask($taskList, $request->user(), $validated);
 
         return response()->json(['item' => $item->load('assignee:id,name,email')], 201);
     }

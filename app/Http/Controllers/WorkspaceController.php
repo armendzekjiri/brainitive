@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreWorkspaceRequest;
 use App\Models\ActivityLog;
 use App\Models\Board;
 use App\Models\Comment;
@@ -12,12 +13,12 @@ use App\Models\TaskList;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
-use App\Notifications\WorkspaceInvitationNotification;
-use App\Support\Entitlements\LimitGate;
+use App\Support\Files\WorkspaceFiles;
 use App\Support\Notifications\WorkspaceNotifications;
+use App\Support\Uploads;
+use App\Support\Workspaces\WorkspaceInvites;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -53,32 +54,12 @@ class WorkspaceController extends Controller
     /**
      * Store a newly created workspace.
      */
-    public function store(Request $request)
+    public function store(StoreWorkspaceRequest $request)
     {
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('workspaces', 'name')
-                    ->where(fn ($q) => $q
-                        ->where('owner_id', $request->user()->id)
-                        ->whereNull('deleted_at')),
-            ],
-            'description' => 'nullable|string|max:1000',
-        ]);
+        $validated = $request->validated();
 
-        // Cloud plans: a new workspace starts free, and one person may own only so many free ones
-        app(LimitGate::class)->ensureCanCreateWorkspace($request->user());
-
-        $workspace = Workspace::create([
-            'name' => $validated['name'],
-            'description' => $validated['description'] ?? null,
-            'owner_id' => $request->user()->id,
-        ]);
-
-        // Add the creator as an admin
-        $workspace->addUser($request->user(), 'admin');
+        // plan limit (free workspaces per owner), the creator becomes its admin — shared with the App API
+        $workspace = Workspace::createOwnedBy($request->user(), $validated['name'], $validated['description'] ?? null);
 
         return redirect()->route('workspaces.show', $workspace)
             ->with('success', 'Workspace created successfully.');
@@ -395,19 +376,28 @@ class WorkspaceController extends Controller
         if (! $request->hasFile('logo')) {
             unset($validated['logo']);
         } else {
-            $validated['logo'] = $request->file('logo')->store('workspaces/logos', 'public');
+            $file = $request->file('logo');
+            $validated['logo'] = WorkspaceFiles::store($workspace, $file, 'workspaces/logos', Uploads::imageName($file), 'workspace_logo', $request->user());
+            $supersededLogo = $workspace->getRawOriginal('logo');
         }
 
         if ($request->boolean('remove_header_image')) {
             $validated['header_image'] = null;
+            $supersededHeader = $workspace->getRawOriginal('header_image');
         } elseif (! $request->hasFile('header_image')) {
             unset($validated['header_image']);
         } else {
-            $validated['header_image'] = $request->file('header_image')->store('workspaces/headers', 'public');
+            $file = $request->file('header_image');
+            $validated['header_image'] = WorkspaceFiles::store($workspace, $file, 'workspaces/headers', Uploads::imageName($file), 'workspace_header', $request->user());
+            $supersededHeader = $workspace->getRawOriginal('header_image');
         }
         unset($validated['remove_header_image']);
 
         $workspace->update($validated);
+
+        // the replaced logo / header is deleted and its bytes go back (Codex web review C)
+        WorkspaceFiles::forget($workspace, $supersededLogo ?? null, 'workspaces/logos/');
+        WorkspaceFiles::forget($workspace, $supersededHeader ?? null, 'workspaces/headers/');
 
         return redirect()->back()
             ->with('success', 'Workspace updated successfully.');
@@ -436,62 +426,30 @@ class WorkspaceController extends Controller
 
         $validated = $request->validate([
             'email' => 'required|email',
-            'role' => 'required|in:admin,editor,member,viewer',
+            'role' => ['required', Rule::in(WorkspaceInvites::ROLES)],
             'confirm_send_invitation' => 'sometimes|boolean',
         ]);
 
-        $email = strtolower($validated['email']);
-        $user = User::where('email', $email)->first();
+        // shared with the App API (BRAI-390): already a member → `email` error, member limit, add or invite
+        $invite = WorkspaceInvites::invite($workspace, $request->user(), $validated['email'], $validated['role'], (bool) ($validated['confirm_send_invitation'] ?? false));
 
-        if ($user && $workspace->users()->where('user_id', $user->id)->exists()) {
+        if ($invite['result'] === WorkspaceInvites::MEMBER_ADDED) {
             return redirect()->back()
-                ->withErrors(['email' => 'This user is already a member of this workspace.']);
-        }
-
-        // Member limit (Cloud plans), before the "send invitation?" question: an open invitation to
-        // this address is already counted
-        app(LimitGate::class)->ensureCanAddMembers($workspace, $workspace->invitations()->forEmail($email)->valid()->exists() ? 0 : 1);
-
-        if ($user) {
-            // Existing user: add to the workspace
-            $workspace->addUser($user, $validated['role'], $request->user());
-            $workspace->invitations()->forEmail($email)->whereNull('accepted_at')->update(['accepted_at' => now()]);
-
-            return redirect()->back()
-                ->with('success', "{$user->name} has been added to the workspace.")
+                ->with('success', "{$invite['user']->name} has been added to the workspace.")
                 ->with('invite_result', 'member_added');
         }
 
         // No user with this email: return 409 so frontend can show "send invitation?" modal without redirect
-        if (! ($validated['confirm_send_invitation'] ?? false)) {
+        if ($invite['result'] === WorkspaceInvites::CONFIRM_REQUIRED) {
             return response()->json([
                 'confirm_required' => true,
-                'email' => $email,
-                'role' => $validated['role'],
+                'email' => $invite['email'],
+                'role' => $invite['role'],
             ], 409);
         }
 
-        // Confirmed: create or refresh a pending invitation (30 days) and send email
-        $invitation = $workspace->invitations()
-            ->forEmail($email)
-            ->valid()
-            ->first();
-
-        if ($invitation) {
-            $invitation->update(['role' => $validated['role'], 'expires_at' => now()->addDays(30)]);
-        } else {
-            $invitation = $workspace->invitations()->create([
-                'email' => $email,
-                'role' => $validated['role'],
-                'invited_by' => $request->user()->id,
-            ]);
-        }
-
-        Notification::route('mail', $email)
-            ->notify(new WorkspaceInvitationNotification($invitation, $workspace, $request->user()));
-
         return redirect()->back()
-            ->with('success', "An invitation has been sent to {$email}. They join when they open the link in it (valid for 30 days).")
+            ->with('success', "An invitation has been sent to {$invite['email']}. They join when they open the link in it (valid for 30 days).")
             ->with('invite_result', 'invitation_sent');
     }
 

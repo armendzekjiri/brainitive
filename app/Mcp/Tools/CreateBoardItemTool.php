@@ -9,6 +9,7 @@ use App\Support\Entitlements\LimitGate;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\Mcp\ResourceLocator;
 use App\Support\Mcp\ToolError;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\Response;
@@ -28,7 +29,7 @@ class CreateBoardItemTool extends Tool
             'project' => 'required|string',
             'board' => 'required|string',
             'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => ['nullable', ...ContentLimits::body()],
             'column_id' => 'nullable|integer',
             'column' => 'nullable|string|max:255',
             'type' => 'nullable|string|max:100',

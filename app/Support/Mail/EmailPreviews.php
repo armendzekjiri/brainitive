@@ -4,6 +4,7 @@ namespace App\Support\Mail;
 
 use App\Mail\BillingReportMail;
 use App\Mail\InstanceTestMail;
+use App\Models\AppDevice;
 use App\Models\BillingReport;
 use App\Models\Board;
 use App\Models\BoardColumn;
@@ -40,6 +41,7 @@ use App\Models\User;
 use App\Models\Webhook;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
+use App\Notifications\AppRefreshReuseNotification;
 use App\Notifications\AutomationNoticeNotification;
 use App\Notifications\BookingCalendarUnreadableNotification;
 use App\Notifications\BookingCancelledNotification;
@@ -184,6 +186,9 @@ final class EmailPreviews
             'reset-password' => ['label' => 'Reset password', 'group' => 'account', 'recipient' => 'Account holder', 'build' => fn () => [new ResetPassword(Str::random(64)), $s->alex()]],
             'data-export-ready' => ['label' => 'Your data is ready (Download my data)', 'group' => 'account', 'recipient' => 'Account holder', 'build' => fn () => [new DataExportReadyNotification($s->make(DataExport::class, [
                 'uuid' => (string) Str::uuid(), 'status' => DataExport::READY, 'file_path' => 'data-exports/sample.zip', 'file_size' => 2_318_000, 'expires_at' => now()->addHours(DataExport::TTL_HOURS),
+            ])), $s->alex()]],
+            'app-refresh-reuse' => ['label' => 'App signed out (sign-in token used twice)', 'group' => 'account', 'recipient' => 'Account holder', 'build' => fn () => [new AppRefreshReuseNotification($s->make(AppDevice::class, [
+                'id' => 0, 'client' => 'desktop', 'platform' => 'macos', 'name' => 'Alex’s MacBook Pro',
             ])), $s->alex()]],
             'workspace-invitation' => ['label' => 'Workspace invitation', 'group' => 'account', 'recipient' => 'Invitee', 'build' => fn () => [new WorkspaceInvitationNotification($s->make(WorkspaceInvitation::class, ['token' => Str::random(64), 'role' => 'editor']), $s->workspace(), $s->sam()), (new AnonymousNotifiable)->route('mail', 'jordan@example.com')]],
             'instance-test' => ['label' => 'Admin test email', 'group' => 'account', 'recipient' => 'Instance admin', 'build' => fn () => [new InstanceTestMail('smtp'), null]],

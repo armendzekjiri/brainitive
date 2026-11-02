@@ -21,6 +21,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Testing\TestResponse;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Feature\Boards\InteractsWithBoards;
 use Tests\Feature\Calendar\FakeCalendarProvider;
 use Tests\TestCase;
@@ -247,6 +248,37 @@ class BookingFlowTest extends TestCase
         $this->assertStringStartsWith('Rescheduled to Mon 4 Jan', $old->cancel_reason);
         Notification::assertSentTo($this->host, BookingCreatedNotification::class, fn ($n) => $n->replaces?->is($old));
         Notification::assertNotSentTo($this->host, BookingCancelledNotification::class);
+    }
+
+    /**
+     * Codex web review U: an existing manage link can't reschedule (or list new slots) once the booking page or type
+     * is switched off, the host left the workspace or the workspace was deleted; cancelling still works.
+     */
+    /** @return array<string, array{0: string}> */
+    public static function closedPages(): array
+    {
+        return ['page disabled' => ['page'], 'type disabled' => ['type'], 'host removed' => ['host'], 'workspace deleted' => ['workspace']];
+    }
+
+    #[DataProvider('closedPages')]
+    public function test_a_closed_booking_page_takes_no_reschedule_but_cancelling_still_works(string $case): void
+    {
+        $url = $this->book()->json('manage_url');
+        match ($case) {
+            'page' => $this->page->update(['enabled' => false]),
+            'type' => $this->type->update(['enabled' => false]),
+            'host' => $this->workspace->removeUser($this->host),
+            'workspace' => $this->workspace->delete(),
+        };
+        $calls = count(FakeCalendarProvider::$calls);
+
+        $this->getJson($url.'/slots?from=2027-01-04&to=2027-01-04&timezone=Europe/Berlin')->assertStatus(410);
+        $this->postJson($url.'/reschedule', ['start' => '2027-01-04T09:30:00Z'])->assertStatus(410);
+        $this->assertSame(1, Booking::count());
+        $this->assertSame(Booking::CONFIRMED, Booking::sole()->status);
+        $this->assertSame($calls, count(FakeCalendarProvider::$calls)); // no provider event either
+
+        $this->postJson($url.'/cancel')->assertOk()->assertJsonPath('booking.status', 'cancelled');
     }
 
     public function test_a_reschedule_to_a_taken_time_keeps_the_old_booking(): void

@@ -63,6 +63,7 @@ things and search titles — it can't read your documents. You can disconnect it
 | `⌘K` / `Ctrl+K` | Command palette: search and commands |
 | `Ctrl+.` (or type `>` in the palette) | Commands only |
 | `C` | Quick capture (when you're not typing) |
+| `N` | Create a task (when you're not typing); Create remembers the project and board you last used |
 
 ### Search page
 

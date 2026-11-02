@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Support\Boards\ProjectIssues;
 use App\Support\Entitlements\LimitGate;
 use App\Support\Mcp\PageContentConverter;
+use App\Support\TaskLists\TaskLists;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
@@ -119,6 +120,9 @@ class ContentCapture
         match ($type) {
             'issue' => app(LimitGate::class)->ensureContentRoom($destination->project->workspace),
             'page' => app(LimitGate::class)->ensureContentRoom($destination->workspace),
+            // every metered type (Codex web review B)
+            'task' => app(LimitGate::class)->ensureContentRoom($destination->project->workspace),
+            'bookmark', 'snippet' => app(LimitGate::class)->ensureContentRoom($destination->workspace),
             default => null,
         };
 
@@ -153,16 +157,13 @@ class ContentCapture
 
     private static function task(User $user, TaskList $taskList, array $data): TaskListItem
     {
-        return $taskList->items()->create([
+        return TaskLists::createTask($taskList, $user, [
             'title' => $data['title'],
             'description' => ! empty($data['notes'])
                 ? ['type' => 'lexical', 'html' => PageContentConverter::markdownToHtml($data['notes'])]
                 : null,
-            'status' => 'todo',
             'due_date' => $data['due_date'] ?? null,
             'assignee_id' => ! empty($data['assign_to_me']) ? $user->id : null,
-            'position' => ($taskList->items()->max('position') ?? 0) + 1,
-            'created_by' => $user->id,
         ]);
     }
 

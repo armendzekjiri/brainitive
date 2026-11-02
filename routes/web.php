@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin;
 use App\Http\Controllers\AiController;
+use App\Http\Controllers\AppDeviceController;
 use App\Http\Controllers\BoardBulkItemController;
 use App\Http\Controllers\BoardController;
 use App\Http\Controllers\BoardViewController;
@@ -14,6 +15,7 @@ use App\Http\Controllers\CaptureInboxController;
 use App\Http\Controllers\CommandPaletteController;
 use App\Http\Controllers\ContentReferenceController;
 use App\Http\Controllers\DataExportController;
+use App\Http\Controllers\DesktopDownloadController;
 use App\Http\Controllers\FileController;
 use App\Http\Controllers\HelpdeskController;
 use App\Http\Controllers\HelpdeskForwardingController;
@@ -66,7 +68,7 @@ use App\Http\Controllers\WorkspaceController;
 use App\Http\Controllers\WorkspaceLegalController;
 use App\Http\Controllers\WorkTimerController;
 use App\Http\Middleware\ReadOnlySession;
-use App\Support\Auth\MicrosoftLogin;
+use App\Support\Auth\SignInMethods;
 use App\Support\Legal\LegalInfo;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
@@ -79,9 +81,9 @@ Route::get('/', function () {
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
-        'canLoginWithGoogle' => (bool) config('services.google.client_id'),
-        'canLoginWithGitHub' => (bool) config('services.github.client_id'),
-        'canLoginWithMicrosoft' => MicrosoftLogin::available(),
+        'canLoginWithGoogle' => SignInMethods::google(),
+        'canLoginWithGitHub' => SignInMethods::github(),
+        'canLoginWithMicrosoft' => SignInMethods::microsoft(),
     ])->withViewData(['meta' => [
         // link previews of the homepage (Open Graph / X), see resources/views/partials/social-meta.blade.php
         'title' => 'Brainitive – Workspaces, Boards & Wiki',
@@ -89,6 +91,9 @@ Route::get('/', function () {
         'url' => url('/'),
     ]]);
 });
+
+// Brainitive Desktop download page (v1.49.0): public, URLs from config/desktop.php.
+Route::get('/download', DesktopDownloadController::class)->name('download');
 
 // The CLI installers (v1.47.0; v1.47.1: hosted on GitHub). install.sh / install.ps1 ship on the GitHub
 // release next to the binaries they download (release.yml, job `cli`); these short addresses forward
@@ -199,6 +204,9 @@ require __DIR__.'/calendar-feed.php';
 
 // Public booking pages (v1.45.0, BRAI-158): /book/{slug}, free slots, booking, the guest's manage link
 require __DIR__.'/booking.php';
+
+// Native sign-in for the desktop / mobile apps (v1.49.0, BRAI-355): consent page + webview session
+require __DIR__.'/app-auth.php';
 
 // Workspace invitation (guest can view; auth user with matching email can accept)
 Route::get('/invite/{token}', [InvitationController::class, 'show'])->name('invitations.show');
@@ -674,14 +682,21 @@ Route::middleware('auth')->group(function () {
     Route::patch('/sidebar/preferences', [SidebarPreferencesController::class, 'update'])->name('sidebar.preferences');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::delete('/profile/connected-apps/{clientId}', [ProfileController::class, 'disconnectApp'])->name('profile.connected-apps.destroy');
+    // Desktop & mobile app installs (App API v1, BRAI-385): sign one out; own devices only (404 otherwise)
+    Route::delete('/profile/app-devices/{device}', [AppDeviceController::class, 'destroy'])->whereNumber('device')->name('profile.app-devices.destroy');
+    if (app()->environment('e2e')) {
+        // e2e only: a signed-in app device + token for the session user (the sign-in exchange's stand-in)
+        Route::post('/profile/app-devices/e2e-create', [AppDeviceController::class, 'e2eCreate'])->name('profile.app-devices.e2e-create');
+    }
     // "Download my data" (GDPR Art. 15 + 20, BRAI-156): queued ZIP, signed 24 h link for its owner only
     Route::get('/data-exports', [DataExportController::class, 'index'])->middleware(ReadOnlySession::class)->name('profile.data-export.index');
     Route::post('/data-exports', [DataExportController::class, 'store'])->middleware('throttle:5,1,profile.data-export.store')->name('profile.data-export.store');
     Route::get('/data-exports/{dataExport}/download', [DataExportController::class, 'download'])->whereUuid('dataExport')->middleware('throttle:30,1,profile.data-export.download')->name('profile.data-export.download');
 
     // File uploads
-    Route::post('/upload/image', [FileController::class, 'uploadImage'])->middleware('file.room')->name('upload.image');
-    Route::post('/upload/document', [FileController::class, 'uploadDocument'])->middleware('file.room')->name('upload.document');
+    // a workspace is required and the bytes are reserved in the controller (EditorUploads, Codex review 4 + 8)
+    Route::post('/upload/image', [FileController::class, 'uploadImage'])->name('upload.image');
+    Route::post('/upload/document', [FileController::class, 'uploadDocument'])->name('upload.document');
 
     // Page-level sticky notes (per user, per URL)
     // fetched on every page load: must not write the session (it would race form submits)

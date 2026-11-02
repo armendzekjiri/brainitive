@@ -25,13 +25,13 @@ Sign-up (open or invite-only), email verification and an SMTP server can also be
 |---|---|---|
 | `APP_NAME` | `Brainitive` | Name shown in emails and the browser title |
 | `APP_ENV` | `production` | Keep `production` on a real server |
-| `APP_DEBUG` | `false` | Shows detailed error pages. Never `true` on a public server |
+| `APP_DEBUG` | `false` (`true` only with `APP_ENV=local`) | Shows detailed error pages. Never `true` on a public server: production logs a warning when it is |
 | `APP_URL` | `http://localhost` | The address people open, for example `https://brainitive.example.com`. Used for links in emails, OAuth callbacks and secure cookies |
 | `APP_KEY` | – | Encryption key. Docker generates it on first start if empty. Never change it on a running installation |
 | `APP_PREVIOUS_KEYS` | – | Comma-separated old keys, so data encrypted with them can still be read after a key rotation |
 | `APP_LOCALE` | `en` | Language of the app |
 | `APP_FALLBACK_LOCALE` | `en` | Language used when a translation is missing |
-| `TRUSTED_PROXIES` | – | IP addresses or networks (comma-separated) of your reverse proxy. Needed behind a proxy so Brainitive sees HTTPS and the real client IP. `*` trusts everyone (only if the app can't be reached any other way) |
+| `TRUSTED_PROXIES` | – | IP addresses or networks (comma-separated) of your reverse proxy, as Brainitive sees them. Needed behind a proxy so Brainitive sees HTTPS and the real client IP. Empty trusts nobody. `*` trusts everyone (only if the app can't be reached any other way) |
 | `LOG_CHANNEL` | `stack` | Where logs go. Docker uses `stderr` (shown by `docker compose logs`) |
 | `LOG_STACK` | `single` | Channels of the `stack` log: `single` (one file) or `daily` |
 | `LOG_LEVEL` | `debug` | Minimum level to log. `warning` is a good choice in production |
@@ -44,11 +44,24 @@ These are read by `compose.yaml`, not by the app.
 | Variable | Default | What it does |
 |---|---|---|
 | `BRAINITIVE_IMAGE` | `ghcr.io/armendzekjiri/brainitive:latest` | Image to run. Pin a version with a tag like `:1.45` |
+| `BIND_ADDRESS` | `127.0.0.1` | Host address the ports are published on. `127.0.0.1`: only this machine (local use, or your own reverse proxy on it). `0.0.0.0`: everyone, only with a domain in `SERVER_NAME` (HTTPS) |
 | `SERVER_NAME` | `:80` | `:80` serves plain HTTP (behind your own proxy). A domain name makes Caddy fetch a TLS certificate |
 | `HTTP_PORT` | `8080` | Host port for HTTP |
 | `HTTPS_PORT` | `8443` | Host port for HTTPS |
 
 In Docker, `DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `COLLAB_URL` and `LIVE_PUBLISH_URL` are set by `compose.yaml` itself.
+
+## Security headers
+
+| Variable | Default | What it does |
+|---|---|---|
+| `HSTS_ENABLED` | `true` with `APP_ENV=production` | Sends `Strict-Transport-Security` on HTTPS responses: browsers then use only HTTPS for this host |
+| `HSTS_MAX_AGE` | `31536000` | How long browsers remember it, in seconds (one year) |
+| `HSTS_INCLUDE_SUBDOMAINS` | `true` | Also covers subdomains of the app's host name. `preload` is never sent |
+| `CSP_MODE` | `report-only` | A script Content Security Policy with a per-request nonce, sent as `Content-Security-Policy-Report-Only`: nothing is blocked, the browser console shows what a strict policy would block. `off` removes it |
+| `CSP_REPORT_URI` | – | Optional address the browser sends those reports to |
+
+Framing protection (`X-Frame-Options`, `frame-ancestors`) is always on; embeds meant for other sites set their own.
 
 ## Database
 
@@ -224,6 +237,15 @@ Normally created in **Instance admin → GitHub App**. These variables override 
 | `CALENDAR_ALLOWED_PORTS` | `8443,5001,5232` | Ports a CalDAV server or calendar link may use besides 80 and 443 |
 | `CALENDAR_MAX_RESPONSE_BYTES` | `5000000` | Largest calendar file or CalDAV response read |
 | `CALENDAR_ICS_REFRESH_MINUTES` | `15` | Minutes a subscribed calendar link is cached |
+
+## Desktop and mobile apps
+
+The Brainitive apps talk to your server's App API under `/api/v1`. See [Desktop and mobile apps](./desktop-and-mobile-apps).
+
+| Variable | Default | What it does |
+|---|---|---|
+| `APP_API_MIN_DESKTOP_VERSION` | `0.1.0` | Oldest desktop app version your server works with. Older apps ask the user to update |
+| `APP_API_MIN_MOBILE_VERSION` | `0.1.0` | The same for the mobile app |
 
 ## Legal pages
 

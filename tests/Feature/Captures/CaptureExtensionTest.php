@@ -82,4 +82,17 @@ class CaptureExtensionTest extends TestCase
         $this->withHeaders($bearer)->postJson(route('ext.captures.store'), ['text' => 'From the extension'])->assertCreated();
         $this->assertSame(2, Capture::count());
     }
+
+    public function test_extension_sign_out_revokes_the_capture_token_and_its_refresh_token(): void
+    {
+        app(ClientRepository::class)->createPersonalAccessGrantClient('Test personal access');
+        $result = $this->user->createToken('extension', ['capture']);
+        $bearer = ['Authorization' => 'Bearer '.$result->accessToken];
+
+        $this->withHeaders($bearer)->deleteJson(route('ext.logout'))->assertOk();
+        $this->assertTrue($result->token->fresh()->revoked);
+
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders($bearer)->getJson(route('ext.me'))->assertUnauthorized();
+    }
 }

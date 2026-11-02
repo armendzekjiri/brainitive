@@ -12,9 +12,10 @@ use App\Models\ProjectTemplate;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Entitlements\LimitGate;
+use App\Support\Files\WorkspaceFiles;
+use App\Support\Projects\ProjectCreator;
 use App\Support\Projects\ProjectTransfer;
 use App\Support\Projects\RecentContent;
-use App\Support\Templates\TemplateDocument;
 use App\Support\Templates\TemplateRuns;
 use App\Support\Uploads;
 use Illuminate\Http\JsonResponse;
@@ -30,28 +31,14 @@ use Inertia\Response;
 class ProjectController extends Controller
 {
     /**
-     * Display a listing of projects in a workspace.
+     * There is no separate projects page: the workspace home lists the projects (only the ones the
+     * user can open). Old links and bookmarks to /workspaces/{slug}/projects land there.
      */
-    public function index(Request $request, Workspace $workspace): Response
+    public function index(Workspace $workspace): RedirectResponse
     {
         $this->authorize('view', $workspace);
 
-        $query = $workspace->projects()
-            ->withCount('boards')
-            ->with('creator:id,name')
-            ->latest();
-
-        // Workspace admins see all projects; others only projects they are assigned to
-        if ($request->user()->workspaceRole($workspace) !== 'admin') {
-            $query->whereHas('users', fn ($q) => $q->where('user_id', $request->user()->id));
-        }
-
-        $projects = $query->get();
-
-        return Inertia::render('Projects/Index', [
-            'workspace' => $workspace,
-            'projects' => $projects,
-        ]);
+        return redirect()->route('workspaces.show', $workspace);
     }
 
     /**
@@ -81,65 +68,15 @@ class ProjectController extends Controller
             return redirect()->route('projects.show', [$workspace, $existing]);
         }
 
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('projects', 'name')
-                    ->where(fn ($q) => $q->where('workspace_id', $workspace->id)),
-            ],
-            'key' => [
-                'required',
-                'string',
-                'max:10',
-                'alpha',
-                Rule::unique('projects', 'key')
-                    ->where(fn ($q) => $q->where('workspace_id', $workspace->id)),
-            ],
-            'description' => 'nullable|string|max:50000',
-            // Start from a template: "builtin:<key>" or "template:<uuid>" (see TemplateRuns::catalog)
-            'template' => 'nullable|string|max:80',
-            'start_date' => 'nullable|required_with:template|date_format:Y-m-d',
-            'include' => 'nullable|array',
-            // "none" stands for "nothing extra" (an empty array isn't sent by forms)
-            'include.*' => Rule::in([...TemplateDocument::SECTIONS, 'none']),
-            'request_id' => 'nullable|uuid',
-        ]);
+        $validated = $request->validate(ProjectCreator::rules($workspace));
 
-        // Cloud plans: project count and content storage (also covers "from a template")
-        $gate = app(LimitGate::class);
-        $gate->ensureCanCreateProject($workspace);
-        $gate->ensureContentRoom($workspace);
+        // limits, blank or from a template — shared with the App API (BRAI-389)
+        [$project, $board] = ProjectCreator::create($workspace, $request->user(), $validated);
 
-        if (! empty($validated['template'])) {
-            if (isset($validated['include'])) {
-                $validated['include'] = array_values(array_diff($validated['include'], ['none']));
-            }
-            $project = TemplateRuns::createProject($workspace, $request->user(), $validated);
-
+        if ($board === null) {
             return redirect()->route('projects.show', [$workspace, $project])
                 ->with('success', 'Project created from the template.');
         }
-
-        $project = $workspace->projects()->create([
-            'name' => $validated['name'],
-            'slug' => Str::slug($validated['name']),
-            'key' => strtoupper($validated['key']),
-            'description' => $validated['description'] ?? null,
-            'created_by' => $request->user()->id,
-        ]);
-
-        // Creator is added as project admin so they have access
-        $project->addUser($request->user(), 'admin');
-
-        // Create a default board
-        $board = $project->boards()->create([
-            'name' => 'Main Board',
-            'slug' => 'main-board',
-            'type' => 'kanban',
-            'created_by' => $request->user()->id,
-        ]);
 
         return redirect()->route('boards.show', [$workspace, $project, $board])
             ->with('success', 'Project created successfully.');
@@ -350,12 +287,13 @@ class ProjectController extends Controller
         }
 
         if ($request->hasFile('icon_image')) {
-            if ($project->icon && self::ownIconPath($project, $project->icon) && Storage::disk('public')->exists($project->icon)) {
-                Storage::disk('public')->delete($project->icon);
-            }
             $file = $request->file('icon_image');
             $ext = Uploads::imageExtension($file);
-            $path = $file->storeAs('project-icons/'.$project->id, 'icon.'.$ext, 'public');
+            $path = WorkspaceFiles::store($workspace, $file, 'project-icons/'.$project->id, 'icon.'.$ext, 'project_icon', $request->user());
+            $previousIcon = $project->getRawOriginal('icon');
+            if ($previousIcon !== $path && $previousIcon && self::ownIconPath($project, $previousIcon)) {
+                WorkspaceFiles::forget($workspace, $previousIcon, 'project-icons/'.$project->id.'/'); // superseded (Codex web review C)
+            }
             $validated['icon'] = $path;
         }
 
@@ -383,8 +321,12 @@ class ProjectController extends Controller
 
         $file = $request->file('icon');
         $ext = Uploads::imageExtension($file);
-        $path = $file->storeAs('project-icons/'.$project->id, 'icon.'.$ext, 'public');
+        $previousIcon = $project->getRawOriginal('icon');
+        $path = WorkspaceFiles::store($workspace, $file, 'project-icons/'.$project->id, 'icon.'.$ext, 'project_icon', $request->user());
         $project->update(['icon' => $path]);
+        if ($previousIcon !== $path && $previousIcon && self::ownIconPath($project, $previousIcon)) {
+            WorkspaceFiles::forget($workspace, $previousIcon, 'project-icons/'.$project->id.'/'); // superseded (Codex web review C)
+        }
 
         return response()->json(['icon_display' => $project->fresh()->icon_display]);
     }
@@ -406,7 +348,7 @@ class ProjectController extends Controller
 
         $file = $request->file('icon');
         $ext = Uploads::imageExtension($file);
-        $path = $file->storeAs('project-item-type-icons/'.$project->id, Str::uuid().'.'.$ext, 'public');
+        $path = WorkspaceFiles::store($workspace, $file, 'project-item-type-icons/'.$project->id, Str::uuid().'.'.$ext, 'item_type_icon', $request->user());
 
         return response()->json(['icon' => $path, 'icon_display' => asset('storage/'.$path)]);
     }

@@ -61,7 +61,8 @@ class GoogleTasksService
     /** Fetch a single task with all details. */
     public function getTask(CalendarConnection $connection, string $taskId): ?array
     {
-        if (! $this->ensureFreshToken($connection)) {
+        $taskId = self::segment($taskId);
+        if ($taskId === null || ! $this->ensureFreshToken($connection)) {
             return null;
         }
         $listId = rawurlencode($connection->external_calendar_id);
@@ -98,7 +99,7 @@ class GoogleTasksService
             Log::warning('Google task create failed', [
                 'connection_id' => $connection->id,
                 'status' => $resp->status(),
-                'body' => $resp->json(),
+                'error' => GoogleCalendarService::errorSummary($resp),
             ]);
 
             return null;
@@ -114,7 +115,8 @@ class GoogleTasksService
      */
     public function updateTask(CalendarConnection $connection, string $taskId, array $data): ?array
     {
-        if (! $this->ensureFreshToken($connection)) {
+        $taskId = self::segment($taskId);
+        if ($taskId === null || ! $this->ensureFreshToken($connection)) {
             return null;
         }
         $listId = rawurlencode($connection->external_calendar_id);
@@ -151,7 +153,7 @@ class GoogleTasksService
                 'connection_id' => $connection->id,
                 'task_id' => $taskId,
                 'status' => $resp->status(),
-                'body' => $resp->json(),
+                'error' => GoogleCalendarService::errorSummary($resp),
             ]);
 
             return null;
@@ -162,7 +164,8 @@ class GoogleTasksService
 
     public function deleteTask(CalendarConnection $connection, string $taskId): bool
     {
-        if (! $this->ensureFreshToken($connection)) {
+        $taskId = self::segment($taskId);
+        if ($taskId === null || ! $this->ensureFreshToken($connection)) {
             return false;
         }
         $listId = rawurlencode($connection->external_calendar_id);
@@ -170,6 +173,23 @@ class GoogleTasksService
             ->delete(self::API_BASE."/lists/{$listId}/tasks/{$taskId}");
 
         return $resp->successful() || $resp->status() === 410;
+    }
+
+    /** What a task id may look like (the MCP tool validates with it too): ≤ 256, no slashes, dot segments or controls. */
+    public const TASK_ID_RULES = ['required', 'string', 'max:256', 'not_regex:/[\/\\\\\x00-\x1F\x7F]/', 'not_in:.,..'];
+
+    /**
+     * A provider id as ONE opaque path segment of the selected list (Codex review, finding 14): an id with a slash,
+     * backslash, control character or that is a dot segment (`.`, `..` — rawurlencode keeps dots) is refused (null),
+     * anything else is percent-encoded, so `../../other-list/tasks/x` can't reach another list of the account.
+     */
+    private static function segment(string $id): ?string
+    {
+        if ($id === '' || $id === '.' || $id === '..' || strlen($id) > 256 || preg_match('/[\/\\\\\x00-\x1F\x7F]/', $id)) {
+            return null;
+        }
+
+        return rawurlencode($id);
     }
 
     /** Build the `due` field. Google Tasks now supports time-of-day. */

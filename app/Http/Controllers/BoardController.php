@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ActivityLog;
 use App\Models\Attachment;
 use App\Models\Board;
 use App\Models\BoardColumn;
@@ -17,22 +16,23 @@ use App\Models\Release;
 use App\Models\Sprint;
 use App\Models\User;
 use App\Models\Workspace;
-use App\Notifications\ItemStatusChangedNotification;
 use App\Rules\ProjectMember;
 use App\Support\Billing\TimeLog;
 use App\Support\Billing\TimeLogActivities;
 use App\Support\Boards\BoardViewConfig;
+use App\Support\Boards\Issues;
+use App\Support\Boards\ItemAttachments;
 use App\Support\Boards\ItemComments;
 use App\Support\Boards\ItemFieldValues;
 use App\Support\Boards\ItemLinks;
-use App\Support\Boards\ItemMentions;
 use App\Support\Boards\LinkedIssueVisibility;
 use App\Support\Boards\Swimlanes;
 use App\Support\Entitlements\LimitGate;
 use App\Support\Github\ItemDevelopment;
 use App\Support\Live\BoardLive;
 use App\Support\References\ContentReferences;
-use App\Support\Uploads;
+use App\Support\Validation\ContentLimits;
+use App\Support\Work\WorkCompletion;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\JsonResponse;
@@ -391,102 +391,15 @@ class BoardController extends Controller
     }
 
     /**
-     * Store a new item in the board.
+     * Store a new item in the board (rules + create shared with the App API: Support\Boards\Issues).
      */
     public function storeItem(Request $request, Workspace $workspace, Project $project, Board $board)
     {
         $this->authorize('createItems', $board);
         app(LimitGate::class)->ensureContentRoom($workspace);
 
-        $subtaskTypeId = ItemType::forProject($project)->where('slug', 'subtask')->value('id');
-
-        $validated = $request->validate([
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'column_id' => ['required', Rule::exists('board_columns', 'id')->where('board_id', $board->id)],
-            'item_type_id' => ['nullable', 'integer', Rule::in(ItemType::selectableIdsFor($project))],
-            'priority_id' => 'nullable|exists:item_priorities,id',
-            'assigned_to' => ['nullable', 'integer', new ProjectMember($project)],
-            'due_date' => 'nullable|date',
-            'due_time' => 'nullable|date_format:H:i',
-            'start_date' => 'nullable|date',
-            'start_time' => 'nullable|date_format:H:i',
-            'label_ids' => 'nullable|array',
-            'label_ids.*' => 'exists:labels,id',
-            'sprint_id' => ['nullable', Rule::exists('sprints', 'id')->where('board_id', $board->id)->whereIn('status', [Sprint::STATUS_PLANNED, Sprint::STATUS_ACTIVE])],
-            'parent_id' => [
-                'nullable',
-                'exists:items,id',
-                function ($attribute, $value, $fail) use ($board) {
-                    if ($value === null) {
-                        return;
-                    }
-                    $parent = Item::find($value);
-                    if (! $parent || $parent->board_id !== $board->id) {
-                        $fail('Parent task must be on the same board.');
-
-                        return;
-                    }
-                    if ($parent->depth() >= Item::MAX_DEPTH) {
-                        $fail('Subtasks can be nested up to 3 levels (issue → subtask → sub-subtask).');
-
-                        return;
-                    }
-                },
-            ],
-        ]);
-
-        $itemTypeId = $validated['item_type_id'] ?? ItemType::defaultIdFor($project);
-        if ($subtaskTypeId && (int) $itemTypeId === (int) $subtaskTypeId && empty($validated['parent_id'])) {
-            return back()->withErrors(['parent_id' => 'Subtasks must have a parent task.']);
-        }
-
-        // Get the next position in the column
-        $maxPosition = Item::where('column_id', $validated['column_id'])->max('position') ?? 0;
-
-        // Sprint: subtasks follow their parent; on a Scrum board a new card joins the running
-        // sprint unless the request says where (null = backlog), like Jira
-        $sprintId = match (true) {
-            ! empty($validated['parent_id']) => Item::find($validated['parent_id'])?->sprint_id,
-            array_key_exists('sprint_id', $validated) => $validated['sprint_id'],
-            $board->isScrum() => $board->activeSprint()->value('id'),
-            default => null,
-        };
-        $backlogPosition = (Item::where('board_id', $board->id)->where('sprint_id', $sprintId)->max('backlog_position') ?? 0) + 1;
-
-        $item = $board->items()->create([
-            'title' => $validated['title'],
-            'description' => $validated['description'] ?? null,
-            'project_id' => $project->id,
-            'column_id' => $validated['column_id'],
-            'parent_id' => $validated['parent_id'] ?? null,
-            'item_type_id' => $itemTypeId,
-            'priority_id' => $validated['priority_id'] ?? ItemPriority::where('is_default', true)->first()?->id,
-            'assigned_to' => $validated['assigned_to'] ?? null,
-            'due_date' => $validated['due_date'] ?? null,
-            'due_time' => $validated['due_time'] ?? null,
-            'start_date' => $validated['start_date'] ?? null,
-            'start_time' => $validated['start_time'] ?? null,
-            'key' => $project->getNextItemKey(),
-            'created_by' => $request->user()->id,
-            'reporter_id' => $request->user()->id,
-            'position' => $maxPosition + 1,
-            'sprint_id' => $sprintId,
-            'backlog_position' => $backlogPosition,
-        ]);
-
-        // Sync labels if provided
-        if (! empty($validated['label_ids'])) {
-            $validLabels = $project->labels()->whereIn('id', $validated['label_ids'])->pluck('id');
-            $item->labels()->sync($validLabels);
-        }
-
-        // The assignee hears about it from ItemObserver (Support\Notifications\Assignments), like every path.
-
-        // Process mentions inside description on item creation
-        if (! empty($validated['description'])) {
-            ItemMentions::notify($validated['description'], $item, $request->user());
-        }
+        $validated = $request->validate(Issues::rules($project, $board));
+        Issues::create($board, $request->user(), $validated);
 
         return back()->with('success', 'Item created successfully.');
     }
@@ -699,37 +612,11 @@ class BoardController extends Controller
             'with_subtasks' => 'nullable|boolean',
         ]);
 
-        $oldColumn = $item->column;
         $newColumn = BoardColumn::findOrFail($validated['column_id']);
 
-        $item->moveToColumn($newColumn, $validated['position']);
-
-        if ($newColumn->is_done_column && $request->boolean('with_subtasks')) {
-            Item::whereIn('id', $item->descendantIds())
-                ->whereHas('column', fn ($q) => $q->where('is_done_column', false))
-                ->get()
-                ->each(fn (Item $child) => $child->moveToColumn($newColumn, 0));
-        }
-
-        // Notify all watchers when the column (status) actually changed
-        if ($oldColumn && $oldColumn->id !== $newColumn->id) {
-            $item->load('watchers');
-            $actorId = $request->user()->id;
-
-            foreach ($item->watchers->filter(fn ($w) => $w->hasProjectAccess($project)) as $watcher) {
-                // Don't notify the person who performed the move
-                if ($watcher->id === $actorId) {
-                    continue;
-                }
-
-                $watcher->notify(new ItemStatusChangedNotification(
-                    item: $item,
-                    oldColumn: $oldColumn,
-                    newColumn: $newColumn,
-                    actor: $request->user(),
-                ));
-            }
-        }
+        // move (+ the open subtasks into a done column) and tell the watchers about a new status
+        // (shared with My Work and the App API)
+        WorkCompletion::moveIssue($item, $newColumn, $validated['position'], $request->user(), $request->boolean('with_subtasks'));
 
         return back();
     }
@@ -767,97 +654,14 @@ class BoardController extends Controller
     }
 
     /**
-     * Update an item.
+     * Update an item (rules + update shared with the App API: Support\Boards\Issues).
      */
     public function updateItem(Request $request, Workspace $workspace, Project $project, Board $board, Item $item)
     {
         $this->authorize('update', $item);
 
-        $subtaskTypeId = ItemType::forProject($project)->where('slug', 'subtask')->value('id');
-
-        $validated = $request->validate([
-            'title' => 'sometimes|required|string|max:255',
-            'description' => 'nullable|string',
-            // enabled types; a card may keep the switched-off type it already has
-            'item_type_id' => ['nullable', 'integer', Rule::in(ItemType::selectableIdsFor($project, $item->item_type_id))],
-            'priority_id' => 'nullable|exists:item_priorities,id',
-            'assigned_to' => ['nullable', 'integer', new ProjectMember($project)],
-            'start_date' => 'nullable|date',
-            'start_time' => 'nullable|date_format:H:i',
-            'due_date' => 'nullable|date',
-            'due_time' => 'nullable|date_format:H:i',
-            'story_points' => 'nullable|integer|min:0',
-            // Fix version: a release of this project that isn't archived.
-            'release_id' => ['nullable', Rule::exists('releases', 'id')->where('project_id', $project->id)->whereIn('status', [Release::STATUS_UNRELEASED, Release::STATUS_RELEASED])],
-            'original_estimate' => ['nullable', 'string', 'max:50', function ($attribute, $value, $fail) {
-                if (Item::parseDuration($value) === null) {
-                    $fail('Use a duration like 45m, 1h 30m, 2h or 1d.');
-                }
-            }],
-            'parent_id' => [
-                'nullable',
-                'exists:items,id',
-                function ($attribute, $value, $fail) use ($board, $item) {
-                    if ($value === null) {
-                        return;
-                    }
-                    if ((int) $value === $item->id) {
-                        $fail('An item cannot be its own parent.');
-
-                        return;
-                    }
-                    $parent = Item::find($value);
-                    if (! $parent || $parent->board_id !== $board->id) {
-                        $fail('Parent task must be on the same board.');
-
-                        return;
-                    }
-                    if ($parent->depth() + 1 + $item->subtreeHeight() > Item::MAX_DEPTH) {
-                        $fail('Subtasks can be nested up to 3 levels (issue → subtask → sub-subtask).');
-
-                        return;
-                    }
-                    // No cycle: walk parent chain from candidate; must not reach current item
-                    $current = $parent;
-                    while ($current->parent_id !== null) {
-                        $current = Item::find($current->parent_id);
-                        if (! $current) {
-                            break;
-                        }
-                        if ($current->id === $item->id) {
-                            $fail('Parent would create a circular reference.');
-
-                            return;
-                        }
-                    }
-                },
-            ],
-        ]);
-
-        $itemTypeId = array_key_exists('item_type_id', $validated) ? $validated['item_type_id'] : $item->item_type_id;
-        $effectiveTypeId = $itemTypeId ?? $item->itemType?->id;
-        if ($subtaskTypeId && (int) $effectiveTypeId === (int) $subtaskTypeId) {
-            $newParentId = array_key_exists('parent_id', $validated) ? $validated['parent_id'] : $item->parent_id;
-            if (empty($newParentId)) {
-                return back()->withErrors(['parent_id' => 'Subtasks must have a parent task.']);
-            }
-        }
-
-        if (array_key_exists('original_estimate', $validated)) {
-            $validated['original_estimate'] = $validated['original_estimate'] === null
-                ? null
-                : Item::parseDuration($validated['original_estimate']);
-        }
-
-        $previousDescription = $item->description;
-
-        // A new assignee hears about it from ItemObserver (Support\Notifications\Assignments).
-        $item->update($validated);
-
-        // Mentions: only people who weren't mentioned in the description before this save
-        if (isset($validated['description'])) {
-            ItemMentions::notify($validated['description'], $item, $request->user(), $previousDescription);
-        }
+        $validated = $request->validate(Issues::rules($project, $board, $item));
+        Issues::update($item, $request->user(), $validated);
 
         return back()->with('success', 'Item updated successfully.');
     }
@@ -930,17 +734,13 @@ class BoardController extends Controller
     }
 
     /**
-     * Delete an item.
+     * Delete an item (with its subtasks; shared with the App API).
      */
     public function destroyItem(Workspace $workspace, Project $project, Board $board, Item $item)
     {
         $this->authorize('delete', $item);
 
-        // Soft deletes don't trigger the FK cascade: remove the whole subtree explicitly.
-        DB::transaction(function () use ($item) {
-            Item::whereIn('id', $item->descendantIds())->get()->each->delete();
-            $item->delete();
-        });
+        Issues::delete($item);
 
         return back()->with('success', 'Item deleted successfully.');
     }
@@ -953,7 +753,7 @@ class BoardController extends Controller
         $this->authorize('update', $item);
 
         $validated = $request->validate([
-            'body' => 'required|string',
+            'body' => ['required', ...ContentLimits::comment()],
             // A reply belongs to a comment on this issue.
             'parent_id' => ['nullable', Rule::exists('comments', 'id')->where('item_id', $item->id)],
         ]);
@@ -975,20 +775,8 @@ class BoardController extends Controller
             'labels.*' => 'exists:labels,id',
         ]);
 
-        // Ensure labels belong to the project
-        $validLabels = $project->labels()->whereIn('id', $validated['labels'] ?? [])->pluck('id');
-        $result = $item->labels()->sync($validLabels);
-
-        if ($result['attached'] !== [] || $result['detached'] !== []) {
-            BoardLive::itemIds([$item->id], ['labels'], $item->board_id);
-            $names = $project->labels()->whereIn('id', array_merge($result['attached'], $result['detached']))->pluck('name', 'id');
-            ActivityLog::log($item, 'labels_changed', [
-                'labels' => [
-                    'added' => collect($result['attached'])->map(fn ($id) => $names[$id] ?? "#{$id}")->values()->all(),
-                    'removed' => collect($result['detached'])->map(fn ($id) => $names[$id] ?? "#{$id}")->values()->all(),
-                ],
-            ]);
-        }
+        // labels of this project only, history + live update (shared with the App API)
+        Issues::syncLabels($item, $validated['labels'] ?? []);
 
         return back()->with('success', 'Labels updated successfully.');
     }
@@ -1122,33 +910,14 @@ class BoardController extends Controller
     }
 
     /**
-     * Store a new attachment for an item.
+     * Store a new attachment for an item (shared with the App API: Support\Boards\ItemAttachments).
      */
     public function storeAttachment(Request $request, Workspace $workspace, Project $project, Board $board, Item $item)
     {
         $this->authorize('update', $item);
 
-        $validated = $request->validate([
-            'file' => 'required|file|max:10240', // 10MB max
-        ]);
-
-        $file = $request->file('file');
-        $filename = Uploads::name($file);
-        $path = $file->storeAs('attachments/'.$item->id, $filename, 'public');
-
-        $attachment = $item->attachments()->create([
-            'user_id' => $request->user()->id,
-            'filename' => $filename,
-            'original_filename' => Uploads::displayName($file),
-            'path' => $path,
-            'mime_type' => $file->getMimeType(),
-            'size' => $file->getSize(),
-        ]);
-
-        // Add URL for response
-        $attachment->url = asset('storage/'.$path);
-
-        ActivityLog::log($item, 'attachment_added', null, ['name' => $attachment->original_filename]);
+        $request->validate(['file' => ItemAttachments::RULES]);
+        ItemAttachments::add($item, $request->user(), $request->file('file'));
 
         return back()->with('success', 'Attachment uploaded successfully.');
     }
@@ -1165,12 +934,7 @@ class BoardController extends Controller
             abort(404);
         }
 
-        // Delete file from storage
-        \Storage::disk('public')->delete($attachment->path);
-
-        ActivityLog::log($item, 'attachment_removed', null, ['name' => $attachment->original_filename]);
-
-        $attachment->delete();
+        ItemAttachments::remove($item, $attachment);
 
         return back()->with('success', 'Attachment deleted successfully.');
     }

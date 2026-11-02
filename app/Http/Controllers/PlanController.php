@@ -36,6 +36,7 @@ class PlanController extends Controller
             'template' => ['nullable', 'string', Rule::in(array_column(PlanTemplates::all(), 'key'))],
         ]);
 
+        app(LimitGate::class)->ensureContentRoom($workspace); // content limit (Codex web review B)
         $plan = $project->plans()->create([
             'name' => $validated['name'],
             'slug' => Plan::uniqueSlug($project, $validated['name']),
@@ -158,6 +159,7 @@ class PlanController extends Controller
         $this->authorize('create', [Plan::class, $project]);
 
         $name = $plan->name.' (copy)';
+        app(LimitGate::class)->ensureContentRoom($workspace); // content limit (Codex web review B)
         $copy = $project->plans()->create([
             'name' => $name,
             'slug' => Plan::uniqueSlug($project, $name),

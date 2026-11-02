@@ -38,6 +38,13 @@ Each person can own up to 3 Free workspaces. Being a member of other people's wo
 
 Brainitive tells you what is full and links to **Plan & billing**, where a workspace admin can upgrade. Members who aren't admins are asked to contact one. Everything already in the workspace keeps working; only adding more (members, projects, uploads, new docs or issues) waits until there is room again.
 
+What counts and what waits at a limit:
+
+- **Content** is everything you write: docs, issues and their comments, task lists and tasks, snippets, bookmarks, helpdesk tickets and replies, leads, Gantt plans, releases and meeting notes. When the content storage is full, nothing new of these can be added, and edits that make something longer wait too. Edits that keep the size or make it shorter, and deleting, always work, so you can clean up.
+- **Files** are every upload: attachments, images in docs, bookmark files, logos and icons. A file that doesn't fit is refused before it is saved. Replacing a logo or an icon frees the old one's space; deleting an attachment frees its space at once.
+- **Public forms** (the helpdesk widget, lead forms, feedback portals) show visitors "This form can't accept submissions right now." Workspace admins get one notification a day while that happens. Emails to a helpdesk are still received.
+- **Very large texts** have a maximum on every plan and on self-hosted installs: 1 million characters for an issue description, snippet or task note, 10 MB for a doc, 100,000 characters for a comment.
+
 ## Downgrading or cancelling
 
 Nothing is deleted when a workspace moves to a smaller plan, a payment fails or a subscription ends. For **90 days** the workspace keeps everything, including old versions; only adding more is paused while it is over a limit. After those 90 days, version history follows the smaller plan's rule.

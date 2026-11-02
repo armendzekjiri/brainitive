@@ -75,7 +75,9 @@ When writing or editing Brainitive Pages via MCP (`create_page` / `update_page`)
   on `create_page`. Never create AI docs at the project root.
 - **Check first, don't duplicate.** `list_pages` (or `search`) before creating; if a page on
   the topic already exists, **`update_page`** it (mode `replace` to rewrite, `append` to add)
-  instead of making a second one.
+  instead of making a second one. Read it with `get_page` first and pass its `edit_revision` as
+  `expected_revision`; a conflict means someone changed it — read again. `result: saved_as_draft` means
+  the change waits in the draft (someone's unpublished changes / live editing): tell the user to publish it.
 - **Update the parent index.** When you add, rename, or remove an AI documentation child,
   update the "General AI Documentation" page so its `Pages` section stays accurate.
 

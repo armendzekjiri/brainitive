@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\LeadForm;
 use App\Models\LeadFormEvent;
+use App\Support\Entitlements\PublicContentRoom;
 use App\Support\LeadForms\LeadFormDefinition;
 use App\Support\LeadForms\LeadFormOptions;
 use App\Support\LeadForms\LeadIntake;
@@ -70,6 +71,11 @@ class PublicLeadFormController extends Controller
         $consented = $consentText !== null && (bool) ($validated['consent'] ?? false);
         if ($settings['consent'] === 'required' && ! $consented) {
             throw ValidationException::withMessages(['consent' => 'Please confirm to send the form.']);
+        }
+
+        // a full workspace: a message the form can show, admins told once a day (Codex web review B)
+        if ($refusal = PublicContentRoom::refusal($form->project->workspace, 'lead form')) {
+            return $refusal;
         }
 
         $referrer = $validated['referrer'] ?? null;

@@ -228,6 +228,8 @@ sudo certbot --nginx -d brainitive.example.com
 
 If you don't run the realtime server, leave out the `/collab` block. The port `1234` must match `COLLAB_PORT` of your realtime server.
 
+With nginx talking to PHP-FPM directly, as above, leave `TRUSTED_PROXIES` empty: there is no proxy in between, and PHP sees HTTPS from nginx itself. In production Brainitive sends `Strict-Transport-Security` on HTTPS pages by itself, so don't add a second one in nginx (see [Security headers](./configuration#security-headers)).
+
 ## 9. Queue worker
 
 The queue worker sends emails and runs background jobs. Without it, nothing is sent. Create `/etc/systemd/system/brainitive-queue.service`:

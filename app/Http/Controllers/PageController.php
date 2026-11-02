@@ -6,14 +6,18 @@ use App\Models\Page;
 use App\Models\Project;
 use App\Models\User;
 use App\Models\Workspace;
-use App\Notifications\PageUpdatedNotification;
+use App\Rules\JsonSize;
 use App\Support\Collab\CollabConfig;
 use App\Support\Collab\PageCollab;
 use App\Support\Collab\WhiteboardCollab;
 use App\Support\Entitlements\LimitGate;
+use App\Support\Files\WorkspaceFiles;
 use App\Support\PageReviews\ReviewGate;
 use App\Support\PageReviews\ReviewPresenter;
 use App\Support\Pages\PageMover;
+use App\Support\Pages\PageWrites;
+use App\Support\Uploads;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -38,34 +42,18 @@ class PageController extends Controller
             'type' => 'required|in:page,folder',
             'parent_id' => [
                 'nullable',
+                'integer',
                 Rule::exists('pages', 'id')->where('project_id', $project->id),
             ],
             'icon' => 'nullable|string|max:2000000',
             'content_type' => 'nullable|string|in:doc,excalidraw',
         ]);
-
-        $content = null;
-        if ($validated['type'] === 'page') {
-            $contentType = $validated['content_type'] ?? 'doc';
-            $content = $contentType === 'excalidraw'
-                ? ['type' => 'excalidraw', 'elements' => [], 'appState' => []]
-                : ['type' => 'doc', 'content' => []];
+        // the parent must be a page the user can open (Codex web review G: not another author's private draft)
+        if (isset($validated['parent_id'])) {
+            $validated['parent_id'] = $this->moveDestination($request, (int) $validated['parent_id'])?->id;
         }
 
-        $defaultIcon = match (true) {
-            $validated['type'] === 'folder' => '📁',
-            ($validated['content_type'] ?? '') === 'excalidraw' => '✏️',
-            default => '📄',
-        };
-
-        $page = $project->allPages()->create([
-            'name' => $validated['name'],
-            'type' => $validated['type'],
-            'parent_id' => $validated['parent_id'] ?? null,
-            'icon' => $validated['icon'] ?? $defaultIcon,
-            'created_by' => Auth::id(),
-            'content' => $content,
-        ]);
+        $page = PageWrites::create($project, $request->user(), $validated);
 
         if ($request->wantsJson()) {
             return response()->json($page->load('children'));
@@ -92,14 +80,15 @@ class PageController extends Controller
 
         $user = $request->user();
 
-        $page->load(['parent', 'children' => function ($query) use ($user) {
+        // no `parent`: it may be a page this user can't view (Codex web review G); the breadcrumbs are filtered
+        $page->load(['children' => function ($query) use ($user) {
             $query->visibleTo($user)->orderBy('type', 'desc')->orderBy('position');
         }, 'creator', 'lastEditor', 'draftEditor', 'watchers']);
 
         $canUpdate = $user->can('update', $page);
 
         // Readers care about when the live version changed, not about draft autosaves
-        $page->setAttribute('last_published_at', $page->versions()->value('created_at'));
+        $page->setAttribute('last_published_at', $page->versions()->where('is_draft', false)->value('created_at'));
 
         // Unpublished changes are shared between editors only; readers get the live page
         if ($canUpdate) {
@@ -112,7 +101,7 @@ class PageController extends Controller
             'workspace' => $workspace,
             'project' => $project,
             'page' => $page,
-            'breadcrumbs' => $page->path,
+            'breadcrumbs' => $page->pathFor($user),
             'review' => ReviewPresenter::forPage($page, $user, $canUpdate), // BRAI-80
             'collab' => PageCollab::props($page, $user, $canUpdate), // live co-editing (BRAI-54); null = single-user editor
             'whiteboardCollab' => WhiteboardCollab::props($page, $user, $canUpdate), // live whiteboard preview (BRAI-153); null = static
@@ -239,7 +228,7 @@ class PageController extends Controller
         abort_if($page->review_required && ! $page->is_whiteboard, 422, 'This page needs an approved review before publishing.');
 
         $validated = $request->validate([
-            'diagram_data' => 'required',
+            'diagram_data' => ['required', new JsonSize(ContentLimits::DIAGRAM)],
             'image' => 'nullable|image|mimes:png|max:10240',
             'base_revision' => 'nullable|integer|min:0',
             'force' => 'boolean',
@@ -268,10 +257,8 @@ class PageController extends Controller
         ];
 
         if ($request->hasFile('image')) {
-            $path = $request->file('image')->store(
-                'excalidraw-previews',
-                'public'
-            );
+            // counted against the workspace's file storage (Codex web review C); older previews stay: versions show them
+            $path = WorkspaceFiles::store($workspace, $request->file('image'), 'excalidraw-previews', Uploads::imageName($request->file('image')), 'whiteboard_image', $request->user());
             $content['previewImageUrl'] = asset('storage/'.$path);
         } elseif (is_array($page->content ?? null) && ! empty(($page->content ?? [])['previewImageUrl'])) {
             $content['previewImageUrl'] = $page->content['previewImageUrl'];
@@ -296,7 +283,7 @@ class PageController extends Controller
         $this->authorize('update', $page);
 
         $validated = $request->validate([
-            'diagram_data' => 'required',
+            'diagram_data' => ['required', new JsonSize(ContentLimits::DIAGRAM)],
             'diagram_id' => 'required|string|max:255',
             'block_id' => 'required|string|max:255',
             'image' => 'required|image|mimes:png|max:10240',
@@ -310,30 +297,18 @@ class PageController extends Controller
             return response()->json(['success' => false, 'message' => 'Invalid diagram data'], 400);
         }
 
-        $content = $page->content ?? [];
-        if (! is_array($content)) {
-            $content = [];
-        }
-        if (! isset($content['excalidrawEmbeds']) || ! is_array($content['excalidrawEmbeds'])) {
-            $content['excalidrawEmbeds'] = [];
-        }
-        $content['excalidrawEmbeds'][$validated['diagram_id']] = [
+        $scene = [
             'elements' => $data['elements'] ?? [],
             'appState' => $data['appState'] ?? [],
             'files' => $data['files'] ?? [],
             'libraryItems' => $data['libraryItems'] ?? [],
         ];
 
-        $path = $request->file('image')->store(
-            'excalidraw-embeds/'.$page->id,
-            'public'
-        );
+        $path = WorkspaceFiles::store($workspace, $request->file('image'), 'excalidraw-embeds/'.$page->id, Uploads::imageName($request->file('image')), 'whiteboard_image', $request->user());
         $imageUrl = asset('storage/'.$path);
 
-        $page->update([
-            'content' => $content,
-            'last_edited_by' => Auth::id(),
-        ]);
+        // the page's draft, like every other edit (Codex web review H): never the published content directly
+        PageWrites::saveEmbed($page, $request->user(), $validated['diagram_id'], $scene);
 
         return response()->json([
             'success' => true,
@@ -353,7 +328,7 @@ class PageController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'icon' => 'nullable|string|max:2000000',
-            'content' => 'nullable',
+            'content' => ['nullable', ...ContentLimits::pageContent()],
             'parent_id' => [
                 'nullable',
                 Rule::exists('pages', 'id')->where('project_id', $project->id),
@@ -400,18 +375,17 @@ class PageController extends Controller
         $this->authorize('update', $page);
 
         $validated = $request->validate([
-            'content' => 'sometimes|nullable',
+            'content' => ['sometimes', 'nullable', ...ContentLimits::pageContent()],
             'name' => 'sometimes|required|string|max:255',
             'icon' => 'sometimes|nullable|string|max:2000000',
             'base_revision' => 'nullable|integer|min:0',
             'force' => 'boolean',
         ]);
 
-        if ($conflict = $this->draftConflict($page, $validated)) {
-            return $conflict;
+        // the revision check and the save run on the locked row (shared with the App API)
+        if (! PageWrites::saveDraft($page, $request->user(), $this->draftChanges($validated), $this->baseRevision($validated))) {
+            return $this->draftConflict($page->fresh(), $validated) ?? response()->json(['message' => 'This page was changed by someone else while you were editing.'], 409);
         }
-
-        $page->saveDraft($request->user(), $this->draftChanges($validated));
 
         return response()->json($this->draftState($page->fresh()));
     }
@@ -438,11 +412,11 @@ class PageController extends Controller
 
         $validated = $request->validate(['editing' => 'boolean', 'leave' => 'boolean']);
         $user = $request->user();
-        $key = "page-presence:{$page->id}";
+        $key = PageCollab::presenceKey($page);
         $now = now()->timestamp;
 
         $present = collect(Cache::get($key, []))
-            ->filter(fn (array $entry) => $now - $entry['seen'] < self::PRESENCE_TTL_SECONDS)
+            ->filter(fn (array $entry) => $now - $entry['seen'] < PageCollab::PRESENCE_TTL_SECONDS)
             ->except($user->id);
 
         if (! ($validated['leave'] ?? false)) {
@@ -455,7 +429,7 @@ class PageController extends Controller
             ]);
         }
 
-        Cache::put($key, $present->all(), self::PRESENCE_TTL_SECONDS * 2);
+        Cache::put($key, $present->all(), PageCollab::PRESENCE_TTL_SECONDS * 2);
 
         $canUpdate = $user->can('update', $page);
 
@@ -480,11 +454,7 @@ class PageController extends Controller
         }
 
         // BRAI-80: "review required" pages publish only an approved draft (checked on the locked row)
-        $result = ReviewGate::publishing(
-            $page,
-            fn (Page $locked) => $locked->isPublished() ? 'published' : null,
-            fn (Page $locked) => $locked->publish($request->user(), $validated['message'] ?? null),
-        );
+        $result = PageWrites::publish($page, $request->user(), $validated['message'] ?? null);
         if ($result === ReviewGate::REFUSAL) {
             return $this->reviewRefusal($request);
         }
@@ -501,7 +471,7 @@ class PageController extends Controller
         $this->authorize('update', $page);
 
         $validated = $request->validate([
-            'content' => 'sometimes|nullable',
+            'content' => ['sometimes', 'nullable', ...ContentLimits::pageContent()],
             'name' => 'sometimes|required|string|max:255',
             'icon' => 'sometimes|nullable|string|max:2000000',
             'message' => 'nullable|string|max:255',
@@ -514,46 +484,21 @@ class PageController extends Controller
             return back()->withErrors(['page' => 'Only published pages can be updated. Publish the page first.']);
         }
 
-        $user = $request->user();
-        $changes = $this->draftChanges($validated);
-
         // One transaction on the locked page row: the editor's last changes, the review check
-        // (BRAI-80) and the publish all see the same draft.
-        $result = ReviewGate::publishing(
-            $page,
-            function (Page $locked) use ($validated, $changes, $user) {
-                if ($this->draftConflict($locked, $validated)) {
-                    return 'conflict';
-                }
-                if ($changes !== []) {
-                    $locked->saveDraft($user, $changes);
-                }
+        // (BRAI-80) and the publish all see the same draft; then the watchers hear (shared with the App API)
+        $result = PageWrites::publishChanges($page, $request->user(), $this->draftChanges($validated), $this->baseRevision($validated),
+            $validated['message'] ?? null, (bool) ($validated['notify'] ?? true));
 
-                return $locked->hasUnpublishedChanges() ? null : 'unchanged';
-            },
-            fn (Page $locked) => [$locked, $locked->publishChanges($user, $validated['message'] ?? null)],
-        );
-
-        if ($result === 'conflict') {
+        if ($result === PageWrites::STALE) {
             return back()->withErrors(['page' => 'Someone else changed this page while you were editing. Reload to see their changes.']);
         }
-        if ($result === 'unchanged') {
+        if ($result === PageWrites::UNCHANGED) {
             return back()->with('success', 'No changes to publish.');
         }
         if ($result === ReviewGate::REFUSAL) {
             return $this->reviewRefusal($request);
         }
-        [$page, $version] = $result;
-
-        if ($validated['notify'] ?? true) {
-            $page->load('watchers');
-            foreach ($page->watchers as $watcher) {
-                if ($watcher->id === $user->id) {
-                    continue;
-                }
-                $watcher->notify(new PageUpdatedNotification($page, $user));
-            }
-        }
+        $version = $result;
 
         return back()->with('success', "Page updated to version {$version->version}.");
     }
@@ -614,7 +559,7 @@ class PageController extends Controller
         $this->authorize('create', [Page::class, $project]);
 
         $validated = $request->validate([
-            'pages' => 'required|array',
+            'pages' => 'required|array|max:'.ContentLimits::REORDER_IDS,
             'pages.*.id' => ['required', Rule::exists('pages', 'id')->where('project_id', $project->id)],
             'pages.*.position' => 'required|integer|min:0',
             'pages.*.parent_id' => ['nullable', Rule::exists('pages', 'id')->where('project_id', $project->id)],
@@ -784,7 +729,12 @@ class PageController extends Controller
         $newPage->status = 'draft';
         $newPage->created_by = $userId;
         $newPage->last_edited_by = $userId;
-        $newPage->parent_id = $newParentId ?? $page->parent_id;
+        // a copy never lands under a parent the user can't view (Codex web review G): top level instead
+        $parentId = $newParentId ?? $page->parent_id;
+        if ($newParentId === null && $parentId !== null && ! User::findOrFail($userId)->can('view', Page::findOrFail($parentId))) {
+            $parentId = null;
+        }
+        $newPage->parent_id = $parentId;
         $newPage->position = 0; // Boot method assigns to end
         $newPage->save();
 
@@ -797,11 +747,6 @@ class PageController extends Controller
 
         return $newPage;
     }
-
-    /**
-     * Presence entries older than this are considered gone.
-     */
-    private const PRESENCE_TTL_SECONDS = 45;
 
     /**
      * Content arrives as a JSON string from the editor or as an array from API clients.
@@ -842,8 +787,7 @@ class PageController extends Controller
      */
     private function draftConflict(Page $page, array $validated): ?JsonResponse
     {
-        $baseRevision = $validated['base_revision'] ?? null;
-        if ($baseRevision === null || ($validated['force'] ?? false) || (int) $baseRevision === $page->edit_revision) {
+        if (! PageWrites::isStale($page, $this->baseRevision($validated))) {
             return null;
         }
 
@@ -857,6 +801,16 @@ class PageController extends Controller
                 'updated_at' => ($page->draft_updated_at ?? $page->updated_at)?->toIso8601String(),
             ],
         ], 409);
+    }
+
+    /**
+     * The revision the editor started from; null (no check) without one or when the user chose to overwrite.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function baseRevision(array $validated): ?int
+    {
+        return isset($validated['base_revision']) && ! ($validated['force'] ?? false) ? (int) $validated['base_revision'] : null;
     }
 
     /**

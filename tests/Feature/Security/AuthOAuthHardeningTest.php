@@ -4,11 +4,13 @@ namespace Tests\Feature\Security;
 
 use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Middleware\GuardOAuthFlows;
+use App\Models\AppDevice;
 use App\Models\Helpdesk;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Models\WorkspaceInvitation;
 use App\Notifications\TicketCreatedNotification;
+use App\Support\AppApi\AppTokens;
 use App\Support\OutboundUrl;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
@@ -48,11 +50,16 @@ class AuthOAuthHardeningTest extends TestCase
     public function test_social_login_takes_over_an_unverified_preregistered_account_and_locks_the_squatter_out(): void
     {
         $squatter = User::factory()->unverified()->create(['email' => 'victim@corp.example', 'password' => Hash::make('attacker-pass')]);
+        // the squatter's signed-in app goes too (SignOutEverywhere → AppTokens::revokeAllFor, BRAI-377)
+        $app = AppDevice::create(['user_id' => $squatter->id, 'client' => 'desktop', 'platform' => 'macos', 'name' => 'Squatter Mac', 'app_version' => '0.1.0']);
+        AppTokens::issue($app);
 
         $this->fakeGoogle('victim@corp.example', verified: true);
         $this->get('/login/google/callback')->assertRedirect();
         $this->assertAuthenticatedAs($squatter->fresh());
         Auth::logout();
+        $this->assertSame('account_takeover', $app->fresh()->revoked_reason);
+        $this->assertNull($app->fresh()->refresh_token_hash);
 
         $this->assertNotNull($squatter->fresh()->email_verified_at);
         $this->assertFalse(Auth::attempt(['email' => 'victim@corp.example', 'password' => 'attacker-pass']), 'the squatter password no longer works');

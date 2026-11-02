@@ -23,11 +23,20 @@ class PagePolicy
             return false;
         }
 
-        if ($page->isFolder() || ! $page->isDraft()) {
+        if ($page->isFolder() || ! $page->isPrivate()) {
             return true;
         }
 
         return $page->created_by === $user->id || $this->isAdmin($user, $project);
+    }
+
+    /**
+     * Versions recorded while the page was a private draft (Codex web review M): the same people who could see the
+     * draft — its author and admins.
+     */
+    public function viewDraftVersions(User $user, Page $page): bool
+    {
+        return $this->view($user, $page) && ($page->created_by === $user->id || $this->isAdmin($user, $page->project));
     }
 
     /**

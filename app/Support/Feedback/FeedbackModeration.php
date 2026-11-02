@@ -7,9 +7,11 @@ use App\Models\FeedbackEvent;
 use App\Models\FeedbackPortal;
 use App\Models\FeedbackPost;
 use App\Models\Item;
+use App\Models\Project;
 use App\Models\User;
 use App\Support\Boards\ProjectIssues;
 use App\Support\Entitlements\LimitGate;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -245,5 +247,70 @@ final class FeedbackModeration
         $url = e($post->publicUrl($portal));
 
         return $paragraphs.'<p>From the feedback portal: <a href="'.$url.'">'.e($portal->title).' #'.$post->number.'</a> ('.$post->votes_count.' votes)</p>';
+    }
+
+    /** What row() reads. */
+    public const ROW_WITH = ['author:id,name,email', 'item:id,key,title,board_id', 'item.board:id,slug', 'mergedInto:id,number,title'];
+
+    /** Moderation tabs: pending, published, rejected, merged. */
+    public const TABS = ['pending', 'published', 'rejected', 'merged'];
+
+    /** How many posts each moderation tab holds. @return array{pending: int, published: int, rejected: int, merged: int} */
+    public static function counts(FeedbackPortal $portal): array
+    {
+        return [
+            'pending' => $portal->posts()->where('moderation', 'pending')->whereNull('merged_into_id')->count(),
+            'published' => $portal->posts()->published()->count(),
+            'rejected' => $portal->posts()->where('moderation', 'rejected')->whereNull('merged_into_id')->count(),
+            'merged' => $portal->posts()->whereNotNull('merged_into_id')->count(),
+        ];
+    }
+
+    /**
+     * The posts of one moderation tab in its order (pending: oldest first; published: most votes first;
+     * rejected / merged: newest first), with what row() needs.
+     *
+     * @return HasMany<FeedbackPost, FeedbackPortal>
+     */
+    public static function tabQuery(FeedbackPortal $portal, string $tab)
+    {
+        $query = $portal->posts()->with(self::ROW_WITH);
+        match ($tab) {
+            'pending' => $query->where('moderation', 'pending')->whereNull('merged_into_id')->orderBy('id'),
+            'published' => $query->published()->orderByDesc('votes_count')->orderByDesc('id'),
+            'rejected' => $query->where('moderation', 'rejected')->whereNull('merged_into_id')->orderByDesc('id'),
+            default => $query->whereNotNull('merged_into_id')->orderByDesc('id'),
+        };
+
+        return $query;
+    }
+
+    /**
+     * A post as the project's moderation page shows it to project admins (with the author's address and the
+     * linked card), shared with the App API (BRAI-422). Expects author, item.board and mergedInto loaded.
+     *
+     * @return array{id: int, number: int, title: string, body: string|null, moderation: string, status: string, status_note: string|null, votes_count: int, author: array{name: string, email: string|null}|null, created_at: string|null, public_url: string, merged_into: array{number: int, title: string}|null, item: array{key: string, title: string, url: string}|null}
+     */
+    public static function row(Project $project, FeedbackPortal $portal, FeedbackPost $post): array
+    {
+        return [
+            'id' => $post->id,
+            'number' => $post->number,
+            'title' => $post->title,
+            'body' => $post->body,
+            'moderation' => $post->moderation,
+            'status' => $post->status,
+            'status_note' => $post->status_note,
+            'votes_count' => $post->votes_count,
+            'author' => $post->author ? ['name' => $post->author->displayName(), 'email' => $post->author->email] : null,
+            'created_at' => $post->created_at?->toIso8601String(),
+            'public_url' => route('feedback.post', [$portal->slug, $post->number]),
+            'merged_into' => $post->mergedInto ? ['number' => $post->mergedInto->number, 'title' => $post->mergedInto->title] : null,
+            'item' => $post->item && $post->item->board ? [
+                'key' => $post->item->key,
+                'title' => $post->item->title,
+                'url' => route('boards.items.show', [$project->workspace->slug, $project->slug, $post->item->board->slug, $post->item->id]),
+            ] : null,
+        ];
     }
 }

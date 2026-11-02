@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\FetchLinkMetadataJob;
 use App\Models\Bookmark;
 use App\Models\BookmarkItem;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Bookmarks\Bookmarks;
+use App\Support\Files\WorkspaceFiles;
 use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -81,20 +82,10 @@ class BookmarkController extends Controller
     {
         $this->authorize('create', [Bookmark::class, $workspace]);
 
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string|max:2000',
+        $validated = $request->validate(Bookmarks::groupRules() + [
             'icon' => 'nullable|string|max:500',
             'icon_image' => 'nullable|image|mimes:png,jpeg,jpg|max:2048',
-            'visibility' => 'nullable|in:private,public',
         ]);
-
-        $slug = Str::slug($validated['name']);
-        $originalSlug = $slug;
-        $counter = 1;
-        while ($workspace->bookmarks()->where('slug', $slug)->exists()) {
-            $slug = $originalSlug.'-'.$counter++;
-        }
 
         $iconValue = $validated['icon'] ?? null;
         $isTempIcon = $iconValue && str_contains($iconValue, 'bookmark-icons/temp/');
@@ -108,18 +99,10 @@ class BookmarkController extends Controller
             $iconValue = null; // set after we move the temp file
         }
 
-        $bookmark = $workspace->bookmarks()->create([
-            'name' => $validated['name'],
-            'slug' => $slug,
-            'description' => $validated['description'] ?? null,
-            'icon' => $iconValue,
-            'visibility' => $validated['visibility'] ?? 'private',
-            'position' => $workspace->bookmarks()->max('position') + 1,
-            'created_by' => $request->user()->id,
-        ]);
+        $bookmark = Bookmarks::createGroup($workspace, $request->user(), ['icon' => $iconValue] + $validated);
 
         if ($request->hasFile('icon_image')) {
-            $path = $request->file('icon_image')->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'public');
+            $path = WorkspaceFiles::store($workspace, $request->file('icon_image'), 'bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'bookmark_icon', $request->user());
             $bookmark->update(['icon' => $path]);
         } elseif ($isTempIcon && isset($validated['icon'])) {
             $tempPath = str_contains($validated['icon'], 'storage/') ? Str::after($validated['icon'], 'storage/') : $validated['icon'];
@@ -128,6 +111,7 @@ class BookmarkController extends Controller
                 $ext = pathinfo($tempPath, PATHINFO_EXTENSION);
                 $newPath = 'bookmark-icons/'.$bookmark->id.'/icon.'.$ext;
                 Storage::disk('public')->move($tempPath, $newPath);
+                WorkspaceFiles::adopt($workspace, $tempPath, $newPath, 'bookmark_icon');
                 $bookmark->update(['icon' => $newPath]);
             }
         }
@@ -140,28 +124,29 @@ class BookmarkController extends Controller
     {
         $this->authorize('update', $bookmark);
 
-        $validated = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'description' => 'nullable|string|max:2000',
+        $validated = $request->validate(Bookmarks::groupRules(update: true) + [
             'icon' => 'nullable|string|max:500',
             'icon_image' => 'nullable|image|mimes:png,jpeg,jpg|max:2048',
-            'visibility' => 'sometimes|in:private,public',
         ]);
 
         if (isset($validated['name'])) {
-            $validated['slug'] = Str::slug($validated['name']);
+            $validated['slug'] = Bookmarks::uniqueSlug($workspace, $validated['name'], $bookmark->id);
         }
 
         if (array_key_exists('icon', $validated) && $validated['icon'] && str_contains($validated['icon'], 'storage/')) {
             $validated['icon'] = Str::after($validated['icon'], 'storage/');
         }
 
+        $previousIcon = $bookmark->getRawOriginal('icon');
         if ($request->hasFile('icon_image')) {
-            $path = $request->file('icon_image')->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'public');
+            $path = WorkspaceFiles::store($workspace, $request->file('icon_image'), 'bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'bookmark_icon', $request->user());
             $validated['icon'] = $path;
         }
 
         $bookmark->update($validated);
+        if (array_key_exists('icon', $validated) && $validated['icon'] !== $previousIcon) {
+            WorkspaceFiles::forget($workspace, $previousIcon, 'bookmark-icons/'.$bookmark->id.'/'); // superseded (Codex web review C)
+        }
 
         if ($request->wantsJson()) {
             return response()->json(['bookmark' => $bookmark->fresh()]);
@@ -184,8 +169,12 @@ class BookmarkController extends Controller
 
         $file = $request->file('icon');
         $ext = Uploads::imageExtension($file);
-        $path = $file->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.$ext, 'public');
+        $previousIcon = $bookmark->getRawOriginal('icon');
+        $path = WorkspaceFiles::store($workspace, $file, 'bookmark-icons/'.$bookmark->id, 'icon.'.$ext, 'bookmark_icon', $request->user());
         $bookmark->update(['icon' => $path]);
+        if ($previousIcon !== $path) {
+            WorkspaceFiles::forget($workspace, $previousIcon, 'bookmark-icons/'.$bookmark->id.'/');
+        }
 
         return response()->json(['icon_display' => $bookmark->fresh()->icon_display]);
     }
@@ -204,7 +193,8 @@ class BookmarkController extends Controller
 
         $file = $request->file('icon');
         $ext = Uploads::imageExtension($file);
-        $path = $file->storeAs('bookmark-icons/temp', Str::uuid().'.'.$ext, 'public');
+        // counted until it's used or pruned (files:prune-temp, Codex web review C)
+        $path = WorkspaceFiles::store($workspace, $file, 'bookmark-icons/temp', Str::uuid().'.'.$ext, 'temp', $request->user());
 
         return response()->json(['icon_display' => asset('storage/'.$path), 'icon_path' => $path]);
     }
@@ -217,13 +207,7 @@ class BookmarkController extends Controller
             abort(404);
         }
 
-        foreach ($bookmark->items()->where('type', 'file')->whereNotNull('file_path')->get() as $item) {
-            if ($item->file_path && Storage::disk('public')->exists($item->file_path)) {
-                Storage::disk('public')->delete($item->file_path);
-            }
-        }
-
-        $bookmark->delete();
+        Bookmarks::deleteGroup($bookmark);
 
         return redirect()->route('bookmarks.index', [$workspace->slug])
             ->with('success', 'Bookmark deleted.');
@@ -237,63 +221,10 @@ class BookmarkController extends Controller
             abort(404);
         }
 
-        $validated = $request->validate([
-            'type' => 'required|in:link,todo,note,file',
-            'title' => 'nullable|string|max:500',
-            'url' => ['nullable', 'string', 'max:2048', 'regex:#^https?://[^\s\x00-\x1f]+$#i'],
-            'content' => 'nullable|string|max:10000',
-        ]);
-
-        $filePath = null;
-        if ($request->hasFile('file')) {
-            $file = $request->file('file');
-            $ext = strtolower($file->getClientOriginalExtension() ?: '');
-
-            $blockedExtensions = [
-                'php', 'phtml', 'php3', 'php4', 'php5', 'php7', 'php8', 'phar', 'phpt', 'phps',
-                'exe', 'bat', 'cmd', 'com', 'msi', 'scr', 'cpl', 'msc', 'jar',
-                'sh', 'bash', 'zsh', 'ps1', 'psm1', 'psd1', 'vbs', 'vbe', 'wsh', 'wsf',
-                'py', 'pyc', 'pyo', 'rb', 'pl', 'cgi', 'dll', 'so', 'dylib',
-                'app', 'deb', 'rpm', 'run', 'out',
-            ];
-            if (in_array($ext, $blockedExtensions, true)) {
-                abort(422, 'This file type is not allowed for security reasons.');
-            }
-
-            $allMimes = 'pdf,doc,docx,xls,xlsx,ppt,pptx,txt,csv,zip,rar,7z,rtf,md,json,xml,jpg,jpeg,png,gif,webp,bmp,ico,tiff,tif,svg,heic,heif,avif,bin';
-            $allMimetypes = 'application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv,text/markdown,application/zip,application/x-rar-compressed,application/x-7z-compressed,application/rtf,application/json,application/xml,text/xml,image/jpeg,image/png,image/gif,image/webp,image/bmp,image/x-icon,image/tiff,image/svg+xml,image/heic,image/heif,image/avif,application/octet-stream';
-            $request->validate([
-                'file' => [
-                    'required',
-                    'file',
-                    'max:204800',
-                    "mimes:{$allMimes}",
-                    "mimetypes:{$allMimetypes}",
-                ],
-            ], [], ['file' => 'file']);
-
-            $filename = Uploads::name($file);
-            $filePath = $file->storeAs('bookmark-files/'.$bookmark->id, $filename, 'public');
-        }
-
-        $position = $bookmark->items()->max('position') + 1;
-
-        $item = $bookmark->items()->create([
-            'type' => $validated['type'],
-            'title' => $validated['title'] ?? ($request->file('file') ? $request->file('file')->getClientOriginalName() : null),
-            'url' => $validated['url'] ?? null,
-            'content' => $validated['content'] ?? null,
-            'file_path' => $filePath,
-            'position' => $position,
-            'created_by' => $request->user()->id,
-        ]);
-
-        if ($item->type === 'link' && $item->url) {
-            FetchLinkMetadataJob::dispatch($item->id);
-        }
+        $item = Bookmarks::createItem($bookmark, $request->user(), $request->validate(Bookmarks::itemRules()), $request->file('file'));
 
         if ($request->wantsJson()) {
-            $item->file_url = $filePath ? asset('storage/'.$filePath) : null;
+            $item->file_url = Bookmarks::fileUrl($item);
 
             return response()->json(['item' => $item]);
         }
@@ -308,14 +239,7 @@ class BookmarkController extends Controller
             abort(404);
         }
 
-        $validated = $request->validate([
-            'title' => 'nullable|string|max:500',
-            'url' => ['nullable', 'string', 'max:2048', 'regex:#^https?://[^\s\x00-\x1f]+$#i'],
-            'content' => 'nullable|string|max:10000',
-            'is_completed' => 'boolean',
-        ]);
-
-        $item->update($validated);
+        $item->update($request->validate(Bookmarks::itemUpdateRules()));
 
         if ($request->wantsJson()) {
             return response()->json(['item' => $item->fresh()]);
@@ -347,11 +271,7 @@ class BookmarkController extends Controller
             abort(404);
         }
 
-        if ($item->type === 'file' && $item->file_path && Storage::disk('public')->exists($item->file_path)) {
-            Storage::disk('public')->delete($item->file_path);
-        }
-
-        $item->delete();
+        Bookmarks::deleteItem($item);
 
         if ($request->wantsJson()) {
             return response()->json(['deleted' => true]);
@@ -426,7 +346,7 @@ class BookmarkController extends Controller
      */
     public function showPublic(Request $request, string $uuid): Response
     {
-        $bookmark = Bookmark::where('uuid', $uuid)->firstOrFail();
+        $bookmark = Bookmark::where('uuid', $uuid)->whereHas('workspace')->firstOrFail(); // a live workspace (Codex web review P)
 
         if ($bookmark->visibility !== 'public') {
             abort(404);
@@ -434,14 +354,19 @@ class BookmarkController extends Controller
 
         $bookmark->load(['items' => fn ($q) => $q->orderBy('position'), 'creator:id,name']);
 
-        foreach ($bookmark->items->where('type', 'file') as $item) {
-            if ($item->file_path) {
-                $item->file_url = asset('storage/'.$item->file_path);
-            }
-        }
+        // An explicit whitelist (Codex web review A): no ids of people, settings or internal metadata
+        $items = $bookmark->items->map(fn (BookmarkItem $item) => [
+            ...$item->only(['id', 'type', 'title', 'url', 'content', 'is_completed', 'position']),
+            'metadata' => array_intersect_key((array) $item->metadata, array_flip(['title', 'description', 'favicon_url', 'image'])),
+            'file_url' => $item->type === 'file' && $item->file_path ? asset('storage/'.$item->file_path) : null,
+        ])->values();
 
         return Inertia::render('Bookmarks/ShowPublic', [
-            'bookmark' => $bookmark,
+            'bookmark' => [
+                ...$bookmark->only(['uuid', 'name', 'description', 'icon', 'icon_display', 'visibility']),
+                'creator' => $bookmark->creator ? ['name' => $bookmark->creator->name] : null,
+                'items' => $items,
+            ],
         ]);
     }
 }

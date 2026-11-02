@@ -67,7 +67,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: cli/go.mod
           cache-dependency-path: cli/go.sum
@@ -145,7 +145,7 @@ jobs:
     needs: frontend
     if: ${{ !cancelled() && needs.frontend.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45 # the journey count grew past 30 min (v1.49 security journeys)
     services:
       # CI-only throwaway database (credentials exist only inside the runner)
       postgres:

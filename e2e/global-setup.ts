@@ -22,5 +22,10 @@ export default async function globalSetup() {
     // Live pause 15 s in the shared cache, so journeys starting right away would miss their events
     const stopLive = await startLiveServer();
     execFileSync('php', ['artisan', 'e2e:reset'], { cwd: ROOT, env: appEnv(), stdio: 'inherit' });
+    // uploads are served from /storage through the public/storage link. A fresh checkout (CI) has none, and then
+    // /storage/* falls through to the private `local` disk's signed route: 403 for every uploaded file.
+    if (!fs.existsSync(`${ROOT}/public/storage`)) {
+        execFileSync('php', ['artisan', 'storage:link'], { cwd: ROOT, env: appEnv(), stdio: 'inherit' });
+    }
     return stopLive;
 }

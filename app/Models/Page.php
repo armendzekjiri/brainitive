@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\Collab\PageCollab;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Notifications\PageMentions;
@@ -44,6 +45,7 @@ class Page extends Model
         'edit_revision',
         'current_version',
         'review_required',
+        'archived_private',
     ];
 
     protected $casts = [
@@ -54,6 +56,7 @@ class Page extends Model
         'edit_revision' => 'integer',
         'current_version' => 'integer',
         'review_required' => 'boolean',
+        'archived_private' => 'boolean',
     ];
 
     /**
@@ -66,6 +69,7 @@ class Page extends Model
         'edit_revision' => 0,
         'current_version' => 0,
         'review_required' => false,
+        'archived_private' => false,
     ];
 
     /**
@@ -139,6 +143,15 @@ class Page extends Model
                     ->where('parent_id', $page->parent_id)
                     ->max('position') ?? -1;
                 $page->position = $maxPosition + 1;
+            }
+        });
+
+        // Codex web review L: archiving keeps a private draft private; any other status clears the flag
+        static::saving(function (Page $page) {
+            if ($page->isDirty('status')) {
+                $page->archived_private = $page->status === 'archived' && $page->getOriginal('status') === 'draft'
+                    ? true
+                    : ($page->status === 'archived' && $page->archived_private);
             }
         });
 
@@ -255,6 +268,17 @@ class Page extends Model
     /**
      * Published snapshots, newest first.
      */
+    /**
+     * The versions this user may see (Codex web review M): versions recorded while the page was a private draft
+     * only for those who could see that draft (PagePolicy::viewDraftVersions).
+     *
+     * @return HasMany<PageVersion, $this>
+     */
+    public function versionsFor(User $user): HasMany
+    {
+        return $this->versions()->when(! $user->can('viewDraftVersions', $this), fn ($q) => $q->where('is_draft', false));
+    }
+
     public function versions(): HasMany
     {
         return $this->hasMany(PageVersion::class)->orderByDesc('version');
@@ -361,7 +385,9 @@ class Page extends Model
 
         $query->where(function (Builder $visible) use ($user, $adminProjectIds) {
             $visible->where('pages.type', 'folder')
-                ->orWhere('pages.status', '!=', 'draft')
+                // not private: neither a draft nor an archived draft (Codex web review L)
+                ->orWhere(fn (Builder $open) => $open->where('pages.status', '!=', 'draft')
+                    ->where(fn (Builder $q) => $q->where('pages.status', '!=', 'archived')->orWhere('pages.archived_private', false)))
                 ->orWhere('pages.created_by', $user->id)
                 ->orWhereIn('pages.project_id', $adminProjectIds);
         });
@@ -380,6 +406,20 @@ class Page extends Model
     public function isDraft(): bool
     {
         return $this->status === 'draft';
+    }
+
+    /**
+     * Private to its author and admins: a draft, or a page archived while it was a draft (Codex web review L).
+     * Folders are never private (PagePolicy).
+     */
+    public function isPrivate(): bool
+    {
+        return self::privateStatus((string) $this->status, (bool) $this->archived_private);
+    }
+
+    public static function privateStatus(string $status, bool $archivedPrivate): bool
+    {
+        return $status === 'draft' || ($status === 'archived' && $archivedPrivate);
     }
 
     public function isPublished(): bool
@@ -401,8 +441,13 @@ class Page extends Model
      *
      * @param  array{content?: array<string, mixed>|null, name?: string, icon?: string|null}  $changes
      */
-    public function saveDraft(User $user, array $changes): void
+    public function saveDraft(User $user, array $changes, bool $live = false): void
     {
+        // content limit (Codex web review B): a bigger body needs room. Live co-editing saves ($live) aren't refused —
+        // the typed text stays in the shared document; publishing it is checked (publishChanges).
+        if (! $live && array_key_exists('content', $changes) && ($workspace = $this->project?->workspace)) {
+            app(LimitGate::class)->ensureContentGrowth($workspace, $this->draftState()['content'], $changes['content']);
+        }
         $attributes = ['edit_revision' => $this->edit_revision + 1];
         // what the editor had before this save: @mentions already in it were notified earlier
         $before = $this->isPublished() && $this->hasUnpublishedChanges() ? $this->draft_content : $this->content;
@@ -463,6 +508,9 @@ class Page extends Model
      */
     public function publishChanges(User $user, ?string $message = null): PageVersion
     {
+        if ($this->hasUnpublishedChanges() && ($workspace = $this->project?->workspace)) {
+            app(LimitGate::class)->ensureContentGrowth($workspace, $this->content, $this->draft_content); // Codex web review B
+        }
         if ($this->hasUnpublishedChanges()) {
             $this->fill([
                 'content' => $this->withExcalidrawEmbeds($this->draft_content, $this->content),
@@ -570,6 +618,8 @@ class Page extends Model
             'content' => $this->content,
             'message' => $message !== null && trim($message) !== '' ? trim($message) : null,
             'created_by' => $user?->id,
+            // recorded while private (a whiteboard checkpoint of a draft): its author's and admins' only (Codex web review M)
+            'is_draft' => $this->isPrivate(),
         ]);
     }
 
@@ -610,6 +660,36 @@ class Page extends Model
     public function descendants(): HasMany
     {
         return $this->children()->with('descendants');
+    }
+
+    /**
+     * The breadcrumbs as one user may see them (Codex web review G): ancestors they can't view (another author's
+     * private draft above a published child) are left out — no name, no id.
+     *
+     * @return list<array{id: int, uuid: string, name: string, slug: string, type: string}>
+     */
+    public function pathFor(User $user): array
+    {
+        $path = [];
+        $current = $this;
+        $seen = [];
+
+        while ($current && ! isset($seen[$current->id])) {
+            $seen[$current->id] = true;
+            if ($current->is($this) || $user->can('view', $current)) {
+                array_unshift($path, [
+                    'id' => $current->id,
+                    'uuid' => $current->uuid,
+                    'name' => $current->name,
+                    'slug' => $current->slug,
+                    'type' => $current->type,
+                ]);
+            }
+            // a fresh query, not the `parent` relation: that would end up serialized with the page
+            $current = $current->parent_id ? self::query()->find($current->parent_id) : null;
+        }
+
+        return $path;
     }
 
     // Get breadcrumb path

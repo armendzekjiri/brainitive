@@ -17,6 +17,43 @@ use Illuminate\Support\Facades\DB;
  */
 class SprintLifecycle
 {
+    /**
+     * Move top-level issues of the board into a planned / active sprint, or the backlog with null (the MCP's
+     * move_items_to_sprint, the App API). Subtasks follow their parent; each lands at the end of its new
+     * list; issues already there stay where they are.
+     *
+     * @param  list<int>  $itemIds
+     * @return int how many issues changed their sprint
+     *
+     * @throws DomainException a completed sprint / another board's sprint, or ids that aren't top-level issues of the board (nothing moves)
+     */
+    public static function moveIssues(Board $board, ?Sprint $sprint, array $itemIds): int
+    {
+        if ($sprint && ($sprint->board_id !== $board->id || $sprint->isCompleted())) {
+            throw new DomainException('Issues can only move into a planned or active sprint, or the backlog.');
+        }
+
+        $ids = array_values(array_unique(array_map('intval', $itemIds)));
+        $items = $board->items()->whereIn('id', $ids)->whereNull('parent_id')->get()->keyBy('id');
+        $invalid = array_values(array_diff($ids, $items->keys()->all()));
+        if ($invalid !== []) {
+            throw new DomainException('Not top-level issues of this board: '.implode(', ', $invalid).'. Nothing was moved.');
+        }
+
+        return DB::transaction(function () use ($ids, $items, $sprint) {
+            $moved = 0;
+            foreach ($ids as $id) {
+                $item = $items[$id];
+                if ($item->sprint_id !== $sprint?->id) {
+                    $item->moveToSprint($sprint);
+                    $moved++;
+                }
+            }
+
+            return $moved;
+        });
+    }
+
     public static function start(Board $board, Sprint $sprint, ?string $startDate, ?string $endDate, ?string $goal = null, ?string $name = null): Sprint
     {
         return DB::transaction(function () use ($board, $sprint, $startDate, $endDate, $goal, $name) {

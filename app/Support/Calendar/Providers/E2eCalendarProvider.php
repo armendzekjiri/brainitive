@@ -60,7 +60,7 @@ class E2eCalendarProvider extends BaseCalendarProvider
         return $this->fromStored($stored, null);
     }
 
-    public function deleteEvent(CalendarConnection $connection, string $eventId): void
+    public function deleteEvent(CalendarConnection $connection, string $eventId, bool $wholeSeries = false): void
     {
         $this->assertWritable($connection);
         $credentials = (array) $connection->credentials;

@@ -23,15 +23,7 @@ class LiveTokenController extends Controller
             'channels' => 'required|array|min:1|max:'.LiveChannels::MAX_PER_TOKEN,
             'channels.*' => 'required|string|max:100',
         ]);
-        $user = $request->user();
-        $requested = array_values(array_unique($validated['channels']));
-        $allowed = (new LiveChannels)->authorize($user, $requested);
 
-        return response()->json(LiveToken::issue($user, $allowed) + [
-            'url' => LiveConfig::url(),
-            'channels' => $allowed,
-            'denied' => array_values(array_diff($requested, $allowed)),
-            'user' => ['id' => $user->id, 'name' => $user->name, 'avatar' => $user->avatar_display],
-        ]);
+        return response()->json(LiveToken::grant($request->user(), $validated['channels']));
     }
 }

@@ -34,6 +34,10 @@ class CreateCalendarEventTool extends Tool
             'timezone' => 'nullable|string|max:64',
         ]);
 
+        if ($limited = $this->calendarWriteLimited($request->user())) {
+            return $limited;
+        }
+
         $user = $request->user();
 
         try {

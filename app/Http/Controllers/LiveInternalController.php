@@ -3,15 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Support\AppApi\AppTokens;
 use App\Support\Live\LiveChannels;
 use App\Support\Live\LiveConfig;
+use App\Support\Live\RealtimeSession;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 /**
  * Internal API for the realtime server (BRAI-151), behind VerifyCollabSecret: every minute it asks
  * which of their channels each connected user may still use, and drops the rest. Users that no
- * longer exist (or are suspended) get an empty list.
+ * longer exist (or are suspended) get an empty list. Entries may list the app devices of the user's
+ * sockets (`devices`, tokens with `dev`); the answer's `revoked_devices` names those that are revoked,
+ * gone or not that user's, and the realtime server closes their sockets (4410). Entries may list the browser sessions
+ * of the user's web sockets (`sessions`, token claim `sid`); the answer's `ended_sessions` names those signed out and
+ * `generations` the users' current generations — older web tokens are signed out (4401, RealtimeSession).
  */
 class LiveInternalController extends Controller
 {
@@ -24,6 +30,10 @@ class LiveInternalController extends Controller
             'users.*.id' => 'required|integer|min:1',
             'users.*.channels' => 'present|array|max:100',
             'users.*.channels.*' => 'string|max:100',
+            'users.*.devices' => 'sometimes|array|max:20',
+            'users.*.devices.*' => 'integer|min:1',
+            'users.*.sessions' => 'sometimes|array|max:100',
+            'users.*.sessions.*' => 'string|max:64',
         ]);
 
         $ids = array_unique(array_map(fn (array $entry) => (int) $entry['id'], $validated['users']));
@@ -37,6 +47,29 @@ class LiveInternalController extends Controller
             $access[(string) $entry['id']] = array_values(array_unique([...($access[(string) $entry['id']] ?? []), ...$allowed]));
         }
 
-        return response()->json(['users' => (object) $access]);
+        return response()->json([
+            'users' => (object) $access,
+            'revoked_devices' => $this->revokedDevices($validated['users']),
+            'ended_sessions' => RealtimeSession::endedAmong(array_merge(...array_map(fn (array $entry) => $entry['sessions'] ?? [], $validated['users']))),
+            'generations' => (object) RealtimeSession::generations($users),
+        ]);
+    }
+
+    /**
+     * The asked devices that may no longer hold a socket: revoked, deleted, or not the entry's user.
+     *
+     * @param  list<array{id: int|string, devices?: list<int|string>}>  $entries
+     * @return list<int>
+     */
+    private function revokedDevices(array $entries): array
+    {
+        $asked = [];
+        foreach ($entries as $entry) {
+            foreach ($entry['devices'] ?? [] as $device) {
+                $asked[(int) $device] = (int) $entry['id'];
+            }
+        }
+
+        return AppTokens::revokedAmong($asked);
     }
 }

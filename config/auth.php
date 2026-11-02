@@ -49,6 +49,13 @@ return [
             'driver' => 'passport',
             'provider' => 'users',
         ],
+
+        // App API v1 (/api/v1, desktop + mobile apps): own device tokens, never Passport's.
+        // Driver registered in AppApiServiceProvider (App\Support\AppApi\AppTokens).
+        'app' => [
+            'driver' => 'app-token',
+            'provider' => 'users',
+        ],
     ],
 
     /*

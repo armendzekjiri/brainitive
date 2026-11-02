@@ -16,12 +16,14 @@ use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
+use Tests\Feature\AppApi\Concerns\ActsAsAppClient;
 use Tests\Feature\Boards\InteractsWithBoards;
 use Tests\TestCase;
 
 /** The private calendar feed (BRAI-142): managing it, and what calendar apps get. */
 class CalendarFeedTest extends TestCase
 {
+    use ActsAsAppClient;
     use InteractsWithBoards;
     use RefreshDatabase;
 
@@ -179,6 +181,32 @@ class CalendarFeedTest extends TestCase
         $this->assertSame(0, substr_count($none, 'BEGIN:VEVENT'));
     }
 
+    /**
+     * Codex web review T: a selection of only foreign / stale projects used to be stored as [] = "all my projects".
+     * It is refused (web and App API); a selection whose projects become unreachable later shows nothing, not all.
+     */
+    public function test_a_project_selection_out_of_reach_never_turns_into_all_projects(): void
+    {
+        $this->item(['title' => 'In BRAI', 'assigned_to' => $this->editor->id, 'due_date' => '2026-11-05']);
+        $foreign = Project::factory()->create(['created_by' => $this->outsider->id]);
+
+        $this->actingAs($this->editor)->postJson(route('calendar-feed.store'), ['options' => ['project_ids' => [$foreign->id]]])
+            ->assertUnprocessable()->assertJsonValidationErrors('options.project_ids');
+        $this->assertNull(CalendarFeed::activeFor($this->editor));
+
+        $this->app['auth']->forgetGuards();
+        $this->putJson('/api/v1/me/calendar-feed', ['options' => ['project_ids' => [$foreign->id]]], $this->appHeaders($this->appToken($this->editor)))
+            ->assertUnprocessable();
+        $this->assertNull(CalendarFeed::activeFor($this->editor));
+
+        // chosen while reachable, then access is lost: nothing, not every project
+        $other = Project::factory()->create(['workspace_id' => $this->workspace->id, 'created_by' => $this->editor->id, 'key' => 'OTH']);
+        $other->users()->attach($this->editor->id, ['role' => 'editor']);
+        $this->actingAs($this->editor)->postJson(route('calendar-feed.store'), ['options' => ['project_ids' => [$other->id]]])->assertCreated();
+        $other->users()->detach($this->editor->id);
+        $this->assertStringNotContainsString('In BRAI', $this->fetch(CalendarFeed::activeFor($this->editor))->getContent());
+    }
+
     public function test_the_project_filter_keeps_only_the_chosen_projects(): void
     {
         $other = Project::factory()->create(['workspace_id' => $this->workspace->id, 'created_by' => $this->editor->id, 'key' => 'OTH']);
@@ -188,8 +216,11 @@ class CalendarFeedTest extends TestCase
         Item::factory()->create(['board_id' => $otherBoard->id, 'created_by' => $this->editor->id, 'title' => 'In OTH', 'assigned_to' => $this->editor->id, 'due_date' => '2026-11-05']);
         $foreign = Project::factory()->create(['created_by' => $this->outsider->id]);
 
+        // a project they can't open is refused, not silently dropped (Codex web review T)
         $this->actingAs($this->editor)->postJson(route('calendar-feed.store'), ['options' => ['project_ids' => [$other->id, $foreign->id]]])
-            ->assertCreated()->assertJsonPath('feed.options.project_ids', [$other->id]); // only projects they can open
+            ->assertUnprocessable()->assertJsonValidationErrors('options.project_ids');
+        $this->actingAs($this->editor)->postJson(route('calendar-feed.store'), ['options' => ['project_ids' => [$other->id]]])
+            ->assertCreated()->assertJsonPath('feed.options.project_ids', [$other->id]);
 
         $body = $this->fetch(CalendarFeed::activeFor($this->editor))->getContent();
         $this->assertStringContainsString('In OTH', $body);

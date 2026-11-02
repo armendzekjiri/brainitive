@@ -3,26 +3,21 @@
 namespace App\Http\Controllers\Billing;
 
 use App\Http\Controllers\Controller;
-use App\Models\ActivityLog;
 use App\Models\BillingActivity;
 use App\Models\Board;
 use App\Models\Item;
 use App\Models\Project;
 use App\Models\TimeEntry;
 use App\Models\Workspace;
+use App\Support\Billing\TimeEntries;
 use App\Support\Billing\TimeLog;
 use App\Support\Billing\TimeLogActivities;
 use App\Support\Boards\ProjectIssues;
-use App\Support\Workload\WorkloadWeeks;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -39,37 +34,15 @@ class TimesheetController extends Controller
         $this->authorize('view', $workspace);
         $user = $request->user();
 
-        $current = WorkloadWeeks::current($user);
-        $requested = $request->query('week');
-        $monday = is_string($requested) && $this->isDate($requested) ? WorkloadWeeks::monday($requested) : $current;
-        $sunday = CarbonImmutable::createFromFormat('!Y-m-d', $monday, 'UTC')->addDays(6)->toDateString();
-
-        $entries = TimeEntry::query()
-            ->where('workspace_id', $workspace->id)
-            ->where('user_id', $user->id)
-            ->whereBetween('spent_on', [$monday, $sunday])
-            ->with([
-                'project:id,name,key,slug',
-                'activity:id,name,color,pricing_type,billable,archived_at',
-                'item' => fn ($q) => $q->select(['id', 'board_id', 'key', 'title'])->with('board:id,slug,project_id', 'board.project:id,slug,workspace_id', 'board.project.workspace:id,slug'),
-            ])
-            ->orderBy('spent_on')->orderBy('id')
-            ->get();
+        $week = TimeEntries::week($user, $request->query('week'));
+        $entries = TimeEntries::between($user, $workspace, $week['start'], $week['end']);
 
         $accessible = array_flip($user->accessibleProjectIds());
         $loggable = TimeLog::loggableProjectIds($user, $workspace);
 
         return Inertia::render('Timesheet/Index', [
             'workspace' => $workspace->only(['id', 'name', 'slug']),
-            'week' => [
-                'start' => $monday,
-                'end' => $sunday,
-                'previous' => WorkloadWeeks::add($monday, -1),
-                'next' => WorkloadWeeks::add($monday, 1),
-                'current' => $current,
-                'number' => (int) CarbonImmutable::createFromFormat('!Y-m-d', $monday, 'UTC')->isoWeek(),
-                'today' => now($user->localTimezone())->toDateString(),
-            ],
+            'week' => $week,
             'entries' => $entries->map(fn (TimeEntry $entry) => $this->entryPayload($workspace, $entry, $accessible))->values(),
             'projects' => Project::whereIn('id', $loggable)->orderBy('name')->get(['id', 'name', 'key', 'slug']),
             'activities' => TimeLogActivities::options($workspace),
@@ -124,94 +97,19 @@ class TimesheetController extends Controller
     {
         $this->authorize('view', $workspace);
         $user = $request->user();
-        $data = $request->validate($this->rules($request, $workspace));
+        $data = $request->validate(TimeEntries::rules($user, $workspace));
 
-        $activity = TimeLogActivities::resolve($workspace, $data['activity_id'] ?? null);
-        $item = $this->loggableItem((int) $data['project_id'], $data['item_id'] ?? null);
-        $minutes = Item::parseDuration($data['time']);
-        $note = $this->note($data['note'] ?? null);
-        // only workspace admins choose billable; everyone else gets the activity's default (v1.39.0)
-        $billable = isset($data['billable']) && Gate::allows('manageBilling', $workspace) ? (bool) $data['billable'] : null;
+        $entry = TimeEntries::create($user, $workspace, $data);
 
-        if ($item) {
-            $item->logWork($minutes, $note, $activity, $data['spent_on'], TimeEntry::SOURCE_MANUAL, $billable);
-        } else {
-            TimeEntry::create([
-                'workspace_id' => $workspace->id,
-                'project_id' => (int) $data['project_id'],
-                'user_id' => $user->id,
-                'billing_activity_id' => $activity?->id,
-                'spent_on' => $data['spent_on'],
-                'minutes' => $minutes,
-                'note' => $note,
-                'billable' => $billable ?? ($activity ? (bool) $activity->billable : true),
-                'source' => TimeEntry::SOURCE_MANUAL,
-            ]);
-        }
-
-        return back()->with('success', 'Logged '.Item::formatDuration($minutes).'.');
+        return back()->with('success', 'Logged '.Item::formatDuration($entry->minutes).'.');
     }
 
     public function update(Request $request, Workspace $workspace, TimeEntry $timeEntry): RedirectResponse
     {
         $this->guard($request, $workspace, $timeEntry);
-        $data = $request->validate($this->rules($request, $workspace, $timeEntry));
+        $data = $request->validate(TimeEntries::rules($request->user(), $workspace, $timeEntry));
 
-        $activity = TimeLogActivities::resolve($workspace, $data['activity_id'] ?? null, $timeEntry->billing_activity_id);
-        $minutes = Item::parseDuration($data['time']);
-        $projectId = (int) $data['project_id'];
-        $itemId = isset($data['item_id']) ? (int) $data['item_id'] : null;
-
-        $currentItemId = $timeEntry->item_id !== null ? (int) $timeEntry->item_id : null;
-        $moved = $projectId !== (int) $timeEntry->project_id || $itemId !== $currentItemId;
-        if ($timeEntry->source === TimeEntry::SOURCE_LEGACY && ($moved || $minutes !== $timeEntry->minutes)) {
-            throw ValidationException::withMessages(['entry' => 'This time was logged before the timesheet existed: only its date, activity and note can change.']);
-        }
-
-        $item = null;
-        if ($moved) {
-            if (! in_array($projectId, TimeLog::loggableProjectIds($request->user(), $workspace), true)) {
-                throw ValidationException::withMessages(['project_id' => 'You can’t log time on this project.']);
-            }
-            $item = $this->loggableItem($projectId, $itemId);
-        }
-
-        $billable = match (true) {
-            isset($data['billable']) && Gate::allows('manageBilling', $workspace) => (bool) $data['billable'],
-            $activity?->id !== $timeEntry->billing_activity_id => $activity ? (bool) $activity->billable : true,
-            default => $timeEntry->billable,
-        };
-
-        DB::transaction(function () use ($timeEntry, $data, $activity, $minutes, $projectId, $itemId, $moved, $item, $billable) {
-            $timeEntry = $this->lockUnbilled($timeEntry);
-            $oldItemId = $timeEntry->item_id;
-            $oldMinutes = $timeEntry->minutes;
-
-            $timeEntry->fill([
-                'project_id' => $projectId,
-                'item_id' => $itemId,
-                'billing_activity_id' => $activity?->id,
-                'spent_on' => $data['spent_on'],
-                'minutes' => $minutes,
-                'note' => $this->note($data['note'] ?? null),
-                'billable' => $billable,
-            ]);
-            if ($moved) {
-                $timeEntry->item_key = $item?->key;
-                $timeEntry->item_title = $item ? Str::limit((string) $item->title, 250, '') : null;
-            }
-            $timeEntry->save(); // the model events move the minutes between the issues' totals
-
-            // the issues' history shows what happened to logged work
-            if ($oldItemId && $oldItemId !== $itemId) {
-                $this->history($oldItemId, 'work_log_removed', ['minutes' => $oldMinutes, 'moved_to' => $item?->key]);
-            }
-            if ($itemId && $oldItemId !== $itemId) {
-                $this->history($itemId, 'work_logged', ['minutes' => $minutes, 'note' => $timeEntry->note, 'activity' => $activity?->name, 'time_entry_id' => $timeEntry->id]);
-            } elseif ($itemId && $oldMinutes !== $minutes) {
-                $this->history($itemId, 'work_log_updated', ['from_minutes' => $oldMinutes, 'minutes' => $minutes]);
-            }
-        });
+        TimeEntries::update($request->user(), $workspace, $timeEntry, $data);
 
         return back()->with('success', 'Time entry updated.');
     }
@@ -219,17 +117,7 @@ class TimesheetController extends Controller
     public function destroy(Request $request, Workspace $workspace, TimeEntry $timeEntry): RedirectResponse
     {
         $this->guard($request, $workspace, $timeEntry);
-        if ($timeEntry->source === TimeEntry::SOURCE_LEGACY) {
-            throw ValidationException::withMessages(['entry' => 'Time logged before the timesheet existed can’t be deleted — mark it as not billable instead.']);
-        }
-
-        DB::transaction(function () use ($timeEntry) {
-            $timeEntry = $this->lockUnbilled($timeEntry);
-            $timeEntry->delete(); // the model event takes the minutes off the issue's total
-            if ($timeEntry->item_id) {
-                $this->history($timeEntry->item_id, 'work_log_removed', ['minutes' => $timeEntry->minutes]);
-            }
-        });
+        TimeEntries::delete($timeEntry);
 
         return back()->with('success', 'Time entry deleted.');
     }
@@ -238,81 +126,7 @@ class TimesheetController extends Controller
     private function guard(Request $request, Workspace $workspace, TimeEntry $entry): void
     {
         $this->authorize('view', $workspace); // former members can't change what is billed here
-        abort_unless((int) $entry->workspace_id === $workspace->id, 404);
-        abort_unless(TimeLog::canChange($request->user(), $entry), 403);
-        if ($entry->isLocked()) {
-            throw ValidationException::withMessages(['entry' => 'This time is on a finalized billing report and can’t be changed.']);
-        }
-    }
-
-    /** Re-read the row under a lock: a report finalized meanwhile wins, the entry stays as billed. */
-    private function lockUnbilled(TimeEntry $entry): TimeEntry
-    {
-        $fresh = TimeEntry::whereKey($entry->id)->lockForUpdate()->firstOrFail();
-        if ($fresh->isLocked()) {
-            throw ValidationException::withMessages(['entry' => 'This time is on a finalized billing report and can’t be changed.']);
-        }
-
-        return $fresh;
-    }
-
-    private function rules(Request $request, Workspace $workspace, ?TimeEntry $entry = null): array
-    {
-        $projects = TimeLog::loggableProjectIds($request->user(), $workspace);
-        if ($entry) {
-            $projects[] = (int) $entry->project_id; // an entry may stay where it is
-        }
-
-        return [
-            'project_id' => ['required', 'integer', Rule::in($projects)],
-            'item_id' => 'nullable|integer',
-            'spent_on' => TimeLog::spentOnRules($request->user(), true),
-            'time' => Item::durationRules(),
-            'activity_id' => 'nullable',
-            'note' => 'nullable|string|max:255',
-            'billable' => 'nullable|boolean',
-        ];
-    }
-
-    /** An issue of the project that you may edit (= log work on), or a validation error. */
-    private function loggableItem(int $projectId, mixed $itemId): ?Item
-    {
-        if ($itemId === null) {
-            return null;
-        }
-        $item = Item::whereKey((int) $itemId)
-            ->whereIn('board_id', Board::where('project_id', $projectId)->select('id'))
-            ->first();
-        if (! $item || Gate::denies('update', $item)) {
-            throw ValidationException::withMessages(['item_id' => 'You can’t log time on this issue.']);
-        }
-
-        return $item;
-    }
-
-    private function history(int $itemId, string $action, array $metadata): void
-    {
-        $item = Item::withTrashed()->find($itemId);
-        if ($item) {
-            ActivityLog::log($item, $action, null, array_filter($metadata, fn ($v) => $v !== null));
-        }
-    }
-
-    private function note(?string $note): ?string
-    {
-        $note = trim((string) $note);
-
-        return $note === '' ? null : $note;
-    }
-
-    private function isDate(string $value): bool
-    {
-        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
-            return false;
-        }
-        $date = CarbonImmutable::createFromFormat('!Y-m-d', $value, 'UTC');
-
-        return $date !== null && $date->toDateString() === $value;
+        TimeEntries::guard($request->user(), $workspace, $entry);
     }
 
     /**
@@ -323,9 +137,8 @@ class TimesheetController extends Controller
      */
     private function entryPayload(Workspace $workspace, TimeEntry $entry, array $accessible): array
     {
-        $item = $entry->item;
+        $item = TimeEntries::visibleIssue($entry, $accessible);
         $board = $item?->board;
-        $item = $item && $board && $board->project?->workspace && isset($accessible[(int) $board->project_id]) ? $item : null;
         $activity = $entry->activity;
 
         return [
@@ -336,7 +149,7 @@ class TimesheetController extends Controller
             'billable' => $entry->billable,
             'source' => $entry->source,
             'locked' => $entry->isLocked(),
-            'project' => $entry->project ? $entry->project->only(['id', 'name', 'key']) : null,
+            'project' => TimeEntries::visibleProject($entry, $accessible), // never a moved project's new name (Codex web review S)
             'item' => $entry->item_id || $entry->item_key ? [
                 'id' => $entry->item_id,
                 'key' => $item?->key ?? $entry->item_key,
