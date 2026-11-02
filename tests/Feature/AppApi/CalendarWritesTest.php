@@ -314,8 +314,11 @@ class CalendarWritesTest extends TestCase
             ->assertJsonPath('data.enabled', false)->assertJsonPath('data.url', null)->assertJsonPath('data.options.assigned', true);
         $this->postJson('/api/v1/me/calendar-feed/reset', [], $this->headers())->assertNotFound();
 
+        // a project out of reach is refused, not silently dropped (Codex web review T)
         $foreignProject = Project::factory()->create();
-        $on = $this->putJson('/api/v1/me/calendar-feed', ['options' => ['descriptions' => true, 'project_ids' => [$this->project->id, $foreignProject->id]]], $this->headers())
+        $this->putJson('/api/v1/me/calendar-feed', ['options' => ['project_ids' => [$this->project->id, $foreignProject->id]]], $this->headers())
+            ->assertUnprocessable()->assertJsonPath('code', 'validation_failed');
+        $on = $this->putJson('/api/v1/me/calendar-feed', ['options' => ['descriptions' => true, 'project_ids' => [$this->project->id]]], $this->headers())
             ->assertCreated()
             ->assertJsonPath('data.enabled', true)
             ->assertJsonPath('data.options.descriptions', true)
