@@ -32,8 +32,12 @@ const appUrl = env.COLLAB_APP_URL || env.APP_URL;
 // that can't reach their own public IP (firewall, no hairpin NAT). See realtime/src/appFetch.js.
 const appHost = env.COLLAB_APP_HOST ?? '';
 const accessIntervalMs = Number(env.COLLAB_ACCESS_INTERVAL_MS ?? 60_000);
+/** a positive integer from the environment, else the default */
+const positive = (value, fallback) => (Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : fallback);
+// Codex realtime review 2: re-checks of a document that may fail in a row before its connections close (fail closed)
+const maxAccessFailures = positive(env.COLLAB_ACCESS_MAX_FAILURES, 2);
 
-const collab = createCollabServer({ port, address, secret, appUrl, appHost, accessIntervalMs });
+const collab = createCollabServer({ port, address, secret, appUrl, appHost, accessIntervalMs, maxAccessFailures });
 
 // Live channels (BRAI-151) on the same port: `?live=1` sockets + Brainitive's publish endpoint.
 // LIVE_PUBLISH_FROM=private (Docker): the app container publishes over the private network.

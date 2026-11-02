@@ -15,6 +15,11 @@ import { fields } from './log.js';
 const FORBIDDEN = { code: 4403, reason: 'Forbidden' };
 const RESET = { code: 4409, reason: 'Document replaced' };
 const TOO_LARGE = { code: 4413, reason: 'Document too large' };
+/**
+ * Brainitive couldn't answer the access re-check COLLAB_ACCESS_MAX_FAILURES times in a row (Codex realtime review 2):
+ * fail closed. The browser asks for a new token and reconnects — authorized again, or refused while the app is down.
+ */
+const ACCESS_UNKNOWN = { code: 4403, reason: 'Access could not be checked' };
 /** the app device of the token was signed out: drop tokens, show sign-in (same code as live channels) */
 const DEVICE_REVOKED = { code: 4410, reason: 'Device signed out' };
 const COLOR = /^#[0-9a-f]{6}$/i;
@@ -27,6 +32,10 @@ export function createCollabServer({
     /** COLLAB_APP_HOST: Host header for calls to appUrl (loopback, see appFetch.js) */
     appHost = '',
     accessIntervalMs = 60_000,
+    /** re-checks of a document that may fail in a row (no answer, 5xx, 401 …) before its connections close */
+    maxAccessFailures = 2,
+    /** users per access request (Brainitive accepts ≤ 500 users and ≤ 500 devices per request) */
+    accessBatchSize = 200,
     storeRetryMs = 15_000,
     debounce = 2_000,
     maxDebounce = 10_000,
@@ -242,41 +251,106 @@ export function createCollabServer({
         return closed;
     }
 
+    /** `${document}|${user}` → access re-checks of that connection that failed in a row */
+    const accessFailures = new Map();
+    let rechecking = false;
+
+    /**
+     * The users of one document in requests Brainitive accepts: ≤ accessBatchSize users and ≤ 500 devices each.
+     * @param {Map<number, number[]>} devicesByUser
+     * @returns {number[][]}
+     */
+    function batches(userIds, devicesByUser) {
+        const out = [];
+        let current = [];
+        let devices = 0;
+        for (const id of userIds) {
+            const own = devicesByUser.get(id)?.length ?? 0;
+            if (current.length > 0 && (current.length >= accessBatchSize || devices + own > 500)) {
+                out.push(current);
+                current = [];
+                devices = 0;
+            }
+            current.push(id);
+            devices += own;
+        }
+        if (current.length > 0) out.push(current);
+        return out;
+    }
+
     /**
      * Lost project access → disconnected; lost edit rights → read-only; replaced draft → all out; a revoked app
-     * device → its socket closed (4410).
+     * device → its socket closed (4410). No answer from Brainitive maxAccessFailures rounds in a row → those
+     * connections close too (fail closed — Codex realtime review 2); a clear "no" closes at once.
      */
     async function recheckAccess() {
+        if (rechecking) return;
+        rechecking = true;
+        try {
+            await recheckDocuments();
+        } finally {
+            rechecking = false;
+        }
+    }
+
+    async function recheckDocuments() {
         // a token lives minutes at most: older revocations can't matter any more
         const now = Math.floor(Date.now() / 1000);
         revokedDevices.forEach((at, id) => { if (now - at > 3600) revokedDevices.delete(id); });
+        const present = new Set();
         for (const [documentName, document] of server.hocuspocus.documents) {
             const connections = document.getConnections();
             const userIds = [...new Set(connections.map((c) => c.context?.user?.id).filter(Number.isInteger))];
             if (userIds.length === 0) continue;
-            const devices = new Map();
-            connections.forEach((c) => { if (Number.isInteger(c.context?.device)) devices.set(c.context.device, c.context.user.id); });
-            let result;
-            try {
-                result = await laravel.access(documentName, userIds, [...devices].map(([id, user]) => ({ id, user_id: user })));
-            } catch (error) {
-                if (isGone(error)) closeDocument(documentName, RESET);
-                else logger.error(`[realtime] access re-check of ${documentName} failed: ${error?.message ?? error}`);
-                continue; // Brainitive unreachable: keep everyone, try again next round
-            }
-            if (!result.current) {
-                closeDocument(documentName, RESET);
-                continue;
-            }
-            const lost = new Set((Array.isArray(result.revoked_devices) ? result.revoked_devices : []).filter((id) => devices.has(id)));
-            if (lost.size > 0) revokeDevices([...lost]);
-            for (const connection of connections) {
-                if (lost.has(connection.context?.device)) continue;
-                const access = result.users?.[String(connection.context?.user?.id)] ?? null;
-                if (access === null) connection.close(FORBIDDEN);
-                else connection.readOnly = access !== 'edit' || !connection.context.edit;
+            const devicesByUser = new Map();
+            connections.forEach((c) => {
+                if (!Number.isInteger(c.context?.device)) return;
+                const list = devicesByUser.get(c.context.user.id) ?? [];
+                if (!list.includes(c.context.device)) list.push(c.context.device);
+                devicesByUser.set(c.context.user.id, list);
+            });
+            userIds.forEach((id) => present.add(`${documentName}|${id}`));
+            for (const batch of batches(userIds, devicesByUser)) {
+                const inBatch = new Set(batch);
+                const mine = connections.filter((c) => inBatch.has(c.context?.user?.id));
+                const devices = batch.flatMap((id) => (devicesByUser.get(id) ?? []).map((device) => ({ id: device, user_id: id })));
+                let result;
+                try {
+                    result = await laravel.access(documentName, batch, devices);
+                } catch (error) {
+                    if (isGone(error)) {
+                        closeDocument(documentName, RESET);
+                        break;
+                    }
+                    for (const id of batch) {
+                        const key = `${documentName}|${id}`;
+                        const failures = (accessFailures.get(key) ?? 0) + 1;
+                        accessFailures.set(key, failures);
+                        if (failures < maxAccessFailures) continue;
+                        accessFailures.delete(key);
+                        mine.filter((c) => c.context?.user?.id === id).forEach((c) => c.close(ACCESS_UNKNOWN));
+                    }
+                    logger.error(`[realtime] access re-check failed: ${fields({ document: documentName, users: batch.length, error: error?.message ?? String(error) })}`);
+                    continue;
+                }
+                if (!result?.current) {
+                    closeDocument(documentName, RESET);
+                    break;
+                }
+                batch.forEach((id) => accessFailures.delete(`${documentName}|${id}`));
+                const asked = new Set(devices.map(({ id }) => id));
+                const lost = new Set((Array.isArray(result.revoked_devices) ? result.revoked_devices : []).filter((id) => asked.has(id)));
+                if (lost.size > 0) revokeDevices([...lost]);
+                for (const connection of mine) {
+                    if (lost.has(connection.context?.device)) continue;
+                    const access = result.users?.[String(connection.context?.user?.id)] ?? null;
+                    if (access === null) connection.close(FORBIDDEN);
+                    else connection.readOnly = access !== 'edit' || !connection.context.edit;
+                }
             }
         }
+        // people who left (or were closed) start over
+        [...accessFailures.keys()].forEach((key) => { if (!present.has(key)) accessFailures.delete(key); });
     }
 
     let timer = null;

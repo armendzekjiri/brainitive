@@ -34,6 +34,7 @@ before(async () => {
         if (request.url.endsWith('/access')) {
             const { document, user_ids: ids, devices = [] } = JSON.parse(body);
             laravel.accessBodies.push(JSON.parse(body));
+            if (laravel.failAccess) return json(laravel.failAccess, { message: 'down' });
             return json(200, {
                 current: !laravel.stale.has(document),
                 users: Object.fromEntries(ids.map((id) => [String(id), laravel.access[id] ?? null])),
@@ -286,4 +287,72 @@ test('a device Brainitive answers as revoked on connect is refused with 4410', a
     await until(() => revoked.events.socketCodes.includes(4410));
     revoked.close();
     laravel.revokedDevices.clear();
+});
+
+// ── Codex realtime review 2: re-checks that keep failing close the document (fail closed) ────────────
+
+test('a re-check that keeps failing closes the document after COLLAB_ACCESS_MAX_FAILURES (2) rounds; an answer resets the count', async () => {
+    const editor = connect(DOC, token(DOC, true, 1));
+    await until(() => editor.events.synced);
+
+    for (const status of [500, 503]) {
+        laravel.failAccess = status;
+        await collab.recheckAccess();
+        await new Promise((r) => setTimeout(r, 100));
+        assert.deepEqual(editor.events.closed, [], `one failed round (${status}) keeps the connection`);
+        laravel.failAccess = 0;
+        await collab.recheckAccess(); // answered: the count starts again
+    }
+
+    laravel.failAccess = 500;
+    await collab.recheckAccess();
+    await collab.recheckAccess();
+    await until(() => editor.events.closed.includes('Access could not be checked'));
+    laravel.failAccess = 0;
+
+    // closed means closed: its edits no longer reach anyone
+    const other = connect(DOC, token(DOC, true, 2));
+    await until(() => other.events.synced);
+    editor.doc.getText('t').insert(0, 'AFTER-CLOSE ');
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(other.doc.getText('t').toString().includes('AFTER-CLOSE'), false);
+    editor.close();
+    other.close();
+});
+
+test('an explicit denial closes at once, no failure budget', async () => {
+    laravel.access[7] = 'edit';
+    const client = connect(DOC, token(DOC, true, 7));
+    await until(() => client.events.synced);
+    laravel.access[7] = null;
+    await collab.recheckAccess();
+    await until(() => client.events.closed.includes('Forbidden'));
+    client.close();
+});
+
+test('re-checks ask in batches Brainitive accepts (≤ 500 users / devices): many users never mean a 422 forever', async () => {
+    const small = createCollabServer({
+        port: 0, secret: SECRET, appUrl: `http://127.0.0.1:${api.address().port}`, accessIntervalMs: 3_600_000, stopOnSignals: false,
+        logger: { error() {}, warn() {} }, accessBatchSize: 2,
+    });
+    await small.listen();
+    const smallUrl = `ws://127.0.0.1:${small.server.address.port}`;
+    const at = (sub) => {
+        const websocketProvider = new HocuspocusProviderWebsocket({ url: smallUrl, WebSocketPolyfill: WebSocket, maxAttempts: 1 });
+        const provider = new HocuspocusProvider({ name: DOC, token: token(DOC, true, sub), websocketProvider });
+        provider.attach();
+        let synced = false;
+        provider.on('synced', () => { synced = true; });
+        return { synced: () => synced, close: () => { provider.destroy(); websocketProvider.destroy(); } };
+    };
+    const clients = [1, 2, 3].map(at);
+    await until(() => clients.every((c) => c.synced()));
+    laravel.accessBodies = [];
+    await small.recheckAccess();
+    assert.equal(laravel.accessBodies.length, 2);
+    assert.deepEqual(laravel.accessBodies.map((b) => b.user_ids.length).sort(), [1, 2]);
+    assert.deepEqual(laravel.accessBodies.flatMap((b) => b.user_ids).sort(), [1, 2, 3]);
+    clients.forEach((c) => c.close());
+    await small.destroy();
+    small.server.httpServer.closeAllConnections();
 });

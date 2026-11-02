@@ -56,7 +56,7 @@ const REMOTE_SAVE_MS = 3_000;
 const RETRY_SAVE_MS = 10_000;
 const BOOTSTRAP_RETRY_MS = 2_500;
 /** Reasons the server gives when it closes one document of a shared socket (realtime/src/server.js). */
-const DOCUMENT_CLOSED = new Set(['Document replaced', 'Forbidden', 'Server closed the connection']);
+const DOCUMENT_CLOSED = new Set(['Document replaced', 'Forbidden', 'Access could not be checked', 'Server closed the connection']);
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const randomClaim = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
