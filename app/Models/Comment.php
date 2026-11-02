@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\GuardsContentGrowth;
 use App\Support\Live\LiveThreads;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Comment extends Model
 {
-    use SoftDeletes;
+    use GuardsContentGrowth, SoftDeletes;
 
     protected $fillable = [
         'item_id',
@@ -71,5 +72,16 @@ class Comment extends Model
     public function isReply(): bool
     {
         return $this->parent_id !== null;
+    }
+
+    /** Content limit (Codex web review B): edits that grow these columns need room. */
+    public function growthColumns(): array
+    {
+        return ['body'];
+    }
+
+    public function meteredWorkspace(): ?Workspace
+    {
+        return $this->item?->board?->project?->workspace;
     }
 }

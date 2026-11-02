@@ -123,6 +123,8 @@ class BillingReportController extends Controller
             'rows' => $computation?->rows ?? ($report->snapshot['entries'] ?? []),
             'excluded' => $computation?->excludedRows ?? [],
             'entryIds' => $computation?->entryIds ?? [],
+            // sent back on finalize: refused when anything of the document changed since (Codex web review V)
+            'revision' => $computation?->revision(),
             'warnings' => $computation?->warnings,
             'projects' => $projects,
             'settings' => [
@@ -149,6 +151,9 @@ class BillingReportController extends Controller
             'excluded_entry_ids.*' => ['integer'],
         ]);
 
+        // both optional: left out = all of the client's projects / the default title (Codex web review Z)
+        $data['project_ids'] ??= null;
+        $data['title'] ??= null;
         $projectIds = null;
         if ($data['project_ids'] !== null) {
             $projectIds = Project::where('workspace_id', $workspace->id)->where('client_id', $report->client_id)
@@ -192,10 +197,11 @@ class BillingReportController extends Controller
         $data = $request->validate([
             'entry_ids' => ['present', 'array', 'max:10000'],
             'entry_ids.*' => ['integer'],
+            'revision' => ['required', 'string', 'size:64'],
         ]);
         $wasFinal = $report->isFinal();
 
-        $report = $this->finalizer->finalize($report, $data['entry_ids'], $request->user());
+        $report = $this->finalizer->finalize($report, $data['entry_ids'], $request->user(), $data['revision']);
 
         return redirect()->route('billing.reports.show', [$workspace, $report->id])
             ->with('success', $wasFinal ? 'This report was already finalized.' : ($report->number ? "Finalized as invoice {$report->number}." : 'Report finalized. Its time entries are locked.'));
@@ -212,11 +218,9 @@ class BillingReportController extends Controller
     {
         $report = $this->report($workspace, $billingReport);
         $data = $request->validate(['confirm' => ['nullable', 'boolean']]);
-        if ($report->status === 'paid' && ! ($data['confirm'] ?? false)) {
-            throw ValidationException::withMessages(['report' => 'This report is paid. Confirm to void it anyway.']);
-        }
 
-        $report = $this->finalizer->void($report);
+        // the paid check happens on the locked row (Codex web review X)
+        $report = $this->finalizer->void($report, (bool) ($data['confirm'] ?? false));
 
         return redirect()->route('billing.reports.show', [$workspace, $report->id])
             ->with('success', 'Report voided. Its time entries can be billed again.');
@@ -265,8 +269,11 @@ class BillingReportController extends Controller
         return [
             'period_from' => ['required', 'date_format:Y-m-d'],
             'period_to' => ['required', 'date_format:Y-m-d', 'after_or_equal:period_from', function ($attribute, $value, $fail) {
+                // parsed, not strtotime() truthiness: 1970-01-01 is 0 and skipped the check (Codex web review Y)
                 $from = request()->input('period_from');
-                if (is_string($from) && strtotime($from) && strtotime((string) $value) - strtotime($from) > 366 * 86400) {
+                $start = is_string($from) ? CarbonImmutable::createFromFormat('!Y-m-d', $from, 'UTC') : false;
+                $end = is_string($value) ? CarbonImmutable::createFromFormat('!Y-m-d', $value, 'UTC') : false;
+                if ($start && $end && $start->diffInDays($end, false) > 366) {
                     $fail('A report covers at most one year.');
                 }
             }],

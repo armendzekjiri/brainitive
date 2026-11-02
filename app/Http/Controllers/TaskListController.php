@@ -7,6 +7,7 @@ use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\Workspace;
 use App\Support\TaskLists\TaskLists;
+use App\Support\Validation\ContentLimits;
 use App\Support\Work\WorkCompletion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -110,7 +111,7 @@ class TaskListController extends Controller
     {
         $this->authorize('manageItems', $taskList);
 
-        $validated = $request->validate(['description' => 'nullable|array'] + TaskLists::taskRules($taskList));
+        $validated = $request->validate(['description' => ContentLimits::taskDescription()] + TaskLists::taskRules($taskList));
 
         $item = TaskLists::createTask($taskList, $request->user(), $validated);
 
@@ -121,7 +122,7 @@ class TaskListController extends Controller
     {
         $this->authorize('manageItems', $taskList);
 
-        $validated = $request->validate(['description' => 'nullable|array'] + TaskLists::taskRules($taskList, update: true));
+        $validated = $request->validate(['description' => ContentLimits::taskDescription()] + TaskLists::taskRules($taskList, update: true));
 
         // a repeating task rolls on to its next date (shared with My Work and the App API)
         WorkCompletion::updateTask($item, $validated);

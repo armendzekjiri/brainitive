@@ -4,6 +4,7 @@ namespace App\Support\CalendarFeed;
 
 use App\Models\CalendarFeed;
 use App\Models\User;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The owner's side of the private calendar feed (BRAI-142), shared by the web's "Subscribe in other apps"
@@ -34,15 +35,24 @@ final class CalendarFeeds
     }
 
     /**
-     * Known keys only, and only projects the user can open now (also re-checked on every fetch).
+     * Known keys only, and only projects the user can open now (also re-checked on every fetch). A selection with a
+     * project they can't open is refused (Codex web review T): silently dropping it turned a foreign-only selection
+     * into [] = "all my projects". An empty list is only ever the explicit "all"; a stored selection whose projects
+     * become unreachable later shows nothing from them (CalendarFeedBuilder), never everything.
      *
      * @param  array<string, mixed>  $options
      * @return array<string, mixed>
+     *
+     * @throws ValidationException
      */
     public static function options(User $user, array $options): array
     {
         $options = CalendarFeed::normalizeOptions($options);
-        $options['project_ids'] = array_values(array_intersect($options['project_ids'], $user->accessibleProjectIds()));
+        $foreign = array_diff($options['project_ids'], $user->accessibleProjectIds());
+        if ($foreign !== []) {
+            throw ValidationException::withMessages(['options.project_ids' => 'Choose only projects you can open.']);
+        }
+        $options['project_ids'] = array_values($options['project_ids']);
 
         return $options;
     }

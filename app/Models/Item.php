@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\GuardsContentGrowth;
 use App\Observers\ItemObserver;
 use App\Support\Collab\ItemCollab;
 use App\Support\Imports\ImportScope;
@@ -23,7 +24,7 @@ use Illuminate\Support\Str;
 #[ObservedBy([ItemObserver::class])]
 class Item extends Model
 {
-    use HasFactory, SoftDeletes;
+    use GuardsContentGrowth, HasFactory, SoftDeletes;
 
     /** Set while a live description save writes (BRAI-151): that one doesn't reset the live document. */
     public bool $collabWrite = false;
@@ -595,5 +596,16 @@ class Item extends Model
     public function release(): BelongsTo
     {
         return $this->belongsTo(Release::class);
+    }
+
+    /** Content limit (Codex web review B): edits that grow these columns need room. */
+    public function growthColumns(): array
+    {
+        return ['description'];
+    }
+
+    public function meteredWorkspace(): ?Workspace
+    {
+        return $this->board?->project?->workspace;
     }
 }

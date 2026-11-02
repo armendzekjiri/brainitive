@@ -13,7 +13,9 @@ use App\Models\TaskList;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
+use App\Support\Files\WorkspaceFiles;
 use App\Support\Notifications\WorkspaceNotifications;
+use App\Support\Uploads;
 use App\Support\Workspaces\WorkspaceInvites;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -374,19 +376,28 @@ class WorkspaceController extends Controller
         if (! $request->hasFile('logo')) {
             unset($validated['logo']);
         } else {
-            $validated['logo'] = $request->file('logo')->store('workspaces/logos', 'public');
+            $file = $request->file('logo');
+            $validated['logo'] = WorkspaceFiles::store($workspace, $file, 'workspaces/logos', Uploads::imageName($file), 'workspace_logo', $request->user());
+            $supersededLogo = $workspace->getRawOriginal('logo');
         }
 
         if ($request->boolean('remove_header_image')) {
             $validated['header_image'] = null;
+            $supersededHeader = $workspace->getRawOriginal('header_image');
         } elseif (! $request->hasFile('header_image')) {
             unset($validated['header_image']);
         } else {
-            $validated['header_image'] = $request->file('header_image')->store('workspaces/headers', 'public');
+            $file = $request->file('header_image');
+            $validated['header_image'] = WorkspaceFiles::store($workspace, $file, 'workspaces/headers', Uploads::imageName($file), 'workspace_header', $request->user());
+            $supersededHeader = $workspace->getRawOriginal('header_image');
         }
         unset($validated['remove_header_image']);
 
         $workspace->update($validated);
+
+        // the replaced logo / header is deleted and its bytes go back (Codex web review C)
+        WorkspaceFiles::forget($workspace, $supersededLogo ?? null, 'workspaces/logos/');
+        WorkspaceFiles::forget($workspace, $supersededHeader ?? null, 'workspaces/headers/');
 
         return redirect()->back()
             ->with('success', 'Workspace updated successfully.');

@@ -33,6 +33,19 @@ class BillingReportMail extends Mailable implements ShouldQueue
         public string $replyToName,
     ) {}
 
+    /**
+     * The worker checks the report again (Codex web review W): one voided after this mail was queued isn't sent —
+     * a void document must never reach the client as a normal invoice.
+     */
+    public function send($mailer)
+    {
+        if ($this->report->fresh()?->status === 'void') {
+            return null;
+        }
+
+        return parent::send($mailer);
+    }
+
     public function envelope(): Envelope
     {
         // the app's mail-from address, but named after the admin, so it never looks like a platform mail

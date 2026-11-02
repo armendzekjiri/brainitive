@@ -120,6 +120,9 @@ class ContentCapture
         match ($type) {
             'issue' => app(LimitGate::class)->ensureContentRoom($destination->project->workspace),
             'page' => app(LimitGate::class)->ensureContentRoom($destination->workspace),
+            // every metered type (Codex web review B)
+            'task' => app(LimitGate::class)->ensureContentRoom($destination->project->workspace),
+            'bookmark', 'snippet' => app(LimitGate::class)->ensureContentRoom($destination->workspace),
             default => null,
         };
 

@@ -8,6 +8,8 @@ use App\Models\Workspace;
 use App\Support\Collab\CollabConfig;
 use App\Support\Collab\StateVector;
 use App\Support\Collab\WhiteboardCollab;
+use App\Support\Files\WorkspaceFiles;
+use App\Support\Uploads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -56,7 +58,8 @@ class WhiteboardCollabController extends Controller
         }
 
         // "Save & exit" sends a preview, like the single-user editor
-        $stored = $request->hasFile('image') ? $request->file('image')->store('excalidraw-previews', 'public') : null;
+        $image = $request->file('image');
+        $stored = $image ? WorkspaceFiles::store($page->project->workspace, $image, 'excalidraw-previews', Uploads::imageName($image), 'whiteboard_image', $request->user()) : null;
         $preview = is_string($stored) ? asset('storage/'.$stored) : null;
 
         $result = WhiteboardCollab::save(

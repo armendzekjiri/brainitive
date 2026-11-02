@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\GuardsContentGrowth;
 use App\Support\Helpdesks\Sla\TicketSla;
 use App\Support\References\ContentReferences;
 use App\Support\SafeHtml;
@@ -16,7 +17,7 @@ use Illuminate\Support\Str;
 
 class Ticket extends Model
 {
-    use HasFactory, SoftDeletes;
+    use GuardsContentGrowth, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'helpdesk_id',
@@ -277,5 +278,26 @@ class Ticket extends Model
     public function getWorkspaceAttribute(): ?Workspace
     {
         return $this->helpdesk?->project?->workspace;
+    }
+
+    /** Content limit (Codex web review B): edits that grow these columns need room. */
+    public function growthColumns(): array
+    {
+        return ['description'];
+    }
+
+    public function meteredWorkspace(): ?Workspace
+    {
+        return $this->helpdesk?->project?->workspace;
+    }
+
+    /** `{ticket:uuid}` (public portal / widget): only tickets of a live project in a live workspace (Codex web review P). */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if ($field === 'uuid') {
+            return $this->where('uuid', $value)->whereHas('helpdesk.project.workspace')->first();
+        }
+
+        return parent::resolveRouteBinding($value, $field);
     }
 }

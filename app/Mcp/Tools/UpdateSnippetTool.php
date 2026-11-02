@@ -5,6 +5,7 @@ namespace App\Mcp\Tools;
 use App\Mcp\Tools\Concerns\InteractsWithBrainitive;
 use App\Models\SnippetCollection;
 use App\Support\Mcp\ResourceLocator;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -25,7 +26,7 @@ class UpdateSnippetTool extends Tool
             'collection' => 'required|string',
             'snippet' => 'required|string',
             'title' => 'sometimes|string|max:255',
-            'content' => 'sometimes|nullable|string',
+            'content' => ['sometimes', 'nullable', ...ContentLimits::body()],
             'language' => 'sometimes|nullable|string|max:50',
             'description' => 'sometimes|nullable|string|max:2000',
         ]);

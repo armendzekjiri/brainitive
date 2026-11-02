@@ -56,8 +56,10 @@ class ShareLinkController extends Controller
     {
         $link = ShareLink::active()->where('token', $token)->first();
         $model = $link?->shareable; // soft-deleted items resolve to null
+        // a deleted project or workspace takes its links offline too (Codex web review P)
+        $workspace = $model instanceof Page ? $model->project?->workspace : $model?->board?->project?->workspace;
 
-        if (! $link || ! $model) {
+        if (! $link || ! $model || ! $workspace) {
             return Inertia::render('Share/Show', ['shared' => null])->toResponse($request)->setStatusCode(410)
                 ->header('X-Robots-Tag', 'noindex, nofollow');
         }
@@ -84,8 +86,6 @@ class ShareLinkController extends Controller
                 'due_date' => $model->due_date?->toDateString(),
                 'updated_at' => $model->updated_at?->toIso8601String(),
             ];
-
-        $workspace = $model instanceof Page ? $model->project?->workspace : $model->board?->project?->workspace;
 
         return Inertia::render('Share/Show', ['shared' => $shared, 'operator' => PublicOperator::for($workspace)])->toResponse($request)
             ->header('X-Robots-Tag', 'noindex, nofollow')

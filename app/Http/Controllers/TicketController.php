@@ -17,12 +17,15 @@ use App\Notifications\TicketCreatedNotification;
 use App\Notifications\TicketReplyNotification;
 use App\Rules\NotExecutableUpload;
 use App\Rules\ProjectMember;
+use App\Support\Entitlements\LimitGate;
+use App\Support\Entitlements\PublicContentRoom;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Helpdesks\HelpdeskForm;
 use App\Support\Helpdesks\TicketActions;
 use App\Support\Legal\PublicOperator;
 use App\Support\Uploads;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
@@ -40,6 +43,8 @@ class TicketController extends Controller
     public function store(Request $request, Workspace $workspace, Project $project, Helpdesk $helpdesk)
     {
         $this->authorize('createTickets', $helpdesk);
+        // content limit (Codex web review B): every metered type, in the shared create path
+        app(LimitGate::class)->ensureContentRoom($workspace);
 
         $settings = $helpdesk->settings ?? [];
         $nameRequired = empty($settings['default_field_contact_name']['hidden']) && ! empty($settings['default_field_contact_name']['is_required']);
@@ -48,13 +53,13 @@ class TicketController extends Controller
 
         $rules = [
             'subject' => 'required|string|max:255',
-            'description' => [$messageRequired ? 'required' : 'nullable', 'string', 'max:50000'],
+            'description' => [$messageRequired ? 'required' : 'nullable', 'string', 'max:'.ContentLimits::TICKET_BODY],
             'contact_email' => 'required|email|max:255',
             'contact_name' => [$nameRequired ? 'required' : 'nullable', 'string', 'max:255'],
             'column_id' => ['required', Rule::exists('helpdesk_columns', 'id')->where('helpdesk_id', $helpdesk->id)],
             'priority_id' => 'nullable|exists:item_priorities,id',
-            // Only people in this workspace — any user id would email a stranger the ticket.
-            'assigned_to' => ['nullable', Rule::exists('workspace_user', 'user_id')->where('workspace_id', $workspace->id)],
+            // Only people who can open the ticket (Codex web review I) — anyone else would get its subject and key.
+            'assigned_to' => ['nullable', 'integer', new ProjectMember($project)],
             'notify_contact' => 'nullable|boolean',
         ];
         $attributes = [];
@@ -64,14 +69,7 @@ class TicketController extends Controller
             }
             $key = 'field_'.$field->name;
             $attributes[$key] = $field->label;
-            $rules[$key] = match ($field->type) {
-                'checkboxes' => [$field->is_required ? 'required' : 'nullable', 'array'],
-                'checkbox' => [$field->is_required ? 'accepted' : 'nullable', 'boolean'],
-                'number' => [$field->is_required ? 'required' : 'nullable', 'numeric'],
-                'date' => [$field->is_required ? 'required' : 'nullable', 'date'],
-                'select', 'radio' => [$field->is_required ? 'required' : 'nullable', Rule::in($field->options ?? [])],
-                default => [$field->is_required ? 'required' : 'nullable', 'string', 'max:10000'],
-            };
+            $rules += HelpdeskForm::fieldRules($field, $key); // the public form's rules (Codex web review K)
         }
         $validated = $request->validate($rules, [], $attributes);
 
@@ -109,7 +107,7 @@ class TicketController extends Controller
         });
 
         if ($ticket->assigned_to && $ticket->assigned_to !== $request->user()->id) {
-            User::find($ticket->assigned_to)?->notify(new TicketAssignedNotification($ticket, $request->user()));
+            TicketActions::notifyIfVisible(User::find($ticket->assigned_to), $ticket, new TicketAssignedNotification($ticket, $request->user()));
         }
 
         DomainEvents::emit($workspace, 'ticket.created', fn () => ['ticket' => EventPayloads::ticket($ticket), 'source' => 'agent'], subject: $ticket); // webhooks (BRAI-104) + automation rules (BRAI-63)
@@ -133,6 +131,10 @@ class TicketController extends Controller
         $helpdesk->load(['fields' => fn ($q) => $q->orderBy('position')]);
         HelpdeskForm::prepare($request, $helpdesk);
         $validated = $request->validate(HelpdeskForm::publicRules($helpdesk));
+        // a full workspace: a message the widget can show, admins told once a day (Codex web review B)
+        if ($refusal = PublicContentRoom::refusal($project->workspace, 'helpdesk')) {
+            return $refusal;
+        }
         $subject = trim((string) ($validated['subject'] ?? ''));
         if ($subject === '') {
             $subject = HelpdeskForm::autoSubject($helpdesk, $validated['contact_name'] ?? null, $validated['contact_email']);
@@ -248,9 +250,9 @@ class TicketController extends Controller
 
         $validated = $request->validate([
             'subject' => 'sometimes|required|string|max:255',
-            'description' => 'nullable|string',
+            'description' => 'nullable|string|max:'.ContentLimits::TICKET_BODY,
             'priority_id' => 'nullable|exists:item_priorities,id',
-            'assigned_to' => ['nullable', Rule::exists('workspace_user', 'user_id')->where('workspace_id', $workspace->id)],
+            'assigned_to' => ['nullable', 'integer', new ProjectMember($project)], // Codex web review I
         ]);
 
         TicketActions::update($ticket, $request->user(), $validated);
@@ -278,7 +280,7 @@ class TicketController extends Controller
         $this->authorize('update', $ticket);
 
         $validated = $request->validate([
-            'body' => 'required|string',
+            'body' => 'required|string|max:'.ContentLimits::TICKET_REPLY,
             'is_internal_note' => 'boolean',
         ]);
 
@@ -294,7 +296,7 @@ class TicketController extends Controller
     public function storePublicReply(Request $request, Helpdesk $helpdesk, Ticket $ticket)
     {
         $validated = $request->validate([
-            'body' => 'required|string|max:50000',
+            'body' => 'required|string|max:'.ContentLimits::TICKET_REPLY,
             'access_token' => 'required|string',
             'file' => 'nullable|array|max:5',
             'file.*' => ['file', 'max:10240', new NotExecutableUpload],
@@ -309,6 +311,9 @@ class TicketController extends Controller
         $contact = $ticket->contact;
         if (! $contact || ! $ticket->verifyPublicAccessToken($validated['access_token'])) {
             abort(403, 'Invalid access token');
+        }
+        if ($refusal = PublicContentRoom::refusal($helpdesk->project->workspace, 'helpdesk')) {
+            return $refusal; // content limit (Codex web review B)
         }
 
         $reply = $ticket->replies()->create([
@@ -347,8 +352,7 @@ class TicketController extends Controller
         }
 
         // Notify agents watching the ticket
-        $watchers = $ticket->watchers()->get();
-        foreach ($watchers as $watcher) {
+        foreach (TicketActions::watchersWhoCanView($ticket) as $watcher) {
             $watcher->notify(new TicketReplyNotification($ticket, $reply, $contact));
         }
 
@@ -488,23 +492,23 @@ class TicketController extends Controller
     {
         $this->authorize('update', $ticket);
 
-        $fields = $helpdesk->fields()->get();
-        $updates = [];
-
-        foreach ($fields as $field) {
-            $value = $request->input($field->name);
-            if ($value !== null) {
-                $existing = $ticket->fieldValues()->where('helpdesk_field_id', $field->id)->first();
-                if ($existing) {
-                    $existing->update(['value' => $value]);
-                } else {
-                    $ticket->fieldValues()->create([
-                        'helpdesk_field_id' => $field->id,
-                        'value' => $value,
-                    ]);
-                }
+        // only the helpdesk's own fields; every value checked by its type before anything is stored (Codex web review K)
+        $values = [];
+        foreach ($helpdesk->fields()->get() as $field) {
+            if ($request->has($field->name)) {
+                $values[] = [$field, HelpdeskForm::storedValue($field, $request->input($field->name))];
             }
         }
+
+        DB::transaction(function () use ($ticket, $values) {
+            foreach ($values as [$field, $value]) {
+                if ($value === null) {
+                    $ticket->fieldValues()->where('helpdesk_field_id', $field->id)->delete();
+                } else {
+                    $ticket->fieldValues()->updateOrCreate(['helpdesk_field_id' => $field->id], ['value' => $value]);
+                }
+            }
+        });
 
         return back()->with('success', 'Fields updated successfully.');
     }

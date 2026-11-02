@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Rules\ProjectMember;
 use App\Support\Calendar\CalendarProviders;
 use App\Support\Calendar\NormalizedEvent;
+use App\Support\Entitlements\LimitGate;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\References\ContentReferences;
 use Carbon\Carbon;
@@ -109,6 +110,7 @@ final class MeetingScheduler
         ]);
 
         $joinUrl = NormalizedEvent::conferenceUrl($event['conference_url'] ?? null);
+        app(LimitGate::class)->ensureContentRoom($project->workspace); // content limit (Codex web review B)
         $meeting = Meeting::create([
             'project_id' => $project->id,
             'subject_type' => $subject::class,

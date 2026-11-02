@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\AppApi;
 
+use App\Support\Validation\ContentLimits;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rule;
 
@@ -18,7 +19,7 @@ class StoreCommentRequest extends IssueRequest
 
         return [
             // Markdown; mentions as @[Name](user:<id>)
-            'body' => ['required', 'string', 'max:20000'],
+            'body' => ['required', ...ContentLimits::comment()],
             // reply to this comment of the issue
             'parent_id' => ['nullable', 'integer', $itemId === null ? 'min:1' : Rule::exists('comments', 'id')->where('item_id', $itemId)],
             'request_id' => ['nullable', 'uuid'],

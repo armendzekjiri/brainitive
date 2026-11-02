@@ -4,8 +4,11 @@ namespace App\Support\Helpdesks;
 
 use App\Models\Helpdesk;
 use App\Models\HelpdeskField;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The public form of a helpdesk (widget, embed, support page): its texts and default fields
@@ -87,31 +90,90 @@ class HelpdeskForm
 
         $rules = [
             'subject' => [self::subject($helpdesk)['hidden'] ? 'nullable' : 'required', 'string', 'max:255'],
-            'description' => [$messageRequired ? 'required' : 'nullable', 'string', 'max:200000'],
+            'description' => [$messageRequired ? 'required' : 'nullable', 'string', 'max:'.ContentLimits::TICKET_BODY],
             'contact_email' => ['required', 'email', 'max:255'],
             'contact_name' => [$nameRequired ? 'required' : 'nullable', 'string', 'max:255'],
         ];
 
         foreach ($helpdesk->fields as $field) {
-            $key = 'field_'.$field->name;
-            $required = $field->is_required ? 'required' : 'nullable';
-            $options = array_values(array_filter((array) $field->options, 'is_string'));
-            $rules[$key] = match (self::type($field)) {
-                'number' => [$required, 'numeric'],
-                'date' => [$required, 'date_format:Y-m-d'],
-                'select', 'radio' => [$required, 'string', Rule::in($options)],
-                'checkboxes' => [$required, 'array', 'max:'.max(1, count($options))],
-                'checkbox' => [$field->is_required ? 'accepted' : 'nullable', 'boolean'],
-                'file' => ['nullable'],
-                'rich_text' => [$required, 'string', 'max:200000'],
-                default => [$required, 'string', 'max:10000'],
-            };
-            if (self::type($field) === 'checkboxes') {
-                $rules[$key.'.*'] = ['string', Rule::in($options)];
-            }
+            $rules += self::fieldRules($field, 'field_'.$field->name);
         }
 
         return $rules;
+    }
+
+    /**
+     * The rules of one custom field's value by its type — shared by the public form, an agent's new ticket and an
+     * edit in the ticket panel (Codex web review K): numbers, Y-m-d dates, choices from the field's options, a
+     * subset of them for checkboxes, bounded text.
+     *
+     * @return array<string, mixed>
+     */
+    public static function fieldRules(HelpdeskField $field, string $key, ?bool $required = null): array
+    {
+        $required = ($required ?? (bool) $field->is_required) ? 'required' : 'nullable';
+        $options = self::options($field);
+        $rules = [$key => match (self::type($field)) {
+            'number' => [$required, 'numeric', 'between:-1e14,1e14'],
+            'date' => [$required, 'date_format:Y-m-d'],
+            'select', 'radio' => [$required, 'string', Rule::in($options)],
+            'checkboxes' => [$required, 'array', 'max:'.max(1, count($options))],
+            'checkbox' => [$required === 'required' ? 'accepted' : 'nullable', 'boolean'],
+            'file' => ['nullable'],
+            'rich_text' => [$required, 'string', 'max:'.ContentLimits::FIELD_RICH_TEXT],
+            default => [$required, 'string', 'max:'.ContentLimits::FIELD_TEXT],
+        }];
+        if (self::type($field) === 'checkboxes') {
+            $rules[$key.'.*'] = ['string', 'distinct', Rule::in($options)];
+        }
+
+        return $rules;
+    }
+
+    /**
+     * A value edited in the ticket panel, in the stored format (the panel sends what it shows: checkboxes as a JSON
+     * list, a checkbox as 1 / 0): validated like the form, then normalised. `null` = clear the value.
+     *
+     * @throws ValidationException
+     */
+    public static function storedValue(HelpdeskField $field, mixed $value): ?string
+    {
+        $type = self::type($field);
+        if ($type === 'file') {
+            throw ValidationException::withMessages([$field->name => 'Files are added as attachments.']);
+        }
+        if ($type === 'checkboxes' && is_string($value)) {
+            $decoded = json_decode($value, true);
+            $value = $value === '' ? null : (is_array($decoded) ? array_values($decoded) : [$value]);
+        }
+        if ($value === '' || $value === []) {
+            $value = null;
+        }
+        if ($type === 'checkbox' && is_string($value) && in_array(strtolower($value), ['true', 'false'], true)) {
+            $value = strtolower($value) === 'true';
+        }
+
+        $rules = self::fieldRules($field, 'value');
+        if ($type === 'checkbox') {
+            $rules['value'] = [$field->is_required ? 'required' : 'nullable', 'boolean'];
+        }
+        $validator = Validator::make(['value' => $value], $rules, [], ['value' => $field->label ?: $field->name]);
+        if ($validator->fails()) {
+            throw ValidationException::withMessages([$field->name => $validator->errors()->all()]);
+        }
+
+        return match (true) {
+            $value === null => null,
+            $type === 'checkbox' => filter_var($value, FILTER_VALIDATE_BOOLEAN) ? '1' : '0',
+            is_array($value) => json_encode(array_values($value)),
+            default => (string) $value,
+        };
+    }
+
+    /** @return list<string> */
+    private static function options(HelpdeskField $field): array
+    {
+        return array_values(array_filter((array) $field->options, 'is_string'));
     }
 
     /**

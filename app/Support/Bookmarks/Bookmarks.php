@@ -7,9 +7,10 @@ use App\Models\Bookmark;
 use App\Models\BookmarkItem;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Support\Entitlements\LimitGate;
+use App\Support\Files\WorkspaceFiles;
 use App\Support\Uploads;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -127,6 +128,8 @@ final class Bookmarks
      */
     public static function createItem(Bookmark $bookmark, User $user, array $data, ?UploadedFile $file = null): BookmarkItem
     {
+        // content limit (Codex web review B): every metered type, in the shared create path
+        app(LimitGate::class)->ensureContentRoom($bookmark->workspace);
         $filePath = $file ? self::storeFile($bookmark, $file) : null;
 
         $item = $bookmark->items()->create([
@@ -170,13 +173,14 @@ final class Bookmarks
             'file' => ['required', 'file', 'max:204800', 'mimes:'.self::FILE_MIMES, 'mimetypes:'.self::FILE_MIMETYPES],
         ], [], ['file' => 'file'])->validate();
 
-        return $file->storeAs('bookmark-files/'.$bookmark->id, Uploads::name($file), 'public');
+        return WorkspaceFiles::store($bookmark->workspace, $file, 'bookmark-files/'.$bookmark->id, Uploads::name($file), 'bookmark_file', auth()->user() instanceof User ? auth()->user() : null);
     }
 
     private static function deleteFile(BookmarkItem $item): void
     {
-        if ($item->type === 'file' && $item->file_path && Storage::disk('public')->exists($item->file_path)) {
-            Storage::disk('public')->delete($item->file_path);
+        if ($item->type === 'file' && $item->file_path) {
+            // deleted and its bytes given back (Codex web review C)
+            WorkspaceFiles::forget($item->bookmark->workspace, $item->file_path, 'bookmark-files/'.$item->bookmark_id.'/');
         }
     }
 }

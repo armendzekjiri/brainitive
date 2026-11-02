@@ -84,6 +84,27 @@ final class PageWrites
     }
 
     /**
+     * The scene of a whiteboard embedded in a doc (Codex web review H): saved like every other edit, on the locked
+     * page row — into the draft of a published page (never into what readers see, so "review required" pages
+     * publish it only through the review gate), straight into a never-published page. The draft's HTML is kept.
+     *
+     * @param  array{elements: array<mixed>, appState: array<mixed>, files: array<mixed>, libraryItems: array<mixed>}  $scene
+     */
+    public static function saveEmbed(Page $page, User $user, string $diagramId, array $scene): void
+    {
+        DB::transaction(function () use ($page, $user, $diagramId, $scene) {
+            $locked = Page::whereKey($page->id)->lockForUpdate()->firstOrFail();
+            $content = $locked->draftState()['content'];
+            $content = is_array($content) ? $content : [];
+            $embeds = is_array($content['excalidrawEmbeds'] ?? null) ? $content['excalidrawEmbeds'] : [];
+            $embeds[$diagramId] = $scene;
+            $content['excalidrawEmbeds'] = $embeds;
+            $locked->saveDraft($user, ['content' => $content]);
+            $page->setRawAttributes($locked->getAttributes(), true);
+        });
+    }
+
+    /**
      * First publish (or again after "unpublish"), through the review gate (BRAI-80).
      *
      * @return PageVersion|string the new version, 'published' when it already was, or ReviewGate::REFUSAL

@@ -21,6 +21,8 @@ interface Props {
     excluded: BillingReportRow[];
     /** draft: the entries the admin reviews; finalize sends them back */
     entryIds: number[];
+    /** the preview's digest, sent back on finalize (Codex web review V) */
+    revision: string | null;
     warnings: BillingReportWarnings | null;
     projects: { id: number; name: string; key: string | null }[];
     settings: { invoice_mode: boolean; rounding_minutes: number; company_name: string | null };
@@ -29,7 +31,7 @@ interface Props {
 type Confirm = 'finalize' | 'delete' | 'void' | null;
 
 /** One billing report (v1.38.0, BRAI-101): draft builder with live preview, or the finalized document. */
-export default function BillingReportShow({ report, preview, rows, excluded, entryIds, warnings, projects, settings }: Props) {
+export default function BillingReportShow({ report, preview, rows, excluded, entryIds, revision, warnings, projects, settings }: Props) {
     const { currentWorkspace, errors } = usePage<PageProps & { errors: Record<string, string> }>().props;
     const workspace = currentWorkspace?.slug ?? '';
     const [busy, setBusy] = useState(false);
@@ -52,7 +54,7 @@ export default function BillingReportShow({ report, preview, rows, excluded, ent
     const includeAgain = (id: number) => save({ excluded_entry_ids: report.options.excluded_entry_ids.filter((x) => x !== id) });
     const noActivityIds = rows.filter((r) => r.billable && r.activity === 'No activity').map((r) => r.id);
 
-    const finalize = () => router.post(url('billing.reports.finalize'), { entry_ids: entryIds }, { ...visit, onSuccess: flashToast });
+    const finalize = () => router.post(url('billing.reports.finalize'), { entry_ids: entryIds, revision }, { ...visit, onSuccess: flashToast });
     const destroy = () => router.delete(url('billing.reports.destroy'), { ...visit, onSuccess: flashToast });
     const markPaid = () => router.post(url('billing.reports.paid'), {}, { ...visit, onSuccess: flashToast });
     const voidReport = () => router.post(url('billing.reports.void'), { confirm: paidConfirmed }, { ...visit, onSuccess: flashToast });

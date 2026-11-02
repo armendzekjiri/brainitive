@@ -57,7 +57,7 @@ class DocReviewController extends Controller
     {
         $page = $this->visiblePage($request, $uuid);
 
-        return new PageVersionCollection($page->versions()->getQuery()
+        return new PageVersionCollection($page->versionsFor($request->user())->getQuery()
             ->with('author')
             ->select(['id', 'page_id', 'version', 'name', 'icon', 'message', 'created_by', 'created_at'])
             ->when($request->updatedSince(), fn ($q, $since) => $q->where('created_at', '>=', $since))
@@ -74,7 +74,7 @@ class DocReviewController extends Controller
     {
         $page = $this->visiblePage($request, $uuid);
 
-        return new PageVersionDetailResource($page->versions()->with('author')->where('version', $version)->firstOrFail());
+        return new PageVersionDetailResource($page->versionsFor($request->user())->with('author')->where('version', $version)->firstOrFail());
     }
 
     /**

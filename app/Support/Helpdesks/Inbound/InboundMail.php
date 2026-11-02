@@ -16,6 +16,7 @@ use App\Support\Entitlements\LimitReached;
 use App\Support\Events\DomainEvents;
 use App\Support\Events\EventPayloads;
 use App\Support\Helpdesks\Mail\TicketMailer;
+use App\Support\Helpdesks\TicketActions;
 use App\Support\Uploads;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
@@ -246,7 +247,7 @@ final class InboundMail
         $stored = [];
 
         self::afterCommit(function () use ($ticket, $reply) {
-            foreach ($ticket->watchers()->get() as $watcher) {
+            foreach (TicketActions::watchersWhoCanView($ticket) as $watcher) {
                 $watcher->notify(new TicketReplyNotification($ticket, $reply, $reply->contact));
             }
 
@@ -301,7 +302,8 @@ final class InboundMail
                 continue;
             }
             try {
-                $gate->ensureCanStoreFiles($workspace, $adding + $attachment['size']);
+                // a quick check first; the attachment row reserves its bytes atomically (ReservesFileStorage)
+                $gate->ensureCanStoreFiles($workspace, $attachment['size']);
             } catch (LimitReached) {
                 $refused[] = Uploads::displayName($file).' (no storage left)';
 
@@ -317,16 +319,20 @@ final class InboundMail
             $room--;
             $adding += $attachment['size'];
 
-            TicketAttachment::create([
-                'ticket_id' => $ticket->id,
-                'ticket_reply_id' => $reply?->id,
-                'filename' => $name,
-                'original_filename' => Uploads::displayName($file),
-                'path' => $path,
-                'mime_type' => $file->getMimeType(),
-                'size' => $attachment['size'],
-                'uploaded_by_contact' => true,
-            ]);
+            try {
+                TicketAttachment::create([
+                    'ticket_id' => $ticket->id,
+                    'ticket_reply_id' => $reply?->id,
+                    'filename' => $name,
+                    'original_filename' => Uploads::displayName($file),
+                    'path' => $path,
+                    'mime_type' => $file->getMimeType(),
+                    'size' => $attachment['size'],
+                    'uploaded_by_contact' => true,
+                ]);
+            } catch (LimitReached) {
+                $refused[] = Uploads::displayName($file).' (no storage left)'; // the file was removed again
+            }
         }
 
         return $refused;

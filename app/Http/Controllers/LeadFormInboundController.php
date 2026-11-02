@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\LeadForm;
+use App\Support\Entitlements\PublicContentRoom;
 use App\Support\LeadForms\LeadFormDefinition;
 use App\Support\LeadForms\LeadIntake;
 use Illuminate\Http\JsonResponse;
@@ -35,6 +36,9 @@ class LeadFormInboundController extends Controller
             return response()->json(['message' => 'Some values are invalid.', 'errors' => $e->errors()], 422);
         }
 
+        if ($refusal = PublicContentRoom::refusal($form->project->workspace, 'lead form')) {
+            return $refusal; // content limit (Codex web review B)
+        }
         $lead = LeadIntake::create($form, $result['answers'], 'webhook', [], $result['contact']);
 
         return response()->json(['id' => $lead->uuid, 'number' => $lead->number], 201);

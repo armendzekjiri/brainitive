@@ -43,7 +43,7 @@ class GetMcpToken extends Command
             // OAuth tables not yet migrated — harmless, continue.
         }
 
-        $token = $user->createToken('brainitive-cli')->accessToken;
+        $token = $user->createToken('brainitive-cli', ['cli', 'mcp:use'])->accessToken; // explicit scopes since v1.49.0 (Codex review 13)
 
         $this->info("Token generated for {$user->name} <{$user->email}>:");
         $this->line('');

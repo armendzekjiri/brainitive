@@ -63,7 +63,7 @@ class CliController extends Controller
 
         // Passport personal access token (Bearer). Validated by the `api`
         // guard (config/auth.php) — the same guard the MCP server uses.
-        $token = $user->createToken('brainitive-cli')->accessToken;
+        $token = $user->createToken('brainitive-cli', ['cli', 'mcp:use'])->accessToken; // explicit scopes since v1.49.0 (Codex review 13)
 
         return response()->json([
             'token' => $token,

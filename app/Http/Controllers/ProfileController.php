@@ -7,12 +7,14 @@ use App\Http\Resources\AppApi\DeviceResource;
 use App\Models\InstanceSettings;
 use App\Notifications\NotificationCatalog;
 use App\Support\Admin\UserDeletion;
+use App\Support\Portal\PortalAuth;
 use App\Support\Profile\Avatar;
 use App\Support\Profile\ConnectedApps;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -60,7 +62,8 @@ class ProfileController extends Controller
         unset($validated['avatar']);
         $user->fill($validated);
 
-        if ($user->isDirty('email')) {
+        $emailChanged = $user->isDirty('email');
+        if ($emailChanged) {
             $user->email_verified_at = null;
         }
 
@@ -68,7 +71,13 @@ class ProfileController extends Controller
             Avatar::replace($user, $request->file('avatar'));
         }
 
-        $user->save();
+        // a new address: the portal identity of the old one is no longer this account's (Codex web review O)
+        DB::transaction(function () use ($user, $emailChanged) {
+            $user->save();
+            if ($emailChanged) {
+                PortalAuth::unlink($user);
+            }
+        });
 
         return Redirect::route('profile.edit');
     }

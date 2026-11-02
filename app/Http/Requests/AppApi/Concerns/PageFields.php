@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\AppApi\Concerns;
 
+use App\Support\Validation\ContentLimits;
+
 /** The fields a doc shares between create and update (BRAI-411). */
 trait PageFields
 {
@@ -14,6 +16,6 @@ trait PageFields
     /** The body as Markdown (docs only), mentions `@[Name](user:<id>)`. */
     protected static function markdownRules(): array
     {
-        return ['nullable', 'string', 'max:1000000'];
+        return ['nullable', 'string', 'max:'.ContentLimits::PAGE_BODY];
     }
 }

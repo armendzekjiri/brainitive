@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\FeedbackPortal;
 use App\Models\FeedbackPost;
 use App\Models\PortalIdentity;
+use App\Support\Entitlements\PublicContentRoom;
 use App\Support\Feedback\FeedbackNotifier;
 use App\Support\Feedback\FeedbackPresenter;
 use App\Support\Feedback\FeedbackText;
@@ -171,6 +172,11 @@ class FeedbackPortalController extends Controller
         $title = FeedbackText::line($data['title'], 160);
         if (mb_strlen($title) < 4) {
             throw ValidationException::withMessages(['title' => 'Give your idea a title of at least 4 characters.']);
+        }
+
+        // a full workspace: a message the portal can show, admins told once a day (Codex web review B)
+        if ($refusal = PublicContentRoom::refusal($portal->project->workspace, 'feedback portal')) {
+            return $refusal;
         }
 
         $key = 'feedback-submit:'.$identity->id;

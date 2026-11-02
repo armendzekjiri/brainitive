@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Mcp;
 
+use App\Http\Middleware\GuardMcpEndpoint;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
@@ -54,20 +55,44 @@ class McpEndpointHardeningTest extends TestCase
     }
 
     /**
-     * Codex review, finding 13 (verified, not enforced): a Passport token without scopes reaches MCP. That is the CLI /
-     * Copilot token (`brainitive-cli`, issued scope-less by /api/cli/login and `mcp:token`, documented for MCP), so
-     * requiring `mcp:use` would break it. Browser-extension tokens (`capture`) stay out (RejectCaptureTokens).
+     * Codex review, finding 13 (enforced since v1.49.0, McpScopeTest has the details): a scope-less token from
+     * Passport::actingAs isn't the CLI's legacy token, so it no longer reaches MCP; `mcp:use` does, `capture` doesn't.
      */
-    public function test_scope_less_cli_tokens_reach_mcp_and_capture_tokens_do_not(): void
+    public function test_mcp_needs_the_mcp_scope_and_capture_tokens_stay_out(): void
     {
         $this->usePassportKeys();
         $user = User::factory()->create();
         $list = ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'];
 
         Passport::actingAs($user);
+        $this->postJson('/mcp', $list)->assertForbidden();
+
+        Passport::actingAs($user, ['mcp:use']);
         $this->postJson('/mcp', $list)->assertOk();
 
         Passport::actingAs($user, ['capture']);
         $this->postJson('/mcp', $list)->assertForbidden();
+    }
+
+    /** Codex recheck, item AA: unauthenticated attempts are limited per IP before authentication; signed-in clients aren't. */
+    public function test_unauthenticated_attempts_are_throttled_per_ip_and_bodies_are_capped(): void
+    {
+        $this->usePassportKeys();
+        $list = ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'tools/list'];
+
+        for ($i = 0; $i < GuardMcpEndpoint::UNAUTHENTICATED_PER_MINUTE; $i++) {
+            $this->postJson('/mcp', $list)->assertUnauthorized();
+        }
+        $this->postJson('/mcp', $list)->assertStatus(429);
+
+        // a signed-in client from another address is not affected, and its own calls never count
+        $user = User::factory()->create();
+        Passport::actingAs($user, ['mcp:use']);
+        for ($i = 0; $i < 5; $i++) {
+            $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.9'])->postJson('/mcp', $list)->assertOk();
+        }
+
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.9'])->call('POST', '/mcp', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json', 'CONTENT_LENGTH' => (string) (GuardMcpEndpoint::MAX_BYTES + 1)], '{}')
+            ->assertStatus(413);
     }
 }

@@ -127,8 +127,11 @@ class AppServiceProvider extends ServiceProvider
         // /mcp or the CLI API (RejectCaptureTokens).
         Passport::tokensCan([
             'mcp:use' => 'Use MCP server',
+            'cli' => 'Use the Brainitive CLI (task lists)',
             'capture' => 'Save pages, links, notes and screenshots to your workspaces and search them',
         ]);
+        // an OAuth client that asks for no scope (an MCP connector) gets `mcp:use`: MCP refuses scope-less tokens
+        Passport::defaultScopes(['mcp:use']);
 
         // Queue workers are long-lived: re-read instance settings (mail, verification) per job.
         Queue::before(function () {

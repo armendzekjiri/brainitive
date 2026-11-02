@@ -9,6 +9,7 @@ use App\Support\Mcp\IdempotentRequest;
 use App\Support\Mcp\PageContentConverter;
 use App\Support\Mcp\RequestIdConflict;
 use App\Support\Mcp\ResourceLocator;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
@@ -31,7 +32,7 @@ class AddItemCommentTool extends Tool
             'project' => 'required|string',
             'board' => 'required|string',
             'item_id' => 'required|integer',
-            'markdown' => 'required|string|max:20000',
+            'markdown' => ['required', ...ContentLimits::comment()],
             'request_id' => 'required|string|max:100',
             'reply_to_comment_id' => 'nullable|integer',
         ]);

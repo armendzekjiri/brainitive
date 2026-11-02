@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Snippet;
 use App\Models\SnippetCollection;
 use App\Models\Workspace;
+use App\Support\Files\WorkspaceFiles;
 use App\Support\Snippets\Snippets;
 use App\Support\Uploads;
 use Illuminate\Http\Request;
@@ -128,16 +129,17 @@ class SnippetController extends Controller
 
     public function showPublicCollection(string $uuid): Response
     {
-        $collection = SnippetCollection::where('uuid', $uuid)
+        $collection = SnippetCollection::where('uuid', $uuid)->whereHas('workspace') // a live workspace (P)
             ->where('visibility', 'public')
             ->firstOrFail();
 
-        $collection->load(['snippets' => fn ($q) => $q->where(function ($q2) {
-            $q2->where('visibility', 'public')->orWhere('visibility', 'inherit');
-        }), 'creator:id,name', 'workspace:id,name,slug']);
+        $snippets = $collection->snippets()->where(function ($q) {
+            $q->where('visibility', 'public')->orWhere('visibility', 'inherit');
+        })->get();
 
+        // An explicit whitelist (Codex web review A): no workspace, ids of people or internal settings
         return Inertia::render('Snippets/ShowPublic', [
-            'collection' => $collection,
+            'collection' => [...self::publicCollection($collection), 'snippets' => $snippets->map(fn (Snippet $s) => self::publicSnippet($s))->values()],
             'isPublic' => true,
         ]);
     }
@@ -146,17 +148,30 @@ class SnippetController extends Controller
     {
         $snippet = Snippet::with(['collection:id,uuid,name,slug,visibility,workspace_id', 'creator:id,name'])
             ->where('uuid', $uuid)
+            ->whereHas('collection.workspace') // a live workspace (Codex web review P)
             ->firstOrFail();
 
         // Must be public itself, or inherit + collection is public
         abort_if($snippet->resolvedVisibility() !== 'public', 404);
 
         return Inertia::render('Snippets/ShowPublic', [
-            'snippet' => $snippet,
-            'collection' => $snippet->collection,
+            'snippet' => self::publicSnippet($snippet),
+            'collection' => self::publicCollection($snippet->collection),
             'isPublic' => true,
             'singleMode' => true,
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private static function publicCollection(SnippetCollection $collection): array
+    {
+        return $collection->only(['uuid', 'slug', 'name', 'description', 'icon', 'visibility']);
+    }
+
+    /** @return array<string, mixed> */
+    private static function publicSnippet(Snippet $snippet): array
+    {
+        return $snippet->only(['id', 'uuid', 'slug', 'title', 'description', 'language', 'content', 'visibility']);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
@@ -171,7 +186,8 @@ class SnippetController extends Controller
 
         $file = $request->file('icon');
         $ext = Uploads::imageExtension($file);
-        $path = $file->storeAs('snippet-icons/temp', Str::uuid().'.'.$ext, 'public');
+        // counted until pruned (files:prune-temp, Codex web review C)
+        $path = WorkspaceFiles::store($workspace, $file, 'snippet-icons/temp', Str::uuid().'.'.$ext, 'temp', $request->user());
 
         return response()->json(['icon_display' => asset('storage/'.$path)]);
     }

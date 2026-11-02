@@ -280,6 +280,22 @@ Plan limits under `/api/v1`: 402 `{message, code: "limit_reached", limit: {kind,
 workspace, billing_url}}` (`billing_url` null for people who can't upgrade; the message then says to
 ask an admin) — `AppApiErrors::limitReached`, called from `LimitReached::render`.
 
+Since v1.49.0 (Codex web review B / C / D) the content limit covers **every** type the meter counts, so these can
+answer 402 `limit_reached` too: comments (`POST /items/{id}/comments`), task lists and tasks, snippets, bookmark
+items, ticket replies, doc reviews and review comments, plus **edits that grow** an issue / task / snippet /
+ticket / comment / bookmark item / doc body (shrinking edits always pass). In `POST /sync` each such change answers
+`status: limit_reached` (402) and nothing is stored. Every file (attachments, bookmark files) reserves its bytes
+atomically: a file that doesn't fit is 402 even before the nightly measure. Maximum lengths are shared with the
+web (`ContentLimits`): comments ≤ 100 000, issue descriptions / snippet bodies / task notes ≤ 1 000 000, doc
+Markdown ≤ 10 000 000, ticket replies ≤ 50 000 → 422 `validation_failed` above. `PATCH /tickets/{id}`:
+`assignee_id` must be someone who can open the ticket's project (422 otherwise). `GET /pages/{uuid}/versions[/{v}]`
+leaves out versions recorded while the page was a private draft, unless the caller is its author or an admin
+(404 for one of them).
+`PUT /me/calendar-feed`: a `project_ids` selection with a project the user can't open is 422 `validation_failed`
+(`options.project_ids`), never stored as "all projects". Work logs (`/work-logs`, `/me/timesheet`): `project` is
+`{id: null, name: "Deleted or moved project", key: null}` once the project left the entry's workspace or the user
+can't open it.
+
 ### Workspaces
 | Method + path | Auth | Desktop use | Mobile | Card | Status |
 |---|---|---|---|---|---|

@@ -18,11 +18,11 @@ class PageVersionController extends Controller
     /**
      * List the versions of a page, newest first.
      */
-    public function index(Workspace $workspace, Project $project, Page $page): JsonResponse
+    public function index(Request $request, Workspace $workspace, Project $project, Page $page): JsonResponse
     {
         $this->authorize('view', $page);
 
-        $versions = $page->versions()
+        $versions = $page->versionsFor($request->user())
             ->with('author:id,name,avatar')
             ->get(['id', 'page_id', 'version', 'name', 'icon', 'message', 'created_by', 'created_at']);
 
@@ -35,11 +35,11 @@ class PageVersionController extends Controller
     /**
      * A single version including its content, for the read-only preview.
      */
-    public function show(Workspace $workspace, Project $project, Page $page, int $versionNumber): JsonResponse
+    public function show(Request $request, Workspace $workspace, Project $project, Page $page, int $versionNumber): JsonResponse
     {
         $this->authorize('view', $page);
 
-        $version = $this->findVersion($page, $versionNumber);
+        $version = $this->findVersion($request, $page, $versionNumber);
 
         return response()->json($this->summary($version) + ['content' => $version->content]);
     }
@@ -51,7 +51,7 @@ class PageVersionController extends Controller
     {
         $this->authorize('update', $page);
 
-        $version = $this->findVersion($page, $versionNumber);
+        $version = $this->findVersion($request, $page, $versionNumber);
 
         // BRAI-80: restoring on a published page publishes a new version without a review
         if ($page->isPublished() && $page->review_required) {
@@ -65,9 +65,9 @@ class PageVersionController extends Controller
             : "Version {$version->version} restored.");
     }
 
-    private function findVersion(Page $page, int $versionNumber): PageVersion
+    private function findVersion(Request $request, Page $page, int $versionNumber): PageVersion
     {
-        return $page->versions()->where('version', $versionNumber)->firstOrFail();
+        return $page->versionsFor($request->user())->where('version', $versionNumber)->firstOrFail();
     }
 
     /**

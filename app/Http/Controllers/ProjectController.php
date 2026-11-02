@@ -12,6 +12,7 @@ use App\Models\ProjectTemplate;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Entitlements\LimitGate;
+use App\Support\Files\WorkspaceFiles;
 use App\Support\Projects\ProjectCreator;
 use App\Support\Projects\ProjectTransfer;
 use App\Support\Projects\RecentContent;
@@ -286,12 +287,13 @@ class ProjectController extends Controller
         }
 
         if ($request->hasFile('icon_image')) {
-            if ($project->icon && self::ownIconPath($project, $project->icon) && Storage::disk('public')->exists($project->icon)) {
-                Storage::disk('public')->delete($project->icon);
-            }
             $file = $request->file('icon_image');
             $ext = Uploads::imageExtension($file);
-            $path = $file->storeAs('project-icons/'.$project->id, 'icon.'.$ext, 'public');
+            $path = WorkspaceFiles::store($workspace, $file, 'project-icons/'.$project->id, 'icon.'.$ext, 'project_icon', $request->user());
+            $previousIcon = $project->getRawOriginal('icon');
+            if ($previousIcon !== $path && $previousIcon && self::ownIconPath($project, $previousIcon)) {
+                WorkspaceFiles::forget($workspace, $previousIcon, 'project-icons/'.$project->id.'/'); // superseded (Codex web review C)
+            }
             $validated['icon'] = $path;
         }
 
@@ -319,8 +321,12 @@ class ProjectController extends Controller
 
         $file = $request->file('icon');
         $ext = Uploads::imageExtension($file);
-        $path = $file->storeAs('project-icons/'.$project->id, 'icon.'.$ext, 'public');
+        $previousIcon = $project->getRawOriginal('icon');
+        $path = WorkspaceFiles::store($workspace, $file, 'project-icons/'.$project->id, 'icon.'.$ext, 'project_icon', $request->user());
         $project->update(['icon' => $path]);
+        if ($previousIcon !== $path && $previousIcon && self::ownIconPath($project, $previousIcon)) {
+            WorkspaceFiles::forget($workspace, $previousIcon, 'project-icons/'.$project->id.'/'); // superseded (Codex web review C)
+        }
 
         return response()->json(['icon_display' => $project->fresh()->icon_display]);
     }
@@ -342,7 +348,7 @@ class ProjectController extends Controller
 
         $file = $request->file('icon');
         $ext = Uploads::imageExtension($file);
-        $path = $file->storeAs('project-item-type-icons/'.$project->id, Str::uuid().'.'.$ext, 'public');
+        $path = WorkspaceFiles::store($workspace, $file, 'project-item-type-icons/'.$project->id, Str::uuid().'.'.$ext, 'item_type_icon', $request->user());
 
         return response()->json(['icon' => $path, 'icon_display' => asset('storage/'.$path)]);
     }

@@ -73,6 +73,7 @@ final class NotificationCatalog
         'sla_breached' => 'helpdesk',
         'automation_notice' => 'status', // BRAI-63: the "Notify" action of an automation rule
         'export_ready' => 'workspace', // BRAI-81: a project export can be downloaded
+        'plan_limit_reached' => 'workspace', // v1.49.0: a public form turned a submission away (content limit), once a day
         'data_export_ready' => 'workspace', // BRAI-156: "Download my data" is ready (in-app + email always; push per category)
         // BRAI-158 (booking pages): to the host
         'booking_created' => 'bookings',

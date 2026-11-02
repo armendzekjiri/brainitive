@@ -11,6 +11,7 @@ use App\Support\Mcp\PageContentConverter;
 use App\Support\Mcp\ResourceLocator;
 use App\Support\Pages\PageMover;
 use App\Support\Pages\PageWrites;
+use App\Support\Validation\ContentLimits;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\Validation\ValidationException;
@@ -35,7 +36,7 @@ class UpdatePageTool extends Tool
             'project' => 'required|string',
             'page_uuid' => 'required|string',
             'title' => 'nullable|string|max:255',
-            'markdown' => 'nullable|string',
+            'markdown' => 'nullable|string|max:'.ContentLimits::PAGE_BODY,
             'mode' => 'nullable|in:replace,append',
             'parent_uuid' => 'nullable|uuid',
             'expected_revision' => 'nullable|integer|min:0',

@@ -186,7 +186,7 @@ final class PageCollab
             if ($locked->draftWouldChange($changes)) {
                 $locked->collabWrite = true;
                 try {
-                    $locked->saveDraft($user, $changes);
+                    $locked->saveDraft($user, $changes, live: true);
                 } finally {
                     $locked->collabWrite = false;
                 }

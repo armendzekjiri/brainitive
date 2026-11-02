@@ -34,8 +34,8 @@ class PageStickyNoteController extends Controller
         $validated = $request->validate([
             'url' => 'required|string|max:1000',
             'color' => 'sometimes|string|in:yellow,pink',
-            'x' => 'sometimes|integer',
-            'y' => 'sometimes|integer',
+            'x' => 'sometimes|integer|between:-1000000,1000000', // the columns are int32 (Codex web review N)
+            'y' => 'sometimes|integer|between:-1000000,1000000',
             'width' => 'sometimes|integer|min:100|max:800',
             'font_size' => 'sometimes|integer|min:10|max:40',
             'content' => 'sometimes|nullable|string|max:10000',
@@ -57,8 +57,8 @@ class PageStickyNoteController extends Controller
 
         $validated = $request->validate([
             'color' => 'sometimes|string|in:yellow,pink',
-            'x' => 'sometimes|integer',
-            'y' => 'sometimes|integer',
+            'x' => 'sometimes|integer|between:-1000000,1000000', // the columns are int32 (Codex web review N)
+            'y' => 'sometimes|integer|between:-1000000,1000000',
             'width' => 'sometimes|integer|min:100|max:800',
             'font_size' => 'sometimes|integer|min:10|max:40',
             'content' => 'sometimes|nullable|string|max:10000',

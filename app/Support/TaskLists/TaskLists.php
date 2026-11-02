@@ -7,6 +7,7 @@ use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\User;
 use App\Rules\ProjectMember;
+use App\Support\Entitlements\LimitGate;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -47,6 +48,8 @@ final class TaskLists
     /** A new list at the end of the project; its creator watches it. */
     public static function create(Project $project, User $user, string $name, ?string $description = null): TaskList
     {
+        // content limit (Codex web review B): every metered type, in the shared create path
+        app(LimitGate::class)->ensureContentRoom($project->workspace);
         $list = $project->taskLists()->create([
             'name' => $name,
             'slug' => self::uniqueSlug($project, $name),
@@ -110,6 +113,9 @@ final class TaskLists
      */
     public static function createTask(TaskList $list, User $user, array $data): TaskListItem
     {
+        // content limit (Codex web review B): every metered type, in the shared create path
+        app(LimitGate::class)->ensureContentRoom($list->project->workspace);
+
         return $list->items()->create([
             'title' => $data['title'],
             'description' => $data['description'] ?? null,

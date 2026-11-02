@@ -7,6 +7,7 @@ use App\Models\BookmarkItem;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Support\Bookmarks\Bookmarks;
+use App\Support\Files\WorkspaceFiles;
 use App\Support\Uploads;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -101,7 +102,7 @@ class BookmarkController extends Controller
         $bookmark = Bookmarks::createGroup($workspace, $request->user(), ['icon' => $iconValue] + $validated);
 
         if ($request->hasFile('icon_image')) {
-            $path = $request->file('icon_image')->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'public');
+            $path = WorkspaceFiles::store($workspace, $request->file('icon_image'), 'bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'bookmark_icon', $request->user());
             $bookmark->update(['icon' => $path]);
         } elseif ($isTempIcon && isset($validated['icon'])) {
             $tempPath = str_contains($validated['icon'], 'storage/') ? Str::after($validated['icon'], 'storage/') : $validated['icon'];
@@ -110,6 +111,7 @@ class BookmarkController extends Controller
                 $ext = pathinfo($tempPath, PATHINFO_EXTENSION);
                 $newPath = 'bookmark-icons/'.$bookmark->id.'/icon.'.$ext;
                 Storage::disk('public')->move($tempPath, $newPath);
+                WorkspaceFiles::adopt($workspace, $tempPath, $newPath, 'bookmark_icon');
                 $bookmark->update(['icon' => $newPath]);
             }
         }
@@ -135,12 +137,16 @@ class BookmarkController extends Controller
             $validated['icon'] = Str::after($validated['icon'], 'storage/');
         }
 
+        $previousIcon = $bookmark->getRawOriginal('icon');
         if ($request->hasFile('icon_image')) {
-            $path = $request->file('icon_image')->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'public');
+            $path = WorkspaceFiles::store($workspace, $request->file('icon_image'), 'bookmark-icons/'.$bookmark->id, 'icon.'.Uploads::imageExtension($request->file('icon_image')), 'bookmark_icon', $request->user());
             $validated['icon'] = $path;
         }
 
         $bookmark->update($validated);
+        if (array_key_exists('icon', $validated) && $validated['icon'] !== $previousIcon) {
+            WorkspaceFiles::forget($workspace, $previousIcon, 'bookmark-icons/'.$bookmark->id.'/'); // superseded (Codex web review C)
+        }
 
         if ($request->wantsJson()) {
             return response()->json(['bookmark' => $bookmark->fresh()]);
@@ -163,8 +169,12 @@ class BookmarkController extends Controller
 
         $file = $request->file('icon');
         $ext = Uploads::imageExtension($file);
-        $path = $file->storeAs('bookmark-icons/'.$bookmark->id, 'icon.'.$ext, 'public');
+        $previousIcon = $bookmark->getRawOriginal('icon');
+        $path = WorkspaceFiles::store($workspace, $file, 'bookmark-icons/'.$bookmark->id, 'icon.'.$ext, 'bookmark_icon', $request->user());
         $bookmark->update(['icon' => $path]);
+        if ($previousIcon !== $path) {
+            WorkspaceFiles::forget($workspace, $previousIcon, 'bookmark-icons/'.$bookmark->id.'/');
+        }
 
         return response()->json(['icon_display' => $bookmark->fresh()->icon_display]);
     }
@@ -183,7 +193,8 @@ class BookmarkController extends Controller
 
         $file = $request->file('icon');
         $ext = Uploads::imageExtension($file);
-        $path = $file->storeAs('bookmark-icons/temp', Str::uuid().'.'.$ext, 'public');
+        // counted until it's used or pruned (files:prune-temp, Codex web review C)
+        $path = WorkspaceFiles::store($workspace, $file, 'bookmark-icons/temp', Str::uuid().'.'.$ext, 'temp', $request->user());
 
         return response()->json(['icon_display' => asset('storage/'.$path), 'icon_path' => $path]);
     }
@@ -335,7 +346,7 @@ class BookmarkController extends Controller
      */
     public function showPublic(Request $request, string $uuid): Response
     {
-        $bookmark = Bookmark::where('uuid', $uuid)->firstOrFail();
+        $bookmark = Bookmark::where('uuid', $uuid)->whereHas('workspace')->firstOrFail(); // a live workspace (Codex web review P)
 
         if ($bookmark->visibility !== 'public') {
             abort(404);
@@ -343,14 +354,19 @@ class BookmarkController extends Controller
 
         $bookmark->load(['items' => fn ($q) => $q->orderBy('position'), 'creator:id,name']);
 
-        foreach ($bookmark->items->where('type', 'file') as $item) {
-            if ($item->file_path) {
-                $item->file_url = asset('storage/'.$item->file_path);
-            }
-        }
+        // An explicit whitelist (Codex web review A): no ids of people, settings or internal metadata
+        $items = $bookmark->items->map(fn (BookmarkItem $item) => [
+            ...$item->only(['id', 'type', 'title', 'url', 'content', 'is_completed', 'position']),
+            'metadata' => array_intersect_key((array) $item->metadata, array_flip(['title', 'description', 'favicon_url', 'image'])),
+            'file_url' => $item->type === 'file' && $item->file_path ? asset('storage/'.$item->file_path) : null,
+        ])->values();
 
         return Inertia::render('Bookmarks/ShowPublic', [
-            'bookmark' => $bookmark,
+            'bookmark' => [
+                ...$bookmark->only(['uuid', 'name', 'description', 'icon', 'icon_display', 'visibility']),
+                'creator' => $bookmark->creator ? ['name' => $bookmark->creator->name] : null,
+                'items' => $items,
+            ],
         ]);
     }
 }

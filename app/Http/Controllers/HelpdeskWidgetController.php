@@ -114,7 +114,7 @@ class HelpdeskWidgetController extends Controller
      */
     public function supportPage(Request $request, string $publicSlug)
     {
-        $helpdesk = Helpdesk::where('public_slug', $publicSlug)->with('project.workspace')->firstOrFail();
+        $helpdesk = Helpdesk::where('public_slug', $publicSlug)->whereHas('project.workspace')->with('project.workspace')->firstOrFail(); // a live workspace (P)
         $settings = $helpdesk->settings ?? [];
 
         return Inertia::render('Widgets/HelpdeskEmbed', [

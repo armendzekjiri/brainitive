@@ -3,6 +3,7 @@
 namespace App\Http\Requests\AppApi;
 
 use App\Support\TaskLists\TaskLists;
+use App\Support\Validation\ContentLimits;
 
 /**
  * `POST /api/v1/task-lists/{id}/items`: the web's task fields (TaskLists::taskRules), with the
@@ -16,7 +17,7 @@ class StoreTaskRequest extends TaskRequest
         return [
             ...TaskLists::taskRules($this->listForRules()),
             // Markdown; stored as the web editor's HTML
-            'notes' => ['nullable', 'string', 'max:10000'],
+            'notes' => ['nullable', 'string', 'max:'.ContentLimits::BODY],
             // a uuid: a retry with the same one answers 200 with the task the first call created
             'request_id' => ['nullable', 'uuid'],
         ];
