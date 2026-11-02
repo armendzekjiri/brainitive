@@ -903,4 +903,8 @@ Code name "entitlements", never "plan" (`App\Models\Plan` is the Gantt plan).
   no Cloud legal facts: `/legal/dpa`, `/legal/subprocessors` and `/refund` are 404, `/imprint` too
   until the operator sets `LEGAL_*` fields or `LEGAL_IMPRINT_URL` (`.env.example`).
 - User guide: `docs/self-hosting.md` (incl. "Live updates (bell, presence, typing)", "Legal pages
-  (imprint, privacy, terms)"). `TRUSTED_PROXIES` (env, `bootstrap/app.php`) for reverse proxies.
+  (imprint, privacy, terms)"). `TRUSTED_PROXIES` (env, `bootstrap/app.php`) for reverse proxies;
+  empty in `.env.docker.example`, ports published on `BIND_ADDRESS` (default `127.0.0.1`) since v1.49.0.
+- **Security headers (v1.49.0):** `FrameProtection` (frame-ancestors / X-Frame-Options) and `SecurityHeaders`
+  (`config/security.php`: HSTS on HTTPS in production, report-only nonce script CSP; Blade scripts carry
+  `nonce="{{ Vite::cspNonce() }}"`) in the web group. Production misconfig warnings: `App\Support\Admin\ProductionConfigWarnings`.

@@ -36,7 +36,11 @@ The recommended way to self-host Brainitive: a ready-made image from the GitHub 
    docker compose up -d
    ```
 
-4. Open `http://localhost:8080` (or `http://your-server:8080`) and register your account.
+4. Open `http://localhost:8080` on the same machine and register your account.
+
+::: warning The quick start is local only
+Out of the box the app listens on `127.0.0.1` (`BIND_ADDRESS` in `.env`), so only the machine it runs on can open it, over plain HTTP. Before other people use it, set up [HTTPS](#https): either Brainitive gets its own certificate (option A) or your own reverse proxy terminates HTTPS (option B). Don't open the plain-HTTP port to your network or the internet: passwords and session cookies would travel unencrypted. (Since v1.49.0. Before, `compose.yaml` published the port on every interface.)
+:::
 
 ::: tip APP_KEY is created for you
 Leave `APP_KEY` empty. The app container generates one on the first start and keeps it in the `storage` volume as `storage/app.key`. Back up that volume. See [Backups](./backups).
@@ -98,12 +102,22 @@ Docker prefixes volume names with the folder name, for example `brainitive_stora
 | `latest` | The newest release |
 | `1.45.0` | Exactly this release |
 | `1.45` | The newest patch release of 1.45 |
+| `sha-<commit>` | The image of exactly that commit (immutable) |
 | `edge` | The latest commit on `main`, which may not be released yet |
+
+Images are only published after the tests passed for exactly that code.
 
 To pin a version, add this to `.env`:
 
 ```ini
-BRAINITIVE_IMAGE=ghcr.io/armendzekjiri/brainitive:1.45
+BRAINITIVE_IMAGE=ghcr.io/armendzekjiri/brainitive:1.45.0
+```
+
+`latest` and `1.45` move with new releases. For a production server, pin an exact version, or pin the image digest so a re-pull can never bring other bytes:
+
+```bash
+docker buildx imagetools inspect ghcr.io/armendzekjiri/brainitive:1.45.0   # prints "Digest: sha256:…"
+# BRAINITIVE_IMAGE=ghcr.io/armendzekjiri/brainitive:1.45.0@sha256:…
 ```
 
 ::: details Build the image from source instead
@@ -122,22 +136,33 @@ The simplest way. Caddy inside the image fetches and renews a Let's Encrypt cert
    ```ini
    APP_URL=https://brainitive.example.com
    SERVER_NAME=brainitive.example.com
+   BIND_ADDRESS=0.0.0.0
    HTTP_PORT=80
    HTTPS_PORT=443
+   TRUSTED_PROXIES=
    ```
 
 3. Run `docker compose up -d` again.
 
-Certificates are stored in the `caddy_data` volume.
+Caddy redirects HTTP to HTTPS by itself. Certificates are stored in the `caddy_data` volume. `TRUSTED_PROXIES` stays empty: nothing sits in front of Brainitive, so no forwarded headers are trusted.
 
 ### Option B: behind your own reverse proxy
 
-Use this if nginx, Traefik, Cloudflare Tunnel or another proxy already handles HTTPS on the server.
+Use this if nginx, Caddy, Traefik or another proxy on the same server already handles HTTPS.
 
-1. Keep `SERVER_NAME=:80` (plain HTTP inside) and let the proxy forward to `HTTP_PORT` (default `8080`).
-2. Set `APP_URL=https://brainitive.example.com`.
-3. Set `TRUSTED_PROXIES` to the proxy's IP address or network, so Brainitive builds `https://` links and secure cookies. The default in `.env.docker.example` trusts localhost and private networks: `127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`.
+1. Keep `SERVER_NAME=:80` (plain HTTP inside) and `BIND_ADDRESS=127.0.0.1`, and let the proxy forward to `127.0.0.1:8080` (`HTTP_PORT`). Only the proxy can reach the app then; check from another machine that `http://your-server:8080` does **not** answer.
+2. Set `APP_URL=https://brainitive.example.com`. The session cookie is then sent over HTTPS only (`SESSION_SECURE_COOKIE` follows `APP_URL`; set it to `true` to force it).
+3. Set `TRUSTED_PROXIES` to the address the proxy's requests come from **as the container sees it**, so Brainitive sees HTTPS and the real client IP. A proxy on the host arrives from the Docker network's gateway:
+
+   ```bash
+   docker network inspect "$(basename "$PWD")_default" --format '{{(index .IPAM.Config 0).Gateway}}'
+   # e.g. 172.18.0.1  →  TRUSTED_PROXIES=172.18.0.1
+   ```
+
+   The proxy must overwrite `X-Forwarded-For` / `X-Forwarded-Proto` (the nginx example below does). A proxy in another container on the same Docker network: use that container's address or the network's subnet.
 4. Forward WebSockets for `/collab`, so live co-editing works.
+
+Until v1.48, `.env.docker.example` trusted all private networks (`127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`) while the port was published on every interface: any client on such a network could fake its IP address. If your `.env` still has that line, replace it with your proxy's address and keep `BIND_ADDRESS=127.0.0.1`.
 
 An nginx example (certificate lines left out):
 
@@ -173,8 +198,12 @@ server {
 ```
 
 ::: warning Don't trust every proxy
-`TRUSTED_PROXIES=*` trusts forwarded headers from any client. Then anyone can fake their IP address and get around login rate limits. Use `*` only if the app port can be reached solely through your proxy.
+`TRUSTED_PROXIES=*` (or a whole private range) trusts forwarded headers from every client in it. Then they can fake their IP address and get around login rate limits. Use `*` only if the app port can be reached solely through your proxy.
 :::
+
+### Security headers
+
+On HTTPS, production responses carry `Strict-Transport-Security: max-age=31536000; includeSubDomains` (no `preload`): browsers that saw it use only HTTPS for this host for a year. Turn it off with `HSTS_ENABLED=false`, for example while you still test HTTPS. Behind a reverse proxy this needs `TRUSTED_PROXIES`, otherwise Brainitive doesn't know the request was HTTPS. Pages also carry a `Content-Security-Policy-Report-Only` header for scripts. It blocks nothing; see [Configuration](./configuration#security-headers).
 
 ## Change settings
 

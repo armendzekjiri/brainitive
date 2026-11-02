@@ -38,6 +38,10 @@ That's all. When the `app` container starts, it runs the migrations, queues a se
 - If you build from source: `git pull && docker compose up -d --build`.
 - From time to time, download the newest `compose.yaml` and compare it with yours. New releases may add services or settings.
 
+::: warning v1.49.0: the ports listen on 127.0.0.1 by default
+The `compose.yaml` of v1.49.0 publishes the app's ports on `BIND_ADDRESS`, which defaults to `127.0.0.1` (only this machine). If you take over the new file and Brainitive gets its own certificate ([HTTPS option A](./docker#option-a-brainitive-gets-the-certificate-itself)), add `BIND_ADDRESS=0.0.0.0` to `.env`, otherwise the site is no longer reachable. Behind your own reverse proxy on the same server nothing changes. Also replace a `TRUSTED_PROXIES` that lists whole private networks with your proxy's address ([option B](./docker#option-b-behind-your-own-reverse-proxy)).
+:::
+
 ## Manual install
 
 Run these in your installation folder (`/opt/brainitive` in this guide).

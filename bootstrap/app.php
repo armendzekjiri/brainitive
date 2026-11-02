@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AddCorsHeaders;
+use App\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use App\Http\Middleware\AppApiJson;
 use App\Http\Middleware\DeferAutomations;
 use App\Http\Middleware\EndRevokedAppDeviceSessions;
@@ -12,11 +13,11 @@ use App\Http\Middleware\EnsureUserIsNotSuspended;
 use App\Http\Middleware\FrameProtection;
 use App\Http\Middleware\GuardOAuthFlows;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\SecurityHeaders;
 use App\Support\AppApi\AppApiErrors;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
-use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Support\Facades\Route;
@@ -50,10 +51,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             GuardOAuthFlows::class, // the /oauth/authorize check needs the session (StartSession runs in this group)
             FrameProtection::class,
+            SecurityHeaders::class, // HSTS (production, HTTPS) + report-only script CSP with a per-request nonce
             EnsureUserIsNotSuspended::class,
             EndRevokedAppDeviceSessions::class, // a webview's session ends with its app device (BRAI-377)
             HandleInertiaRequests::class,
-            AddLinkHeadersForPreloadedAssets::class,
+            AddLinkHeadersForPreloadedAssets::class, // Laravel's, minus the CSP nonce (header size)
         ]);
 
         // App API v1 (routes/app-api.php): JSON only, throttled; no session, CSRF or CORS

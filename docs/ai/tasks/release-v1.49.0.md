@@ -923,6 +923,18 @@ Before: nothing to build specially; `desktop/` is its own repo and is not part o
    - `/docs/api` opens as an instance admin;
    - the homepage shows the new "Brainitive on your desktop" section; Help → Changelog lists v1.49.0;
    - realtime: open a board in two browsers, a card move shows live (the service restarted correctly).
+8. **Codex config review (`fix/v1.49-config`), see the section at the end:**
+   - Nothing to run: no migration, no new env var is required. `composer install` picks up `symfony/mime` 7.4.22.
+   - **HSTS on production** (`APP_ENV=production`, HTTPS): `curl -sI https://www.brainitive.app/login | grep -i strict-transport`
+     shows `max-age=31536000; includeSubDomains` once. If nginx already sends one, remove it there (or `HSTS_ENABLED=false`).
+     dev (`APP_ENV=staging`) sends none. Check that nothing under `*.www.brainitive.app` must stay plain HTTP (includeSubDomains).
+   - **Report-only CSP:** pages carry `Content-Security-Policy-Report-Only` (blocks nothing). Open an issue, a doc, a whiteboard,
+     the OAuth consent page and the desktop app's webview on dev and note the `[Report Only]` console messages: that is the
+     list to fix before it can ever be enforced. `CSP_MODE=off` removes the header.
+   - **Logs:** `[config] …` warnings in `storage/logs` mean debug on / http APP_URL / mail to the log in production.
+   - **CI:** deploy / pre-release / docs jobs show a "SSH host key NOT verified" warning until the `DEPLOY_FINGERPRINT`
+     secret exists (needs the owner). The next push to `main` runs Release behind the test gate (skipped when pre-release
+     already passed the same tree).
 
 ## feat/create-shortcut
 - `N` (not `C`, which is Quick capture) opens the Create modal on the Task tab; guarded like the capture shortcut (`isTypingTarget`, open dialogs/palette, defaultPrevented, composing).
@@ -971,9 +983,26 @@ Each one was reproduced with a failing test first; one commit per finding. CLI: 
 | 11 | Refresh save errors ignored | yes: command continued with an unsaved rotated token | save before use; error names the path; retry in-process | `TestRefreshThatCannotBeSavedFails` |
 
 Open / for the release:
-- **Server:** add a capture-scoped `DELETE /api/ext/v1/logout` (ext/v1 group; revoke `currentAccessToken()` and its
-  refresh token like `CliController::logout`) + a feature test. Until then extension sign-out says "couldn't confirm".
+- **Server:** done: `DELETE /api/ext/v1/logout` (`ext.logout`, capture scope) revokes the token and its refresh token
+  (`fix/ext-logout`, test in `CaptureExtensionTest`).
 - **New CLI release:** findings 1, 5, 6, 7, 11 ship in the binaries (`release.yml` builds them from the app version).
 - **New extension release:** findings 2, 3, 4, 5, 8. Bump `browser-extension/package.json` to 1.2.0 for the store upload
   (README: bump per upload; not bumped here).
 - Not done: cross-process refresh lock in the CLI; OS keychain storage (both noted in KNOWLEDGE).
+
+## Codex config review (`fix/v1.49-config`, 2026-11-02)
+Read-only Codex review of CI, Docker, config and self-hosting docs (10 items, reviewed at `ae277c86`). Each item was
+re-checked against the release branch. Decisions/traps: KNOWLEDGE.md → "Codex config review of v1.49.0".
+
+| # | Item | Verified? | Fix | Needs the owner |
+|---|---|---|---|---|
+| 1 | Releases / images don't wait for the test gate (HIGH) | Yes: `release.yml` and `docker-publish.yml` (tags, manual) ran without tests | `release.yml`: `already-tested.yml` (proven by `pre-release.yml` / `tests.yml`, same tree) else full `tests.yml`, then release / zips / CLI / image. `docker-publish.yml` gates tags + manual runs itself (`tested: true` from release). `pre-release.yml` / `deploy.yml` unchanged. | Optional: tag protection rule for `v*` (repo setting) |
+| 2 | Docker quick start serves plain HTTP on all interfaces (HIGH) | Yes: `compose.yaml` published `8080`/`8443` on 0.0.0.0, docs said `http://your-server:8080` | `BIND_ADDRESS` (default `127.0.0.1`) in `compose.yaml`; `.env.docker.example` + docs: local-only quick start, option A needs `BIND_ADDRESS=0.0.0.0`, option B binds loopback + trusted proxy + secure cookie; upgrading note | Mention in the v1.49.0 release notes: self-hosters with option A who take the new `compose.yaml` must add `BIND_ADDRESS=0.0.0.0` |
+| 3 | Broad proxy trust + published backend (MEDIUM) | Yes in `.env.docker.example` (all RFC1918 + loopback). App bootstrap: opt-in, explicit list (prod: nginx → FPM, unset = right) | Template `TRUSTED_PROXIES=` (empty) + how to find the Docker gateway; docs; `TrustedProxiesTest` (spoofed X-Forwarded-* ignored) | – |
+| 4 | SSH host key optional in deploys (MEDIUM) | Yes: `fingerprint: secrets.DEPLOY_FINGERPRINT`, empty = unchecked; appleboy has no known_hosts input | Step before every SSH deploy (deploy / pre-release / docs): pinned → note; missing → `::warning::`, deploy as before; missing + variable `DEPLOY_REQUIRE_HOST_KEY=true` → fail | **Add secret `DEPLOY_FINGERPRINT`** (`ssh-keyscan -p PORT HOST \| ssh-keygen -lf -`, the `SHA256:…` of the key type the server offers first), then **variable `DEPLOY_REQUIRE_HOST_KEY=true`**. Separate deploy users per environment: later |
+| 5 | Actions not pinned; CLA write token (MEDIUM) | Yes: release, docker-publish, cli, browser-extension, tests (setup-go), cla used tags | All actions SHA-pinned (`# vX.Y.Z`); `cla.yml` + `release.yml` `permissions: {}` + per-job grants; CLA never checks out PR code (comment) | Optional: Dependabot for `github-actions` + `docker` to bump pins (not added: it opens PRs) |
+| 6 | No CSP / HSTS (MEDIUM) | Yes: only frame protection | `SecurityHeaders` (web group): HSTS on HTTPS in production (`max-age=31536000; includeSubDomains`, no preload, `HSTS_*`); `Content-Security-Policy-Report-Only` nonce + `strict-dynamic` (`CSP_MODE=report-only\|off`, `CSP_REPORT_URI`); nonces on all Blade scripts + `@routes`. Not enforced. | Collect the report-only console messages (web, whiteboards, embeds, desktop webview) before any enforcing CSP; a report endpoint if wanted |
+| 7 | `symfony/mime` advisory (MEDIUM) | Yes: 7.4.19 locked | `composer update symfony/mime --with-dependencies` → 7.4.22 (+ polyfill-mbstring 1.43.3), no constraint change; mail / helpdesk / admin mail tests green | – |
+| 8 | docs-site dev-tool advisories (MEDIUM) | Yes: vitepress 1.6.4 → vite 5.4.21 / esbuild 0.21.5 | npm `overrides: { vite: 6.4.4 }` (esbuild 0.25.12); `npm run build` works. 1 moderate dev-server advisory left (GHSA-8g5g-mxqh-grgj), fixed in vite 6.4.5 (2026-10-21, < 2 weeks old) | Bump the override to 6.4.5+ after 2026-11-04 |
+| 9 | Dev env template / log mailer in production (LOW) | Yes | `APP_DEBUG` defaults to on only for `APP_ENV=local`; `.env.example` header + no `APP_DEBUG` line (phpunit.xml sets it); `ProductionConfigWarnings`: hourly `[config]` warnings for debug, http APP_URL, mail via a log mailer | – |
+| 10 | Mutable base images / tags (LOW) | Yes | `Dockerfile` bases pinned `tag@sha256:` (index digests, amd64+arm64), the `node` binary copied from the pinned realtime stage; `sha-<short>` tag on every image build; docs: pin `X.Y.Z` or a digest; `.dockerignore` skips `bootstrap/cache/*.php` (a dev checkout's cache broke local builds) | Signed / attested images (cosign, provenance) and a digest-bump routine: later |

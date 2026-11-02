@@ -663,6 +663,41 @@ Decisions and traps from the review; the finding list is in `docs/ai/tasks/relea
   Copilot token `brainitive-cli` has no scopes (see the review section for the enforcement plan).
 - **Google failures log reason codes only** (`GoogleCalendarService::errorSummary`), never the response body.
 
+### Codex config review of v1.49.0: CI, Docker, headers (2026-11-02, `fix/v1.49-config`)
+Item list + what needs the owner: `docs/ai/tasks/release-v1.49.0.md` → Codex config review.
+- **Nothing is published untested.** `release.yml` (push to `main`) runs `already-tested.yml` (`proven-by: pre-release.yml
+  tests.yml`, same git tree) and else the full `tests.yml` before the release, extension zips, CLI binaries and image.
+  `docker-publish.yml` gates hand-pushed `v*` tags / manual runs itself; `release.yml` calls it with `tested: true`. A
+  called workflow's jobs may only ask for permissions the caller's job grants, even when they're skipped: `release.yml`'s
+  `docker` job grants `actions: read` for that reason. Jobs after a skipped `tests` need an explicit
+  `if: !cancelled() && needs.X.result == 'success'` (default `success()` treats a skipped ancestor as failure).
+- **Every action is SHA-pinned** (`@<sha> # vX.Y.Z`); `release.yml` and `cla.yml` default to `permissions: {}` and grant
+  per job. `cla.yml` runs on `pull_request_target`: never add a checkout or any step that runs PR code there.
+- **SSH host key:** `appleboy/ssh-action` checks the host key only when `fingerprint` (`DEPLOY_FINGERPRINT`) is set; it
+  has no known_hosts input. A step before every SSH deploy warns when it is missing, and fails when the repo variable
+  `DEPLOY_REQUIRE_HOST_KEY=true` (fail closed only once the secret exists, so a missing secret can't turn a deploy red).
+- **Security headers (`SecurityHeaders`, web group, `config/security.php`).** HSTS (`max-age=31536000; includeSubDomains`,
+  no preload) on HTTPS responses, default on only with `APP_ENV=production` (dev = `staging` → none). The script CSP is
+  **report-only** (`CSP_MODE=report-only|off`, no enforce mode yet): `script-src 'nonce-…' 'strict-dynamic'` +
+  CSP2 fallbacks, `object-src 'none'`, `base-uri 'self'`, `report-uri` only with `CSP_REPORT_URI`. The nonce is
+  `Vite::useCspNonce()` from the middleware; every inline / external `<script>` in a Blade view needs
+  `nonce="{{ Vite::cspNonce() }}"` and `@routes(nonce: Vite::cspNonce())`, or the console reports it (it'll block once
+  enforced). Violations are console messages, not `pageerror`s, so the e2e fixtures don't fail on them.
+  **Trap:** with a nonce, Laravel's `AddLinkHeadersForPreloadedAssets` puts `nonce="…"` on every preloaded chunk (~140 on a
+  board page → +7 KB `Link` header; Playwright's request client failed with "Header overflow"). The web group uses our
+  `App\Http\Middleware\AddLinkHeadersForPreloadedAssets` (same, minus the nonce); the page's `<link>` tags keep it.
+- **Debug only for `APP_ENV=local` by default** (`config/app.php`); `.env.example` no longer sets `APP_DEBUG`, so
+  `phpunit.xml` sets `APP_DEBUG=true` (as CI had it). `ProductionConfigWarnings` logs `[config] …` warnings in
+  production (hourly per problem, via the cache): debug on, a non-local `http://` `APP_URL` (boot), and mail actually
+  sent through a `log`-transport mailer (`MessageSending`: an admin-console SMTP replaces `MAIL_MAILER=log` at runtime,
+  so a boot check would be wrong).
+- **Docker:** `compose.yaml` publishes on `BIND_ADDRESS` (default `127.0.0.1`); Brainitive's own HTTPS needs
+  `BIND_ADDRESS=0.0.0.0`. `TRUSTED_PROXIES` is empty in `.env.docker.example` (was all of RFC1918): a host proxy reaches
+  the container from the Docker network gateway, which is what to trust. Base images in the `Dockerfile` are pinned
+  `tag@sha256:<index digest>` (refresh with `docker buildx imagetools inspect`); images also get `sha-<short>` always.
+- **Docs site:** VitePress 1.6.4 (newest 1.x) runs on vite 6 through `overrides` in `docs-site/package.json`; check
+  `npm run build` there after any VitePress bump and drop the override once VitePress ships a patched vite.
+
 ### Lead form logic lives twice
 Which steps / questions a visitor sees is evaluated in the browser (`lib/leadForms.ts`) *and*
 on submit (`LeadFormDefinition::visibleFields`) — hidden questions are never validated and
