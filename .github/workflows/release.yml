@@ -5,6 +5,11 @@
 #
 # The image build is called from here rather than triggered by the tag: tags created with
 # GITHUB_TOKEN don't start other workflows.
+#
+# Test gate (Codex config review 1): nothing is released or published unless this exact code passed
+# the tests. Normally it already did on its way here (release branch → tests.yml, pre-release →
+# pre-release.yml), with the same tree: then the gate is skipped (already-tested.yml). Any other
+# code (a direct push, a manual run) runs the full tests.yml first; a red gate releases nothing.
 name: Release
 
 on:
@@ -20,7 +25,27 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  already-tested:
+    uses: ./.github/workflows/already-tested.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      proven-by: pre-release.yml tests.yml
+
+  tests:
+    needs: already-tested
+    if: ${{ !cancelled() && needs.already-tested.result == 'success' && needs.already-tested.outputs.tested != 'true' }}
+    uses: ./.github/workflows/tests.yml
+    # tests.yml's own docs-only check needs to read workflow runs (it is skipped on main)
+    permissions:
+      contents: read
+      actions: read
+
   version:
+    needs: [already-tested, tests]
+    # explicit: a skipped tests job (code already proven) would otherwise skip this job too
+    if: ${{ !cancelled() && needs.already-tested.result == 'success' && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # creates the tag + GitHub Release
@@ -58,6 +83,8 @@ jobs:
   # https://github.com/<repo>/releases/latest/download/brainitive-extension-chrome.zip works.
   extension:
     needs: version
+    # explicit: a skipped tests job upstream would otherwise skip this job too
+    if: ${{ !cancelled() && needs.version.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # uploads the zips to the release
@@ -88,6 +115,7 @@ jobs:
   # from GitHub alone (brainitive.app/install.sh forwards there).
   cli:
     needs: version
+    if: ${{ !cancelled() && needs.version.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # uploads the binaries to the release
@@ -128,9 +156,12 @@ jobs:
 
   docker:
     needs: version
+    if: ${{ !cancelled() && needs.version.result == 'success' }}
     uses: ./.github/workflows/docker-publish.yml
     permissions:
       contents: read
       packages: write # pushes ghcr.io/<owner>/brainitive
+      actions: read # docker-publish declares its own gate (skipped here, tested: true) with it
     with:
       version: ${{ needs.version.outputs.released == 'true' && needs.version.outputs.version || '' }}
+      tested: true # the gate above already passed for this commit

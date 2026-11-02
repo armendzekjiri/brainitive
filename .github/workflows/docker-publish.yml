@@ -1,7 +1,7 @@
 # Builds the self-hosting image ghcr.io/<owner>/brainitive.
 # - Called by release.yml on every push to main: :edge + :sha-<short>, plus :X.Y.Z, :X.Y and
 #   :latest when that push released a new version.
-# - A v* tag pushed by hand builds that version too.
+# - A v* tag pushed by hand (or a manual run) builds that version too, after the test gate below.
 name: Docker image
 
 on:
@@ -11,6 +11,10 @@ on:
         description: 'Released version (X.Y.Z) to tag the image with; empty for an edge build'
         type: string
         default: ''
+      tested:
+        description: 'true when the caller already gated this exact commit on the tests (release.yml)'
+        type: boolean
+        default: false
   push:
     tags: ['v*']
   workflow_dispatch:
@@ -20,7 +24,29 @@ permissions:
   packages: write
 
 jobs:
+  # Test gate (Codex config review 1): a hand-pushed v* tag or a manual run publishes only code that
+  # passed the tests: the same tree as a green tests / pre-release / release run, else the full
+  # tests.yml runs first. release.yml gates before calling and passes tested: true.
+  already-tested:
+    if: ${{ !inputs.tested }}
+    uses: ./.github/workflows/already-tested.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      proven-by: pre-release.yml tests.yml release.yml
+
+  tests:
+    needs: already-tested
+    if: ${{ !cancelled() && !inputs.tested && needs.already-tested.result == 'success' && needs.already-tested.outputs.tested != 'true' }}
+    uses: ./.github/workflows/tests.yml
+    permissions:
+      contents: read
+      actions: read
+
   publish:
+    needs: [already-tested, tests]
+    if: ${{ !cancelled() && (inputs.tested || (needs.already-tested.result == 'success' && (needs.tests.result == 'success' || needs.tests.result == 'skipped'))) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
