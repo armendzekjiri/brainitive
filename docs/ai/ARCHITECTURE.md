@@ -291,6 +291,9 @@ Plan [`tasks/feat-offline.md`](./tasks/feat-offline.md). Opt-in per device (Prof
 - **Controller / routes:** `OfflineSyncController` — `shell` (`GET /offline`, `offline.shell`, `throttle:60,1`, **session-free**: no `EncryptCookies` / `StartSession` / CSRF, `Inertia::flushShared()`), `store` (`POST /offline/sync`, `offline.sync`, ReadOnlySession, `throttle:240,1,offline.sync`; one mutation per request `{id, type, target, base, data, user_id}`; wrong `user_id` → 401 `wrong_account`).
 - **Service worker / PWA:** `public/sw.js` (PWA install, web push, offline). Only same-origin GET: failed navigation → cached shell (or a static "you're offline" page when offline mode is off), failed full Inertia visit → `409 + X-Inertia-Location`, `/build/assets/*` → shell cache first. Everything else (documents, realtime, JSON, writes) gets no `respondWith`.
 - **Frontend:** `lib/offline/` (`db`, `settings`, `shell`, `store`, `sync` (engine: `online`, focus, every 30 s; `applyLocally`), `session` (clearing on sign-out / other account), `actions` (queue a change, then the local copy), `resolve`, `snapshots` (`useOfflineSnapshot` + snapshot builders), `bootLocation` (imported first in `app.tsx`: keeps the real URL under the shell)), `components/offline/` (`OfflineIndicator` in `AppLayout`'s top bar, `ConflictsPanel`, `OfflineSettingCard` in `Profile/Edit`, `Offline{MyDay,TaskList,Issue,Capture}View`, `NotSyncedBadge`, `useSnapshot`), `Pages/Offline/Shell.tsx`. Snapshot hooks in `Pages/Lists/Show.tsx`, `Pages/MyWork/Index.tsx`, `components/item/ItemDetail.tsx` (`useItemDetail`); `QuickCaptureDialog` queues while offline.
+- **Native clients (v1.49.0, BRAI-425):** the App API's `POST /api/v1/sync` runs the same `OfflineSync::handle` per change (batches,
+  `request_id` = the mutation uuid); `GET /api/v1/sync/changes` is their snapshot source (the web builds snapshots from page props).
+  Type `work.done` (`WorkMutations`) exists for them; the web's outbox doesn't send it yet.
 - **Tests:** `tests/Feature/Offline/OfflineSyncTest.php`, e2e `e2e/tests/offline.spec.ts` (no JS unit runner: the client is covered by e2e).
 
 ### Push devices + test notification (v1.44.0, BRAI-154)
@@ -452,7 +455,7 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   Workspace, Project, Member, Navigation, Search, Notification, ConnectedApp, DeviceAuth, MyWork, Today,
   Calendar, TaskList, Capture, Snippet, Bookmark, Timer + WorkLog, Board, Issue + IssueActivity + IssueLink, Sprint,
   Page + PageCollab + DocReview + Link, Whiteboard, Plan, Release, Upload, CalendarEvent + Meeting + CalendarFeed, Booking,
-  Helpdesk, Lead, Portal, Insights —
+  Helpdesk, Lead, Portal, Insights, Sync —
   one `#[Group]` tag per
   `API.md` module), Form Requests in `app/Http/Requests/AppApi/`, Resources in
   `app/Http/Resources/AppApi/`. The tables in `API.md` are the list.
@@ -508,6 +511,15 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   `CalendarProviders` (+ `CalendarEvents::mapExternalEvent`, now public), `MeetingCalendars`, `BookingService::cancel`,
   `LeadController::present`, the `Insights\*Insights` classes + `InsightsFilters`, `HealthMetrics`, `WorkloadGrid`.
   `CalendarProviderException::render` answers in the App API error shape on `/api/v1`.
+- **Offline sync (phase 09, BRAI-425):** `Controllers\AppApi\SyncController` (`GET /sync/changes`, `POST /sync`, tag Sync 330).
+  Writes reuse the web's offline engine as it is (`Support\Offline\OfflineSync` + appliers, BRAI-82), batched with one result per
+  change; new applier `Offline\Appliers\WorkMutations` (`work.done` → `WorkCompletion::setDone`), `FieldMerge::BOOL`;
+  `CaptureMutations` now writes through `CaptureInbox::create`. Reads: `Support\Sync\ChangeFeed` (phased keyset feed over My Work /
+  kept task lists / My Day / captures, built on `AssignedWork`, `TaskLists::withCounts`, `MyDayPlan`, `CaptureConversion::locations`)
+  + `SyncCursor` (opaque cursor: scope, run `since`, phase, keyset, My Day hash) + `SyncChange`; resources `SyncChangeResource`
+  (wraps the existing resources) / `SyncResultResource`. Deletions = soft deletes + table `sync_tombstones` (`SyncTombstone`,
+  migration `2026_11_08_100000`, pruned 30 days at 04:37): written by `Capture::deleted` and the Item / TaskListItem observers when
+  the assignee changes. Tests `tests/Feature/AppApi/SyncTest.php`, e2e `e2e/tests/app-api-sync.spec.ts`.
 - **TV device-code sign-in (BRAI-438):** `Support\AppApi\AppDeviceCodes` (RFC 8628 codes in the cache),
   `AppDeviceSignIn` (device row + `max_devices` + first pair; also used by `/auth/exchange`), `AppClients`
   (`config/app-api.php` → `clients.*.grant` / `platforms`); `Controllers\AppApi\DeviceAuthController`;

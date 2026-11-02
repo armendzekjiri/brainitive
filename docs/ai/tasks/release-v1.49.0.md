@@ -587,3 +587,58 @@ away an unpublished draft and ignored live (Yjs) editors; no revision check. The
   required" waits in the draft like the web's rename.
 - Tests `tests/Feature/Mcp/UpdatePageToolTest.php`; docs: KNOWLEDGE, CONVENTIONS, server instructions. No MCP e2e
   pattern exists (MCP is covered by PHPUnit only), so no e2e.
+
+## Phase 09 — offline sync + realtime API
+
+Desktop-app board cards 705 (BRAI-425) and 706 (BRAI-426), same flow and definition of done as phases 06–08
+(`feat/app-api-<name>` from `release/v1.49.0`, merged back `--no-ff`; PHPUnit incl. Passport → 401 and other users' data
+never showing up; e2e spec; `API.md` rows + mobile card texts; OpenAPI via `TEST_DB_SUFFIX=p09 composer openapi`). New
+spec tags: Sync 330, Realtime 340. Plus a doc fix of the root `AGENTS.md` (`docs/agents-postgres-rules`).
+
+### BRAI-425 offline sync (`feat/app-api-sync`)
+The web's offline mode (BRAI-82) already has the write side: `App\Support\Offline\OfflineSync` (idempotent per
+(user, uuid) in `offline_mutations`, field-level three-way merge, 409 conflicts, 410 deleted, 424 waiting). Native
+clients get the same engine, batched, plus a server-side delta feed (the web builds its snapshots from page props).
+- `POST /api/v1/sync` `{changes: [{request_id, type, target?, base?, data}]}` (≤ 50, applied in order) → 200
+  `{data: [result]}`, one result per change in the same order: `applied` 200 / `conflict` 409 (nothing of the
+  conflicting fields written, the server value comes back) / `deleted` 410 / `waiting` 424 / `forbidden` 403 /
+  `invalid` 422 (+ `errors`) / `rate_limited` 429 / `error` 500. One bad change never fails the others.
+  `request_id` = OfflineSync's mutation uuid (replay → the stored outcome + `replayed: true`; same id, other
+  content → `invalid`). Same types as the web (`list_task.*`, `issue.*`, `capture.create`, `my_day.*`) + new
+  `work.done` (the circle of My Work / My Day, `WorkCompletion::setDone`, base `done`). Budget 240 changes / min /
+  user (the web's per-mutation throttle). `capture.create` gets the app's name as `source` (as `POST /captures`),
+  and `CaptureMutations` now goes through `CaptureInbox::create` (no second copy).
+- `GET /api/v1/sync/changes?cursor=&limit=&scopes=work,my_day,captures,task_lists&task_lists=1,2` → `{data:
+  [change], next_cursor, has_more, reset, project_ids}`; change = `{type: work|task_list|task|capture|my_day, id,
+  op: upsert|delete, project_id, updated_at, data}` with the existing resources (WorkItemResource, TaskListResource,
+  TaskResource, CaptureResource, MyDayResource). One opaque cursor: it remembers the scope, the run's phase and
+  keyset position, the time of the last complete run (−10 s overlap) and a hash of My Day (sent only when it
+  changed). No / unknown / other user's / > 30 days old cursor or a changed scope → a full run (`reset: true`:
+  afterwards drop what the run didn't send). `project_ids` = projects the user can open now (drop cached rows of
+  others: lost access, trashed project / workspace).
+- Deletions: issues / tasks / task lists are soft-deleted (`deleted_at`, also a trashed board / list); captures are
+  deleted for good, and work that is reassigned leaves the user's scope without a trace → **additive migration
+  `sync_tombstones`** (user, entity type, entity id, reason `deleted|unassigned`, created_at; pruned after 30 days):
+  written by `Capture::deleted` and by the Item / TaskListItem observers when the assignee changes.
+- Shared code: `App\Support\Sync\{ChangeFeed,SyncCursor}`, `App\Models\SyncTombstone`, `Offline\Appliers\WorkMutations`,
+  `FieldMerge::BOOL`. Controller `AppApi\SyncController` (tag Sync 330).
+- Tests `tests/Feature/AppApi/SyncTest.php` (+ the web's `OfflineSyncTest` for the shared appliers); e2e
+  `app-api-sync.spec.ts`. Mobile cards: BRAI-263, BRAI-264, BRAI-204.
+
+### BRAI-426 realtime for token clients (`feat/app-api-realtime`)
+There is no Reverb / Laravel broadcasting: realtime is the app's own **live channels** (BRAI-151) on the realtime
+server (`realtime/`, `/collab?live=1`), joined with a short-lived HMAC token listing the channels Brainitive allowed
+(`LiveChannels`, re-checked every minute by the realtime server). The card's `POST /broadcasting/auth` becomes:
+- `GET /api/v1/realtime` → `{data: {enabled, url (absolute ws/wss), token_endpoint, token_ttl, max_channels,
+  channel_types, protocol}}` (connection info; `enabled: false` with nulls when live channels are off).
+- `POST /api/v1/realtime/token` `{channels: [≤ 50]}` → `{data: {token, expires_at, url, channels, denied, user}}`
+  — the web's `LiveTokenController` answer, through the same `LiveChannels::authorize` (one copy of the rules).
+  404 when live channels are off. Passport tokens stay 401; a suspended user gets no channels.
+- The event catalog (every channel, event, payload, when) in `API.md` → Realtime. `X-Live-Client` works for app
+  writes too (echo suppression), since BoardLive reads the authenticated user of any guard.
+- Tests `tests/Feature/AppApi/RealtimeTest.php`; e2e `app-api-realtime.spec.ts`. Mobile cards: BRAI-196, BRAI-265, BRAI-208.
+
+### AGENTS.md doc fix (`docs/agents-postgres-rules`)
+"Cursor Cloud specific instructions" still said SQLite: PostgreSQL only, `brainitive_test` / `TEST_DB_SUFFIX`, e2e
+`brainitive_e2e_<port>`, never `migrate:fresh` / `db:wipe` / … against the `.env` database, commit identity, no push
+without the owner, no broad `pkill`.

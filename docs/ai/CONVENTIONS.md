@@ -203,6 +203,12 @@ Full conventions and the endpoint registry: [`API.md`](./API.md); recipe:
   never runs an OAuth connect flow.
 - When an endpoint returns what a web page computes (Insights, health, workload), call the page's Support class and pass its
   arrays through a Resource that types the top level; don't re-derive numbers in the API.
+- Offline writes from the apps go through `POST /api/v1/sync` = the web's `OfflineSync` (one engine): a new offline-capable
+  write is a new mutation type + applier there (CONVENTIONS → Offline), never a second idempotency / conflict mechanism. Batch
+  results are per change (`status` + `http_status`); one bad change never fails the batch.
+- Content the apps keep offline must be visible to `ChangeFeed`: soft deletes, or a `SyncTombstone::record()` where a row
+  leaves a user's scope without a trace (hard delete, reassignment). Feed queries are the user's own or limited to
+  `accessibleProjectIds()`.
 - The spec's `info.version` is the API version (`1.0.0`), not the app release; breaking changes → `/api/v2`.
 - Web ↔ desktop: call native features only through `resources/js/lib/desktop.ts` (feature-detected,
   no-op in a browser); never import `@tauri-apps/api` into the web app.

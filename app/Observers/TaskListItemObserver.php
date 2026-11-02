@@ -2,7 +2,9 @@
 
 namespace App\Observers;
 
+use App\Models\SyncTombstone;
 use App\Models\TaskListItem;
+use App\Support\MyWork\WorkRef;
 use App\Support\Notifications\Assignments;
 
 /**
@@ -20,6 +22,8 @@ class TaskListItemObserver
     {
         if ($task->wasChanged('assignee_id')) {
             Assignments::task($task);
+            // App API offline sync (BRAI-425): the task leaves the previous assignee's My Work
+            SyncTombstone::record((int) $task->getOriginal('assignee_id') ?: null, SyncTombstone::WORK, WorkRef::of($task), SyncTombstone::UNASSIGNED);
         }
     }
 }
