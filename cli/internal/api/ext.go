@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/armendzekjiri/brainitive/cli/internal/config"
 	"github.com/armendzekjiri/brainitive/cli/internal/mcp"
 )
 
@@ -28,7 +29,7 @@ type Client struct {
 
 // New makes a client for a server origin.
 func New(server string, tokens mcp.TokenSource) *Client {
-	return &Client{Server: strings.TrimRight(server, "/"), Tokens: tokens, HTTP: &http.Client{Timeout: 120 * time.Second}}
+	return &Client{Server: strings.TrimRight(server, "/"), Tokens: tokens, HTTP: config.HTTPClient(120 * time.Second)} // never follows redirects
 }
 
 // Board is a board the user may create issues on, with its numeric id.
@@ -136,6 +137,10 @@ func (c *Client) CreateIssueWithScreenshot(ctx context.Context, boardID int64, t
 }
 
 func (c *Client) do(ctx context.Context, method, path, contentType string, body []byte, out any) error {
+	// No token over plaintext http to a remote host (Codex CLI/extension review 6).
+	if err := config.CheckServer(c.Server); err != nil {
+		return err
+	}
 	token, err := c.Tokens.Token(ctx)
 	if err != nil {
 		return err

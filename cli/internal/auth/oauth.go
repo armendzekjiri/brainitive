@@ -44,7 +44,7 @@ type tokenResponse struct {
 }
 
 // HTTPClient is what the package uses for every request (tests swap it).
-var HTTPClient = &http.Client{Timeout: 30 * time.Second}
+var HTTPClient = config.HTTPClient(30 * time.Second) // never follows redirects (Codex CLI/extension review 5)
 
 // OpenBrowser opens the sign-in page; tests replace it.
 var OpenBrowser = func(u string) error {
@@ -154,6 +154,9 @@ func randomString(n int) (string, error) {
 
 // Login runs the whole flow and returns a session ready to store. `status` gets progress lines.
 func Login(ctx context.Context, server string, status func(string)) (*config.Session, error) {
+	if err := config.CheckServer(server); err != nil {
+		return nil, err
+	}
 	m, err := Discover(ctx, server)
 	if err != nil {
 		return nil, err
@@ -272,6 +275,12 @@ func Login(ctx context.Context, server string, status func(string)) (*config.Ses
 func Refresh(ctx context.Context, s *config.Session) error {
 	if s.RefreshToken == "" {
 		return errors.New("your Brainitive session expired. Run `brainitive login` again")
+	}
+	if err := config.CheckServer(s.TokenEndpoint); err != nil {
+		return fmt.Errorf("the saved session's token endpoint is not safe (%v). Run `brainitive login` again", err)
+	}
+	if s.Server != "" && !sameOrigin(s.Server, s.TokenEndpoint) {
+		return fmt.Errorf("the saved session's token endpoint %s is not on %s. Run `brainitive login` again", s.TokenEndpoint, s.Server)
 	}
 	tokens, err := tokenRequest(ctx, s.TokenEndpoint, url.Values{
 		"grant_type":    {"refresh_token"},

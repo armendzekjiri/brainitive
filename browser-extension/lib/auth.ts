@@ -1,5 +1,5 @@
 import { browser } from 'wxt/browser';
-import { forgetClient, getClient, getSession, setClient, setLastServer, setSession } from './storage';
+import { bumpGeneration, forgetClient, getClient, getGeneration, getSession, setClient, setLastServer, setSession } from './storage';
 import type { Session } from './types';
 
 /**
@@ -41,7 +41,45 @@ export function normalizeServer(input: string): string {
     return url.origin;
 }
 
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * The background's own check of a server origin (the sign-in form checks too, but any
+ * extension page can send `sign-in`): https, or plain http only on an exact loopback
+ * address; no user name / password, path, query or fragment.
+ */
+export function checkServer(server: string): void {
+    let url: URL;
+    try {
+        url = new URL(server);
+    } catch {
+        throw new Error(`${server} is not a valid server address.`);
+    }
+    if (url.username || url.password || url.origin !== server) {
+        throw new Error(`${server} is not a plain server address (https://host[:port]).`);
+    }
+    if (url.protocol === 'https:') return;
+    if (url.protocol === 'http:' && LOOPBACK.has(url.hostname)) return;
+    throw new Error(`Use https for ${url.host}: plain http only works for localhost, 127.0.0.1 and [::1].`);
+}
+
+/**
+ * True when `endpoint` is on exactly the server's origin (scheme, host and port) without
+ * credentials in the URL. OAuth metadata, the stored token endpoint and every token request
+ * must pass this (Codex CLI/extension review 4): a code + PKCE verifier or a refresh token
+ * never goes to another origin.
+ */
+export function sameOrigin(server: string, endpoint: string): boolean {
+    try {
+        const url = new URL(endpoint);
+        return !url.username && !url.password && url.origin === new URL(server).origin;
+    } catch {
+        return false;
+    }
+}
+
 export async function signIn(server: string): Promise<Session> {
+    checkServer(server);
     const metadata = await discover(server);
     const redirectUri = browser.identity.getRedirectURL();
 
@@ -98,16 +136,75 @@ export async function signIn(server: string): Promise<Session> {
         redirectUri,
         ...sessionTokens(tokens, null),
     };
-    await setSession(session);
+    await exclusive(async () => {
+        await bumpGeneration(); // a refresh still running for the previous session must not land
+        await setSession(session);
+    });
     await setLastServer(server);
 
     return session;
 }
 
-/** Forget the tokens and everything cached from the account. */
-export async function signOut(): Promise<void> {
-    await setSession(null);
-    await browser.storage.local.remove(['destinations', 'lastDestination']);
+/**
+ * The server endpoint that revokes the calling capture token and its refresh token (like
+ * `DELETE /api/cli/logout` for the CLI). Codex CLI/extension review 2.
+ */
+export const REVOKE_PATH = '/api/ext/v1/logout';
+
+/** Revokes an access token (and, on the server, its refresh token). True when the server confirmed it. */
+async function revoke(server: string, accessToken: string): Promise<boolean> {
+    try {
+        const response = await fetch(`${server}${REVOKE_PATH}`, {
+            method: 'DELETE',
+            headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` },
+            redirect: 'error',
+        });
+        return response.ok;
+    } catch {
+        return false; // offline, or a redirect
+    }
+}
+
+/**
+ * Sign out: forget the tokens and everything cached from the account (right away, so nothing
+ * can use them any more), then revoke them on the server. If the server can't confirm — offline,
+ * or a server without the endpoint — the local sign-out stands and a note says how to revoke
+ * the extension by hand (shown on the sign-in screen).
+ */
+export async function signOut(): Promise<{ revoked: boolean }> {
+    const session = await exclusive(async () => {
+        const current = await getSession();
+        await bumpGeneration();
+        await setSession(null);
+        await browser.storage.local.remove(['destinations', 'lastDestination', 'signOutNotice']);
+        return current;
+    });
+    if (!session) return { revoked: false };
+
+    const revoked = await revoke(session.server, session.accessToken);
+    if (!revoked) {
+        await browser.storage.local.set({
+            signOutNotice: `Signed out on this device, but ${new URL(session.server).host} couldn’t confirm that the extension’s access was revoked. To be sure, remove “Brainitive for …” under Profile → Connected apps.`,
+        });
+    }
+    return { revoked };
+}
+
+/*
+ * Session writes are serialized, and each sign-in / sign-out starts a new session
+ * "generation" (stored, so it survives the worker being restarted). A refresh remembers the
+ * generation it started in and only stores its result — or signs out after a failure — if
+ * that generation is still current. Without this, a refresh answered after a sign-out signed
+ * the user back in, and one answered after a new sign-in overwrote (or deleted) the new
+ * session (Codex CLI/extension review 3). All auth runs in the background, so an in-memory
+ * queue is enough to make check-and-write atomic.
+ */
+let queue: Promise<unknown> = Promise.resolve();
+
+function exclusive<T>(task: () => Promise<T>): Promise<T> {
+    const run = queue.then(task, task);
+    queue = run.catch(() => undefined);
+    return run;
 }
 
 let refreshing: Promise<Session> | null = null;
@@ -117,54 +214,77 @@ let refreshing: Promise<Session> | null = null;
  * use, so all contexts get their token from here (one refresh at a time).
  */
 export async function getAccessToken(force = false): Promise<{ token: string; server: string }> {
-    let session = await getSession();
+    let { session, generation } = await exclusive(async () => ({ session: await getSession(), generation: await getGeneration() }));
     if (!session) {
         throw new NotSignedInError();
     }
 
     if (force || session.expiresAt - 60_000 < Date.now()) {
-        refreshing ??= refresh(session).finally(() => (refreshing = null));
+        refreshing ??= refresh(session, generation).finally(() => (refreshing = null));
         session = await refreshing;
     }
 
     return { token: session.accessToken, server: session.server };
 }
 
-async function refresh(session: Session): Promise<Session> {
-    if (!session.refreshToken) {
-        await setSession(null);
-        throw new NotSignedInError('Your Brainitive session expired. Sign in again.');
+/** Clears the session — but only the one this refresh belonged to. */
+async function expire(generation: number): Promise<never> {
+    await exclusive(async () => {
+        if ((await getGeneration()) === generation) await setSession(null);
+    });
+    throw new NotSignedInError('Your Brainitive session expired. Sign in again.');
+}
+
+async function refresh(session: Session, generation: number): Promise<Session> {
+    if (!session.refreshToken || !sameOrigin(session.server, session.tokenEndpoint)) {
+        return expire(generation);
     }
 
+    let tokens: TokenResponse;
     try {
-        const tokens = await tokenRequest(session.tokenEndpoint, {
+        tokens = await tokenRequest(session.tokenEndpoint, {
             grant_type: 'refresh_token',
             client_id: session.clientId,
             refresh_token: session.refreshToken,
             scope: SCOPE,
         });
-        const next = { ...session, ...sessionTokens(tokens, session.refreshToken) };
-        await setSession(next);
-        return next;
     } catch (error) {
         if (error instanceof TypeError) {
             throw error; // offline — keep the session
         }
-        await setSession(null);
-        throw new NotSignedInError('Your Brainitive session expired. Sign in again.');
+        return expire(generation);
     }
+
+    return exclusive(async () => {
+        if ((await getGeneration()) !== generation) {
+            // Signed out or signed in again meanwhile: revoke and drop these tokens and hand out
+            // the current session (if any), never the old one's fresh token.
+            void revoke(session.server, tokens.access_token);
+            const current = await getSession();
+            if (!current) throw new NotSignedInError();
+            return current;
+        }
+        const next = { ...session, ...sessionTokens(tokens, session.refreshToken) };
+        await setSession(next);
+        return next;
+    });
 }
 
 async function discover(server: string): Promise<ServerMetadata> {
     let response: Response;
     try {
-        response = await fetch(`${server}/.well-known/oauth-authorization-server`, { headers: { Accept: 'application/json' } });
+        response = await fetch(`${server}/.well-known/oauth-authorization-server`, { headers: { Accept: 'application/json' }, redirect: 'error' });
     } catch {
         throw new Error(`Couldn’t reach ${server}. Check the address and your connection.`);
     }
     const metadata = response.ok ? ((await response.json().catch(() => null)) as ServerMetadata | null) : null;
     if (!metadata?.authorization_endpoint || !metadata.token_endpoint || !metadata.registration_endpoint) {
         throw new Error(`${server} doesn’t look like a Brainitive server.`);
+    }
+    for (const endpoint of [metadata.authorization_endpoint, metadata.token_endpoint, metadata.registration_endpoint]) {
+        if (!sameOrigin(server, endpoint)) {
+            throw new Error(`${server}’s sign-in settings point at another address (${endpoint}). Not signing in.`);
+        }
     }
     return metadata;
 }
@@ -174,6 +294,7 @@ async function register(metadata: ServerMetadata, redirectUri: string): Promise<
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ client_name: `Brainitive for ${browserName()}`, redirect_uris: [redirectUri] }),
+        redirect: 'error',
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok || !body.client_id) {
@@ -187,6 +308,8 @@ async function tokenRequest(endpoint: string, params: Record<string, string>): P
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
         body: new URLSearchParams(params),
+        // A 307/308 would replay the code + verifier or the refresh token elsewhere (Codex CLI/extension review 5).
+        redirect: 'error',
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok || !body.access_token) {

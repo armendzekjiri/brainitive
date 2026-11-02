@@ -19,6 +19,22 @@ Or download `brainitive_<os>_<arch>.tar.gz` / `.zip` from the
 [latest release](https://github.com/armendzekjiri/brainitive/releases/latest) and put the binary
 on your `PATH`. `brainitive update` upgrades in place.
 
+### Verify a download
+
+`install.sh`, `install.ps1` and `brainitive update` check the archive against `checksums.txt`.
+That catches a broken download, but `checksums.txt` sits on the same GitHub release as the
+binaries, so whoever could replace one could replace both. Every release file (binaries,
+`checksums.txt`, the installers and the extension zips) therefore also has a Sigstore-signed
+build-provenance attestation from the release workflow. It is stored outside the release and
+names the workflow that built the file. To check a file with the [GitHub CLI](https://cli.github.com):
+
+```sh
+gh attestation verify brainitive_darwin_arm64.tar.gz --repo armendzekjiri/brainitive \
+  --signer-workflow armendzekjiri/brainitive/.github/workflows/release.yml
+```
+
+A file that was swapped on the release has no matching attestation and fails this check.
+
 The installer also adds `bi` as a short command when that name is available, so `bi login` and `brainitive login` do the same thing. It never replaces an existing `bi` command. Use `bi -s "search words"` to search or `bi -c "a quick note"` to capture.
 
 ### Quick shortcuts
@@ -47,6 +63,26 @@ Your browser opens, you approve the access, done — the same OAuth flow the bro
 uses, nothing to copy. The session lives in `~/.config/brainitive/config.json` (readable only by
 you). For scripts and CI set `BRAINITIVE_TOKEN` and `BRAINITIVE_SERVER` instead (a token from
 *Profile → Connected apps*, or `php artisan mcp:get-token <email>` on the server).
+
+### Security notes
+
+- **One sign-in per server.** The saved session remembers the server that issued it, and its
+  tokens are only ever sent there. If `--server` or `BRAINITIVE_SERVER` points somewhere
+  else, the command stops and asks you to run `brainitive login --server <that server>`.
+  `brainitive logout` always revokes on the session's own server. `BRAINITIVE_TOKEN` goes to
+  the server you pair it with (`--server` / `BRAINITIVE_SERVER`, else the configured one), so
+  set both together.
+- **https only.** Plain `http://` works only for `localhost`, `127.0.0.1` and `[::1]` (local
+  development). Any other `http://` server, or an address with a user name or password, is
+  refused before anything is sent. There is no override.
+- **No redirects.** The CLI doesn't follow HTTP redirects to the server, so a token, refresh
+  token or authorization code can't be forwarded elsewhere. If your server moved, use its
+  new address with `--server`.
+- **Private config file.** Every save writes a fresh owner-only (0600) temp file and renames
+  it over `config.json`. This also fixes the mode of an older, more readable file.
+- **Refreshes are saved before use.** Refresh tokens are single use. If the rotated session
+  can't be written to the config file, the command fails with the reason instead of
+  continuing. Fix the file's location or permissions, then `brainitive login` again.
 
 ## Everyday
 
@@ -110,4 +146,4 @@ Layout: `cmd/brainitive` (main), `internal/cli` (commands), `internal/mcp` (JSON
 `internal/auth` (OAuth 2.1 + PKCE with dynamic client registration and a loopback redirect),
 `internal/api` (the extension API, for screenshots), `internal/config`, `internal/output`.
 Releases: `.github/workflows/release.yml` builds the six binaries and attaches them to the app's
-GitHub release with `checksums.txt`; `install.sh` / `install.ps1` download from there.
+GitHub release with `checksums.txt` and a build-provenance attestation per file (see "Verify a download"); `install.sh` / `install.ps1` download from there.
