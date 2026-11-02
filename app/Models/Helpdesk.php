@@ -139,4 +139,17 @@ class Helpdesk extends Model
     {
         return 'slug';
     }
+
+    /**
+     * `{helpdesk:uuid}` is the public widget's key: only a helpdesk of a live project in a live workspace answers
+     * (Codex web review P). Signed-in routes go through `{workspace}` / `{project}` first.
+     */
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if ($field === 'uuid') {
+            return $this->where('uuid', $value)->whereHas('project.workspace')->first();
+        }
+
+        return parent::resolveRouteBinding($value, $field);
+    }
 }

@@ -346,7 +346,7 @@ class BookmarkController extends Controller
      */
     public function showPublic(Request $request, string $uuid): Response
     {
-        $bookmark = Bookmark::where('uuid', $uuid)->firstOrFail();
+        $bookmark = Bookmark::where('uuid', $uuid)->whereHas('workspace')->firstOrFail(); // a live workspace (Codex web review P)
 
         if ($bookmark->visibility !== 'public') {
             abort(404);

@@ -45,6 +45,7 @@ class Page extends Model
         'edit_revision',
         'current_version',
         'review_required',
+        'archived_private',
     ];
 
     protected $casts = [
@@ -55,6 +56,7 @@ class Page extends Model
         'edit_revision' => 'integer',
         'current_version' => 'integer',
         'review_required' => 'boolean',
+        'archived_private' => 'boolean',
     ];
 
     /**
@@ -67,6 +69,7 @@ class Page extends Model
         'edit_revision' => 0,
         'current_version' => 0,
         'review_required' => false,
+        'archived_private' => false,
     ];
 
     /**
@@ -140,6 +143,15 @@ class Page extends Model
                     ->where('parent_id', $page->parent_id)
                     ->max('position') ?? -1;
                 $page->position = $maxPosition + 1;
+            }
+        });
+
+        // Codex web review L: archiving keeps a private draft private; any other status clears the flag
+        static::saving(function (Page $page) {
+            if ($page->isDirty('status')) {
+                $page->archived_private = $page->status === 'archived' && $page->getOriginal('status') === 'draft'
+                    ? true
+                    : ($page->status === 'archived' && $page->archived_private);
             }
         });
 
@@ -256,6 +268,17 @@ class Page extends Model
     /**
      * Published snapshots, newest first.
      */
+    /**
+     * The versions this user may see (Codex web review M): versions recorded while the page was a private draft
+     * only for those who could see that draft (PagePolicy::viewDraftVersions).
+     *
+     * @return HasMany<PageVersion, $this>
+     */
+    public function versionsFor(User $user): HasMany
+    {
+        return $this->versions()->when(! $user->can('viewDraftVersions', $this), fn ($q) => $q->where('is_draft', false));
+    }
+
     public function versions(): HasMany
     {
         return $this->hasMany(PageVersion::class)->orderByDesc('version');
@@ -362,7 +385,9 @@ class Page extends Model
 
         $query->where(function (Builder $visible) use ($user, $adminProjectIds) {
             $visible->where('pages.type', 'folder')
-                ->orWhere('pages.status', '!=', 'draft')
+                // not private: neither a draft nor an archived draft (Codex web review L)
+                ->orWhere(fn (Builder $open) => $open->where('pages.status', '!=', 'draft')
+                    ->where(fn (Builder $q) => $q->where('pages.status', '!=', 'archived')->orWhere('pages.archived_private', false)))
                 ->orWhere('pages.created_by', $user->id)
                 ->orWhereIn('pages.project_id', $adminProjectIds);
         });
@@ -381,6 +406,20 @@ class Page extends Model
     public function isDraft(): bool
     {
         return $this->status === 'draft';
+    }
+
+    /**
+     * Private to its author and admins: a draft, or a page archived while it was a draft (Codex web review L).
+     * Folders are never private (PagePolicy).
+     */
+    public function isPrivate(): bool
+    {
+        return self::privateStatus((string) $this->status, (bool) $this->archived_private);
+    }
+
+    public static function privateStatus(string $status, bool $archivedPrivate): bool
+    {
+        return $status === 'draft' || ($status === 'archived' && $archivedPrivate);
     }
 
     public function isPublished(): bool
@@ -579,6 +618,8 @@ class Page extends Model
             'content' => $this->content,
             'message' => $message !== null && trim($message) !== '' ? trim($message) : null,
             'created_by' => $user?->id,
+            // recorded while private (a whiteboard checkpoint of a draft): its author's and admins' only (Codex web review M)
+            'is_draft' => $this->isPrivate(),
         ]);
     }
 

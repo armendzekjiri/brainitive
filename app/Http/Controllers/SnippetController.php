@@ -129,7 +129,7 @@ class SnippetController extends Controller
 
     public function showPublicCollection(string $uuid): Response
     {
-        $collection = SnippetCollection::where('uuid', $uuid)
+        $collection = SnippetCollection::where('uuid', $uuid)->whereHas('workspace') // a live workspace (P)
             ->where('visibility', 'public')
             ->firstOrFail();
 
@@ -148,6 +148,7 @@ class SnippetController extends Controller
     {
         $snippet = Snippet::with(['collection:id,uuid,name,slug,visibility,workspace_id', 'creator:id,name'])
             ->where('uuid', $uuid)
+            ->whereHas('collection.workspace') // a live workspace (Codex web review P)
             ->firstOrFail();
 
         // Must be public itself, or inherit + collection is public
