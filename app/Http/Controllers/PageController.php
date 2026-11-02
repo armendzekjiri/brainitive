@@ -295,14 +295,7 @@ class PageController extends Controller
             return response()->json(['success' => false, 'message' => 'Invalid diagram data'], 400);
         }
 
-        $content = $page->content ?? [];
-        if (! is_array($content)) {
-            $content = [];
-        }
-        if (! isset($content['excalidrawEmbeds']) || ! is_array($content['excalidrawEmbeds'])) {
-            $content['excalidrawEmbeds'] = [];
-        }
-        $content['excalidrawEmbeds'][$validated['diagram_id']] = [
+        $scene = [
             'elements' => $data['elements'] ?? [],
             'appState' => $data['appState'] ?? [],
             'files' => $data['files'] ?? [],
@@ -315,10 +308,8 @@ class PageController extends Controller
         );
         $imageUrl = asset('storage/'.$path);
 
-        $page->update([
-            'content' => $content,
-            'last_edited_by' => Auth::id(),
-        ]);
+        // the page's draft, like every other edit (Codex web review H): never the published content directly
+        PageWrites::saveEmbed($page, $request->user(), $validated['diagram_id'], $scene);
 
         return response()->json([
             'success' => true,
