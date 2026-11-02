@@ -39,7 +39,7 @@ final class Deliverables
     /** @return array{0: ClientDeliverable, 1: bool} the deliverable and whether it is new */
     public static function publishPage(ClientPortal $portal, Page $page, User $user, ?string $message = null): array
     {
-        $version = $page->versions()->first();
+        $version = $page->versions()->where('is_draft', false)->first(); // never a private draft checkpoint (M)
         if (! $version || ! $page->isPublished() || ! $page->isPage() || $page->is_whiteboard) {
             throw ValidationException::withMessages(['id' => 'Only published docs can be shared with clients.']);
         }

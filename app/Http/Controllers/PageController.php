@@ -86,7 +86,7 @@ class PageController extends Controller
         $canUpdate = $user->can('update', $page);
 
         // Readers care about when the live version changed, not about draft autosaves
-        $page->setAttribute('last_published_at', $page->versions()->value('created_at'));
+        $page->setAttribute('last_published_at', $page->versions()->where('is_draft', false)->value('created_at'));
 
         // Unpublished changes are shared between editors only; readers get the live page
         if ($canUpdate) {

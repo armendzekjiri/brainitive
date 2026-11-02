@@ -268,6 +268,17 @@ class Page extends Model
     /**
      * Published snapshots, newest first.
      */
+    /**
+     * The versions this user may see (Codex web review M): versions recorded while the page was a private draft
+     * only for those who could see that draft (PagePolicy::viewDraftVersions).
+     *
+     * @return HasMany<PageVersion, $this>
+     */
+    public function versionsFor(User $user): HasMany
+    {
+        return $this->versions()->when(! $user->can('viewDraftVersions', $this), fn ($q) => $q->where('is_draft', false));
+    }
+
     public function versions(): HasMany
     {
         return $this->hasMany(PageVersion::class)->orderByDesc('version');
@@ -607,6 +618,8 @@ class Page extends Model
             'content' => $this->content,
             'message' => $message !== null && trim($message) !== '' ? trim($message) : null,
             'created_by' => $user?->id,
+            // recorded while private (a whiteboard checkpoint of a draft): its author's and admins' only (Codex web review M)
+            'is_draft' => $this->isPrivate(),
         ]);
     }
 

@@ -21,6 +21,7 @@ class PageVersion extends Model
         'content',
         'message',
         'created_by',
+        'is_draft',
     ];
 
     protected function casts(): array
@@ -28,6 +29,7 @@ class PageVersion extends Model
         return [
             'content' => 'array',
             'version' => 'integer',
+            'is_draft' => 'boolean',
         ];
     }
 
