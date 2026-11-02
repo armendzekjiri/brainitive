@@ -612,6 +612,36 @@ class Page extends Model
         return $this->children()->with('descendants');
     }
 
+    /**
+     * The breadcrumbs as one user may see them (Codex web review G): ancestors they can't view (another author's
+     * private draft above a published child) are left out — no name, no id.
+     *
+     * @return list<array{id: int, uuid: string, name: string, slug: string, type: string}>
+     */
+    public function pathFor(User $user): array
+    {
+        $path = [];
+        $current = $this;
+        $seen = [];
+
+        while ($current && ! isset($seen[$current->id])) {
+            $seen[$current->id] = true;
+            if ($current->is($this) || $user->can('view', $current)) {
+                array_unshift($path, [
+                    'id' => $current->id,
+                    'uuid' => $current->uuid,
+                    'name' => $current->name,
+                    'slug' => $current->slug,
+                    'type' => $current->type,
+                ]);
+            }
+            // a fresh query, not the `parent` relation: that would end up serialized with the page
+            $current = $current->parent_id ? self::query()->find($current->parent_id) : null;
+        }
+
+        return $path;
+    }
+
     // Get breadcrumb path
     public function getPathAttribute(): array
     {

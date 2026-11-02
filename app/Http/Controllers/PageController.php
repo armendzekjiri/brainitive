@@ -38,11 +38,16 @@ class PageController extends Controller
             'type' => 'required|in:page,folder',
             'parent_id' => [
                 'nullable',
+                'integer',
                 Rule::exists('pages', 'id')->where('project_id', $project->id),
             ],
             'icon' => 'nullable|string|max:2000000',
             'content_type' => 'nullable|string|in:doc,excalidraw',
         ]);
+        // the parent must be a page the user can open (Codex web review G: not another author's private draft)
+        if (isset($validated['parent_id'])) {
+            $validated['parent_id'] = $this->moveDestination($request, (int) $validated['parent_id'])?->id;
+        }
 
         $page = PageWrites::create($project, $request->user(), $validated);
 
@@ -71,7 +76,8 @@ class PageController extends Controller
 
         $user = $request->user();
 
-        $page->load(['parent', 'children' => function ($query) use ($user) {
+        // no `parent`: it may be a page this user can't view (Codex web review G); the breadcrumbs are filtered
+        $page->load(['children' => function ($query) use ($user) {
             $query->visibleTo($user)->orderBy('type', 'desc')->orderBy('position');
         }, 'creator', 'lastEditor', 'draftEditor', 'watchers']);
 
@@ -91,7 +97,7 @@ class PageController extends Controller
             'workspace' => $workspace,
             'project' => $project,
             'page' => $page,
-            'breadcrumbs' => $page->path,
+            'breadcrumbs' => $page->pathFor($user),
             'review' => ReviewPresenter::forPage($page, $user, $canUpdate), // BRAI-80
             'collab' => PageCollab::props($page, $user, $canUpdate), // live co-editing (BRAI-54); null = single-user editor
             'whiteboardCollab' => WhiteboardCollab::props($page, $user, $canUpdate), // live whiteboard preview (BRAI-153); null = static
@@ -733,7 +739,12 @@ class PageController extends Controller
         $newPage->status = 'draft';
         $newPage->created_by = $userId;
         $newPage->last_edited_by = $userId;
-        $newPage->parent_id = $newParentId ?? $page->parent_id;
+        // a copy never lands under a parent the user can't view (Codex web review G): top level instead
+        $parentId = $newParentId ?? $page->parent_id;
+        if ($newParentId === null && $parentId !== null && ! User::findOrFail($userId)->can('view', Page::findOrFail($parentId))) {
+            $parentId = null;
+        }
+        $newPage->parent_id = $parentId;
         $newPage->position = 0; // Boot method assigns to end
         $newPage->save();
 

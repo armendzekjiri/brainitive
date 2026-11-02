@@ -50,7 +50,7 @@ class PageDetailResource extends PageResource
             'has_unpublished_changes' => $canUpdate && $page->hasUnpublishedChanges(),
             'review_required' => (bool) $page->review_required,
             // the ancestors, top first (the web's breadcrumbs)
-            'breadcrumbs' => PageCrumbResource::collection(array_slice($page->path, 0, -1)),
+            'breadcrumbs' => PageCrumbResource::collection(array_slice($page->pathFor($user), 0, -1)),
             'creator' => $page->creator ? new PersonResource($page->creator) : null,
             'last_edited_by' => $page->lastEditor ? new PersonResource($page->lastEditor) : null,
             'watching' => $page->watchers()->whereKey($user->id)->exists(),
