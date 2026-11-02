@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\AppApi;
 
+use App\Models\WorkTimer;
 use App\Support\Sync\SyncChange;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -52,6 +53,10 @@ class SyncChangeResource extends JsonResource
             'capture' => new CaptureResource($change->record, is_array($change->context) ? $change->context : null),
             'my_day' => new MyDayResource($change->record),
             'comment' => new CommentResource($change->record),
+            // POST /sync results only (not in the feed)
+            'timer' => new TimerStateResource($change->record instanceof WorkTimer ? $change->record : null, $change->context),
+            'notification' => new NotificationResource($change->record),
+            'unread_count' => new UnreadCountResource($change->record),
             default => null,
         };
     }

@@ -18,6 +18,8 @@ class StartTimerRequest extends FormRequest
         return [
             // issue:<id> (as in My Work); list tasks have no work log and can't be timed
             'id' => ['required', 'string', 'max:40'],
+            // what the user works on: the work log's note when the stop gives none
+            'description' => ['nullable', 'string', 'max:255'],
         ];
     }
 }

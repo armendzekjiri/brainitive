@@ -5,29 +5,44 @@ namespace App\Support\Sync;
 use App\Http\Resources\AppApi\TaskListDetailResource;
 use App\Models\Capture;
 use App\Models\Comment;
+use App\Models\InboxNotification;
 use App\Models\TaskList;
 use App\Models\TaskListItem;
 use App\Models\User;
+use App\Models\WorkTimer;
 use App\Support\Captures\CaptureConversion;
 use App\Support\MyDay\MyDayPlan;
 use App\Support\MyWork\WorkRef;
+use App\Support\Notifications\NotificationInbox;
 use App\Support\TaskLists\TaskLists;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Str;
 
 /**
  * The entity of a `POST /api/v1/sync` result as the feed's record (BRAI-441): the web's offline engine
  * answers snapshots of its own; the App API looks the entity up again (by the outcome's entity type + id,
  * also for replays) and renders it with the feed's resources, so a client replaces its cached record
  * directly. `issue.*` and `work.done` → `work`, `list_task.create|update` → `task`, `list_task.reorder` →
- * `task_list`, `capture.create` → `capture`, `my_day.*` → `my_day`, `issue.comment` → `comment`. Only
- * what the user can open now: gone or hidden → null.
+ * `task_list`, `capture.create` → `capture`, `my_day.*` → `my_day`, `issue.comment` → `comment`,
+ * `timer.*` → `timer` (the timer state now), `notification.read` → `notification`, `notifications.read_all`
+ * → `unread_count`. Only what the user can open now: gone or hidden → null.
  */
 final class SyncRecords
 {
-    public static function find(User $user, string $mutationType, ?string $entityType, ?int $entityId): ?SyncChange
+    /** @param  array<string, mixed>  $data  the change's data (a notification is addressed by its uuid there) */
+    public static function find(User $user, string $mutationType, ?string $entityType, ?int $entityId, array $data = []): ?SyncChange
     {
         if (str_starts_with($mutationType, 'my_day.')) {
             return self::myDay($user);
+        }
+        if (str_starts_with($mutationType, 'timer.')) {
+            return self::timer($user);
+        }
+        if ($mutationType === 'notification.read') {
+            return self::notification($user, $data['notification_id'] ?? null);
+        }
+        if ($mutationType === 'notifications.read_all') {
+            return new SyncChange('unread_count', 'me', SyncChange::UPSERT, null, CarbonImmutable::now('UTC'), NotificationInbox::unread($user));
         }
         if ($entityId === null) {
             return null;
@@ -95,6 +110,24 @@ final class SyncRecords
         }
 
         return new SyncChange('comment', (string) $comment->id, SyncChange::UPSERT, (int) $item->board->project_id, $comment->updated_at, $comment);
+    }
+
+    /** The user's timer state now, as `GET /me/timer` (running or not). */
+    private static function timer(User $user): SyncChange
+    {
+        $timer = WorkTimer::where('user_id', $user->id)->first();
+
+        return new SyncChange('timer', 'me', SyncChange::UPSERT, null, $timer?->updated_at ?? CarbonImmutable::now('UTC'), $timer, $user);
+    }
+
+    private static function notification(User $user, mixed $id): ?SyncChange
+    {
+        $notification = is_string($id) && Str::isUuid($id) ? NotificationInbox::own($user)->find($id) : null;
+        if (! $notification instanceof InboxNotification) {
+            return null;
+        }
+
+        return new SyncChange('notification', (string) $notification->id, SyncChange::UPSERT, null, $notification->updated_at, $notification);
     }
 
     /** Today's My Day, as `GET /me/my-day`. */

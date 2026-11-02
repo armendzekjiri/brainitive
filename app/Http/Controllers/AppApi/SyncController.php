@@ -9,6 +9,7 @@ use App\Http\Resources\AppApi\SyncChangeResource;
 use App\Http\Resources\AppApi\SyncResultResource;
 use App\Models\User;
 use App\Support\AppApi\AppTokens;
+use App\Support\AppApi\ValidationWithExtras;
 use App\Support\Offline\OfflineSync;
 use App\Support\Sync\ChangeFeed;
 use App\Support\Sync\SyncChange;
@@ -75,11 +76,13 @@ class SyncController extends Controller
      * `{changes: [{request_id, type, target?, base?, data}]}` (≤ 50), applied in order, each on its own: one
      * result per change in the same order, and one bad change never stops the others. Types and their data
      * are the web's offline mutations (`list_task.create|update|reorder`, `issue.update|comment|create`,
-     * `capture.create`, `my_day.add|remove`) plus `work.done`. Updates carry `base.fields` (each changed
+     * `capture.create`, `my_day.add|remove`) plus `work.done`, `timer.start|stop|discard`, `notification.read`
+     * and `notifications.read_all`. Updates carry `base.fields` (each changed
      * field as the device saw it): a field someone else changed meanwhile is a `conflict` (409) and is not
      * written — never overwritten. `request_id` makes a change idempotent (30 days): a retry answers the
      * stored result (`replayed: true`); the same id with another change → `invalid`. `entity` is the server's
-     * current state as the feed's record of `record_type` (work, task, task_list, capture, my_day, comment).
+     * current state as the feed's record of `record_type` (work, task, task_list, capture, my_day, comment, timer,
+     * notification, unread_count). `gone`: the timer / notification is no longer there, nothing was written.
      * `target.ref` / `data.work_ref` = the request_id of an earlier create (in this batch or before). Budget:
      * 240 changes a minute per user (`rate_limited`: send it again later).
      */
@@ -143,7 +146,10 @@ class SyncController extends Controller
         try {
             $outcome = OfflineSync::handle($user, $mutation);
         } catch (ValidationException $e) {
-            return $result('invalid', 422, ['message' => $e->getMessage()], $e->errors());
+            // a timer stop refused for its activity also says what may be picked (as the REST 422)
+            $extras = $e instanceof ValidationWithExtras ? $e->extras : [];
+
+            return $result('invalid', 422, ['message' => $e->getMessage()] + $extras, $e->errors());
         } catch (AuthorizationException) {
             return $result('forbidden', 403, ['message' => 'You are not allowed to make this change.']);
         } catch (ThrottleRequestsException $e) {
@@ -155,7 +161,7 @@ class SyncController extends Controller
         }
 
         // the entity as the feed's record (the web engine's snapshot is for the web's own offline mode)
-        $record = $outcome->isFinal() ? SyncRecords::find($user, (string) $type, $outcome->entityType, $outcome->entityId) : null;
+        $record = $outcome->isFinal() ? SyncRecords::find($user, (string) $type, $outcome->entityType, $outcome->entityId, $mutation['data']) : null;
 
         return $result((string) ($outcome->body['status'] ?? 'applied'), $outcome->status, $outcome->body) + ['record' => $record];
     }

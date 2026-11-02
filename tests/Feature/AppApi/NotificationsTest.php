@@ -53,7 +53,7 @@ class NotificationsTest extends TestCase
             ->assertJsonPath('data.1.data.actor_name', 'Ada')
             ->assertJsonPath('data.1.read', false)
             ->assertJsonPath('data.0.read', true);
-        $this->assertSame(['id', 'type', 'category', 'data', 'read', 'read_at', 'archived_at', 'created_at'], array_keys($all->json('data.0')));
+        $this->assertSame(['id', 'type', 'category', 'summary', 'url', 'data', 'read', 'read_at', 'archived_at', 'created_at'], array_keys($all->json('data.0')));
         $this->assertMatchesRegularExpression('/Z$/', $all->json('data.0.created_at'));
 
         $ids = fn (string $query) => array_column($this->getJson('/api/v1/notifications?'.$query, $this->appHeaders($this->token))->assertOk()->json('data'), 'id');

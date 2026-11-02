@@ -9,13 +9,11 @@ use App\Http\Requests\AppApi\StartTimerRequest;
 use App\Http\Requests\AppApi\StopTimerRequest;
 use App\Http\Resources\AppApi\TimerStateResource;
 use App\Http\Resources\AppApi\TimerStopResource;
-use App\Models\BillingActivity;
 use App\Models\Item;
 use App\Models\User;
 use App\Models\WorkTimer;
-use App\Support\AppApi\ValidationWithExtras;
+use App\Support\AppApi\TimerStopRefusal;
 use App\Support\Billing\TimeEntries;
-use App\Support\Billing\TimeLogActivities;
 use App\Support\Billing\WorkTimers;
 use App\Support\MyWork\WorkRef;
 use Dedoc\Scramble\Attributes\Group;
@@ -42,6 +40,8 @@ class TimerController extends Controller
      *
      * Answers an `ETag`; send it back as `If-None-Match` to get 304 while nothing changed. The elapsed
      * time ticks by itself and does not change the tag: count from `timer.started_at` on a 304.
+     *
+     * @response TimerStateResource
      */
     public function show(Request $request): JsonResponse|Response
     {
@@ -56,7 +56,8 @@ class TimerController extends Controller
     /**
      * Start the timer on an issue.
      *
-     * Needs the right to edit the issue (= log work on it, 403). Only one timer runs per user: another
+     * `description` (optional): what the user works on; it becomes the work log's note unless the stop sends
+     * one. Needs the right to edit the issue (= log work on it, 403). Only one timer runs per user: another
      * one running → 409 (stop it first). List tasks can't be timed (422).
      *
      * @throws NotFoundHttpException not an issue the user can open (404)
@@ -74,7 +75,7 @@ class TimerController extends Controller
         abort_unless($item instanceof Item, 404);
         $this->authorize('update', $item);
 
-        abort_if(WorkTimers::start($user, $item) === null, 409, 'A timer is already running — stop it first.');
+        abort_if(WorkTimers::start($user, $item, null, $request->validated('description')) === null, 409, 'A timer is already running — stop it first.');
 
         return (new TimerStateResource(WorkTimer::where('user_id', $user->id)->first(), $user))->response()->setStatusCode(201);
     }
@@ -100,15 +101,7 @@ class TimerController extends Controller
             $stopped = WorkTimers::stop($user, (int) $data['timer_id'], $minutes, $data['note'] ?? null, $data['activity_id'] ?? null, $data['spent_on'] ?? null);
         } catch (ValidationException $e) {
             // the stop was rolled back (the timer runs on): tell the app what it may pick, so it can retry
-            $workspaceId = isset($e->errors()['activity_id']) ? $timer?->item?->board?->project?->workspace_id : null;
-            if ($workspaceId === null) {
-                throw $e;
-            }
-
-            throw ValidationWithExtras::with($e->errors(), [
-                'activities' => TimeLogActivities::active($workspaceId)->map(fn (BillingActivity $a) => ['id' => $a->id, 'name' => $a->name])->values()->all(),
-                'default_activity_id' => TimeLogActivities::defaultFor($user, $workspaceId, $timer->item),
-            ]);
+            throw TimerStopRefusal::withPicker($e, $user, $timer);
         }
         $stopped['entry']?->load([...TimeEntries::WITH, 'workspace']);
 

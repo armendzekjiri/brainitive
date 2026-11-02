@@ -152,4 +152,76 @@ class PollingETagsTest extends TestCase
         $this->assertNotSame($plannedTag, $other->headers->get('ETag'));
         $this->assertSame($emptyTag === $other->headers->get('ETag'), false); // the empty tag is the editor's, not shared
     }
+
+    public function test_my_work_answers_304_until_the_work_changes_and_is_per_user(): void
+    {
+        $path = '/api/v1/me/work';
+        $item = $this->item(['title' => 'Mine', 'assigned_to' => $this->editor->id]);
+
+        $first = $this->poll($path)->assertOk()->assertJsonCount(1, 'data');
+        $tag = $first->headers->get('ETag');
+        $this->assertNotEmpty($tag);
+        $this->poll($path, null, $tag)->assertStatus(304)->assertNoContent(304);
+
+        Carbon::setTestNow(now()->addMinute());
+        $item->update(['title' => 'Renamed']);
+        $renamed = $this->poll($path, null, $tag)->assertOk()->assertJsonPath('data.0.title', 'Renamed');
+        $this->assertNotSame($tag, $renamed->headers->get('ETag'));
+
+        $this->item(['title' => 'New one', 'assigned_to' => $this->editor->id]);
+        $added = $this->poll($path, null, $renamed->headers->get('ETag'))->assertOk()->assertJsonCount(2, 'data');
+
+        // another user: never a 304 on this tag, nor this work
+        $other = $this->poll($path, $this->viewer, $added->headers->get('ETag'))->assertOk()->assertJsonCount(0, 'data');
+        $this->assertNotSame($added->headers->get('ETag'), $other->headers->get('ETag'));
+    }
+
+    public function test_the_first_notifications_page_answers_304_until_the_inbox_changes(): void
+    {
+        $path = '/api/v1/notifications';
+        $this->notify($this->editor, 'one');
+
+        $first = $this->poll($path)->assertOk()->assertJsonCount(1, 'data');
+        $tag = $first->headers->get('ETag');
+        $this->assertNotEmpty($tag);
+        $this->poll($path, null, $tag)->assertStatus(304);
+
+        // read elsewhere: the row changed
+        $this->editor->notifications()->update(['read_at' => now()]);
+        $read = $this->poll($path, null, $tag)->assertOk()->assertJsonPath('data.0.read', true);
+        $this->assertNotSame($tag, $read->headers->get('ETag'));
+
+        $this->notify($this->editor, 'two');
+        $this->poll($path, null, $read->headers->get('ETag'))->assertOk()->assertJsonCount(2, 'data');
+
+        // per user (both have the same one-row inbox shape)
+        $this->notify($this->viewer, 'one');
+        $theirs = $this->poll($path, $this->viewer)->assertOk()->headers->get('ETag');
+        $this->assertNotSame($read->headers->get('ETag'), $theirs);
+
+        // later pages (a cursor) answer without a tag
+        $this->notify($this->editor, 'three');
+        $page = $this->poll($path.'?limit=1')->assertOk();
+        $this->assertNotNull($page->headers->get('ETag'));
+        $next = $this->poll($path.'?limit=1&cursor='.urlencode((string) $page->json('next_cursor')))->assertOk()->assertJsonCount(1, 'data');
+        $this->assertNull($next->headers->get('ETag'));
+    }
+
+    public function test_capture_destinations_answer_304_until_they_change_and_are_per_user(): void
+    {
+        $path = '/api/v1/capture-destinations';
+
+        $first = $this->poll($path)->assertOk();
+        $tag = $first->headers->get('ETag');
+        $this->assertNotEmpty($tag);
+        $this->poll($path, null, $tag)->assertStatus(304)->assertNoContent(304);
+
+        $this->project->update(['name' => 'Renamed project']);
+        $renamed = $this->poll($path, null, $tag)->assertOk()->assertJsonPath('data.0.projects.0.name', 'Renamed project');
+        $this->assertNotSame($tag, $renamed->headers->get('ETag'));
+
+        // the viewer sees the same workspace and project, but may write less: another answer and tag
+        $theirs = $this->poll($path, $this->viewer, $renamed->headers->get('ETag'))->assertOk();
+        $this->assertNotSame($renamed->headers->get('ETag'), $theirs->headers->get('ETag'));
+    }
 }

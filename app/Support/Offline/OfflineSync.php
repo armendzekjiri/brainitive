@@ -8,6 +8,8 @@ use App\Support\Offline\Appliers\CaptureMutations;
 use App\Support\Offline\Appliers\IssueMutations;
 use App\Support\Offline\Appliers\ListTaskMutations;
 use App\Support\Offline\Appliers\MyDayMutations;
+use App\Support\Offline\Appliers\NotificationMutations;
+use App\Support\Offline\Appliers\TimerMutations;
 use App\Support\Offline\Appliers\WorkMutations;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -38,6 +40,12 @@ final class OfflineSync
         'my_day.remove' => [MyDayMutations::class, 'remove'],
         // the circle of My Work / My Day (App API sync, BRAI-425)
         'work.done' => [WorkMutations::class, 'done'],
+        // the focus timer and the notification inbox, for the desktop tray / mobile offline (App API sync)
+        'timer.start' => [TimerMutations::class, 'start'],
+        'timer.stop' => [TimerMutations::class, 'stop'],
+        'timer.discard' => [TimerMutations::class, 'discard'],
+        'notification.read' => [NotificationMutations::class, 'read'],
+        'notifications.read_all' => [NotificationMutations::class, 'readAll'],
     ];
 
     /**

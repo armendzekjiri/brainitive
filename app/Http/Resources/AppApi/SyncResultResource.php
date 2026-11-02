@@ -9,7 +9,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 /**
  * The result of one change of a `POST /api/v1/sync` batch (BRAI-425), in the batch's order. `status`
  * says what the device does with its queued change: `applied` / `conflict` → done (drop it from the
- * outbox; on a conflict show `conflicts` and let the user pick), `deleted` / `forbidden` / `invalid` →
+ * outbox; on a conflict show `conflicts` and let the user pick), `deleted` / `gone` / `forbidden` / `invalid` →
  * drop it and tell the user, `waiting` / `rate_limited` / `error` → keep it and send it again later.
  *
  * @property-read array{request_id: string|null, type: string|null, status: string, http_status: int, body?: array<string, mixed>, errors?: array<string, list<string>>|null, record?: SyncChange|null} $resource
@@ -28,15 +28,15 @@ class SyncResultResource extends JsonResource
             'request_id' => $result['request_id'],
             /** @var string|null the change's type */
             'type' => $result['type'],
-            // applied | conflict | deleted | waiting | forbidden | invalid | rate_limited | error
+            // applied | conflict | deleted | gone | waiting | forbidden | invalid | rate_limited | error
             'status' => $result['status'],
-            // the HTTP status this result stands for: 200 | 409 | 410 | 424 | 403 | 422 | 429 | 500
+            // the HTTP status this result stands for: 200 | 409 | 410 | 424 | 403 | 422 | 429 | 500 (gone: 410)
             'http_status' => (int) $result['http_status'],
             // true: this request_id was applied before; this is the stored result, nothing was written again
             'replayed' => (bool) ($body['replayed'] ?? false),
             // issue | list_task | comment | capture | my_day | task_list | board …
             'entity_type' => $body['entity_type'] ?? null,
-            /** @var string|null which feed record `entity` is: work | task | task_list | capture | my_day | comment (null: no entity) */
+            /** @var string|null which record `entity` is: work | task | task_list | capture | my_day | comment | timer (as GET /me/timer) | notification | unread_count (null: no entity) */
             'record_type' => $record?->type,
             /** @var array<string, mixed>|null the server's state after the change (applied, conflict) as the feed's record of `record_type` — replace your cached copy with it; null when it is gone or hidden now */
             'entity' => $record ? SyncChangeResource::record($record) : null,
@@ -48,6 +48,10 @@ class SyncResultResource extends JsonResource
             'message' => $body['message'] ?? null,
             /** @var array<string, list<string>>|null validation errors of an `invalid` change */
             'errors' => $result['errors'] ?? null,
+            /** @var list<array{id: int, name: string}>|null an `invalid` timer.stop for its activity: what can be picked (send it as `activity_id` in a new change) */
+            'activities' => $body['activities'] ?? null,
+            /** @var int|null an `invalid` timer.stop for its activity: the activity to preselect (or null) */
+            'default_activity_id' => $body['default_activity_id'] ?? null,
         ];
     }
 }

@@ -288,4 +288,44 @@ class TimeTrackingTest extends TestCase
         $unverified = User::factory()->unverified()->create();
         $this->getJson('/api/v1/work-logs', $this->appHeaders($this->appToken($unverified)))->assertForbidden();
     }
+
+    public function test_today_logged_seconds_counts_the_users_local_today_without_the_running_timer(): void
+    {
+        // 2026-10-22 12:00 UTC is already 01:00 on the 23rd in Auckland (UTC+13)
+        Carbon::setTestNow(Carbon::parse('2026-10-22 12:00', 'UTC'));
+        $this->editor->forceFill(['timezone' => 'Pacific/Auckland'])->save();
+        $this->entry(['spent_on' => '2026-10-23', 'minutes' => 30]);
+        $this->entry(['spent_on' => '2026-10-23', 'minutes' => 15, 'billing_activity_id' => null]);
+        $this->entry(['spent_on' => '2026-10-22', 'minutes' => 120]); // the UTC date: yesterday in Auckland
+        $this->entry(['spent_on' => '2026-10-23', 'minutes' => 999, 'user_id' => $this->viewer->id]); // someone else
+        WorkTimers::start($this->editor, $this->item(), now()->subHours(3));
+
+        $this->getJson('/api/v1/me/timer', $this->headers($this->editor))->assertOk()
+            ->assertJsonPath('data.running', true)
+            ->assertJsonPath('data.today_logged_seconds', 45 * 60);
+
+        // in UTC the 22nd is today
+        $this->editor->forceFill(['timezone' => 'UTC'])->save();
+        $this->getJson('/api/v1/me/timer', $this->headers($this->editor))->assertJsonPath('data.today_logged_seconds', 120 * 60);
+    }
+
+    public function test_the_timer_tag_changes_when_time_is_logged(): void
+    {
+        $first = $this->getJson('/api/v1/me/timer', $this->headers())->assertOk()->assertJsonPath('data.today_logged_seconds', 0);
+        $tag = $first->headers->get('ETag');
+
+        $this->entry(['spent_on' => '2026-10-22', 'minutes' => 20]);
+        $this->getJson('/api/v1/me/timer', $this->headers() + ['If-None-Match' => $tag])->assertOk()->assertJsonPath('data.today_logged_seconds', 1200);
+    }
+
+    public function test_a_description_given_at_the_start_is_the_default_note(): void
+    {
+        $item = $this->item();
+        $timer = $this->postJson('/api/v1/me/timer/start', ['id' => 'issue:'.$item->id, 'description' => 'Pairing with Ada'], $this->headers())
+            ->assertCreated()->assertJsonPath('data.timer.description', 'Pairing with Ada')->json('data.timer.id');
+
+        $this->postJson('/api/v1/me/timer/stop', ['timer_id' => $timer, 'time' => '30m', 'activity_id' => $this->programming->id], $this->headers())
+            ->assertOk()->assertJsonPath('data.result', 'logged');
+        $this->assertSame('Pairing with Ada', TimeEntry::where('item_id', $item->id)->sole()->note);
+    }
 }

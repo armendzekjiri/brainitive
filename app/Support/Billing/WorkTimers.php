@@ -6,7 +6,9 @@ use App\Models\Item;
 use App\Models\TimeEntry;
 use App\Models\User;
 use App\Models\WorkTimer;
+use Carbon\CarbonInterface;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
@@ -27,14 +29,25 @@ final class WorkTimers
     /** The user can no longer log work on the issue: the timer is stopped, nothing is logged. */
     public const NO_ACCESS = 'no_access';
 
-    /** Start a timer on the issue; null when one is already running (stop it first). */
-    public static function start(User $user, Item $item): ?WorkTimer
+    /** How far back a start time may lie (a timer started offline, sent later: App API sync `timer.start`). */
+    public const MAX_BACKDATE_HOURS = 12;
+
+    /**
+     * Start a timer on the issue; null when one is already running (stop it first). `$startedAt` (default now)
+     * is clamped to the last MAX_BACKDATE_HOURS hours and never lies in the future; `$description` (what the
+     * user works on) becomes the work log's note unless the stop gives one.
+     */
+    public static function start(User $user, Item $item, ?CarbonInterface $startedAt = null, ?string $description = null): ?WorkTimer
     {
         if (WorkTimer::where('user_id', $user->id)->exists()) {
             return null;
         }
+        $now = now();
+        $startedAt = $startedAt === null ? $now : Carbon::instance($startedAt)->max($now->copy()->subHours(self::MAX_BACKDATE_HOURS))->min($now);
+        $description = $description !== null && trim($description) !== '' ? trim($description) : null;
         try {
-            return WorkTimer::create(['user_id' => $user->id, 'item_id' => $item->id, 'started_at' => now()]);
+            return WorkTimer::create(['user_id' => $user->id, 'item_id' => $item->id, 'started_at' => $startedAt]
+                + ($description !== null ? ['description' => $description] : []));
         } catch (UniqueConstraintViolationException) {
             return null; // started in another tab / on another device a moment ago
         }
@@ -55,6 +68,7 @@ final class WorkTimers
                 return ['result' => self::ALREADY_STOPPED, 'item' => null, 'entry' => null];
             }
             $item = $timer->item;
+            $note ??= $timer->description;
             $timer->delete();
             if (! $item || Gate::forUser($user)->denies('update', $item)) {
                 return ['result' => self::NO_ACCESS, 'item' => null, 'entry' => null];

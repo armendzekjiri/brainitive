@@ -6,6 +6,7 @@ use App\Models\InboxNotification;
 use App\Models\User;
 use App\Notifications\NotificationCatalog;
 use App\Support\Live\Live;
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Pagination\CursorPaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -127,11 +128,19 @@ final class NotificationInbox
         return $unread;
     }
 
-    /** Mark every unread inbox notification as read. */
-    public static function markAllRead(User $user): void
+    /**
+     * Mark every unread inbox notification as read — with `$before`, only those created until then, so what
+     * arrived later stays unread (an app's offline "read all"). Returns the new unread count.
+     */
+    public static function markAllRead(User $user, ?CarbonInterface $before = null): int
     {
-        self::own($user)->whereNull('archived_at')->whereNull('read_at')->update(['read_at' => now()]);
-        self::announce($user, 0);
+        self::own($user)->whereNull('archived_at')->whereNull('read_at')
+            ->when($before !== null, fn (Builder $q) => $q->where('created_at', '<=', $before))
+            ->update(['read_at' => now()]);
+        $unread = $before === null ? 0 : self::unread($user);
+        self::announce($user, $unread);
+
+        return $unread;
     }
 
     /** The user's other tabs and apps (bell badge, tab title) follow a read / archive at once (BRAI-151). */

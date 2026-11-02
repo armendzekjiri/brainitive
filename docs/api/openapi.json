@@ -2017,6 +2017,7 @@
         "/notifications": {
             "get": {
                 "operationId": "app.v1.notifications.index",
+                "description": "Each row carries `summary` (the bell's sentence as plain text) and `url` (the page to open, or null).\nThe first page (no `cursor`) answers an `ETag`: send it back as `If-None-Match` to get 304 while it is unchanged.",
                 "summary": "The inbox, newest first: `filter` = all | unread | mentions | assigned; `archived=1` for the archive",
                 "tags": [
                     "Notifications"
@@ -2487,7 +2488,7 @@
         "/me/work": {
             "get": {
                 "operationId": "app.v1.work.index",
-                "description": "Board issues and list tasks of every project the user can open, soonest due first (no due date\nlast). `due` = overdue | today | upcoming (or several, comma separated), by the user's local date;\n`status` = open (default) | done | all. For a cheap refresh pass `updated_since` with\n`status=all`: entries that were completed since then come back with `done: true`.",
+                "description": "Board issues and list tasks of every project the user can open, soonest due first (no due date\nlast). `due` = overdue | today | upcoming (or several, comma separated), by the user's local date;\n`status` = open (default) | done | all. For a cheap refresh pass `updated_since` with\n`status=all`: entries that were completed since then come back with `done: true`.\n\nAnswers an `ETag` (the page and the user); send it back as `If-None-Match` to get 304 while that page is unchanged.",
                 "summary": "The work assigned to the user",
                 "tags": [
                     "My Work"
@@ -4912,6 +4913,7 @@
         "/capture-destinations": {
             "get": {
                 "operationId": "app.v1.captures.destinations",
+                "description": "Answers an `ETag`: send it back as `If-None-Match` to get 304 while nothing changed.",
                 "summary": "Where the user can organize captures into, per workspace (only what they may write to)",
                 "tags": [
                     "Captures"
@@ -6204,11 +6206,19 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "",
+                        "description": "`TimerStateResource`",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "object"
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/components/schemas/TimerStateResource"
+                                        }
+                                    },
+                                    "required": [
+                                        "data"
+                                    ]
                                 }
                             }
                         }
@@ -6225,7 +6235,7 @@
         "/me/timer/start": {
             "post": {
                 "operationId": "app.v1.timer.start",
-                "description": "Needs the right to edit the issue (= log work on it, 403). Only one timer runs per user: another\none running \u2192 409 (stop it first). List tasks can't be timed (422).",
+                "description": "`description` (optional): what the user works on; it becomes the work log's note unless the stop sends\none. Needs the right to edit the issue (= log work on it, 403). Only one timer runs per user: another\none running \u2192 409 (stop it first). List tasks can't be timed (422).",
                 "summary": "Start the timer on an issue",
                 "tags": [
                     "Time tracking"
@@ -12749,7 +12759,7 @@
         "/sync": {
             "post": {
                 "operationId": "app.v1.sync.store",
-                "description": "`{changes: [{request_id, type, target?, base?, data}]}` (\u2264 50), applied in order, each on its own: one\nresult per change in the same order, and one bad change never stops the others. Types and their data\nare the web's offline mutations (`list_task.create|update|reorder`, `issue.update|comment|create`,\n`capture.create`, `my_day.add|remove`) plus `work.done`. Updates carry `base.fields` (each changed\nfield as the device saw it): a field someone else changed meanwhile is a `conflict` (409) and is not\nwritten \u2014 never overwritten. `request_id` makes a change idempotent (30 days): a retry answers the\nstored result (`replayed: true`); the same id with another change \u2192 `invalid`. `entity` is the server's\ncurrent state as the feed's record of `record_type` (work, task, task_list, capture, my_day, comment).\n`target.ref` / `data.work_ref` = the request_id of an earlier create (in this batch or before). Budget:\n240 changes a minute per user (`rate_limited`: send it again later).",
+                "description": "`{changes: [{request_id, type, target?, base?, data}]}` (\u2264 50), applied in order, each on its own: one\nresult per change in the same order, and one bad change never stops the others. Types and their data\nare the web's offline mutations (`list_task.create|update|reorder`, `issue.update|comment|create`,\n`capture.create`, `my_day.add|remove`) plus `work.done`, `timer.start|stop|discard`, `notification.read`\nand `notifications.read_all`. Updates carry `base.fields` (each changed\nfield as the device saw it): a field someone else changed meanwhile is a `conflict` (409) and is not\nwritten \u2014 never overwritten. `request_id` makes a change idempotent (30 days): a retry answers the\nstored result (`replayed: true`); the same id with another change \u2192 `invalid`. `entity` is the server's\ncurrent state as the feed's record of `record_type` (work, task, task_list, capture, my_day, comment, timer,\nnotification, unread_count). `gone`: the timer / notification is no longer there, nothing was written.\n`target.ref` / `data.work_ref` = the request_id of an earlier create (in this batch or before). Budget:\n240 changes a minute per user (`rate_limited`: send it again later).",
                 "summary": "Apply a batch of queued offline changes",
                 "tags": [
                     "Sync"
@@ -18919,6 +18929,17 @@
                         ],
                         "description": "mentions, assignments, comments, due, \u2026 (NotificationCatalog::CATEGORIES)"
                     },
+                    "summary": {
+                        "type": "string",
+                        "description": "the bell's sentence as one line of plain text (no HTML / Markdown, mentions as @Name, \u2264 200 characters)"
+                    },
+                    "url": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "the page to open: an absolute URL on this server while the user can open it, else null"
+                    },
                     "data": {
                         "type": "object"
                     },
@@ -18948,6 +18969,8 @@
                     "id",
                     "type",
                     "category",
+                    "summary",
+                    "url",
                     "data",
                     "read",
                     "read_at",
@@ -22404,6 +22427,14 @@
                         "type": "string",
                         "description": "issue:<id> (as in My Work); list tasks have no work log and can't be timed",
                         "maxLength": 40
+                    },
+                    "description": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "description": "what the user works on: the work log's note when the stop gives none",
+                        "maxLength": 255
                     }
                 },
                 "required": [
@@ -23594,7 +23625,7 @@
                                         "string",
                                         "null"
                                     ],
-                                    "description": "list_task.create|update|reorder, issue.update|comment|create, capture.create, my_day.add|remove, work.done"
+                                    "description": "list_task.create|update|reorder, issue.update|comment|create, capture.create, my_day.add|remove, work.done,\ntimer.start|stop|discard, notification.read, notifications.read_all"
                                 },
                                 "target": {
                                     "type": [
@@ -23694,11 +23725,11 @@
                     },
                     "status": {
                         "type": "string",
-                        "description": "applied | conflict | deleted | waiting | forbidden | invalid | rate_limited | error"
+                        "description": "applied | conflict | deleted | gone | waiting | forbidden | invalid | rate_limited | error"
                     },
                     "http_status": {
                         "type": "integer",
-                        "description": "the HTTP status this result stands for: 200 | 409 | 410 | 424 | 403 | 422 | 429 | 500"
+                        "description": "the HTTP status this result stands for: 200 | 409 | 410 | 424 | 403 | 422 | 429 | 500 (gone: 410)"
                     },
                     "replayed": {
                         "type": "boolean",
@@ -23716,7 +23747,7 @@
                             "string",
                             "null"
                         ],
-                        "description": "which feed record `entity` is: work | task | task_list | capture | my_day | comment (null: no entity)"
+                        "description": "which record `entity` is: work | task | task_list | capture | my_day | comment | timer (as GET /me/timer) | notification | unread_count (null: no entity)"
                     },
                     "entity": {
                         "type": [
@@ -23775,6 +23806,35 @@
                                 "type": "string"
                             }
                         }
+                    },
+                    "activities": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "description": "an `invalid` timer.stop for its activity: what can be picked (send it as `activity_id` in a new change)",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                }
+                            },
+                            "required": [
+                                "id",
+                                "name"
+                            ]
+                        }
+                    },
+                    "default_activity_id": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ],
+                        "description": "an `invalid` timer.stop for its activity: the activity to preselect (or null)"
                     }
                 },
                 "required": [
@@ -23789,7 +23849,9 @@
                     "conflicts",
                     "applied",
                     "message",
-                    "errors"
+                    "errors",
+                    "activities",
+                    "default_activity_id"
                 ],
                 "title": "SyncResultResource"
             },
@@ -24768,6 +24830,13 @@
                                 "type": "integer",
                                 "description": "what the stop dialog suggests (at least 1)"
                             },
+                            "description": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "description": "what the user works on (given at the start): the work log's note unless the stop sends one"
+                            },
                             "issue": {
                                 "type": [
                                     "object",
@@ -24811,6 +24880,7 @@
                             "started_at",
                             "elapsed_seconds",
                             "elapsed_minutes",
+                            "description",
                             "issue"
                         ]
                     },
@@ -24829,6 +24899,10 @@
                             "integer",
                             "null"
                         ]
+                    },
+                    "today_logged_seconds": {
+                        "type": "integer",
+                        "description": "seconds the user logged on their local today (finished work logs; the running timer not included)"
                     }
                 },
                 "required": [
@@ -24836,7 +24910,8 @@
                     "timer",
                     "activities",
                     "activity_required",
-                    "default_activity_id"
+                    "default_activity_id",
+                    "today_logged_seconds"
                 ],
                 "title": "TimerStateResource"
             },

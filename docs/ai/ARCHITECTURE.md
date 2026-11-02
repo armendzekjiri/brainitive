@@ -532,6 +532,16 @@ extension: own tokens, guard, throttles; only Support services and policies are 
   `Support\Sync\SyncRecords` (the feed's record by the outcome's entity type + id, BRAI-441). Deletions = soft deletes + table `sync_tombstones` (`SyncTombstone`,
   migration `2026_11_08_100000`, pruned 30 days at 04:37): written by `Capture::deleted` and the Item / TaskListItem observers when
   the assignee changes. Tests `tests/Feature/AppApi/SyncTest.php`, e2e `e2e/tests/app-api-sync.spec.ts`.
+- **Client gaps (v1.49.0, feat/app-api-client-gaps):** sync types `timer.start|stop|discard` (`Offline\Appliers\TimerMutations` →
+  `WorkTimers`, clamped device times, status `gone` = `SyncOutcome::gone`) and `notification.read` / `notifications.read_all`
+  (`NotificationMutations` → `NotificationInbox::apply` / `markAllRead($before)`); `issue.create` now goes through
+  `Boards\Issues::create` (+ `description` Markdown via `IssueMarkdown`, `item_type_id`). `SyncRecords` renders `timer`
+  (`TimerStateResource`), `notification`, `unread_count`; an invalid timer stop carries the activity picker
+  (`Support\AppApi\TimerStopRefusal`, shared with `POST /me/timer/stop`). Notification `summary` / `url`:
+  `Support\Notifications\NotificationText` (+ one `Summaries\*` class per worded type, `ContractSummary` fallback) and
+  `NotificationLinks` (route match + access checks). `work_timers.description` (migration `2026_11_09_100000`),
+  `TimeEntries::loggedSecondsToday`. ETags on `/me/work`, `/notifications` (first page), `/capture-destinations`.
+  Tests `SyncClientChangesTest`, `NotificationSummariesTest`, `PollingETagsTest`, `TimeTrackingTest`.
 - **Realtime (phase 09, BRAI-426):** `Controllers\AppApi\RealtimeController` (`GET /realtime`, `POST /realtime/token`, tag
   Realtime 340): native clients join the web's **live channels** (no Laravel broadcasting exists). `LiveToken::grant()` (extracted
   from `LiveTokenController`, used by both) → `LiveChannels::authorize` (one copy of the channel rules); `LiveConfig::absoluteUrl()`
