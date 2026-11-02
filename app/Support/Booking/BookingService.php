@@ -42,6 +42,9 @@ final class BookingService
      */
     public static function book(BookingType $type, CarbonImmutable $start, array $guest, ?CarbonImmutable $now = null, ?Booking $replaces = null): array
     {
+        if (! self::accepting($type)) {
+            throw new BookingClosed; // before any provider read (Codex web review U)
+        }
         $type->loadMissing('page.user');
         $page = $type->page;
         $rules = $type->bookingRules();
@@ -62,6 +65,9 @@ final class BookingService
             $booking = DB::transaction(function () use ($type, $page, $rules, $start, $end, $guest, $hash, $busy) {
                 // 2. one booking at a time per host: re-check what the lock now protects
                 User::whereKey($page->user_id)->lockForUpdate()->first();
+                if (! self::accepting($type)) {
+                    throw new BookingClosed; // again under the lock: switched off meanwhile (Codex web review U)
+                }
                 $clash = Booking::confirmed()->where('user_id', $page->user_id)
                     ->where('starts_at', '<', $end->addMinutes($rules->bufferAfter))
                     ->where('ends_at', '>', $start->subMinutes($rules->bufferBefore))
@@ -180,6 +186,20 @@ final class BookingService
         self::cleanUp($old, 'guest', $reason);
 
         return [$new, $token];
+    }
+
+    /**
+     * Whether this type takes new bookings right now (Codex web review U), read fresh from the database: the type and
+     * its page are switched on, the workspace isn't deleted and the host is still in it. The public page checks the
+     * same; a guest's manage link must too before it lists slots or reschedules.
+     */
+    public static function accepting(BookingType $type): bool
+    {
+        $fresh = BookingType::query()->whereKey($type->id)->where('enabled', true)
+            ->whereHas('page', fn ($q) => $q->where('enabled', true)->whereHas('workspace')->whereHas('user'))
+            ->with('page.user', 'page.workspace')->first();
+
+        return $fresh !== null && $fresh->page->user->hasWorkspaceAccess($fresh->page->workspace);
     }
 
     /** @return array<string, int> local date (page zone) → confirmed bookings of this type */
