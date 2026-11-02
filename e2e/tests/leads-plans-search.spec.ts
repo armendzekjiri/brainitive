@@ -305,7 +305,8 @@ test.describe('search', () => {
         const input = page.getByRole('combobox', { name: 'Search or type a command' });
         await expect(input).toBeVisible();
         await input.fill('checkout');
-        const result = page.getByRole('option', { name: /Checkout bug/ });
+        // .first(): the palette can list the issue as a result and as a recent destination (dev keeps both)
+        const result = page.getByRole('option', { name: /Checkout bug/ }).first();
         await expect(result).toBeVisible();
         await result.click();
 
