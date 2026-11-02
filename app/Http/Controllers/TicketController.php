@@ -64,14 +64,7 @@ class TicketController extends Controller
             }
             $key = 'field_'.$field->name;
             $attributes[$key] = $field->label;
-            $rules[$key] = match ($field->type) {
-                'checkboxes' => [$field->is_required ? 'required' : 'nullable', 'array'],
-                'checkbox' => [$field->is_required ? 'accepted' : 'nullable', 'boolean'],
-                'number' => [$field->is_required ? 'required' : 'nullable', 'numeric'],
-                'date' => [$field->is_required ? 'required' : 'nullable', 'date'],
-                'select', 'radio' => [$field->is_required ? 'required' : 'nullable', Rule::in($field->options ?? [])],
-                default => [$field->is_required ? 'required' : 'nullable', 'string', 'max:10000'],
-            };
+            $rules += HelpdeskForm::fieldRules($field, $key); // the public form's rules (Codex web review K)
         }
         $validated = $request->validate($rules, [], $attributes);
 
@@ -487,23 +480,23 @@ class TicketController extends Controller
     {
         $this->authorize('update', $ticket);
 
-        $fields = $helpdesk->fields()->get();
-        $updates = [];
-
-        foreach ($fields as $field) {
-            $value = $request->input($field->name);
-            if ($value !== null) {
-                $existing = $ticket->fieldValues()->where('helpdesk_field_id', $field->id)->first();
-                if ($existing) {
-                    $existing->update(['value' => $value]);
-                } else {
-                    $ticket->fieldValues()->create([
-                        'helpdesk_field_id' => $field->id,
-                        'value' => $value,
-                    ]);
-                }
+        // only the helpdesk's own fields; every value checked by its type before anything is stored (Codex web review K)
+        $values = [];
+        foreach ($helpdesk->fields()->get() as $field) {
+            if ($request->has($field->name)) {
+                $values[] = [$field, HelpdeskForm::storedValue($field, $request->input($field->name))];
             }
         }
+
+        DB::transaction(function () use ($ticket, $values) {
+            foreach ($values as [$field, $value]) {
+                if ($value === null) {
+                    $ticket->fieldValues()->where('helpdesk_field_id', $field->id)->delete();
+                } else {
+                    $ticket->fieldValues()->updateOrCreate(['helpdesk_field_id' => $field->id], ['value' => $value]);
+                }
+            }
+        });
 
         return back()->with('success', 'Fields updated successfully.');
     }
