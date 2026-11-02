@@ -116,11 +116,44 @@ func (c *Config) Save() error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
+	return writePrivate(path, append(data, '\n'))
+}
+
+// writePrivate replaces path atomically with a file only the owner can read: a fresh, uniquely
+// named temp file (O_EXCL, 0600 — never an existing file or a symlink someone left at a
+// predictable name) is written, synced, chmodded 0600 and renamed over path. The rename also
+// replaces an older, more permissive config.json (Codex CLI/extension review 7). On Windows the
+// mode bits mean little; the file inherits the profile directory's ACL as before.
+func writePrivate(path string, data []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	tmp := f.Name()
+	ok := false
+	defer func() {
+		if !ok {
+			_ = f.Close()
+			_ = os.Remove(tmp)
+		}
+	}()
+	if err := f.Chmod(0o600); err != nil && runtime.GOOS != "windows" {
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	ok = true
+	return nil
 }
 
 // NormalizeServer turns what a person types into an origin: "brainitive.example.com" →

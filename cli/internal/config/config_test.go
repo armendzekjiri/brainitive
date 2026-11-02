@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -58,6 +59,56 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 	}
 	if again.Server != "https://example.test" || again.Defaults.Workspace != "acme" || again.Session == nil || again.Session.AccessToken != "tok" {
 		t.Errorf("round trip lost data: %+v", again)
+	}
+}
+
+// Codex CLI/extension review 7: a pre-existing temp file (permissive, or a symlink) must neither
+// leave the saved tokens readable nor redirect the write; an existing config.json gets 0600.
+func TestSaveIsPrivateWhateverIsAlreadyThere(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix permission bits")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	t.Setenv("BRAINITIVE_CONFIG", path)
+	victim := filepath.Join(dir, "victim.txt")
+	if err := os.WriteFile(victim, []byte("untouched"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"server":"https://example.test"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name  string
+		setup func(tmp string) error
+	}{
+		{"permissive temp file", func(tmp string) error { return os.WriteFile(tmp, []byte("x"), 0o644) }},
+		{"symlinked temp file", func(tmp string) error { return os.Symlink(victim, tmp) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmp := path + ".tmp"
+			_ = os.Remove(tmp)
+			if err := tc.setup(tmp); err != nil {
+				t.Fatal(err)
+			}
+			cfg := &Config{Server: "https://example.test", Session: &Session{AccessToken: "secret"}}
+			if err := cfg.Save(); err != nil {
+				t.Fatal(err)
+			}
+			info, err := os.Lstat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+				t.Fatalf("config.json mode = %v, want a private regular file", info.Mode())
+			}
+			if data, _ := os.ReadFile(victim); string(data) != "untouched" {
+				t.Fatalf("the save wrote through a symlink: victim = %q", data)
+			}
+			if again, err := Load(); err != nil || again.Session == nil || again.Session.AccessToken != "secret" {
+				t.Fatalf("reload = %+v, %v", again, err)
+			}
+		})
 	}
 }
 
