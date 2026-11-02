@@ -37,7 +37,15 @@ const positive = (value, fallback) => (Number.isInteger(Number(value)) && Number
 // Codex realtime review 2: re-checks of a document that may fail in a row before its connections close (fail closed)
 const maxAccessFailures = positive(env.COLLAB_ACCESS_MAX_FAILURES, 2);
 
-const collab = createCollabServer({ port, address, secret, appUrl, appHost, accessIntervalMs, maxAccessFailures });
+// Codex realtime review 4: document sockets per user, messages per socket, message size (DEFAULT_COLLAB_LIMITS)
+const limits = Object.fromEntries(Object.entries({
+    maxSocketsPerUser: positive(env.COLLAB_MAX_SOCKETS_PER_USER, null),
+    messageBurst: positive(env.COLLAB_MESSAGE_BURST, null),
+    messagesPerSecond: positive(env.COLLAB_MESSAGES_PER_SECOND, null),
+    maxMessageBytes: positive(env.COLLAB_MAX_MESSAGE_BYTES, null),
+}).filter(([, value]) => value !== null));
+
+const collab = createCollabServer({ port, address, secret, appUrl, appHost, accessIntervalMs, maxAccessFailures, limits });
 
 // Live channels (BRAI-151) on the same port: `?live=1` sockets + Brainitive's publish endpoint.
 // LIVE_PUBLISH_FROM=private (Docker): the app container publishes over the private network.

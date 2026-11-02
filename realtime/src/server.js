@@ -11,6 +11,7 @@ import { removeAwarenessStates } from 'y-protocols/awareness';
 import { DOCUMENT_NAME, deriveKeys, inspectToken } from './token.js';
 import { createLaravelClient } from './laravel.js';
 import { fields } from './log.js';
+import { bucket } from './live/hub.js';
 
 const FORBIDDEN = { code: 4403, reason: 'Forbidden' };
 const RESET = { code: 4409, reason: 'Document replaced' };
@@ -23,6 +24,24 @@ const ACCESS_UNKNOWN = { code: 4403, reason: 'Access could not be checked' };
 /** the app device of the token was signed out: drop tokens, show sign-in (same code as live channels) */
 const DEVICE_REVOKED = { code: 4410, reason: 'Device signed out' };
 const COLOR = /^#[0-9a-f]{6}$/i;
+/** Codex realtime review 4: one socket sent too much, or one user holds too many document sockets */
+const TOO_MANY_MESSAGES = { code: 4429, reason: 'Too many messages' };
+const TOO_MANY_SOCKETS = { code: 4429, reason: 'Too many connections' };
+
+/**
+ * Limits of document sockets (Codex realtime review 4), like the live channels' (live/hub.js DEFAULT_LIMITS) but
+ * sized for Yjs: every keystroke is an update plus an awareness message, a drag on a whiteboard many more.
+ * Environment: COLLAB_MAX_SOCKETS_PER_USER, COLLAB_MESSAGE_BURST, COLLAB_MESSAGES_PER_SECOND, COLLAB_MAX_MESSAGE_BYTES.
+ */
+export const DEFAULT_COLLAB_LIMITS = {
+    /** document sockets one user may hold at once (each open doc / whiteboard / description is one) */
+    maxSocketsPerUser: 30,
+    /** messages per socket: this many at once, refilled at messagesPerSecond — beyond: closed (4429) */
+    messageBurst: 300,
+    messagesPerSecond: 100,
+    /** largest single WebSocket message (bytes; larger closes the socket with 1009) */
+    maxMessageBytes: 16 * 1024 * 1024,
+};
 
 export function createCollabServer({
     port = 1234,
@@ -44,10 +63,13 @@ export function createCollabServer({
     stopOnSignals = true,
     /** a socket must authenticate this quickly, or it is closed (no anonymous sockets holding memory) */
     authDeadlineMs = 10_000,
+    /** see DEFAULT_COLLAB_LIMITS */
+    limits = {},
 }) {
     if (!secret) throw new Error('COLLAB_SECRET (or APP_KEY) is required');
     if (!appUrl) throw new Error('COLLAB_APP_URL (or APP_URL) is required');
 
+    const L = { ...DEFAULT_COLLAB_LIMITS, ...limits };
     const keys = deriveKeys(secret);
     const warn = (message) => (logger.warn ?? logger.error)?.call(logger, message);
     const laravel = createLaravelClient({ appUrl, appHost, internalKey: keys.internal, fetchImpl });
@@ -70,6 +92,11 @@ export function createCollabServer({
     /** request → socket, to close sockets that never authenticate or fail to */
     const sockets = new WeakMap();
     const authenticated = new WeakSet();
+    /** user id → their document sockets; socket → the users it carries (to let go on close) */
+    const userSockets = new Map();
+    const socketUsers = new WeakMap();
+    /** sockets closed for flooding: their remaining messages are dropped */
+    const flooded = new WeakSet();
     const closeSocket = (request, code, reason) => {
         const socket = sockets.get(request);
         if (socket && socket.readyState === socket.OPEN) socket.close(code, reason);
@@ -132,6 +159,19 @@ export function createCollabServer({
             payload = inspected.payload;
             if (!payload) refuse(inspected.problem ?? 'invalid-token', inspected.problem === 'expired-token' ? 'token older than COLLAB_TOKEN_TTL' : 'is COLLAB_SECRET the same for the app and this server?');
             if (payload.doc !== documentName) refuse('wrong-document');
+            // Codex realtime review 4: at most maxSocketsPerUser sockets per user (a place is held from here on)
+            const socket = sockets.get(request);
+            const held = userSockets.get(payload.sub) ?? new Set();
+            if (socket && !held.has(socket)) {
+                if (held.size >= L.maxSocketsPerUser) {
+                    warn(`[realtime] refused ${fields({ document: documentName, user: payload.sub, reason: 'too-many-connections' })}`);
+                    setImmediate(() => closeSocket(request, TOO_MANY_SOCKETS.code, TOO_MANY_SOCKETS.reason));
+                    throw Object.assign(new Error('Not authorized: too-many-connections'), { reason: 'too-many-connections' });
+                }
+                held.add(socket);
+                userSockets.set(payload.sub, held);
+                socketUsers.set(socket, (socketUsers.get(socket) ?? new Set()).add(payload.sub));
+            }
             const device = payload.dev ?? null;
             // a signed-out app device: 4410 (not 4401), so the app drops its tokens instead of retrying
             const refuseDevice = () => {
@@ -194,6 +234,13 @@ export function createCollabServer({
             });
         },
 
+        // a flooding socket is being closed: what it still sends is dropped, never applied or passed on
+        async beforeHandleMessage({ connection }) {
+            if (connection?.webSocket && flooded.has(connection.webSocket)) {
+                throw Object.assign(new Error(TOO_MANY_MESSAGES.reason), TOO_MANY_MESSAGES);
+            }
+        },
+
         async onLoadDocument({ document, documentName }) {
             let state;
             try {
@@ -212,16 +259,31 @@ export function createCollabServer({
         async beforeUnloadDocument({ documentName }) {
             if (unsaved.has(documentName)) throw new Error('unsaved changes'); // keep it in memory
         },
-    }, { maxPayload: 16 * 1024 * 1024 });
+    }, { maxPayload: L.maxMessageBytes });
 
-    // every socket has authDeadlineMs to authenticate
+    // every socket has authDeadlineMs to authenticate, and a message budget (before Hocuspocus sees the message)
     server.webSocketServer.on('connection', (socket, request) => {
         sockets.set(request, socket);
+        const allow = bucket(L.messageBurst, L.messagesPerSecond);
+        socket.prependListener('message', () => {
+            if (flooded.has(socket) || allow()) return;
+            flooded.add(socket);
+            warn(`[realtime] closed a socket: ${fields({ user: [...(socketUsers.get(socket) ?? [])].join(',') || null, reason: 'too-many-messages' })}`);
+            socket.close(TOO_MANY_MESSAGES.code, TOO_MANY_MESSAGES.reason);
+        });
         const timer = setTimeout(() => {
             if (!authenticated.has(request)) closeSocket(request, 4401, 'Unauthorized');
         }, authDeadlineMs);
         timer.unref();
-        socket.once('close', () => clearTimeout(timer));
+        socket.once('close', () => {
+            clearTimeout(timer);
+            for (const id of socketUsers.get(socket) ?? []) {
+                const held = userSockets.get(id);
+                held?.delete(socket);
+                if (held?.size === 0) userSockets.delete(id);
+            }
+            socketUsers.delete(socket);
+        });
     });
 
     /** Close one connection of a revoked app device: the document, then its whole socket (4410). */

@@ -184,6 +184,7 @@ const REFUSALS: Record<string, string> = {
     'invalid-document': 'unknown document',
     'document-replaced': 'the document was replaced',
     'access-denied': 'no access',
+    'too-many-connections': 'too many live documents open',
 };
 
 /** A permission-denied / close reason from realtime/src/server.js → what it means. */

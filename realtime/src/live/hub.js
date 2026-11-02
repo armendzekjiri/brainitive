@@ -50,7 +50,7 @@ export const DEFAULT_LIMITS = {
 };
 
 /** Token bucket: `capacity` at once, refilled at `perSecond`. */
-function bucket(capacity, perSecond) {
+export function bucket(capacity, perSecond) {
     let tokens = capacity;
     let last = Date.now();
     return () => {
