@@ -163,6 +163,24 @@ func TestDiscoverRejectsForeignEndpoints(t *testing.T) {
 	}
 }
 
+// Codex CLI/extension review 9 (server side, v1.49.0): /mcp now requires `mcp:use`
+// (EnsureMcpScope) and /api/ext/v1 requires `capture`; the CLI's OAuth token must ask for both,
+// at sign-in and at every refresh (TestLoginAndRefresh checks both requests carry Scope).
+func TestScopeCoversMcpAndCapture(t *testing.T) {
+	scopes := strings.Fields(Scope)
+	has := func(s string) bool {
+		for _, x := range scopes {
+			if x == s {
+				return true
+			}
+		}
+		return false
+	}
+	if !has("mcp:use") || !has("capture") {
+		t.Fatalf("Scope = %q; the CLI needs mcp:use (MCP) and capture (screenshots)", Scope)
+	}
+}
+
 // roundTripFunc lets a test see (or forbid) every request a client makes.
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
