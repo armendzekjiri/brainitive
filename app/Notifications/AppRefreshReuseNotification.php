@@ -10,8 +10,8 @@ use Illuminate\Notifications\Notification;
 
 /**
  * A desktop / mobile app's refresh token was used a second time (BRAI-428): either a copy of it
- * was stolen or the app misbehaved. The user has already been signed out everywhere (this device,
- * the other apps, browsers, CLI / MCP — BRAI-377); this tells the account holder. Transactional account mail, not a preference.
+ * was stolen or the app misbehaved. The device has already been signed out, with the web session its
+ * window opened; this tells the account holder. Transactional account mail, not a preference.
  */
 class AppRefreshReuseNotification extends Notification
 {
@@ -31,8 +31,8 @@ class AppRefreshReuseNotification extends Notification
             ->subject('We signed out '.$clientName.' on one of your devices')
             ->headline('We signed out one of your devices')
             ->preheader('An old sign-in token of '.$clientName.' was used again.')
-            ->line('An old sign-in token of '.$clientName.' on “'.$this->device->name.'” ('.$this->device->platform.') was used again. That can mean a copy of it was taken from the device, so to be safe we signed you out everywhere: this device, your other apps and your browsers.')
-            ->line('If this was you, just sign in again.')
+            ->line('An old sign-in token of '.$clientName.' on “'.$this->device->name.'” ('.$this->device->platform.') was used again. That can mean a copy of it was taken from the device, so we signed that device out to be safe.')
+            ->line('If this was you, just sign in again in the app.')
             // account mail never links to the profile (that link means "manage notifications")
             ->action('Open Brainitive', BrandedMail::appRoute('dashboard'))
             ->line('If you don’t recognise this, change your password: that signs out every browser and app.');

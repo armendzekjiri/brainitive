@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Notifications\AppRefreshReuseNotification;
 use App\Support\AppApi\AppAuthCodes;
 use App\Support\AppApi\AppTokens;
+use App\Support\AppApi\AppWebSessions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -246,33 +247,35 @@ class AppAuthTokensTest extends TestCase
         Notification::assertSentToTimes($user, AppRefreshReuseNotification::class, 1);
     }
 
-    public function test_refresh_reuse_signs_the_user_out_everywhere(): void
+    public function test_refresh_reuse_signs_out_only_that_device_and_its_webview_session(): void
     {
         Notification::fake();
         config(['session.driver' => 'database']);
         $user = User::factory()->create(['remember_token' => 'old-remember-token']);
-        $stranger = User::factory()->create();
-        foreach ([[$user, 'browser-a'], [$user, 'browser-b'], [$stranger, 'stranger']] as [$owner, $id]) {
-            DB::table('sessions')->insert(['id' => $id, 'user_id' => $owner->id, 'payload' => '', 'last_activity' => now()->getTimestamp()]);
-        }
+        DB::table('sessions')->insert(['id' => 'browser-a', 'user_id' => $user->id, 'payload' => '', 'last_activity' => now()->getTimestamp()]);
         $phone = $this->appDevice($user, ['client' => 'mobile', 'platform' => 'ios']);
         $passport = $this->passportToken($user);
-        $strangerDevice = $this->appDevice($stranger);
         $first = $this->exchange($this->code($user))->json();
+        $device = AppDevice::findOrFail($first['device']['id']);
         $this->refresh($first['refresh_token'])->assertOk();
+
+        // the webview of the reused device holds a web session bound to it
+        $this->actingAs($user)->withSession([AppWebSessions::SESSION_KEY => $device->id])->get('/profile')->assertOk();
 
         $this->assertInvalidGrant($this->refresh($first['refresh_token']), 401);
 
-        // a theft signal: every browser session, the remember-me token, CLI / MCP tokens and the other apps
-        $this->assertSame(['stranger'], DB::table('sessions')->pluck('id')->all());
-        $this->assertNotSame('old-remember-token', $user->fresh()->remember_token);
-        $this->assertSame('refresh_reuse', AppDevice::findOrFail($first['device']['id'])->revoked_reason);
-        $this->assertSame('refresh_reuse', $phone->fresh()->revoked_reason);
-        $this->assertTrue($user->tokens()->firstOrFail()->revoked, 'Passport tokens (MCP / CLI) too');
+        $this->assertSame('refresh_reuse', $device->fresh()->revoked_reason);
+        // a double refresh must not punish the rest: other apps, browsers, remember-me, CLI / MCP stay
+        $this->assertNull($phone->fresh()->revoked_at);
+        $this->assertTrue(DB::table('sessions')->where('id', 'browser-a')->exists(), 'other browser sessions stay');
+        $this->assertSame('old-remember-token', $user->fresh()->remember_token);
+        $this->assertFalse($user->tokens()->firstOrFail()->revoked);
         $this->assertNotEmpty($passport);
-        $this->assertNull($strangerDevice->fresh()->revoked_at);
-        // the email still goes out, once
         Notification::assertSentToTimes($user, AppRefreshReuseNotification::class, 1);
+
+        // that device's webview session ends on its next request
+        $this->get('/profile')->assertRedirect(route('login'));
+        $this->assertGuest('web');
     }
 
     public function test_the_reuse_email_is_branded_account_mail(): void
