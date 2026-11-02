@@ -683,6 +683,9 @@ Item list + what needs the owner: `docs/ai/tasks/release-v1.49.0.md` → Codex c
   `Vite::useCspNonce()` from the middleware; every inline / external `<script>` in a Blade view needs
   `nonce="{{ Vite::cspNonce() }}"` and `@routes(nonce: Vite::cspNonce())`, or the console reports it (it'll block once
   enforced). Violations are console messages, not `pageerror`s, so the e2e fixtures don't fail on them.
+  **Trap:** with a nonce, Laravel's `AddLinkHeadersForPreloadedAssets` puts `nonce="…"` on every preloaded chunk (~140 on a
+  board page → +7 KB `Link` header; Playwright's request client failed with "Header overflow"). The web group uses our
+  `App\Http\Middleware\AddLinkHeadersForPreloadedAssets` (same, minus the nonce); the page's `<link>` tags keep it.
 - **Debug only for `APP_ENV=local` by default** (`config/app.php`); `.env.example` no longer sets `APP_DEBUG`, so
   `phpunit.xml` sets `APP_DEBUG=true` (as CI had it). `ProductionConfigWarnings` logs `[config] …` warnings in
   production (hourly per problem, via the cache): debug on, a non-local `http://` `APP_URL` (boot), and mail actually
