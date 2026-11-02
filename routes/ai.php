@@ -1,11 +1,8 @@
 <?php
 
 use App\Http\Middleware\EnsureUserIsNotSuspended;
-use App\Http\Middleware\LogMcpRequest;
 use App\Http\Middleware\RejectCaptureTokens;
 use App\Mcp\Servers\BrainitiveServer;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Route;
 use Laravel\Mcp\Facades\Mcp;
 
 /*
@@ -29,20 +26,8 @@ use Laravel\Mcp\Facades\Mcp;
 
 Mcp::oauthRoutes();
 
+// 120 requests a minute per user (as the browser extension's API), counted after auth:api so connectors sharing
+// an egress IP (ChatGPT, Claude) don't share one budget. No request logging before auth (Codex review 9 / 12: the
+// temporary [MCP-DEBUG] logger wrote caller-controlled JSON to the log for unauthenticated requests).
 Mcp::web('/mcp', BrainitiveServer::class)
-    ->middleware([LogMcpRequest::class, 'auth:api', EnsureUserIsNotSuspended::class, RejectCaptureTokens::class]);
-
-// TEMPORARY: log GET probes (some clients open a standalone GET SSE stream before
-// POSTing). laravel/mcp normally answers GET with 405; we keep that behaviour but
-// log the attempt first. Registered AFTER Mcp::web() so this GET route overrides
-// the package's silent 405 handler (last route registered for a method+URI wins).
-// Remove together with LogMcpRequest once the Perplexity connector is sorted.
-Route::get('/mcp', function () {
-    Log::info('[MCP-DEBUG] GET probe', [
-        'accept' => request()->header('Accept'),
-        'user_agent' => request()->userAgent(),
-        'has_authorization' => request()->header('Authorization') !== null,
-    ]);
-
-    return response('', 405)->header('Allow', 'POST');
-})->middleware([LogMcpRequest::class]);
+    ->middleware(['auth:api', 'throttle:120,1,mcp', EnsureUserIsNotSuspended::class, RejectCaptureTokens::class]);
